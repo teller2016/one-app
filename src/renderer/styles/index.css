@@ -1,0 +1,352 @@
+:root {
+  --bg: #1a1b1e;
+  --bg-sidebar: #202124;
+  --bg-elevated: #26272b;
+  --border: #34363b;
+  --text: #e4e6eb;
+  --text-dim: #9aa0a6;
+  --accent: #4c8dff;
+  --accent-soft: rgba(76, 141, 255, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 전체 레이아웃 */
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+/* 사이드바 */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  /* macOS 신호등 버튼 영역 확보 + 창 드래그 */
+  padding-top: 28px;
+  -webkit-app-region: drag;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.sidebar__brand-mark {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sidebar__item:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.sidebar__item--active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.sidebar__item-icon {
+  font-size: 15px;
+  width: 20px;
+  text-align: center;
+}
+
+/* 콘텐츠 영역 */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 탭바 */
+.tabbar {
+  height: 40px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  -webkit-app-region: no-drag;
+}
+
+.tab--active {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+/* 메인 영역 */
+.main {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px;
+}
+
+.placeholder__icon {
+  font-size: 52px;
+  margin-bottom: 12px;
+}
+
+.placeholder__title {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.placeholder__desc {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.placeholder__hint {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+/* ── 일정 등록 섹션 ── */
+.sched {
+  padding: 22px 26px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.sched__title {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.sched__sub {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.sched__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sched__row--col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.sched__label {
+  font-size: 13px;
+  color: var(--text-dim);
+  min-width: 72px;
+}
+
+.sched__label code {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.sched__label--log {
+  display: block;
+  margin: 20px 0 6px;
+  color: var(--text);
+}
+
+.sched__segment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seg {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-dim);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seg--on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.sched__date,
+.sched__time {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.sched__time {
+  width: 80px;
+}
+
+.sched__hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sched__textarea {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: #16171a;
+  color: var(--text);
+  border-radius: 10px;
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sched__textarea:focus,
+.sched__time:focus,
+.sched__date:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sched__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.btn {
+  padding: 9px 18px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--ghost {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.btn--danger {
+  background: #3a2224;
+  color: #ff8a8a;
+  border-color: #5a2e2e;
+}
+
+.sched__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+
+.sched__log {
+  margin: 0;
+  height: 220px;
+  overflow: auto;
+  padding: 12px;
+  background: #0f1012;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #cfd3d8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

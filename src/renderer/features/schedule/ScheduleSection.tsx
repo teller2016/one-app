@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from 'react';
+
+type DateType = 'today' | 'yesterday' | 'date';
+
+/** 일정 등록 섹션 — 폼 작성 후 버튼을 누르면 기존 매크로가 실행된다. */
+export function ScheduleSection() {
+  const [scheduleText, setScheduleText] = useState('');
+  const [startTime, setStartTime] = useState('9.5');
+  const [dateType, setDateType] = useState<DateType>('today');
+  const [customDate, setCustomDate] = useState('');
+  const [running, setRunning] = useState(false);
+  const [log, setLog] = useState('');
+  const logRef = useRef<HTMLPreElement>(null);
+
+  // 매크로 출력/종료 이벤트 구독
+  useEffect(() => {
+    if (!window.oneApp?.schedule) return;
+    const offOutput = window.oneApp.schedule.onOutput(({ data }) => {
+      setLog((prev) => prev + data);
+      // 매크로가 완료를 보고하면(브라우저는 열린 채여도) 폼을 다시 활성화
+      if (data.includes('등록 완료') || data.includes('페이지 이동까지 완료')) {
+        setRunning(false);
+      }
+    });
+    const offDone = window.oneApp.schedule.onDone(({ code }) => {
+      setRunning(false);
+      setLog((prev) => prev + `\n— 프로세스 종료 (code ${code}) —\n`);
+    });
+    return () => {
+      offOutput();
+      offDone();
+    };
+  }, []);
+
+  // 로그 자동 스크롤
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [log]);
+
+  const run = async (testMode: boolean) => {
+    if (!window.oneApp?.schedule) {
+      setLog('❌ 앱 연결(preload)이 되지 않았습니다.\n');
+      return;
+    }
+    if (!scheduleText.trim()) {
+      setLog('⚠️ 일정 내용을 입력하세요.\n');
+      return;
+    }
+    if (dateType === 'date' && !customDate) {
+      setLog('⚠️ 날짜를 선택하세요.\n');
+      return;
+    }
+    setLog('');
+    setRunning(true);
+    const res = await window.oneApp.schedule.run({
+      scheduleText,
+      startTime,
+      dateOption:
+        dateType === 'date'
+          ? { type: 'date', date: customDate }
+          : { type: dateType },
+      testMode,
+    });
+    if (!res.ok) {
+      setRunning(false);
+      setLog((prev) => prev + `\n❌ 실행 실패: ${res.error ?? '알 수 없음'}\n`);
+    }
+  };
+
+  const cancel = async () => {
+    await window.oneApp.schedule.cancel();
+    setRunning(false);
+  };
+
+  return (
+    <div className="sched">
+      <h2 className="sched__title">🗓️ 일정 등록</h2>
+      <p className="sched__sub">
+        비즈박스 그룹웨어에 하루 일정을 자동 등록합니다.
+      </p>
+
+      {/* 날짜 */}
+      <div className="sched__row">
+        <label className="sched__label">날짜</label>
+        <div className="sched__segment">
+          {(['today', 'yesterday', 'date'] as DateType[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={'seg' + (dateType === t ? ' seg--on' : '')}
+              onClick={() => setDateType(t)}
+              disabled={running}
+            >
+              {t === 'today' ? '오늘' : t === 'yesterday' ? '어제' : '직접 입력'}
+            </button>
+          ))}
+          {dateType === 'date' && (
+            <input
+              type="date"
+              className="sched__date"
+              value={customDate}
+              onChange={(e) => setCustomDate(e.target.value)}
+              disabled={running}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* 시작 시간 */}
+      <div className="sched__row">
+        <label className="sched__label">시작 시간</label>
+        <input
+          type="text"
+          className="sched__time"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          disabled={running}
+        />
+        <span className="sched__hint">예: 9 = 09:00, 9.5 = 09:30</span>
+      </div>
+
+      {/* 일정 입력 */}
+      <div className="sched__row sched__row--col">
+        <label className="sched__label">
+          일정 (한 줄에 하나: <code>종료시간 일정명</code>)
+        </label>
+        <textarea
+          className="sched__textarea"
+          value={scheduleText}
+          onChange={(e) => setScheduleText(e.target.value)}
+          placeholder={
+            '10.5 [순수본] QA\n12.5 [순수본] 장바구니/주문서 V1.2\n15 [FE] 주간회의'
+          }
+          spellCheck={false}
+          disabled={running}
+        />
+      </div>
+
+      {/* 버튼 */}
+      <div className="sched__actions">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => run(true)}
+          disabled={running}
+        >
+          테스트 (등록 안 함)
+        </button>
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => run(false)}
+          disabled={running}
+        >
+          {running ? '실행 중…' : '일정 등록'}
+        </button>
+        {running && (
+          <button type="button" className="btn btn--danger" onClick={cancel}>
+            중지
+          </button>
+        )}
+      </div>
+      <p className="sched__note">
+        ※ 실행하면 자동 조작용 브라우저가 열립니다. 등록이 끝나도 확인용으로 창이
+        열려 있으니 확인 후 직접 닫으세요.
+      </p>
+
+      {/* 로그 */}
+      <label className="sched__label sched__label--log">실행 로그</label>
+      <pre className="sched__log" ref={logRef}>
+        {log || '실행하면 여기에 진행 상황이 표시됩니다.'}
+      </pre>
+    </div>
+  );
+}
