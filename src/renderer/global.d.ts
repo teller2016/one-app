@@ -4,6 +4,8 @@ import type {
   ScheduleRunResult,
   ScheduleOutputChunk,
   ScheduleDoneInfo,
+  AppSettingsView,
+  SaveSettingsInput,
 } from '../shared/types';
 
 declare global {
@@ -14,6 +16,10 @@ declare global {
         cancel: () => Promise<{ ok: boolean }>;
         onOutput: (cb: (chunk: ScheduleOutputChunk) => void) => () => void;
         onDone: (cb: (info: ScheduleDoneInfo) => void) => () => void;
+      };
+      settings: {
+        get: () => Promise<AppSettingsView>;
+        set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
       };
     };
   }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 type DateType = 'today' | 'yesterday' | 'date';
 
-/** 일정 등록 섹션 — 폼 작성 후 버튼을 누르면 기존 매크로가 실행된다. */
+/** 일정 등록 섹션 — 폼 작성 후 버튼을 누르면 앱 내부 매크로가 실행된다. */
 export function ScheduleSection() {
   const [scheduleText, setScheduleText] = useState('');
   const [startTime, setStartTime] = useState('9.5');
@@ -10,6 +10,7 @@ export function ScheduleSection() {
   const [customDate, setCustomDate] = useState('');
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState('');
+  const [credsReady, setCredsReady] = useState<boolean | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
   // 매크로 출력/종료 이벤트 구독
@@ -17,7 +18,6 @@ export function ScheduleSection() {
     if (!window.oneApp?.schedule) return;
     const offOutput = window.oneApp.schedule.onOutput(({ data }) => {
       setLog((prev) => prev + data);
-      // 매크로가 완료를 보고하면(브라우저는 열린 채여도) 폼을 다시 활성화
       if (data.includes('등록 완료') || data.includes('페이지 이동까지 완료')) {
         setRunning(false);
       }
@@ -30,6 +30,13 @@ export function ScheduleSection() {
       offOutput();
       offDone();
     };
+  }, []);
+
+  // 계정 정보 설정 여부 확인
+  useEffect(() => {
+    window.oneApp?.settings
+      .get()
+      .then((s) => setCredsReady(!!s.bizboxId && s.hasPassword));
   }, []);
 
   // 로그 자동 스크롤
@@ -63,7 +70,6 @@ export function ScheduleSection() {
     });
     if (!res.ok) {
       setRunning(false);
-      setLog((prev) => prev + `\n❌ 실행 실패: ${res.error ?? '알 수 없음'}\n`);
     }
   };
 
@@ -78,6 +84,13 @@ export function ScheduleSection() {
       <p className="sched__sub">
         비즈박스 그룹웨어에 하루 일정을 자동 등록합니다.
       </p>
+
+      {credsReady === false && (
+        <div className="sched__banner">
+          ⚠️ 비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
+          먼저 저장하세요.
+        </div>
+      )}
 
       {/* 날짜 */}
       <div className="sched__row">
