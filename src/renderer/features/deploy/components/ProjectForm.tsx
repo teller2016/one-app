@@ -1,4 +1,9 @@
 import type { DeployProjectView } from '../../../../shared/types';
+import { Button } from '../../../components/Button';
+import { SectionHeader } from '../../../components/SectionHeader';
+import { FormRow } from '../../../components/FormRow';
+import { Input } from '../../../components/Input';
+import { Banner } from '../../../components/Banner';
 
 // ── 폼 상태 ──
 export type TargetFormState = { id?: string; name: string; jobPath: string };
@@ -49,54 +54,41 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
   };
 
   return (
-    <div className="sched">
-      <h2 className="sched__title">
-        🚀 {form.id ? '프로젝트 편집' : '프로젝트 추가'}
-      </h2>
-      <p className="sched__sub">
-        프로젝트의 젠킨스 정보와 배포 대상(스토어/어드민 등)을 등록합니다.
-      </p>
+    <div className="section">
+      <SectionHeader
+        title={`🚀 ${form.id ? '프로젝트 편집' : '프로젝트 추가'}`}
+        sub="프로젝트의 젠킨스 정보와 배포 대상(스토어/어드민 등)을 등록합니다."
+      />
 
-      <div className="sched__row">
-        <label className="sched__label">프로젝트명</label>
-        <input
-          className="sched__input"
+      <FormRow label="프로젝트명">
+        <Input
           type="text"
           value={form.name}
           onChange={(e) => onChange({ ...form, name: e.target.value })}
           placeholder="예: 메타커머스"
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <div className="sched__row">
-        <label className="sched__label">젠킨스 URL</label>
-        <input
-          className="sched__input"
+      <FormRow label="젠킨스 URL">
+        <Input
           type="text"
           value={form.jenkinsUrl}
           onChange={(e) => onChange({ ...form, jenkinsUrl: e.target.value })}
           placeholder="예: https://jenkins.example.com"
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <div className="sched__row">
-        <label className="sched__label">아이디</label>
-        <input
-          className="sched__input"
+      <FormRow label="아이디">
+        <Input
           type="text"
           value={form.username}
           onChange={(e) => onChange({ ...form, username: e.target.value })}
           placeholder="젠킨스 아이디"
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <div className="sched__row">
-        <label className="sched__label">API 토큰</label>
-        <input
-          className="sched__input"
+      <FormRow label="API 토큰">
+        <Input
           type="password"
           value={form.secret}
           onChange={(e) => onChange({ ...form, secret: e.target.value })}
@@ -105,40 +97,33 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
               ? '●●●●●●  (저장됨 — 바꿀 때만 입력)'
               : 'API 토큰 또는 비밀번호'
           }
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <p className="sched__note">
+      <p className="note">
         🔐 젠킨스 <b>내 계정 → 설정(Configure) → API Token</b> 에서 발급한
         토큰 권장. 비밀번호도 동작하지만 젠킨스 보안 설정에 따라 막힐 수
         있습니다. 값은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
         저장됩니다.
       </p>
 
-      <label className="sched__label sched__label--log">배포 대상</label>
+      <label className="form-label">배포 대상</label>
       {form.targets.map((t, i) => (
-        <div className="sched__row" key={t.id ?? `new-${i}`}>
-          <input
-            className="sched__input"
+        <FormRow key={t.id ?? `new-${i}`}>
+          <Input
             style={{ maxWidth: 180 }}
             type="text"
             value={t.name}
             onChange={(e) => setTarget(i, { name: e.target.value })}
             placeholder="표시명 (예: 스토어)"
-            autoComplete="off"
           />
-          <input
-            className="sched__input"
+          <Input
             type="text"
             value={t.jobPath}
             onChange={(e) => setTarget(i, { jobPath: e.target.value })}
             placeholder="젠킨스 잡 이름 (폴더 안이면 폴더/잡)"
-            autoComplete="off"
           />
-          <button
-            type="button"
-            className="btn btn--ghost"
+          <Button
             onClick={() =>
               onChange({
                 ...form,
@@ -149,12 +134,10 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
             title="이 배포 대상 삭제"
           >
             ✕
-          </button>
-        </div>
+          </Button>
+        </FormRow>
       ))}
-      <button
-        type="button"
-        className="btn btn--ghost"
+      <Button
         onClick={() =>
           onChange({
             ...form,
@@ -163,17 +146,15 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
         }
       >
         + 배포 대상 추가
-      </button>
+      </Button>
 
-      {error && <p className="sched__banner">{error}</p>}
+      {error && <Banner>{error}</Banner>}
 
-      <div className="sched__actions">
-        <button type="button" className="btn btn--primary" onClick={onSave}>
+      <div className="form-actions">
+        <Button variant="primary" onClick={onSave}>
           저장
-        </button>
-        <button type="button" className="btn btn--ghost" onClick={onCancel}>
-          취소
-        </button>
+        </Button>
+        <Button onClick={onCancel}>취소</Button>
       </div>
     </div>
   );

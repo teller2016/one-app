@@ -5,6 +5,8 @@ import type {
   SaveDeployProjectInput,
 } from '../../../../shared/types';
 import { statusKey } from '../lib/format';
+import { Button } from '../../../components/Button';
+import { SectionHeader } from '../../../components/SectionHeader';
 import { ProjectCard } from './ProjectCard';
 import {
   ProjectForm,
@@ -187,29 +189,23 @@ export function DeploySection() {
 
   // ── 프로젝트 목록 ──
   return (
-    <div className="sched">
+    <div className="section">
       <div className="deploy__head">
-        <div>
-          <h2 className="sched__title">🚀 배포</h2>
-          <p className="sched__sub">
-            프로젝트별 젠킨스 잡을 버튼 한 번으로 배포합니다.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => setForm(emptyForm())}
-        >
+        <SectionHeader
+          title="🚀 배포"
+          sub="프로젝트별 젠킨스 잡을 버튼 한 번으로 배포합니다."
+        />
+        <Button variant="primary" onClick={() => setForm(emptyForm())}>
           + 프로젝트 추가
-        </button>
+        </Button>
       </div>
 
       {loading ? (
-        <p className="sched__hint">불러오는 중...</p>
+        <p className="hint">불러오는 중...</p>
       ) : projects.length === 0 ? (
         <div className="deploy__empty">
           <p>등록된 프로젝트가 없습니다.</p>
-          <p className="sched__hint">
+          <p className="hint">
             [+ 프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요.
           </p>
         </div>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AttendanceInfo } from '../../../../shared/types';
+import { Button } from '../../../components/Button';
+import { RefreshButton } from '../../../components/RefreshButton';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
 
@@ -46,29 +48,13 @@ export function AttendanceWidget() {
     <div className="attend">
       <div className="attend__head">
         <span className="attend__title">🏢 근태</span>
-        <button
-          type="button"
-          className="attend__refresh"
+        <RefreshButton
+          size={11}
+          spinning={busy === 'fetch'}
           onClick={refresh}
           disabled={busy !== null}
           title="출퇴근 시각 새로고침"
-          aria-label="새로고침"
-        >
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={busy === 'fetch' ? 'attend__spin' : undefined}
-          >
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-        </button>
+        />
       </div>
 
       <div className="attend__row">
@@ -85,9 +71,9 @@ export function AttendanceWidget() {
       </div>
 
       {nextAction && (
-        <button
-          type="button"
-          className="btn btn--primary attend__btn"
+        <Button
+          variant="primary"
+          className="attend__btn"
           onClick={() => stamp(nextAction)}
           disabled={busy !== null}
         >
@@ -96,7 +82,7 @@ export function AttendanceWidget() {
             : nextAction === 'come'
               ? '출근하기'
               : '퇴근하기'}
-        </button>
+        </Button>
       )}
       {info && !nextAction && (
         <p className="attend__done">✓ 오늘 출퇴근 완료</p>

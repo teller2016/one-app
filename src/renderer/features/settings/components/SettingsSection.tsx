@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Button } from '../../../components/Button';
+import { SectionHeader } from '../../../components/SectionHeader';
+import { FormRow } from '../../../components/FormRow';
+import { Input } from '../../../components/Input';
 
 /** 환경설정 섹션 — 비즈박스 로그인 계정 정보를 관리한다. */
 export function SettingsSection() {
@@ -26,29 +30,24 @@ export function SettingsSection() {
   };
 
   return (
-    <div className="sched">
-      <h2 className="sched__title">⚙️ 환경설정</h2>
-      <p className="sched__sub">
-        비즈박스 그룹웨어 로그인 계정 정보 (일정 등록에 사용)
-      </p>
+    <div className="section">
+      <SectionHeader
+        title="⚙️ 환경설정"
+        sub="비즈박스 그룹웨어 로그인 계정 정보 (일정 등록에 사용)"
+      />
 
-      <div className="sched__row">
-        <label className="sched__label">아이디</label>
-        <input
-          className="sched__input"
+      <FormRow label="아이디">
+        <Input
           type="text"
           value={bizboxId}
           onChange={(e) => setBizboxId(e.target.value)}
           placeholder="비즈박스 아이디"
           disabled={loading}
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <div className="sched__row">
-        <label className="sched__label">비밀번호</label>
-        <input
-          className="sched__input"
+      <FormRow label="비밀번호">
+        <Input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -56,26 +55,20 @@ export function SettingsSection() {
             hasPassword ? '●●●●●●  (저장됨 — 바꿀 때만 입력)' : '비밀번호 입력'
           }
           disabled={loading}
-          autoComplete="off"
         />
-      </div>
+      </FormRow>
 
-      <p className="sched__note">
+      <p className="note">
         🔒 비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
         (평문 저장 아님)
       </p>
 
-      <div className="sched__actions">
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={save}
-          disabled={loading || !bizboxId}
-        >
+      <div className="form-actions">
+        <Button variant="primary" onClick={save} disabled={loading || !bizboxId}>
           저장
-        </button>
+        </Button>
         {status && (
-          <span className="sched__hint" style={{ alignSelf: 'center' }}>
+          <span className="hint" style={{ alignSelf: 'center' }}>
             {status}
           </span>
         )}

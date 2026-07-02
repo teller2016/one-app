@@ -21,34 +21,6 @@
     color: var(--text-dim);
   }
 
-  &__refresh {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    color: var(--text-dim);
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      color: var(--text);
-      background: var(--bg-elevated);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-  }
-
-  &__spin {
-    animation: attend-spin 0.9s linear infinite;
-  }
-
   &__row {
     display: flex;
     align-items: center;
@@ -85,11 +57,5 @@
     line-height: 1.4;
     color: #ff8a8a;
     word-break: keep-all;
-  }
-}
-
-@keyframes attend-spin {
-  to {
-    transform: rotate(360deg);
   }
 }

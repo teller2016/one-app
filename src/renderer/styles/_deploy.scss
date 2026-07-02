@@ -72,40 +72,6 @@
     }
   }
 
-  // 새로고침 아이콘 버튼
-  &__refresh {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    background: transparent;
-    color: var(--text-dim);
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      color: var(--text);
-      border-color: var(--accent);
-    }
-
-    &:disabled {
-      opacity: 0.4;
-      cursor: default;
-    }
-
-    // 갱신 중에는 흐림 없이 아이콘 회전으로 표시
-    &--spinning:disabled {
-      opacity: 1;
-    }
-
-    &--spinning svg {
-      animation: deploy-spin 0.9s linear infinite;
-    }
-  }
-
   &__target {
     display: flex;
     align-items: center;
@@ -226,11 +192,5 @@
       font-size: 11.5px;
       opacity: 0.85;
     }
-  }
-}
-
-@keyframes deploy-spin {
-  to {
-    transform: rotate(360deg);
   }
 }

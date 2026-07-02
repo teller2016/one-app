@@ -40,6 +40,19 @@ body {
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    filter 0.12s,
+    background 0.12s,
+    border-color 0.12s;
+
+  // hover 시 살짝 밝게, 누르는 순간 살짝 어둡게
+  &:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+
+  &:active:not(:disabled) {
+    filter: brightness(0.92);
+  }
 
   &:disabled {
     opacity: 0.5;
@@ -55,12 +68,161 @@ body {
     background: var(--bg-elevated);
     color: var(--text);
     border-color: var(--border);
+
+    // 어두운 배경이라 밝기 변화가 약해서 테두리도 함께 강조
+    &:hover:not(:disabled) {
+      border-color: #4a4d54;
+    }
   }
 
   &--danger {
     background: #3a2224;
     color: #ff8a8a;
     border-color: #5a2e2e;
+  }
+}
+
+// 섹션 컨테이너 + 헤더
+.section {
+  padding: 22px 26px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.section-head {
+  &__title {
+    margin: 0 0 4px;
+    font-size: 20px;
+  }
+
+  &__sub {
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+}
+
+// 폼 공통
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+
+  &--col {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  &__label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 72px;
+
+    code {
+      color: var(--text);
+      font-size: 12px;
+    }
+  }
+}
+
+// 폼 밖의 독립 라벨 (실행 로그, 배포 대상 등)
+.form-label {
+  display: block;
+  margin: 20px 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 13px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+// 경고/안내 배너
+.banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 180, 80, 0.12);
+  border: 1px solid rgba(255, 180, 80, 0.35);
+  color: #f0c675;
+  font-size: 13px;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+
+// 아이콘 버튼 (새로고침 등)
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--bg-elevated);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  &--bordered {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+
+    &:hover:not(:disabled) {
+      background: transparent;
+      border-color: var(--accent);
+    }
+  }
+
+  &__spin {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

@@ -1,5 +1,8 @@
 import type { DeployProjectView, DeployStatus } from '../../../../shared/types';
 import { statusKey, isBusy, jenkinsJobUrl } from '../lib/format';
+import { Button } from '../../../components/Button';
+import { Banner } from '../../../components/Banner';
+import { RefreshButton } from '../../../components/RefreshButton';
 import { StatusBadge } from './StatusBadge';
 import { BuildDetailPanel, DetailState } from './BuildDetailPanel';
 
@@ -42,46 +45,26 @@ export function ProjectCard({
           </button>
         </div>
         <div className="deploy__card-actions">
-          <button
-            type="button"
-            className={
-              refreshing
-                ? 'deploy__refresh deploy__refresh--spinning'
-                : 'deploy__refresh'
-            }
+          <RefreshButton
+            bordered
+            size={14}
+            spinning={refreshing}
             onClick={onRefresh}
             disabled={!p.hasSecret || refreshing}
             title="이 프로젝트의 빌드 상태 새로고침"
-            aria-label="새로고침"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 3v6h-6" />
-            </svg>
-          </button>
-          <button type="button" className="btn btn--ghost" onClick={onEdit}>
-            편집
-          </button>
-          <button type="button" className="btn btn--danger" onClick={onDelete}>
+          />
+          <Button onClick={onEdit}>편집</Button>
+          <Button variant="danger" onClick={onDelete}>
             삭제
-          </button>
+          </Button>
         </div>
       </div>
 
       {!p.hasSecret && (
-        <p className="sched__banner">
+        <Banner>
           ⚠️ 젠킨스 계정이 저장되지 않았습니다. [편집]에서 API 토큰을
           입력하세요.
-        </p>
+        </Banner>
       )}
 
       {p.targets.map((t) => {
@@ -103,14 +86,13 @@ export function ProjectCard({
               >
                 {t.name} ↗
               </button>
-              <button
-                type="button"
-                className="btn btn--primary"
+              <Button
+                variant="primary"
                 onClick={() => onDeploy(t.id)}
                 disabled={!p.hasSecret || isBusy(status)}
               >
                 배포
-              </button>
+              </Button>
               <StatusBadge status={status} />
               <button
                 type="button"

@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '../../../components/Button';
+import { SectionHeader } from '../../../components/SectionHeader';
+import { FormRow } from '../../../components/FormRow';
+import { Banner } from '../../../components/Banner';
 
 type DateType = 'today' | 'yesterday' | 'date';
 
@@ -79,22 +83,21 @@ export function ScheduleSection() {
   };
 
   return (
-    <div className="sched">
-      <h2 className="sched__title">🗓️ 일정 등록</h2>
-      <p className="sched__sub">
-        비즈박스 그룹웨어에 하루 일정을 자동 등록합니다.
-      </p>
+    <div className="section">
+      <SectionHeader
+        title="🗓️ 일정 등록"
+        sub="비즈박스 그룹웨어에 하루 일정을 자동 등록합니다."
+      />
 
       {credsReady === false && (
-        <div className="sched__banner">
+        <Banner>
           ⚠️ 비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
           먼저 저장하세요.
-        </div>
+        </Banner>
       )}
 
       {/* 날짜 */}
-      <div className="sched__row">
-        <label className="sched__label">날짜</label>
+      <FormRow label="날짜">
         <div className="sched__segment">
           {(['today', 'yesterday', 'date'] as DateType[]).map((t) => (
             <button
@@ -117,11 +120,10 @@ export function ScheduleSection() {
             />
           )}
         </div>
-      </div>
+      </FormRow>
 
       {/* 시작 시간 */}
-      <div className="sched__row">
-        <label className="sched__label">시작 시간</label>
+      <FormRow label="시작 시간">
         <input
           type="text"
           className="sched__time"
@@ -129,14 +131,18 @@ export function ScheduleSection() {
           onChange={(e) => setStartTime(e.target.value)}
           disabled={running}
         />
-        <span className="sched__hint">예: 9 = 09:00, 9.5 = 09:30</span>
-      </div>
+        <span className="hint">예: 9 = 09:00, 9.5 = 09:30</span>
+      </FormRow>
 
       {/* 일정 입력 */}
-      <div className="sched__row sched__row--col">
-        <label className="sched__label">
-          일정 (한 줄에 하나: <code>종료시간 일정명</code>)
-        </label>
+      <FormRow
+        column
+        label={
+          <>
+            일정 (한 줄에 하나: <code>종료시간 일정명</code>)
+          </>
+        }
+      >
         <textarea
           className="sched__textarea"
           value={scheduleText}
@@ -147,39 +153,29 @@ export function ScheduleSection() {
           spellCheck={false}
           disabled={running}
         />
-      </div>
+      </FormRow>
 
       {/* 버튼 */}
-      <div className="sched__actions">
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => run(true)}
-          disabled={running}
-        >
+      <div className="form-actions">
+        <Button onClick={() => run(true)} disabled={running}>
           테스트 (등록 안 함)
-        </button>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => run(false)}
-          disabled={running}
-        >
+        </Button>
+        <Button variant="primary" onClick={() => run(false)} disabled={running}>
           {running ? '실행 중…' : '일정 등록'}
-        </button>
+        </Button>
         {running && (
-          <button type="button" className="btn btn--danger" onClick={cancel}>
+          <Button variant="danger" onClick={cancel}>
             중지
-          </button>
+          </Button>
         )}
       </div>
-      <p className="sched__note">
+      <p className="note">
         ※ 실행하면 자동 조작용 브라우저가 열립니다. 등록이 끝나도 확인용으로 창이
         열려 있으니 확인 후 직접 닫으세요.
       </p>
 
       {/* 로그 */}
-      <label className="sched__label sched__label--log">실행 로그</label>
+      <label className="form-label">실행 로그</label>
       <pre className="sched__log" ref={logRef}>
         {log || '실행하면 여기에 진행 상황이 표시됩니다.'}
       </pre>

@@ -47,7 +47,8 @@ src/
 ├── renderer/                    # 🎨 React UI
 │   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
 │   ├── app/App.tsx              #  앱 셸(사이드바/탭/메인) + SECTIONS
-│   ├── components/              #  공용 UI (Sidebar 등)
+│   ├── components/              #  공용 UI — Sidebar · Button · Input ·
+│   │                            #  FormRow · SectionHeader · Banner · RefreshButton
 │   ├── features/                #  기능별 폴더 — index.ts 가 공개 API
 │   │   ├── schedule/
 │   │   │   ├── components/ScheduleSection.tsx
@@ -101,6 +102,8 @@ src/
 ## 컨벤션
 - 코드 주석·문서·대화는 **한국어**.
 - **스타일은 SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts`에서 modern-compiler API 사용). BEM 클래스를 `&__`/`&--` 네스팅으로 작성하고, 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss`에 `@use` 추가.
+- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger), 입력 `Input`, 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`, 경고 배너 `Banner`, 새로고침 아이콘 `RefreshButton`. `.btn`/`.input` 등 공통 클래스 직접 사용 금지.
+- 공통 레이아웃 클래스(`_base.scss`): 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`.
 - 커밋: 한국어 conventional commit (`feat`/`fix`/`refactor`/`docs`/`chore`). **커밋 메시지에 Claude 서명(Co-Authored-By 등) 넣지 말 것.** → **`/commit` 스킬 사용.**
 - 새 라이브러리/기술 도입 전 **공식 문서 확인**. 큰 리팩터링은 사용자 승인 후 진행.
 - 자세한 로드맵은 `ROADMAP.md` 참고.
