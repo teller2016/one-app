@@ -7,7 +7,7 @@ import type {
   DeployProjectView,
   DeployTarget,
   SaveDeployProjectInput,
-} from '../../shared/types';
+} from '../../../shared/types';
 
 interface StoredDeployProject {
   id: string;

@@ -1,10 +1,10 @@
 import { ipcMain } from 'electron';
 import type { Browser } from 'puppeteer';
-import { runMacro } from '../schedule/runMacro';
-import { resolveBaseDate } from '../schedule/scheduleUtils';
-import { SCHEDULE_CONFIG } from '../schedule/config';
-import { getCredentials } from '../settings';
-import type { ScheduleRunPayload } from '../../shared/types';
+import { runMacro } from './runMacro';
+import { resolveBaseDate } from './scheduleUtils';
+import { SCHEDULE_CONFIG } from './config';
+import { getCredentials } from '../settings/store';
+import type { ScheduleRunPayload } from '../../../shared/types';
 
 let running = false;
 let currentBrowser: Browser | null = null;

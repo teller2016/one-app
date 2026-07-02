@@ -1,9 +1,9 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { registerScheduleIpc } from './ipc/schedule';
-import { registerSettingsIpc } from './ipc/settings';
-import { registerDeployIpc } from './ipc/deploy';
+import { registerScheduleIpc } from './features/schedule/ipc';
+import { registerSettingsIpc } from './features/settings/ipc';
+import { registerDeployIpc } from './features/deploy/ipc';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {

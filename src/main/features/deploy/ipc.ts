@@ -4,21 +4,21 @@ import {
   saveProject,
   deleteProject,
   getProjectCredentials,
-} from '../deploy/store';
+} from './store';
 import {
   triggerBuild,
   watchBuild,
   fetchLastStatus,
   fetchBuildDetail,
   JenkinsAuth,
-} from '../deploy/jenkins';
+} from './jenkins';
 import type {
   SaveDeployProjectInput,
   DeployStatus,
   DeployStatusEvent,
   DeployTriggerResult,
   DeployBuildDetailResult,
-} from '../../shared/types';
+} from '../../../shared/types';
 
 // 진행 중인 배포 (projectId:targetId) — 같은 대상 중복 트리거 방지
 const inFlight = new Set<string>();

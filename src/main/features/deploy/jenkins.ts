@@ -5,7 +5,7 @@ import type {
   DeployStatus,
   DeployBuildDetail,
   DeployCommit,
-} from '../../shared/types';
+} from '../../../shared/types';
 
 export type JenkinsAuth = {
   baseUrl: string; // 예: https://jenkins.example.com (끝 슬래시 없음)

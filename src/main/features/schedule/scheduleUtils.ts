@@ -1,5 +1,5 @@
 // 일정 파싱 / 시간·날짜 변환 (Day_Schedule_Macro/src/schedule.js 이식)
-import type { ScheduleDateOption } from '../../shared/types';
+import type { ScheduleDateOption } from '../../../shared/types';
 
 export interface ScheduleItem {
   start: number;

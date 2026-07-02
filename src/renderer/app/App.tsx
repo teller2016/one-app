@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Sidebar, SidebarSection } from './components/Sidebar';
-import { ScheduleSection } from './features/schedule/ScheduleSection';
-import { SettingsSection } from './features/settings/SettingsSection';
-import { DeploySection } from './features/deploy/DeploySection';
+import { Sidebar, SidebarSection } from '../components/Sidebar';
+import { ScheduleSection } from '../features/schedule';
+import { SettingsSection } from '../features/settings';
+import { DeploySection } from '../features/deploy';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: '🗓️' },

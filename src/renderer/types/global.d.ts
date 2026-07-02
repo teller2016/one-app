@@ -12,7 +12,7 @@ import type {
   DeployStatusEvent,
   DeployTriggerResult,
   DeployBuildDetailResult,
-} from '../shared/types';
+} from '../../shared/types';
 
 declare global {
   interface Window {

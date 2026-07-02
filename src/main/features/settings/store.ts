@@ -2,7 +2,7 @@
 import { app, safeStorage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { AppSettingsView, SaveSettingsInput } from '../shared/types';
+import type { AppSettingsView, SaveSettingsInput } from '../../../shared/types';
 
 interface StoredSettings {
   bizboxId: string;
