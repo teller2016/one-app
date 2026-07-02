@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { registerScheduleIpc } from './features/schedule/ipc';
@@ -16,6 +16,15 @@ registerScheduleIpc();
 registerSettingsIpc();
 registerDeployIpc();
 registerAttendanceIpc();
+
+// 외부 브라우저로 링크 열기 (http/https 만 허용)
+ipcMain.handle('app:openExternal', async (_e, url: string) => {
+  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+    await shell.openExternal(url);
+    return { ok: true };
+  }
+  return { ok: false };
+});
 
 const createWindow = () => {
   // 메인 창 생성

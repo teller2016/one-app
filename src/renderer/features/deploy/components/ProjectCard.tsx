@@ -1,5 +1,5 @@
 import type { DeployProjectView, DeployStatus } from '../../../../shared/types';
-import { statusKey, isBusy } from '../lib/format';
+import { statusKey, isBusy, jenkinsJobUrl } from '../lib/format';
 import { StatusBadge } from './StatusBadge';
 import { BuildDetailPanel, DetailState } from './BuildDetailPanel';
 
@@ -32,7 +32,14 @@ export function ProjectCard({
       <div className="deploy__card-head">
         <div>
           <span className="deploy__project-name">{p.name}</span>
-          <span className="deploy__project-url">{p.jenkinsUrl}</span>
+          <button
+            type="button"
+            className="deploy__project-url deploy__link"
+            onClick={() => void window.oneApp.openExternal(p.jenkinsUrl)}
+            title="젠킨스 열기"
+          >
+            {p.jenkinsUrl} ↗
+          </button>
         </div>
         <div className="deploy__card-actions">
           <button
@@ -84,7 +91,18 @@ export function ProjectCard({
         return (
           <div key={t.id}>
             <div className="deploy__target">
-              <span className="deploy__target-name">{t.name}</span>
+              <button
+                type="button"
+                className="deploy__target-name deploy__link"
+                onClick={() =>
+                  void window.oneApp.openExternal(
+                    jenkinsJobUrl(p.jenkinsUrl, t.jobPath),
+                  )
+                }
+                title={`젠킨스 잡 페이지 열기 — ${t.jobPath}`}
+              >
+                {t.name} ↗
+              </button>
               <button
                 type="button"
                 className="btn btn--primary"

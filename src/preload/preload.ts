@@ -73,4 +73,6 @@ contextBridge.exposeInMainWorld('oneApp', {
     stamp: (action: 'come' | 'leave') =>
       ipcRenderer.invoke('attendance:stamp', action),
   },
+  // 기본 브라우저로 링크 열기 (http/https 만 허용)
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
 });

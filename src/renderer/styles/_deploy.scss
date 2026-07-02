@@ -56,6 +56,22 @@
     color: var(--text-dim);
   }
 
+  // 텍스트를 클릭 가능한 링크처럼 (젠킨스 페이지 열기)
+  &__link {
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  }
+
   // 새로고침 아이콘 버튼
   &__refresh {
     display: inline-flex;

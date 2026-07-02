@@ -8,6 +8,14 @@ export const statusKey = (projectId: string, targetId: string) =>
 export const isBusy = (s?: DeployStatus) =>
   s?.state === 'queued' || s?.state === 'building';
 
+/** 젠킨스 잡 페이지 URL — "폴더/잡" 경로를 /job/폴더/job/잡 으로 변환 */
+export const jenkinsJobUrl = (baseUrl: string, jobPath: string) =>
+  `${baseUrl.replace(/\/+$/, '')}/job/${jobPath
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/job/')}/`;
+
 export const formatTime = (ts?: number) =>
   ts ? new Date(ts).toLocaleString('ko-KR') : '';
 

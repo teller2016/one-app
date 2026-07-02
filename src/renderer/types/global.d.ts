@@ -52,6 +52,7 @@ declare global {
         fetch: () => Promise<AttendanceResult>;
         stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
       };
+      openExternal: (url: string) => Promise<{ ok: boolean }>;
     };
   }
 }
