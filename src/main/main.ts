@@ -3,6 +3,7 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { registerScheduleIpc } from './ipc/schedule';
 import { registerSettingsIpc } from './ipc/settings';
+import { registerDeployIpc } from './ipc/deploy';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -12,6 +13,7 @@ if (started) {
 // IPC 핸들러 등록
 registerScheduleIpc();
 registerSettingsIpc();
+registerDeployIpc();
 
 const createWindow = () => {
   // 메인 창 생성

@@ -1,7 +1,12 @@
 // preload: 렌더러에 안전하게 노출할 API를 contextBridge 로 등록한다.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ScheduleRunPayload, SaveSettingsInput } from '../shared/types';
+import type {
+  ScheduleRunPayload,
+  SaveSettingsInput,
+  SaveDeployProjectInput,
+  DeployStatusEvent,
+} from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
   schedule: {
@@ -31,5 +36,34 @@ contextBridge.exposeInMainWorld('oneApp', {
     get: () => ipcRenderer.invoke('settings:get'),
     // 설정 저장 (비밀번호는 암호화되어 저장)
     set: (input: SaveSettingsInput) => ipcRenderer.invoke('settings:set', input),
+  },
+  deploy: {
+    // 프로젝트 목록 조회 (토큰/비밀번호 값은 오지 않음)
+    getProjects: () => ipcRenderer.invoke('deploy:projects:get'),
+    // 프로젝트 추가/수정 (토큰은 암호화되어 저장). 최신 목록 반환
+    saveProject: (input: SaveDeployProjectInput) =>
+      ipcRenderer.invoke('deploy:projects:save', input),
+    // 프로젝트 삭제. 최신 목록 반환
+    deleteProject: (id: string) =>
+      ipcRenderer.invoke('deploy:projects:delete', id),
+    // 배포 대상별 최근 빌드 상태 조회 (targetId → status)
+    fetchStatuses: (projectId: string) =>
+      ipcRenderer.invoke('deploy:status:fetch', projectId),
+    // 배포 실행 — 이후 진행 상태는 onStatus 로 전달됨
+    trigger: (projectId: string, targetId: string) =>
+      ipcRenderer.invoke('deploy:trigger', projectId, targetId),
+    // 빌드 상세(커밋 내역 등) 조회. buildNumber 없으면 최근 빌드
+    getBuildDetail: (
+      projectId: string,
+      targetId: string,
+      buildNumber?: number,
+    ) =>
+      ipcRenderer.invoke('deploy:build:detail', projectId, targetId, buildNumber),
+    // 배포 상태 이벤트 구독. 해제 함수를 반환한다.
+    onStatus: (cb: (evt: DeployStatusEvent) => void) => {
+      const listener = (_e: unknown, evt: DeployStatusEvent) => cb(evt);
+      ipcRenderer.on('deploy:status', listener);
+      return () => ipcRenderer.removeListener('deploy:status', listener);
+    },
   },
 });

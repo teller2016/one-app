@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Sidebar, SidebarSection } from './components/Sidebar';
 import { ScheduleSection } from './features/schedule/ScheduleSection';
 import { SettingsSection } from './features/settings/SettingsSection';
+import { DeploySection } from './features/deploy/DeploySection';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: '🗓️' },
+  { id: 'deploy', label: '배포', icon: '🚀' },
   { id: 'settings', label: '환경설정', icon: '⚙️' },
   // 나중에 추가할 섹션들 (필요할 때 주석 해제)
   // { id: 'terminal', label: '터미널', icon: '🖥️' },
@@ -12,7 +14,6 @@ const SECTIONS: SidebarSection[] = [
   // { id: 'monitoring', label: '모니터링', icon: '📈' },
   // { id: 'memo', label: '메모', icon: '📝' },
   // { id: 'jira', label: 'Jira', icon: '📋' },
-  // { id: 'jenkins', label: 'Jenkins', icon: '🛠️' },
   // { id: 'docker', label: 'Docker', icon: '🐳' },
   // { id: 'vpn', label: 'VPN', icon: '🔒' },
   // { id: 'nas', label: 'NAS', icon: '🗄️' },
@@ -26,6 +27,8 @@ export function App() {
     switch (active.id) {
       case 'schedule':
         return <ScheduleSection />;
+      case 'deploy':
+        return <DeploySection />;
       case 'settings':
         return <SettingsSection />;
       default:

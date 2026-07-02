@@ -6,6 +6,12 @@ import type {
   ScheduleDoneInfo,
   AppSettingsView,
   SaveSettingsInput,
+  DeployProjectView,
+  SaveDeployProjectInput,
+  DeployStatus,
+  DeployStatusEvent,
+  DeployTriggerResult,
+  DeployBuildDetailResult,
 } from '../shared/types';
 
 declare global {
@@ -20,6 +26,26 @@ declare global {
       settings: {
         get: () => Promise<AppSettingsView>;
         set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
+      };
+      deploy: {
+        getProjects: () => Promise<DeployProjectView[]>;
+        saveProject: (
+          input: SaveDeployProjectInput,
+        ) => Promise<DeployProjectView[]>;
+        deleteProject: (id: string) => Promise<DeployProjectView[]>;
+        fetchStatuses: (
+          projectId: string,
+        ) => Promise<Record<string, DeployStatus>>;
+        trigger: (
+          projectId: string,
+          targetId: string,
+        ) => Promise<DeployTriggerResult>;
+        getBuildDetail: (
+          projectId: string,
+          targetId: string,
+          buildNumber?: number,
+        ) => Promise<DeployBuildDetailResult>;
+        onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
       };
     };
   }
