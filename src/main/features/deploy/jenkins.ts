@@ -150,7 +150,7 @@ export async function fetchLastStatus(
 
 // 빌드 상세에서 필요한 필드만 받아오기 위한 tree 파라미터
 const DETAIL_TREE =
-  'number,building,result,timestamp,' +
+  'number,building,result,timestamp,duration,' +
   'actions[causes[shortDescription,userName],lastBuiltRevision[SHA1,branch[name]],remoteUrls],' +
   'changeSet[items[commitId,msg,comment,timestamp,author[fullName],authorEmail]],' +
   'changeSets[items[commitId,msg,comment,timestamp,author[fullName],authorEmail]]';
@@ -198,6 +198,7 @@ export async function fetchBuildDetail(
     building: boolean;
     result: string | null;
     timestamp?: number;
+    duration?: number;
     actions?: RawAction[];
     changeSet?: { items?: RawChangeItem[] }; // freestyle 잡
     changeSets?: { items?: RawChangeItem[] }[]; // pipeline 잡
@@ -223,6 +224,7 @@ export async function fetchBuildDetail(
     building: b.building,
     result: b.result,
     timestamp: b.timestamp,
+    duration: b.duration,
     startedBy: cause?.userName ?? cause?.shortDescription,
     revision: gitData?.lastBuiltRevision?.SHA1,
     branch: gitData?.lastBuiltRevision?.branch?.[0]?.name,

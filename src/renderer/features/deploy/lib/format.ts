@@ -19,6 +19,17 @@ export const jenkinsJobUrl = (baseUrl: string, jobPath: string) =>
 export const formatTime = (ts?: number) =>
   ts ? new Date(ts).toLocaleString('ko-KR') : '';
 
+/** 소요 시간 — "22분 47초" / "45초" / "1시간 3분" */
+export const formatDuration = (ms: number) => {
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}시간 ${m}분`;
+  if (m > 0) return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+  return `${s}초`;
+};
+
 /** "5분 전" 형태의 상대 시간 (일주일 넘으면 날짜로) */
 export const formatRelative = (ts: number) => {
   const min = Math.floor((Date.now() - ts) / 60000);

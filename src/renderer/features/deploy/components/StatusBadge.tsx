@@ -1,11 +1,11 @@
 import type { DeployStatus } from '../../../../shared/types';
 import { formatRelative, formatTime } from '../lib/format';
 
-// 배지 옆 마지막 배포(완료) 시각 — 호버 시 정확한 일시 툴팁
+// 배지 옆 마지막 배포(완료) 시각 — 호버 시 정확한 완료 일시 툴팁
 function FinishedTime({ ts }: { ts?: number }) {
   if (!ts) return null;
   return (
-    <span className="deploy__badge-time" title={formatTime(ts)}>
+    <span className="deploy__badge-time" title={`완료: ${formatTime(ts)}`}>
       {formatRelative(ts)}
     </span>
   );

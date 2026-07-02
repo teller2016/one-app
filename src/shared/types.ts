@@ -101,6 +101,7 @@ export type DeployBuildDetail = {
   building: boolean;
   result: string | null;
   timestamp?: number; // 빌드 시작 시각 (epoch ms)
+  duration?: number; // 소요 시간 (ms)
   startedBy?: string; // 시작한 사용자
   revision?: string; // git SHA
   branch?: string; // 예: refs/remotes/origin/develop

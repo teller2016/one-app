@@ -1,5 +1,5 @@
 import type { DeployBuildDetail } from '../../../../shared/types';
-import { formatTime } from '../lib/format';
+import { formatTime, formatDuration } from '../lib/format';
 
 /** 커밋 내역 펼침 패널 상태 */
 export type DetailState = {
@@ -22,7 +22,10 @@ export function BuildDetailPanel({ state }: { state: DetailState }) {
     <div className="deploy__detail">
       <div className="deploy__detail-head">
         <b>#{d.number}</b>
-        {d.timestamp ? ` · ${formatTime(d.timestamp)}` : ''}
+        {d.timestamp ? ` · 시작 ${formatTime(d.timestamp)}` : ''}
+        {d.duration != null && !d.building
+          ? ` (${formatDuration(d.duration)} 소요)`
+          : ''}
         {d.startedBy ? ` · ${d.startedBy}` : ''}
       </div>
       {(d.revision || d.branch || d.repoUrl) && (
