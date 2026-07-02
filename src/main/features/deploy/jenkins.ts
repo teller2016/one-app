@@ -62,22 +62,31 @@ export async function triggerBuild(
   a: JenkinsAuth,
   jobPath: string,
 ): Promise<{ queueUrl: string }> {
-  const url = `${jobUrl(a, jobPath)}/build`;
-  const doPost = (extra: Record<string, string> = {}) =>
-    fetch(url, {
+  const base = jobUrl(a, jobPath);
+  let crumbHeaders: Record<string, string> = {};
+  const doPost = (endpoint: 'build' | 'buildWithParameters') =>
+    fetch(`${base}/${endpoint}`, {
       method: 'POST',
-      headers: { Authorization: authHeader(a), ...extra },
+      headers: { Authorization: authHeader(a), ...crumbHeaders },
     });
 
   let res: Response;
   try {
-    res = await doPost();
+    res = await doPost('build');
     // 403 이면 CSRF crumb 필요 → 발급 후 재시도
     if (res.status === 403) {
       const crumb = await fetchCrumbHeaders(a);
-      if (crumb) res = await doPost(crumb);
+      if (crumb) {
+        crumbHeaders = crumb;
+        res = await doPost('build');
+      }
     }
-  } catch (err) {
+    // 파라미터가 정의된 잡은 /build 를 400 으로 거부
+    // → 파라미터 기본값으로 실행되는 buildWithParameters 로 재시도
+    if (res.status === 400) {
+      res = await doPost('buildWithParameters');
+    }
+  } catch {
     throw new Error(
       `젠킨스에 연결할 수 없습니다 (${a.baseUrl}) — URL·네트워크(VPN)를 확인하세요.`,
     );
@@ -95,6 +104,10 @@ export async function triggerBuild(
     throw new Error('권한 없음(403) — 계정에 빌드 권한이 있는지 확인하세요.');
   if (res.status === 404)
     throw new Error(`잡을 찾을 수 없습니다: ${jobPath} (잡 이름/경로 확인)`);
+  if (res.status === 400)
+    throw new Error(
+      '빌드 요청 거부(HTTP 400) — 잡의 파라미터 설정(필수 파라미터 여부)을 확인하세요.',
+    );
   throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
 }
 
