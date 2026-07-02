@@ -46,6 +46,28 @@ const isBusy = (s?: DeployStatus) =>
 const formatTime = (ts?: number) =>
   ts ? new Date(ts).toLocaleString('ko-KR') : '';
 
+// "5분 전" 형태의 상대 시간 (일주일 넘으면 날짜로)
+const formatRelative = (ts: number) => {
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return new Date(ts).toLocaleDateString('ko-KR');
+};
+
+// 배지 옆 마지막 배포(완료) 시각 — 호버 시 정확한 일시 툴팁
+function FinishedTime({ ts }: { ts?: number }) {
+  if (!ts) return null;
+  return (
+    <span className="deploy__badge-time" title={formatTime(ts)}>
+      {formatRelative(ts)}
+    </span>
+  );
+}
+
 // 커밋 내역 펼침 패널 상태
 type DetailState = {
   open: boolean;
@@ -120,14 +142,20 @@ function StatusBadge({ status }: { status?: DeployStatus }) {
       );
     case 'success':
       return (
-        <span className="deploy__badge deploy__badge--ok">✅ 성공{num}</span>
+        <>
+          <span className="deploy__badge deploy__badge--ok">✅ 성공{num}</span>
+          <FinishedTime ts={status.finishedAt} />
+        </>
       );
     case 'failure':
       return (
-        <span className="deploy__badge deploy__badge--fail">
-          ❌ {status.result === 'ABORTED' ? '중단됨' : '실패'}
-          {num}
-        </span>
+        <>
+          <span className="deploy__badge deploy__badge--fail">
+            ❌ {status.result === 'ABORTED' ? '중단됨' : '실패'}
+            {num}
+          </span>
+          <FinishedTime ts={status.finishedAt} />
+        </>
       );
     case 'error':
       return (
@@ -147,6 +175,12 @@ export function DeploySection() {
   const [formError, setFormError] = useState('');
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+  const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
+
+  useEffect(() => {
+    const id = setInterval(() => setClock((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // 프로젝트 목록의 최근 빌드 상태 조회
   const refreshStatuses = async (list: DeployProjectView[]) => {

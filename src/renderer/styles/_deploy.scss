@@ -112,6 +112,15 @@
     font-size: 12.5px;
     color: var(--text-dim);
 
+    // 배지 옆 마지막 배포 시각
+    &-time {
+      margin-left: -5px; // 행 gap(12px)이 넓어 배지에 붙여 표시
+      font-size: 11.5px;
+      color: var(--text-dim);
+      opacity: 0.85;
+      cursor: default;
+    }
+
     &--busy {
       color: #f0c675;
     }
