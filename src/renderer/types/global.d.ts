@@ -12,6 +12,7 @@ import type {
   DeployStatusEvent,
   DeployTriggerResult,
   DeployBuildDetailResult,
+  AttendanceResult,
 } from '../../shared/types';
 
 declare global {
@@ -46,6 +47,10 @@ declare global {
           buildNumber?: number,
         ) => Promise<DeployBuildDetailResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
+      };
+      attendance: {
+        fetch: () => Promise<AttendanceResult>;
+        stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
       };
     };
   }

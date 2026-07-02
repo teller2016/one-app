@@ -3,6 +3,7 @@ import { Sidebar, SidebarSection } from '../components/Sidebar';
 import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
+import { AttendanceWidget } from '../features/attendance';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: '🗓️' },
@@ -49,7 +50,12 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar sections={SECTIONS} activeId={activeId} onSelect={setActiveId} />
+      <Sidebar
+        sections={SECTIONS}
+        activeId={activeId}
+        onSelect={setActiveId}
+        footer={<AttendanceWidget />}
+      />
 
       {/* 오른쪽 콘텐츠 영역 */}
       <section className="content">

@@ -113,3 +113,17 @@ export type DeployBuildDetailResult = {
   detail?: DeployBuildDetail;
   error?: string;
 };
+
+// ── 출퇴근 (근태) ──
+export type AttendanceInfo = {
+  comeTime: string | null; // "09:37" — 아직 안 찍었으면 null
+  leaveTime: string | null;
+  date: string; // "2026.07.02"
+  checkedAt: number; // 조회 시각 (epoch ms)
+};
+
+export type AttendanceResult = {
+  ok: boolean;
+  info?: AttendanceInfo;
+  error?: string;
+};

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export interface SidebarSection {
   id: string;
   label: string;
@@ -9,10 +11,12 @@ export function Sidebar({
   sections,
   activeId,
   onSelect,
+  footer,
 }: {
   sections: SidebarSection[];
   activeId: string;
   onSelect: (id: string) => void;
+  footer?: ReactNode; // 하단 고정 영역 (근태 위젯 등)
 }) {
   return (
     <aside className="sidebar">
@@ -35,6 +39,7 @@ export function Sidebar({
           </button>
         ))}
       </nav>
+      {footer && <div className="sidebar__footer">{footer}</div>}
     </aside>
   );
 }

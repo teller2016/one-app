@@ -66,4 +66,11 @@ contextBridge.exposeInMainWorld('oneApp', {
       return () => ipcRenderer.removeListener('deploy:status', listener);
     },
   },
+  attendance: {
+    // 현재 출퇴근 시각 조회 (headless 브라우저로 그룹웨어 확인 — 수 초 소요)
+    fetch: () => ipcRenderer.invoke('attendance:fetch'),
+    // 출근/퇴근 찍기
+    stamp: (action: 'come' | 'leave') =>
+      ipcRenderer.invoke('attendance:stamp', action),
+  },
 });

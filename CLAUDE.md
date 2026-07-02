@@ -36,9 +36,13 @@ src/
 │       │   ├── ipc.ts
 │       │   ├── jenkins.ts       #    빌드 트리거·상태 폴링 (crumb 처리 포함)
 │       │   └── store.ts         #    프로젝트 저장 (토큰 safeStorage 암호화)
-│       └── settings/            #  환경설정
+│       ├── settings/            #  환경설정
+│       │   ├── ipc.ts
+│       │   └── store.ts         #    설정 저장 (safeStorage 암호화)
+│       └── attendance/          #  출퇴근 (headless puppeteer)
 │           ├── ipc.ts
-│           └── store.ts         #    설정 저장 (safeStorage 암호화)
+│           ├── config.ts        #    그룹웨어 URL·셀렉터·플래그
+│           └── attend.ts        #    로그인→근태 조회/찍기
 ├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
 ├── renderer/                    # 🎨 React UI
 │   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
@@ -52,13 +56,15 @@ src/
 │   │   │   ├── components/      #  Section(오케스트레이션)·Card·Form·Badge·DetailPanel
 │   │   │   ├── lib/format.ts    #  키·시간 포맷 헬퍼
 │   │   │   └── index.ts
-│   │   └── settings/            #  (schedule 과 동일 구조)
+│   │   ├── settings/            #  (schedule 과 동일 구조)
+│   │   └── attendance/          #  출퇴근 위젯 (사이드바 하단 고정)
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
 │   │   ├── _base.scss           #    변수·리셋·공통(btn, placeholder)
 │   │   ├── _layout.scss         #    사이드바·탭바·메인
 │   │   ├── _schedule.scss       #    일정 등록 (환경설정도 공용)
-│   │   └── _deploy.scss         #    배포
+│   │   ├── _deploy.scss         #    배포
+│   │   └── _attendance.scss     #    출퇴근 위젯
 │   └── types/global.d.ts        #  window.oneApp 타입
 └── shared/types.ts              # 🔗 프로세스 간 공용 타입
 ```
@@ -83,6 +89,7 @@ src/
 ## 주요 기능 메모
 - **일정 등록** (`renderer/features/schedule` + `main/features/schedule`): 비즈박스 그룹웨어에 하루 일정을 puppeteer로 자동 등록. 계정 정보는 **환경설정 탭**에서 입력 → `safeStorage`로 암호화 저장. 실행 시 자동화 브라우저가 열리며, 완료 후에도 확인용으로 유지됨.
 - **환경설정** (`renderer/features/settings` + `main/features/settings`): 비즈박스 ID/비밀번호 관리.
+- **출퇴근** (`renderer/features/attendance` + `main/features/attendance`): 사이드바 하단 고정 위젯. headless puppeteer로 그룹웨어(gw.forbiz.co.kr) 로그인 후 userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용. 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거침.
 - **배포** (`renderer/features/deploy` + `main/features/deploy`): 프로젝트별 젠킨스 잡을 REST API로 트리거하고 상태(대기→빌드중→성공/실패)를 폴링해 표시. 대상별 [커밋 내역]으로 빌드에 포함된 커밋(changeSet)·시작자·revision 확인 가능. 프로젝트 하나에 배포 대상 여러 개(스토어·어드민 등) 등록 가능. 젠킨스 URL·계정은 배포 탭에서 프로젝트별로 등록하고, API 토큰(또는 비밀번호)은 `safeStorage`로 암호화해 `userData/deploy.json`에 저장. 인증은 Basic Auth + API 토큰 권장(비밀번호 인증은 CSRF crumb 자동 처리).
 
 ## 트러블슈팅

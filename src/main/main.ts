@@ -4,6 +4,7 @@ import started from 'electron-squirrel-startup';
 import { registerScheduleIpc } from './features/schedule/ipc';
 import { registerSettingsIpc } from './features/settings/ipc';
 import { registerDeployIpc } from './features/deploy/ipc';
+import { registerAttendanceIpc } from './features/attendance/ipc';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -14,6 +15,7 @@ if (started) {
 registerScheduleIpc();
 registerSettingsIpc();
 registerDeployIpc();
+registerAttendanceIpc();
 
 const createWindow = () => {
   // 메인 창 생성
