@@ -1,6 +1,6 @@
 // 데스크톱 알림 (공통 인프라) — Electron Notification 래퍼.
 // 알림을 클릭하면 앱 창을 앞으로 가져오고, 지정한 사이드바 섹션으로 이동시킨다.
-import { BrowserWindow, Notification } from 'electron';
+import { BrowserWindow, Notification, ipcMain } from 'electron';
 
 // main.ts 에서 창 생성 후 등록한다 (알림 클릭 시 포커스/이동에 사용)
 let mainWindow: BrowserWindow | null = null;
@@ -29,4 +29,16 @@ export function notify({ title, body, section }: NotifyOptions) {
     if (section) win.webContents.send('app:navigate', section);
   });
   n.show();
+}
+
+/** 알림 관련 IPC 등록 — 현재는 미리보기용 테스트 알림 */
+export function registerNotifyIpc() {
+  ipcMain.handle('notify:test', () => {
+    notify({
+      title: '🔔 알림 테스트',
+      body: 'One App 알림이 이렇게 표시됩니다. 클릭하면 앱이 열려요.',
+      section: 'settings',
+    });
+    return { ok: true };
+  });
 }

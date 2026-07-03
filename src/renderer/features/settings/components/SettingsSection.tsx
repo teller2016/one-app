@@ -117,6 +117,12 @@ export function SettingsSection() {
         />
         <span>배포가 끝나면 데스크톱 알림 받기 (성공/실패)</span>
       </label>
+      <div className="settings__test-row">
+        <Button onClick={() => window.oneApp?.testNotification()}>
+          🔔 테스트 알림 보내기
+        </Button>
+        <span className="hint">알림이 어떻게 뜨는지 미리 확인 (권한 허용도 이걸로)</span>
+      </div>
 
       <label className="form-label">출퇴근 리마인더</label>
       <p className="hint" style={{ marginBottom: 10 }}>

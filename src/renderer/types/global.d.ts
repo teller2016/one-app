@@ -75,6 +75,7 @@ declare global {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;
         onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
       };
+      testNotification: () => Promise<{ ok: boolean }>;
       openExternal: (url: string) => Promise<{ ok: boolean }>;
       onNavigate: (cb: (section: string) => void) => () => void;
     };

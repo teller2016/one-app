@@ -169,3 +169,16 @@
     opacity: 0.45;
   }
 }
+
+// 환경설정 — 테스트 알림 버튼 행
+.settings__test-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+
+  .btn {
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+}
