@@ -32,6 +32,35 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+// 스크롤바 (앱 전역) — 기본 스크롤바가 투박해서 얇고 은은하게 통일.
+// Electron(Chromium)이라 ::-webkit-scrollbar 로 충분하다.
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  // 투명 테두리 + padding-box 클립으로 실제 두께가 얇아 보이게
+  background: #45474e;
+  border: 3px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+
+  &:hover {
+    background: #585b63;
+    background-clip: padding-box;
+  }
+}
+
+// 스크롤바가 트랙 위에 떠 있어 모서리 배경이 튀지 않게
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 // 공용 버튼
 .btn {
   padding: 9px 18px;
