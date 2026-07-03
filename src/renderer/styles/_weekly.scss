@@ -313,6 +313,7 @@
   border-top: 3px solid #6366f1;
   border-radius: 14px;
   padding: 22px;
+  min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록
 
   &__head {
     display: flex;
@@ -344,12 +345,13 @@
 
   &__duo {
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr;
+    // minmax(0, …) 로 트랙이 canvas 최소폭 아래로도 줄어들게 (안 하면 가로 오버플로)
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
     gap: 14px;
     margin-bottom: 14px;
 
     @media (max-width: 1100px) {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }
@@ -358,6 +360,8 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
+  min-width: 0; // 내부 canvas 가 패널 폭을 밀어내지 않도록
+  overflow: hidden;
 
   &__title {
     font-size: 12px;
@@ -369,6 +373,7 @@
   }
 
   canvas {
+    max-width: 100%;
     max-height: 200px;
   }
 }
