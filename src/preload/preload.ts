@@ -8,6 +8,7 @@ import type {
   DeployStatusEvent,
   SaveVpnSettingsInput,
   VpnStatus,
+  WeeklyProgress,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -95,6 +96,17 @@ contextBridge.exposeInMainWorld('oneApp', {
     // 출근/퇴근 찍기
     stamp: (action: 'come' | 'leave') =>
       ipcRenderer.invoke('attendance:stamp', action),
+  },
+  weekly: {
+    // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주
+    fetch: (weekOffset: number) =>
+      ipcRenderer.invoke('weekly:fetch', weekOffset),
+    // 수집 진행 단계 구독. 해제 함수를 반환한다.
+    onProgress: (cb: (progress: WeeklyProgress) => void) => {
+      const listener = (_e: unknown, progress: WeeklyProgress) => cb(progress);
+      ipcRenderer.on('weekly:progress', listener);
+      return () => ipcRenderer.removeListener('weekly:progress', listener);
+    },
   },
   // 기본 브라우저로 링크 열기 (http/https 만 허용)
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),

@@ -18,6 +18,8 @@ import type {
   VpnSaveResult,
   VpnActionResult,
   VpnStatus,
+  WeeklyFetchResult,
+  WeeklyProgress,
 } from '../../shared/types';
 
 declare global {
@@ -65,6 +67,10 @@ declare global {
       attendance: {
         fetch: () => Promise<AttendanceResult>;
         stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
+      };
+      weekly: {
+        fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;
+        onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
       };
       openExternal: (url: string) => Promise<{ ok: boolean }>;
     };

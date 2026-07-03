@@ -3,11 +3,13 @@ import { Sidebar, SidebarSection } from '../components/Sidebar';
 import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
+import { WeeklySection } from '../features/weekly';
 import { AttendanceWidget } from '../features/attendance';
 import { VpnWidget } from '../features/vpn';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: '🗓️' },
+  { id: 'weekly', label: '주간보고', icon: '📊' },
   { id: 'deploy', label: '배포', icon: '🚀' },
   { id: 'settings', label: '환경설정', icon: '⚙️' },
   // 나중에 추가할 섹션들 (필요할 때 주석 해제)
@@ -29,6 +31,8 @@ export function App() {
     switch (active.id) {
       case 'schedule':
         return <ScheduleSection />;
+      case 'weekly':
+        return <WeeklySection />;
       case 'deploy':
         return <DeploySection />;
       case 'settings':

@@ -148,6 +148,29 @@ export type VpnSaveResult = {
 
 export type VpnActionResult = { ok: boolean; error?: string };
 
+// ── 주간보고 (FE챕터 개인별 주간 분석) ──
+
+/** 그룹웨어 개인별 주간 화면에서 수집한 일정 한 건 (엑셀 payload 원본) */
+export type WeeklyRawRow = {
+  day: string; // 일자 — 예: "06.29 (월)"
+  time: string; // 시간 — 예: "08:30 ~ 11:30"
+  title: string; // 일정명 — 예: "[뉴발] QA 이슈 대응"
+  createName: string; // 등록자
+  userList: string; // 일정대상자 (여러 명이면 이름이 나열됨)
+};
+
+export type WeeklyPeriod = { start: string; end: string }; // "YYYY-MM-DD"
+
+export type WeeklyFetchResult = {
+  ok: boolean;
+  rows?: WeeklyRawRow[];
+  period?: WeeklyPeriod;
+  error?: string;
+};
+
+/** 수집 진행 단계 (메인 → 렌더러 이벤트) */
+export type WeeklyProgress = { step: string };
+
 // ── 출퇴근 (근태) ──
 export type AttendanceInfo = {
   comeTime: string | null; // "09:37" — 아직 안 찍었으면 null
