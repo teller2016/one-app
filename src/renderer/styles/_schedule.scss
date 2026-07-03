@@ -78,3 +78,21 @@
     color: var(--text);
   }
 }
+
+// 환경설정 — 체크박스 옵션 행 (알림 토글 등)
+.settings__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+}

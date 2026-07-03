@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar, SidebarSection } from '../components/Sidebar';
 import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
@@ -26,6 +26,14 @@ const SECTIONS: SidebarSection[] = [
 export function App() {
   const [activeId, setActiveId] = useState<string>('schedule');
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
+
+  // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환
+  useEffect(() => {
+    if (!window.oneApp?.onNavigate) return;
+    return window.oneApp.onNavigate((section) => {
+      if (SECTIONS.some((s) => s.id === section)) setActiveId(section);
+    });
+  }, []);
 
   const renderMain = () => {
     switch (active.id) {

@@ -49,10 +49,12 @@ src/
 │       │   ├── totp.ts          #    RFC 6238 TOTP (Google OTP 자동 생성)
 │       │   ├── store.ts         #    계정·시크릿 저장 (safeStorage 암호화)
 │       │   └── openvpn.ts       #    root 데몬 실행·상태 추적·연결/해제
-│       └── weekly/              #  주간보고 (headless puppeteer)
-│           ├── ipc.ts
-│           ├── config.ts        #    그룹웨어 개인별 주간 화면 셀렉터
-│           └── collect.ts       #    로그인→FE챕터→개인별 주간→datas 캡처
+│       ├── weekly/              #  주간보고 (headless puppeteer)
+│       │   ├── ipc.ts
+│       │   ├── config.ts        #    그룹웨어 개인별 주간 화면 셀렉터
+│       │   └── collect.ts       #    로그인→FE챕터→개인별 주간→datas 캡처
+│       └── notify/              #  데스크톱 알림 (공통 인프라)
+│           └── notify.ts        #    Notification 래퍼 + 클릭 시 창 포커스·섹션 이동
 ├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
 ├── renderer/                    # 🎨 React UI
 │   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
@@ -107,6 +109,7 @@ src/
 - **출퇴근** (`renderer/features/attendance` + `main/features/attendance`): 사이드바 하단 고정 위젯. headless puppeteer로 그룹웨어(gw.forbiz.co.kr) 로그인 후 userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용. 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거침.
 - **VPN** (`renderer/features/vpn` + `main/features/vpn`): 사이드바 하단 위젯. Homebrew `openvpn` CLI(**필수 의존성**, `/opt/homebrew/sbin/openvpn`)를 osascript 관리자 인증으로 root 데몬 실행하고, management 인터페이스(127.0.0.1 TCP + 비밀번호 파일)로 자격증명 전달·상태 추적·해제(SIGTERM). 비밀번호는 Google OTP — 위젯 설정에 TOTP 시크릿 키를 저장하면 자동 생성(`totp.ts`, RFC 6238), 없으면 매번 수동 입력. 계정·시크릿은 `safeStorage` 암호화로 `userData/vpn.json`에 저장. **앱을 종료해도 VPN 데몬은 유지**되고, 재시작 시 `userData/vpn/session.json`으로 management에 재접속해 상태 복원. openvpn 로그는 `userData/vpn/openvpn.log`(root 소유).
 - **주간보고** (`renderer/features/weekly` + `main/features/weekly`): FE챕터 공유일정의 **개인별 주간** 화면을 headless puppeteer 로 수집해 팀원별 T/OT·MM 을 카드+차트(chart.js)로 표시. 엑셀 다운로드 없이 페이지의 `calendarExcelSave()` form submit 을 후킹해 `datas`(JSON payload)를 가로챈다(익스텐션 `fe-schedule-extension` 이식). 주간 이동은 페이지 함수 `beforeWeek()`/`nextWeek()`, 현재 주는 iframe 전역 `startDate`/`endDate`(YYYYMMDD)로 판별. 개인별 주간 진입/주간 이동 직후 일정 목록이 ajax 로 늦게 채워지므로 **datasExcel 행 수 안정화 대기 + 캡처 재시도**가 들어 있음(제거하면 빈 결과 레이스 재발). T/OT 규칙: 하루 8시간까지 T, 초과분 OT, MM=시간÷8÷20.6. 전체 MM 제외 프로젝트는 칩 클릭으로 토글(localStorage `weekly:mmExcluded`, 기본 FE·전사·본부·휴가·연차·시차). 계정은 환경설정의 비즈박스 계정 공용.
+- **알림** (`main/features/notify`): 데스크톱 알림 공통 인프라. `notify({title, body, section})` 호출 시 Electron `Notification` 표시, 클릭하면 앱 창을 앞으로 + `app:navigate` IPC 로 해당 섹션 이동(App.tsx `onNavigate` 구독). 창 참조는 `main.ts`에서 `setNotifyWindow()` 로 등록. 현재 사용처: 배포 완료/실패 알림(환경설정에서 on/off, `settings.notifyDeploy`). 새 알림이 필요하면 이 모듈을 재사용.
 - **배포** (`renderer/features/deploy` + `main/features/deploy`): 프로젝트별 젠킨스 잡을 REST API로 트리거하고 상태(대기→빌드중→성공/실패)를 폴링해 표시. 대상별 [커밋 내역]으로 빌드에 포함된 커밋(changeSet)·시작자·revision 확인 가능. 프로젝트 하나에 배포 대상 여러 개(스토어·어드민 등) 등록 가능. 젠킨스 URL·계정은 배포 탭에서 프로젝트별로 등록하고, API 토큰(또는 비밀번호)은 `safeStorage`로 암호화해 `userData/deploy.json`에 저장. 인증은 Basic Auth + API 토큰 권장(비밀번호 인증은 CSRF crumb 자동 처리).
 
 ## 트러블슈팅

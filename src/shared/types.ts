@@ -26,11 +26,13 @@ export type ScheduleDoneInfo = { code: number | null };
 export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
+  notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
 };
 
 export type SaveSettingsInput = {
   bizboxId: string;
   password?: string; // 빈 값이면 기존 비밀번호 유지
+  notifyDeploy?: boolean; // 미지정이면 기존 유지
 };
 
 // ── 배포 (젠킨스) ──

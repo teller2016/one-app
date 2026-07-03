@@ -110,4 +110,10 @@ contextBridge.exposeInMainWorld('oneApp', {
   },
   // 기본 브라우저로 링크 열기 (http/https 만 허용)
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  // 알림 클릭 등으로 특정 섹션으로 이동하라는 신호 구독. 해제 함수를 반환한다.
+  onNavigate: (cb: (section: string) => void) => {
+    const listener = (_e: unknown, section: string) => cb(section);
+    ipcRenderer.on('app:navigate', listener);
+    return () => ipcRenderer.removeListener('app:navigate', listener);
+  },
 });

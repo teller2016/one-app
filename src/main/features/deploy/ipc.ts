@@ -5,6 +5,8 @@ import {
   deleteProject,
   getProjectCredentials,
 } from './store';
+import { notify } from '../notify/notify';
+import { isDeployNotifyEnabled } from '../settings/store';
 import {
   triggerBuild,
   watchBuild,
@@ -113,10 +115,47 @@ export function registerDeployIpc() {
         secret: cred.secret,
       };
       const sender = event.sender;
+      // 알림 라벨용 프로젝트 이름 (대상 이름은 target.name)
+      const projectName =
+        listProjects().find((p) => p.id === projectId)?.name ?? '';
+      const label = `${projectName ? `${projectName} · ` : ''}${target.name}`;
+      let notified = false;
+
       const push = (status: DeployStatus) => {
-        if (sender.isDestroyed()) return;
-        const evt: DeployStatusEvent = { projectId, targetId, status };
-        sender.send('deploy:status', evt);
+        // 창이 살아있으면 상태 이벤트 전달 (창이 닫혀 있어도 알림은 아래에서 처리)
+        if (!sender.isDestroyed()) {
+          const evt: DeployStatusEvent = { projectId, targetId, status };
+          sender.send('deploy:status', evt);
+        }
+        // 완료(성공/실패/오류) 시 데스크톱 알림 — 대상당 한 번만
+        if (
+          !notified &&
+          (status.state === 'success' ||
+            status.state === 'failure' ||
+            status.state === 'error') &&
+          isDeployNotifyEnabled()
+        ) {
+          notified = true;
+          if (status.state === 'success') {
+            notify({
+              title: '✅ 배포 성공',
+              body: `${label} 배포가 완료됐습니다.`,
+              section: 'deploy',
+            });
+          } else if (status.state === 'failure') {
+            notify({
+              title: '❌ 배포 실패',
+              body: `${label} — ${status.result ?? '실패'}`,
+              section: 'deploy',
+            });
+          } else {
+            notify({
+              title: '⚠️ 배포 오류',
+              body: `${label} — ${status.error ?? '상태 추적 오류'}`,
+              section: 'deploy',
+            });
+          }
+        }
       };
 
       try {

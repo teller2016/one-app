@@ -7,6 +7,7 @@ import { registerDeployIpc } from './features/deploy/ipc';
 import { registerAttendanceIpc } from './features/attendance/ipc';
 import { registerVpnIpc } from './features/vpn/ipc';
 import { registerWeeklyIpc } from './features/weekly/ipc';
+import { setNotifyWindow } from './features/notify/notify';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -45,6 +46,9 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  // 데스크톱 알림이 이 창을 포커스/이동할 수 있도록 참조 등록
+  setNotifyWindow(mainWindow);
 
   // 앱 화면(index.html) 로드
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

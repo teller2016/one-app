@@ -9,6 +9,7 @@ export function SettingsSection() {
   const [bizboxId, setBizboxId] = useState('');
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
+  const [notifyDeploy, setNotifyDeploy] = useState(true);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
 
@@ -16,14 +17,20 @@ export function SettingsSection() {
     window.oneApp?.settings.get().then((s) => {
       setBizboxId(s.bizboxId);
       setHasPassword(s.hasPassword);
+      setNotifyDeploy(s.notifyDeploy);
       setLoading(false);
     });
   }, []);
 
   const save = async () => {
     setStatus('저장 중...');
-    const res = await window.oneApp.settings.set({ bizboxId, password });
+    const res = await window.oneApp.settings.set({
+      bizboxId,
+      password,
+      notifyDeploy,
+    });
     setHasPassword(res.hasPassword);
+    setNotifyDeploy(res.notifyDeploy);
     setPassword('');
     setStatus('✅ 저장되었습니다.');
     setTimeout(() => setStatus(''), 2500);
@@ -62,6 +69,17 @@ export function SettingsSection() {
         🔒 비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
         (평문 저장 아님)
       </p>
+
+      <label className="form-label">알림</label>
+      <label className="settings__check">
+        <input
+          type="checkbox"
+          checked={notifyDeploy}
+          onChange={(e) => setNotifyDeploy(e.target.checked)}
+          disabled={loading}
+        />
+        <span>배포가 끝나면 데스크톱 알림 받기 (성공/실패)</span>
+      </label>
 
       <div className="form-actions">
         <Button variant="primary" onClick={save} disabled={loading || !bizboxId}>
