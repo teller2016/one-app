@@ -9,6 +9,7 @@ import type {
   SaveVpnSettingsInput,
   VpnStatus,
   WeeklyProgress,
+  ReminderConfig,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -96,6 +97,10 @@ contextBridge.exposeInMainWorld('oneApp', {
     // 출근/퇴근 찍기
     stamp: (action: 'come' | 'leave') =>
       ipcRenderer.invoke('attendance:stamp', action),
+    // 출퇴근 리마인더 설정 조회/저장 (요일별 출근·퇴근 알림 시각)
+    getReminders: () => ipcRenderer.invoke('reminders:get'),
+    setReminders: (config: ReminderConfig) =>
+      ipcRenderer.invoke('reminders:set', config),
   },
   weekly: {
     // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주

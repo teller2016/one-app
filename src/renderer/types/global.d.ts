@@ -20,6 +20,7 @@ import type {
   VpnStatus,
   WeeklyFetchResult,
   WeeklyProgress,
+  ReminderConfig,
 } from '../../shared/types';
 
 declare global {
@@ -67,6 +68,8 @@ declare global {
       attendance: {
         fetch: () => Promise<AttendanceResult>;
         stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
+        getReminders: () => Promise<ReminderConfig>;
+        setReminders: (config: ReminderConfig) => Promise<ReminderConfig>;
       };
       weekly: {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;

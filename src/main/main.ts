@@ -8,6 +8,7 @@ import { registerAttendanceIpc } from './features/attendance/ipc';
 import { registerVpnIpc } from './features/vpn/ipc';
 import { registerWeeklyIpc } from './features/weekly/ipc';
 import { setNotifyWindow } from './features/notify/notify';
+import { startReminderScheduler } from './features/attendance/scheduler';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -73,6 +74,8 @@ app.on('ready', () => {
     }
   }
   createWindow();
+  // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
+  startReminderScheduler();
 });
 
 // 모든 창이 닫히면 종료 (macOS 제외)

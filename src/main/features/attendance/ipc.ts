@@ -1,7 +1,11 @@
 import { ipcMain } from 'electron';
 import { runAttendance } from './attend';
 import { getCredentials } from '../settings/store';
-import type { AttendanceResult } from '../../../shared/types';
+import { getReminderConfig, saveReminderConfig } from './reminders';
+import type {
+  AttendanceResult,
+  ReminderConfig,
+} from '../../../shared/types';
 
 /** 출퇴근(근태) 관련 IPC 핸들러 등록 */
 export function registerAttendanceIpc() {
@@ -36,5 +40,12 @@ export function registerAttendanceIpc() {
         return { ok: false, error: (err as Error).message };
       }
     },
+  );
+
+  // 출퇴근 리마인더 설정 조회/저장 (스케줄러는 저장값을 매 tick 읽으므로 재시작 불필요)
+  ipcMain.handle('reminders:get', (): ReminderConfig => getReminderConfig());
+  ipcMain.handle(
+    'reminders:set',
+    (_e, config: ReminderConfig): ReminderConfig => saveReminderConfig(config),
   );
 }

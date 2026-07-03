@@ -3,13 +3,31 @@ import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
+import type { ReminderConfig, DayReminderConfig } from '../../../../shared/types';
 
-/** 환경설정 섹션 — 비즈박스 로그인 계정 정보를 관리한다. */
+const DAY_LABELS: Record<number, string> = {
+  1: '월',
+  2: '화',
+  3: '수',
+  4: '목',
+  5: '금',
+};
+
+// 설정이 비어 있을 때 표시할 기본 요일 구성 (월~금)
+const defaultDays = (): DayReminderConfig[] =>
+  [1, 2, 3, 4, 5].map((day) => ({
+    day,
+    come: { enabled: true, time: '09:00' },
+    leave: { enabled: true, time: '18:00' },
+  }));
+
+/** 환경설정 섹션 — 비즈박스 계정 · 알림 · 출퇴근 리마인더를 관리한다. */
 export function SettingsSection() {
   const [bizboxId, setBizboxId] = useState('');
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
+  const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
 
@@ -20,7 +38,23 @@ export function SettingsSection() {
       setNotifyDeploy(s.notifyDeploy);
       setLoading(false);
     });
+    window.oneApp?.attendance.getReminders().then((r) => {
+      if (r.days?.length) setReminders(r.days);
+    });
   }, []);
+
+  // 특정 요일의 출근/퇴근 슬롯 수정
+  const updateSlot = (
+    day: number,
+    type: 'come' | 'leave',
+    patch: Partial<{ enabled: boolean; time: string }>,
+  ) => {
+    setReminders((prev) =>
+      prev.map((d) =>
+        d.day === day ? { ...d, [type]: { ...d[type], ...patch } } : d,
+      ),
+    );
+  };
 
   const save = async () => {
     setStatus('저장 중...');
@@ -29,8 +63,11 @@ export function SettingsSection() {
       password,
       notifyDeploy,
     });
+    const savedReminders: ReminderConfig =
+      await window.oneApp.attendance.setReminders({ days: reminders });
     setHasPassword(res.hasPassword);
     setNotifyDeploy(res.notifyDeploy);
+    if (savedReminders.days?.length) setReminders(savedReminders.days);
     setPassword('');
     setStatus('✅ 저장되었습니다.');
     setTimeout(() => setStatus(''), 2500);
@@ -80,6 +117,44 @@ export function SettingsSection() {
         />
         <span>배포가 끝나면 데스크톱 알림 받기 (성공/실패)</span>
       </label>
+
+      <label className="form-label">출퇴근 리마인더</label>
+      <p className="hint" style={{ marginBottom: 10 }}>
+        요일별로 시각을 정하면 그 시각에 알림을 줍니다. 이미 찍었으면 알리지
+        않아요. (평일만)
+      </p>
+      <div className="settings__reminders">
+        <div className="settings__rem-head">
+          <span />
+          <span>출근</span>
+          <span>퇴근</span>
+        </div>
+        {reminders.map((d) => (
+          <div key={d.day} className="settings__rem-row">
+            <span className="settings__rem-day">{DAY_LABELS[d.day]}</span>
+            {(['come', 'leave'] as const).map((type) => (
+              <div key={type} className="settings__rem-slot">
+                <input
+                  type="checkbox"
+                  checked={d[type].enabled}
+                  onChange={(e) =>
+                    updateSlot(d.day, type, { enabled: e.target.checked })
+                  }
+                  disabled={loading}
+                  aria-label={`${DAY_LABELS[d.day]} ${type === 'come' ? '출근' : '퇴근'} 알림 사용`}
+                />
+                <input
+                  type="time"
+                  className="settings__time"
+                  value={d[type].time}
+                  onChange={(e) => updateSlot(d.day, type, { time: e.target.value })}
+                  disabled={loading || !d[type].enabled}
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
 
       <div className="form-actions">
         <Button variant="primary" onClick={save} disabled={loading || !bizboxId}>

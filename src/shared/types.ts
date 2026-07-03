@@ -186,3 +186,19 @@ export type AttendanceResult = {
   info?: AttendanceInfo;
   error?: string;
 };
+
+// 출퇴근 리마인더 — 요일별로 출근/퇴근 알림 시각을 따로 설정
+export type ReminderSlot = {
+  enabled: boolean;
+  time: string; // "HH:MM"
+};
+
+export type DayReminderConfig = {
+  day: number; // 1=월 … 5=금 (JS Date.getDay: 0=일)
+  come: ReminderSlot; // 출근 리마인더
+  leave: ReminderSlot; // 퇴근 리마인더
+};
+
+export type ReminderConfig = {
+  days: DayReminderConfig[];
+};
