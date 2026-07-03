@@ -57,7 +57,17 @@ const createWindow = () => {
 };
 
 // Electron 초기화 완료 후 창 생성
-app.on('ready', createWindow);
+app.on('ready', () => {
+  // 개발 모드 Dock 아이콘 — 패키징된 앱은 번들 아이콘(assets/icon.icns)을 사용
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    try {
+      app.dock?.setIcon(path.join(app.getAppPath(), 'assets', 'icon.png'));
+    } catch {
+      // 아이콘 파일이 없어도 실행에는 지장 없음
+    }
+  }
+  createWindow();
+});
 
 // 모든 창이 닫히면 종료 (macOS 제외)
 app.on('window-all-closed', () => {

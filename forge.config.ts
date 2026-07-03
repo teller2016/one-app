@@ -10,6 +10,7 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: './assets/icon', // 확장자 없이 — 플랫폼별로 .icns/.ico 자동 선택
   },
   rebuildConfig: {},
   makers: [
