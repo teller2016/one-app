@@ -108,25 +108,25 @@
   background: var(--bg-elevated);
 }
 
-.settings__rem-head {
+// 헤더·행 동일 컬럼폭 — 시각 입력(오전/오후+아이콘)이 넉넉히 들어가도록 넓게
+.settings__rem-head,
+.settings__rem-row {
   display: grid;
-  grid-template-columns: 32px 130px 130px;
-  gap: 10px;
+  grid-template-columns: 32px 180px 180px;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings__rem-head {
   font-size: 11.5px;
   font-weight: 700;
   color: var(--text-dim);
   padding-bottom: 2px;
 
+  // 헤더 라벨을 슬롯의 시각 입력 위쪽에 맞춰 정렬 (체크박스 폭만큼 들여쓰기)
   span {
-    text-align: center;
+    padding-left: 23px;
   }
-}
-
-.settings__rem-row {
-  display: grid;
-  grid-template-columns: 32px 130px 130px;
-  gap: 10px;
-  align-items: center;
 }
 
 .settings__rem-day {
@@ -139,6 +139,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 
   input[type='checkbox'] {
     width: 15px;
@@ -151,6 +152,7 @@
 
 .settings__time {
   flex: 1;
+  min-width: 0;
   padding: 5px 8px;
   border: 1px solid var(--border);
   background: var(--bg);
