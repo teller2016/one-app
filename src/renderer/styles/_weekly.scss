@@ -1,7 +1,7 @@
 // 주간보고 섹션 — fe-schedule-extension dashboard.css 를 다크 테마로 이식
 
 .weekly {
-  max-width: 1100px; // 카드 그리드가 넓게 필요해 기본 .section 폭을 확장
+  max-width: 1200px; // 좌우 2단(팀 목록 + 상세)을 위해 기본 .section 폭을 확장
 
   &__toolbar {
     display: flex;
@@ -44,6 +44,12 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--text-dim);
+
+    &--warn {
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.35);
+      color: #f8a1a1;
+    }
   }
 
   &__loading {
@@ -75,14 +81,49 @@
     font-size: 13.5px;
   }
 
-  &__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
-    gap: 12px;
+  // 좌우 2단 — 왼쪽 팀 목록 + 오른쪽 상세
+  &__panes {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
   }
 
-  &__detail-area {
-    margin-top: 16px;
+  &__roster {
+    width: 264px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    // 상세를 스크롤해도 팀 목록은 화면에 고정 (인원 많으면 목록만 스크롤)
+    position: sticky;
+    top: 6px;
+    max-height: calc(100vh - 168px);
+    overflow-y: auto;
+  }
+
+  &__detail-pane {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // 좁은 창에서는 2단을 위아래로 쌓고, 목록은 가로로 흐르게
+  @media (max-width: 980px) {
+    &__panes {
+      flex-direction: column;
+    }
+
+    &__roster {
+      width: auto;
+      max-width: none;
+      position: static;
+      max-height: none;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    &__roster .weekly-roster-row {
+      width: 200px;
+    }
   }
 }
 
@@ -110,49 +151,110 @@
   }
 }
 
-// 사원 요약 카드
-.weekly-card {
+// 팀 목록 사원 한 줄 (좌측 목록)
+.weekly-roster-row {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
+  border-left: 3px solid transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   cursor: pointer;
-  transition: 0.15s;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 
   &:hover {
     border-color: #565aa8;
-    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.15);
   }
 
   &--warn {
-    border-left: 3px solid #f87171;
+    border-left-color: #f87171;
   }
 
   &--good {
-    border-left: 3px solid #4ade80;
+    border-left-color: #4ade80;
   }
 
-  &--selected {
+  &.is-selected {
     border-color: #6366f1;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.25);
+    background: var(--accent-soft);
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.22);
   }
 
-  &__top {
+  &__line {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    margin-bottom: 12px;
+    gap: 8px;
   }
 
   &__name {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
   }
 
-  &__foot {
-    margin-top: 12px;
+  &__hours {
+    font-size: 15px;
+    font-weight: 800;
+
+    i {
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+  }
+
+  &--warn &__hours {
+    color: #f87171;
+  }
+
+  &--good &__hours {
+    color: #4ade80;
+  }
+
+  // T 진행바 (40시간 기준)
+  &__bar {
+    height: 4px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: 99px;
+    }
+  }
+
+  &--warn &__bar > span {
+    background: #f87171;
+  }
+
+  &--good &__bar > span {
+    background: #4ade80;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 11.5px;
     color: var(--text-dim);
+  }
+
+  &__ot {
+    color: #f0a06a;
+    font-weight: 600;
+  }
+
+  &__mm {
+    margin-left: auto;
 
     b {
       color: var(--text);

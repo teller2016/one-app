@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
-import { EmployeeCard } from './EmployeeCard';
+import { RosterRow } from './RosterRow';
 import { EmployeeDetail } from './EmployeeDetail';
 import { buildReport, DEFAULT_MM_EXCLUDED, type WeeklyReport } from '../lib/report';
 import type { WeeklyPeriod } from '../../../../shared/types';
@@ -130,6 +130,12 @@ export function WeeklySection() {
   const selected =
     report && selectedName ? report.byName[selectedName] : undefined;
 
+  // T 40시간 미달/초과(≠40)인 인원 수 — 상단 요약에 표시
+  const offCount = report
+    ? report.nameList.filter((n) => report.byName[n].summaryTotalData.T !== 40)
+        .length
+    : 0;
+
   return (
     <div className="section weekly">
       <SectionHeader
@@ -199,28 +205,34 @@ export function WeeklySection() {
               </span>
             )}
             <span className="weekly__period">{report.nameList.length}명</span>
+            {offCount > 0 && (
+              <span className="weekly__period weekly__period--warn">
+                40시간 ≠ {offCount}명
+              </span>
+            )}
           </div>
 
           {report.nameList.length === 0 ? (
             <div className="weekly__empty">표시할 사원 데이터가 없습니다.</div>
           ) : (
-            <>
-              <div className="weekly__grid">
+            <div className="weekly__panes">
+              {/* 왼쪽: 팀 목록 (항상 보임, 스크롤 시 고정) */}
+              <aside className="weekly__roster">
                 {report.nameList.map((name) => (
-                  <EmployeeCard
+                  <RosterRow
                     key={name}
                     name={name}
                     data={report.byName[name]}
                     excluded={excluded}
                     selected={name === selectedName}
                     onSelect={setSelectedName}
-                    onToggleExclude={toggleExclude}
                   />
                 ))}
-              </div>
+              </aside>
 
-              {selected && selectedName && (
-                <div className="weekly__detail-area">
+              {/* 오른쪽: 선택한 사원 상세 */}
+              <div className="weekly__detail-pane">
+                {selected && selectedName && (
                   <EmployeeDetail
                     name={selectedName}
                     data={selected}
@@ -229,9 +241,9 @@ export function WeeklySection() {
                     onToggleExclude={toggleExclude}
                     onCopy={copyText}
                   />
-                </div>
-              )}
-            </>
+                )}
+              </div>
+            </div>
           )}
         </>
       )}

@@ -70,7 +70,7 @@ src/
 │   │   ├── settings/            #  (schedule 과 동일 구조)
 │   │   ├── attendance/          #  출퇴근 위젯 (사이드바 하단 고정)
 │   │   ├── vpn/                 #  VPN 위젯 (사이드바 하단 고정)
-│   │   └── weekly/              #  주간보고 — components(Section·Card·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
+│   │   └── weekly/              #  주간보고 — 좌우 2단(팀 목록 RosterRow + 상세 Detail). components(Section·RosterRow·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
 │   │   ├── _base.scss           #    변수·리셋·공통(btn, placeholder)
