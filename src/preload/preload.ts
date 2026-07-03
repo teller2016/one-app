@@ -6,6 +6,8 @@ import type {
   SaveSettingsInput,
   SaveDeployProjectInput,
   DeployStatusEvent,
+  SaveVpnSettingsInput,
+  VpnStatus,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -64,6 +66,27 @@ contextBridge.exposeInMainWorld('oneApp', {
       const listener = (_e: unknown, evt: DeployStatusEvent) => cb(evt);
       ipcRenderer.on('deploy:status', listener);
       return () => ipcRenderer.removeListener('deploy:status', listener);
+    },
+  },
+  vpn: {
+    // VPN 설정 조회 (시크릿 값은 오지 않고 설정 여부만)
+    getSettings: () => ipcRenderer.invoke('vpn:settings:get'),
+    // VPN 설정 저장 (시크릿은 암호화되어 저장)
+    saveSettings: (input: SaveVpnSettingsInput) =>
+      ipcRenderer.invoke('vpn:settings:save', input),
+    // .ovpn 설정 파일 선택 다이얼로그
+    pickOvpn: () => ipcRenderer.invoke('vpn:pick-ovpn'),
+    // 연결 — 진행/완료 상태는 onStatus 로도 전달됨. manualOtp 없으면 시크릿으로 자동 생성
+    connect: (manualOtp?: string) => ipcRenderer.invoke('vpn:connect', manualOtp),
+    // 연결 해제
+    disconnect: () => ipcRenderer.invoke('vpn:disconnect'),
+    // 현재 상태 조회
+    getStatus: () => ipcRenderer.invoke('vpn:status:get'),
+    // 상태 이벤트 구독. 해제 함수를 반환한다.
+    onStatus: (cb: (status: VpnStatus) => void) => {
+      const listener = (_e: unknown, status: VpnStatus) => cb(status);
+      ipcRenderer.on('vpn:status', listener);
+      return () => ipcRenderer.removeListener('vpn:status', listener);
     },
   },
   attendance: {

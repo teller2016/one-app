@@ -4,6 +4,7 @@ import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
 import { AttendanceWidget } from '../features/attendance';
+import { VpnWidget } from '../features/vpn';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: '🗓️' },
@@ -54,7 +55,12 @@ export function App() {
         sections={SECTIONS}
         activeId={activeId}
         onSelect={setActiveId}
-        footer={<AttendanceWidget />}
+        footer={
+          <>
+            <VpnWidget />
+            <AttendanceWidget />
+          </>
+        }
       />
 
       {/* 오른쪽 콘텐츠 영역 */}

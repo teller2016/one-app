@@ -13,6 +13,11 @@ import type {
   DeployTriggerResult,
   DeployBuildDetailResult,
   AttendanceResult,
+  VpnSettingsView,
+  SaveVpnSettingsInput,
+  VpnSaveResult,
+  VpnActionResult,
+  VpnStatus,
 } from '../../shared/types';
 
 declare global {
@@ -47,6 +52,15 @@ declare global {
           buildNumber?: number,
         ) => Promise<DeployBuildDetailResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
+      };
+      vpn: {
+        getSettings: () => Promise<VpnSettingsView>;
+        saveSettings: (input: SaveVpnSettingsInput) => Promise<VpnSaveResult>;
+        pickOvpn: () => Promise<{ path?: string }>;
+        connect: (manualOtp?: string) => Promise<VpnActionResult>;
+        disconnect: () => Promise<VpnActionResult>;
+        getStatus: () => Promise<VpnStatus>;
+        onStatus: (cb: (status: VpnStatus) => void) => () => void;
       };
       attendance: {
         fetch: () => Promise<AttendanceResult>;

@@ -115,6 +115,39 @@ export type DeployBuildDetailResult = {
   error?: string;
 };
 
+// ── VPN (OpenVPN) ──
+export type VpnState = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export type VpnStatus = {
+  state: VpnState;
+  detail?: string; // 진행 단계 설명 (인증 중, IP 할당 중 …)
+  vpnIp?: string; // 터널 IP (연결됨일 때)
+  since?: number; // 연결 시각 (epoch ms)
+  error?: string;
+};
+
+/** 렌더러에 보내는 VPN 설정 — 시크릿 값은 포함하지 않음 */
+export type VpnSettingsView = {
+  username: string;
+  hasTotpSecret: boolean;
+  ovpnPath: string;
+  openvpnInstalled: boolean; // openvpn CLI 설치 여부
+};
+
+export type SaveVpnSettingsInput = {
+  username: string;
+  totpSecret?: string; // 빈 값이면 기존 유지
+  ovpnPath: string;
+};
+
+export type VpnSaveResult = {
+  ok: boolean;
+  error?: string;
+  settings?: VpnSettingsView;
+};
+
+export type VpnActionResult = { ok: boolean; error?: string };
+
 // ── 출퇴근 (근태) ──
 export type AttendanceInfo = {
   comeTime: string | null; // "09:37" — 아직 안 찍었으면 null

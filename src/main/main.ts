@@ -5,6 +5,7 @@ import { registerScheduleIpc } from './features/schedule/ipc';
 import { registerSettingsIpc } from './features/settings/ipc';
 import { registerDeployIpc } from './features/deploy/ipc';
 import { registerAttendanceIpc } from './features/attendance/ipc';
+import { registerVpnIpc } from './features/vpn/ipc';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -16,6 +17,7 @@ registerScheduleIpc();
 registerSettingsIpc();
 registerDeployIpc();
 registerAttendanceIpc();
+registerVpnIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle('app:openExternal', async (_e, url: string) => {
