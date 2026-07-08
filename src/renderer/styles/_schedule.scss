@@ -170,6 +170,36 @@
   }
 }
 
+// 환경설정 — 반복 알림 행 (안 찍었으면 N분마다)
+.settings__repeat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings__minutes {
+  width: 64px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 7px;
+  font-size: 13px;
+  text-align: center;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+  }
+}
+
 // 환경설정 — 테스트 알림 버튼 행
 .settings__test-row {
   display: flex;

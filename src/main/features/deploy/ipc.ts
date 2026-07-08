@@ -127,7 +127,7 @@ export function registerDeployIpc() {
           const evt: DeployStatusEvent = { projectId, targetId, status };
           sender.send('deploy:status', evt);
         }
-        // 완료(성공/실패/오류) 시 데스크톱 알림 — 대상당 한 번만
+        // 완료(성공/실패/오류) 시 알림(알럿) — 대상당 한 번만
         if (
           !notified &&
           (status.state === 'success' ||
@@ -137,19 +137,19 @@ export function registerDeployIpc() {
         ) {
           notified = true;
           if (status.state === 'success') {
-            notify({
+            void notify({
               title: '✅ 배포 성공',
               body: `${label} 배포가 완료됐습니다.`,
               section: 'deploy',
             });
           } else if (status.state === 'failure') {
-            notify({
+            void notify({
               title: '❌ 배포 실패',
               body: `${label} — ${status.result ?? '실패'}`,
               section: 'deploy',
             });
           } else {
-            notify({
+            void notify({
               title: '⚠️ 배포 오류',
               body: `${label} — ${status.error ?? '상태 추적 오류'}`,
               section: 'deploy',

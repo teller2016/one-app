@@ -49,7 +49,7 @@ const createWindow = () => {
     },
   });
 
-  // 데스크톱 알림이 이 창을 포커스/이동할 수 있도록 참조 등록
+  // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록
   setNotifyWindow(mainWindow);
 
   // 앱 화면(index.html) 로드

@@ -28,6 +28,8 @@ export function SettingsSection() {
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
   const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatMinutes, setRepeatMinutes] = useState('10');
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
 
@@ -40,6 +42,10 @@ export function SettingsSection() {
     });
     window.oneApp?.attendance.getReminders().then((r) => {
       if (r.days?.length) setReminders(r.days);
+      if (r.repeat) {
+        setRepeatEnabled(r.repeat.enabled);
+        setRepeatMinutes(String(r.repeat.minutes));
+      }
     });
   }, []);
 
@@ -64,10 +70,17 @@ export function SettingsSection() {
       notifyDeploy,
     });
     const savedReminders: ReminderConfig =
-      await window.oneApp.attendance.setReminders({ days: reminders });
+      await window.oneApp.attendance.setReminders({
+        days: reminders,
+        repeat: { enabled: repeatEnabled, minutes: Number(repeatMinutes) || 10 },
+      });
     setHasPassword(res.hasPassword);
     setNotifyDeploy(res.notifyDeploy);
     if (savedReminders.days?.length) setReminders(savedReminders.days);
+    if (savedReminders.repeat) {
+      setRepeatEnabled(savedReminders.repeat.enabled);
+      setRepeatMinutes(String(savedReminders.repeat.minutes));
+    }
     setPassword('');
     setStatus('✅ 저장되었습니다.');
     setTimeout(() => setStatus(''), 2500);
@@ -115,13 +128,13 @@ export function SettingsSection() {
           onChange={(e) => setNotifyDeploy(e.target.checked)}
           disabled={loading}
         />
-        <span>배포가 끝나면 데스크톱 알림 받기 (성공/실패)</span>
+        <span>배포가 끝나면 알림 받기 (성공/실패)</span>
       </label>
       <div className="settings__test-row">
         <Button onClick={() => window.oneApp?.testNotification()}>
           🔔 테스트 알림 보내기
         </Button>
-        <span className="hint">알림이 어떻게 뜨는지 미리 확인 (권한 허용도 이걸로)</span>
+        <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
       </div>
 
       <label className="form-label">출퇴근 리마인더</label>
@@ -160,6 +173,29 @@ export function SettingsSection() {
             ))}
           </div>
         ))}
+      </div>
+
+      <div className="settings__repeat-row">
+        <label className="settings__check">
+          <input
+            type="checkbox"
+            checked={repeatEnabled}
+            onChange={(e) => setRepeatEnabled(e.target.checked)}
+            disabled={loading}
+          />
+          <span>안 찍었으면</span>
+        </label>
+        <input
+          type="number"
+          className="settings__minutes"
+          min={1}
+          max={120}
+          value={repeatMinutes}
+          onChange={(e) => setRepeatMinutes(e.target.value)}
+          disabled={loading || !repeatEnabled}
+          aria-label="반복 알림 간격(분)"
+        />
+        <span>분마다 계속 알림</span>
       </div>
 
       <div className="form-actions">

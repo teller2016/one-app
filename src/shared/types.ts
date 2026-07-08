@@ -199,6 +199,13 @@ export type DayReminderConfig = {
   leave: ReminderSlot; // 퇴근 리마인더
 };
 
+// 안 찍었으면 N분마다 재알림 (반복 알림)
+export type ReminderRepeat = {
+  enabled: boolean;
+  minutes: number; // 반복 간격(분) — 1~120
+};
+
 export type ReminderConfig = {
   days: DayReminderConfig[];
+  repeat: ReminderRepeat;
 };
