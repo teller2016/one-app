@@ -3,6 +3,7 @@ import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
+import { Collapsible } from '../../../components/Collapsible';
 import type { ReminderConfig, DayReminderConfig } from '../../../../shared/types';
 
 const DAY_LABELS: Record<number, string> = {
@@ -90,113 +91,126 @@ export function SettingsSection() {
     <div className="section">
       <SectionHeader
         title="⚙️ 환경설정"
-        sub="비즈박스 그룹웨어 로그인 계정 정보 (일정 등록에 사용)"
+        sub="계정 · 알림 · 출퇴근 리마인더를 관리합니다."
       />
 
-      <FormRow label="아이디">
-        <Input
-          type="text"
-          value={bizboxId}
-          onChange={(e) => setBizboxId(e.target.value)}
-          placeholder="비즈박스 아이디"
-          disabled={loading}
-        />
-      </FormRow>
+      <Collapsible title="🔑 비즈박스 계정" storageKey="settings:group:account">
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          그룹웨어 로그인 계정 — 일정 등록 · 출퇴근 · 주간보고에 공용으로
+          사용됩니다.
+        </p>
+        <FormRow label="아이디">
+          <Input
+            type="text"
+            value={bizboxId}
+            onChange={(e) => setBizboxId(e.target.value)}
+            placeholder="비즈박스 아이디"
+            disabled={loading}
+          />
+        </FormRow>
 
-      <FormRow label="비밀번호">
-        <Input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={
-            hasPassword ? '●●●●●●  (저장됨 — 바꿀 때만 입력)' : '비밀번호 입력'
-          }
-          disabled={loading}
-        />
-      </FormRow>
+        <FormRow label="비밀번호">
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={
+              hasPassword ? '●●●●●●  (저장됨 — 바꿀 때만 입력)' : '비밀번호 입력'
+            }
+            disabled={loading}
+          />
+        </FormRow>
 
-      <p className="note">
-        🔒 비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
-        (평문 저장 아님)
-      </p>
+        <p className="note">
+          🔒 비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
+          저장됩니다. (평문 저장 아님)
+        </p>
+      </Collapsible>
 
-      <label className="form-label">알림</label>
-      <label className="settings__check">
-        <input
-          type="checkbox"
-          checked={notifyDeploy}
-          onChange={(e) => setNotifyDeploy(e.target.checked)}
-          disabled={loading}
-        />
-        <span>배포가 끝나면 알림 받기 (성공/실패)</span>
-      </label>
-      <div className="settings__test-row">
-        <Button onClick={() => window.oneApp?.testNotification()}>
-          🔔 테스트 알림 보내기
-        </Button>
-        <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
-      </div>
-
-      <label className="form-label">출퇴근 리마인더</label>
-      <p className="hint" style={{ marginBottom: 10 }}>
-        요일별로 시각을 정하면 그 시각에 알림을 줍니다. 이미 찍었으면 알리지
-        않아요. (평일만)
-      </p>
-      <div className="settings__reminders">
-        <div className="settings__rem-head">
-          <span />
-          <span>출근</span>
-          <span>퇴근</span>
-        </div>
-        {reminders.map((d) => (
-          <div key={d.day} className="settings__rem-row">
-            <span className="settings__rem-day">{DAY_LABELS[d.day]}</span>
-            {(['come', 'leave'] as const).map((type) => (
-              <div key={type} className="settings__rem-slot">
-                <input
-                  type="checkbox"
-                  checked={d[type].enabled}
-                  onChange={(e) =>
-                    updateSlot(d.day, type, { enabled: e.target.checked })
-                  }
-                  disabled={loading}
-                  aria-label={`${DAY_LABELS[d.day]} ${type === 'come' ? '출근' : '퇴근'} 알림 사용`}
-                />
-                <input
-                  type="time"
-                  className="settings__time"
-                  value={d[type].time}
-                  onChange={(e) => updateSlot(d.day, type, { time: e.target.value })}
-                  disabled={loading || !d[type].enabled}
-                />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      <div className="settings__repeat-row">
+      <Collapsible title="🔔 알림" storageKey="settings:group:notify">
         <label className="settings__check">
           <input
             type="checkbox"
-            checked={repeatEnabled}
-            onChange={(e) => setRepeatEnabled(e.target.checked)}
+            checked={notifyDeploy}
+            onChange={(e) => setNotifyDeploy(e.target.checked)}
             disabled={loading}
           />
-          <span>안 찍었으면</span>
+          <span>배포가 끝나면 알림 받기 (성공/실패)</span>
         </label>
-        <input
-          type="number"
-          className="settings__minutes"
-          min={1}
-          max={120}
-          value={repeatMinutes}
-          onChange={(e) => setRepeatMinutes(e.target.value)}
-          disabled={loading || !repeatEnabled}
-          aria-label="반복 알림 간격(분)"
-        />
-        <span>분마다 계속 알림</span>
-      </div>
+        <div className="settings__test-row">
+          <Button onClick={() => window.oneApp?.testNotification()}>
+            🔔 테스트 알림 보내기
+          </Button>
+          <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
+        </div>
+      </Collapsible>
+
+      <Collapsible
+        title="🕘 출퇴근 리마인더"
+        storageKey="settings:group:reminders"
+      >
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          요일별로 시각을 정하면 그 시각에 알림을 줍니다. 이미 찍었으면 알리지
+          않아요. (평일만)
+        </p>
+        <div className="settings__reminders">
+          <div className="settings__rem-head">
+            <span />
+            <span>출근</span>
+            <span>퇴근</span>
+          </div>
+          {reminders.map((d) => (
+            <div key={d.day} className="settings__rem-row">
+              <span className="settings__rem-day">{DAY_LABELS[d.day]}</span>
+              {(['come', 'leave'] as const).map((type) => (
+                <div key={type} className="settings__rem-slot">
+                  <input
+                    type="checkbox"
+                    checked={d[type].enabled}
+                    onChange={(e) =>
+                      updateSlot(d.day, type, { enabled: e.target.checked })
+                    }
+                    disabled={loading}
+                    aria-label={`${DAY_LABELS[d.day]} ${type === 'come' ? '출근' : '퇴근'} 알림 사용`}
+                  />
+                  <input
+                    type="time"
+                    className="settings__time"
+                    value={d[type].time}
+                    onChange={(e) =>
+                      updateSlot(d.day, type, { time: e.target.value })
+                    }
+                    disabled={loading || !d[type].enabled}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <div className="settings__repeat-row">
+          <label className="settings__check">
+            <input
+              type="checkbox"
+              checked={repeatEnabled}
+              onChange={(e) => setRepeatEnabled(e.target.checked)}
+              disabled={loading}
+            />
+            <span>안 찍었으면</span>
+          </label>
+          <input
+            type="number"
+            className="settings__minutes"
+            min={1}
+            max={120}
+            value={repeatMinutes}
+            onChange={(e) => setRepeatMinutes(e.target.value)}
+            disabled={loading || !repeatEnabled}
+            aria-label="반복 알림 간격(분)"
+          />
+          <span>분마다 계속 알림</span>
+        </div>
+      </Collapsible>
 
       <div className="form-actions">
         <Button variant="primary" onClick={save} disabled={loading || !bizboxId}>

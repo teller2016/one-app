@@ -97,15 +97,11 @@
   }
 }
 
-// 환경설정 — 출퇴근 리마인더 요일별 표
+// 환경설정 — 출퇴근 리마인더 요일별 표 (Collapsible 그룹 안이라 자체 박스 없음)
 .settings__reminders {
   display: inline-flex;
   flex-direction: column;
   gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
 }
 
 // 헤더·행 동일 컬럼폭 — 시각 입력(오전/오후+아이콘)이 넉넉히 들어가도록 넓게

@@ -185,6 +185,59 @@ body {
   }
 }
 
+// 열고닫기 그룹 (공용 Collapsible 컴포넌트)
+.collapsible {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  margin-bottom: 12px;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    list-style: none; // 기본 ▶ 마커 제거
+    border-radius: 9px;
+    transition: background 0.12s;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    // 접힘 화살표 — 크게, 열리면 90도 회전
+    &::before {
+      content: '▸';
+      color: var(--text-dim);
+      font-size: 17px;
+      line-height: 1;
+      transition:
+        transform 0.15s,
+        color 0.12s;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.03);
+
+      &::before {
+        color: var(--text);
+      }
+    }
+  }
+
+  &[open] > &__head::before {
+    transform: rotate(90deg);
+  }
+
+  &__body {
+    padding: 2px 16px 16px;
+  }
+}
+
 // 경고/안내 배너
 .banner {
   margin: 0 0 16px;
