@@ -73,6 +73,12 @@ export function DeploySection() {
 
   // ── 배포 실행 ──
   const deploy = async (projectId: string, targetId: string) => {
+    // 실수 방지 — 무엇을 배포하는지 확인받고 진행
+    const project = projects.find((p) => p.id === projectId);
+    const target = project?.targets.find((t) => t.id === targetId);
+    const label = [project?.name, target?.name].filter(Boolean).join(' — ');
+    if (!window.confirm(`🚀 ${label} 배포를 시작할까요?`)) return;
+
     const key = statusKey(projectId, targetId);
     setStatuses((prev) => ({ ...prev, [key]: { state: 'queued' } }));
     const res = await window.oneApp.deploy.trigger(projectId, targetId);
