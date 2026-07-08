@@ -118,7 +118,11 @@ export async function runAttendance(
 ): Promise<AttendanceInfo> {
   if (running) throw new Error('이미 근태 처리가 진행 중입니다.');
   running = true;
-  const browser = await puppeteer.launch({ headless: 'new' as const });
+  // 시스템에 설치된 Google Chrome 사용 (배포판에서 Chromium 동봉 없이 동작)
+  const browser = await puppeteer.launch({
+    headless: 'new' as const,
+    channel: 'chrome',
+  });
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });

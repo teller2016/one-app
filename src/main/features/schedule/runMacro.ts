@@ -18,7 +18,8 @@ export async function runMacro(opts: RunMacroOptions): Promise<void> {
   const { lines, startTime, baseDate, testMode, credentials, onLog, onBrowser } =
     opts;
 
-  const browser = await puppeteer.launch({ headless: false });
+  // 시스템에 설치된 Google Chrome 사용 (배포판에서 Chromium 동봉 없이 동작)
+  const browser = await puppeteer.launch({ headless: false, channel: 'chrome' });
   onBrowser?.(browser);
 
   try {

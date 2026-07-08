@@ -386,8 +386,10 @@ export async function collectWeekly(
   let browser: Browser | null = null;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   try {
+    // 시스템에 설치된 Google Chrome 사용 (배포판에서 Chromium 동봉 없이 동작)
     browser = await puppeteer.launch({
       headless: 'new' as const,
+      channel: 'chrome',
       timeout: 30000,
     });
     // 어느 단계든 예상 밖으로 멈추면 deadline 이 reject 시켜 로딩이 끝나게 한다
