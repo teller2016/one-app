@@ -91,13 +91,19 @@ export function DeploySection() {
   };
 
   // ── 커밋 내역 조회 (buildNumber 없으면 최근 빌드 기준) ──
+  // 패널은 한 번에 하나만 — 하나를 열면 다른 대상의 패널은 닫는다
   const loadDetail = async (
     projectId: string,
     targetId: string,
     buildNumber?: number,
   ) => {
     const key = statusKey(projectId, targetId);
-    setDetails((prev) => ({ ...prev, [key]: { open: true, loading: true } }));
+    setDetails((prev) => {
+      const next: Record<string, DetailState> = {};
+      for (const [k, v] of Object.entries(prev)) next[k] = { ...v, open: false };
+      next[key] = { open: true, loading: true };
+      return next;
+    });
     const res = await window.oneApp.deploy.getBuildDetail(
       projectId,
       targetId,
@@ -106,7 +112,8 @@ export function DeploySection() {
     setDetails((prev) => ({
       ...prev,
       [key]: {
-        open: true,
+        // 조회 중에 다른 패널을 열었으면(=이 패널은 닫힘) 닫힌 상태를 유지한다
+        open: prev[key]?.open ?? false,
         loading: false,
         detail: res.detail,
         error: res.ok ? undefined : res.error ?? '조회 실패',
