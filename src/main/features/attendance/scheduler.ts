@@ -5,7 +5,8 @@
 import { runAttendance } from './attend';
 import { getReminderConfig } from './reminders';
 import { getCredentials } from '../settings/store';
-import { notify } from '../notify/notify';
+import { notify, getNotifyWindow } from '../notify/notify';
+import type { AttendanceInfo } from '../../../shared/types';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -70,17 +71,52 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
   console.log(`[reminder] ${label} 알림 발화`, checkFailed ? '(상태 확인 실패)' : '');
   alertOpen.add(type);
   try {
-    await notify({
+    const stampNow = await notify({
       title: type === 'come' ? '🕘 출근 체크' : '🕕 퇴근 체크',
       body: checkFailed
         ? `${label} 찍는 것을 잊지 마세요.`
-        : `아직 ${label}을 안 찍었어요 — 사이드바 근태 위젯에서 ${label}을 눌러주세요.`,
+        : `아직 ${label}을 안 찍었어요.`,
+      // 계정이 있으면 알럿에서 바로 찍기 제공 (알럿 자체가 확인 대화상자 역할)
+      action: cred ? `지금 ${label} 찍기` : undefined,
     });
+    if (stampNow && cred) await stampFromAlert(type, key, cred);
   } finally {
-    // 반복 간격은 알럿을 닫은 시점부터 다시 센다 (방치 중 중복 알럿 방지)
+    // 반복 간격은 알럿(결과 알럿 포함)을 닫은 시점부터 다시 센다 (방치 중 중복 알럿 방지)
     alertOpen.delete(type);
     lastAttempt.set(key, nowMinutes(new Date()));
   }
+}
+
+// 알럿의 '지금 찍기' — 찍은 뒤 결과 알럿을 띄우고, 성공하면 그날 리마인더를 멈춘다
+async function stampFromAlert(
+  type: 'come' | 'leave',
+  key: string,
+  cred: NonNullable<ReturnType<typeof getCredentials>>,
+) {
+  const label = type === 'come' ? '출근' : '퇴근';
+  try {
+    const info = await runAttendance(type, cred);
+    doneToday.add(key);
+    pushAttendanceChanged(info);
+    const time = type === 'come' ? info.comeTime : info.leaveTime;
+    console.log(`[reminder] 알럿에서 ${label} 찍기 완료`, time ?? '');
+    await notify({
+      title: `✅ ${label} 완료`,
+      body: time ? `${time} 에 ${label} 처리됐습니다.` : `${label} 처리됐습니다.`,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[reminder] 알럿에서 ${label} 찍기 실패:`, msg);
+    await notify({
+      title: `❌ ${label} 찍기 실패`,
+      body: `${msg}\n사이드바 근태 위젯에서 직접 시도해주세요.`,
+    });
+  }
+}
+
+// 알럿에서 찍으면 사이드바 근태 위젯이 즉시 갱신되도록 렌더러에 알린다
+function pushAttendanceChanged(info: AttendanceInfo) {
+  getNotifyWindow()?.webContents.send('attendance:changed', info);
 }
 
 function tick() {

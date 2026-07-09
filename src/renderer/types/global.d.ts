@@ -13,6 +13,7 @@ import type {
   DeployTriggerResult,
   DeployBuildDetailResult,
   AttendanceResult,
+  AttendanceInfo,
   VpnSettingsView,
   SaveVpnSettingsInput,
   VpnSaveResult,
@@ -70,6 +71,7 @@ declare global {
         stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
         getReminders: () => Promise<ReminderConfig>;
         setReminders: (config: ReminderConfig) => Promise<ReminderConfig>;
+        onChanged: (cb: (info: AttendanceInfo) => void) => () => void;
       };
       weekly: {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;

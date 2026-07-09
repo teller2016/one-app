@@ -10,6 +10,7 @@ import type {
   VpnStatus,
   WeeklyProgress,
   ReminderConfig,
+  AttendanceInfo,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -101,6 +102,12 @@ contextBridge.exposeInMainWorld('oneApp', {
     getReminders: () => ipcRenderer.invoke('reminders:get'),
     setReminders: (config: ReminderConfig) =>
       ipcRenderer.invoke('reminders:set', config),
+    // 메인 프로세스(리마인더 알럿)에서 찍었을 때의 근태 변경 구독. 해제 함수를 반환한다.
+    onChanged: (cb: (info: AttendanceInfo) => void) => {
+      const listener = (_e: unknown, info: AttendanceInfo) => cb(info);
+      ipcRenderer.on('attendance:changed', listener);
+      return () => ipcRenderer.removeListener('attendance:changed', listener);
+    },
   },
   weekly: {
     // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주
