@@ -1,5 +1,6 @@
 import type { DeployProjectView } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
+import { Icon } from '../../../components/Icon';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
@@ -56,7 +57,8 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
   return (
     <div className="section">
       <SectionHeader
-        title={`🚀 ${form.id ? '프로젝트 편집' : '프로젝트 추가'}`}
+        icon={<Icon name="rocket" size={18} />}
+        title={form.id ? '프로젝트 편집' : '프로젝트 추가'}
         sub="프로젝트의 젠킨스 정보와 배포 대상(스토어/어드민 등)을 등록합니다."
       />
 
@@ -101,7 +103,7 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
       </FormRow>
 
       <p className="note">
-        🔐 젠킨스 <b>내 계정 → 설정(Configure) → API Token</b> 에서 발급한
+        젠킨스 <b>내 계정 → 설정(Configure) → API Token</b> 에서 발급한
         토큰 권장. 비밀번호도 동작하지만 젠킨스 보안 설정에 따라 막힐 수
         있습니다. 값은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
         저장됩니다.
@@ -111,7 +113,7 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
       {form.targets.map((t, i) => (
         <FormRow key={t.id ?? `new-${i}`}>
           <Input
-            style={{ maxWidth: 180 }}
+            className="deploy__form-target-name"
             type="text"
             value={t.name}
             onChange={(e) => setTarget(i, { name: e.target.value })}
@@ -123,7 +125,9 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
             onChange={(e) => setTarget(i, { jobPath: e.target.value })}
             placeholder="젠킨스 잡 이름 (폴더 안이면 폴더/잡)"
           />
-          <Button
+          <button
+            type="button"
+            className="icon-btn icon-btn--bordered"
             onClick={() =>
               onChange({
                 ...form,
@@ -132,9 +136,10 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
             }
             disabled={form.targets.length <= 1}
             title="이 배포 대상 삭제"
+            aria-label="이 배포 대상 삭제"
           >
-            ✕
-          </Button>
+            <Icon name="x" size={14} />
+          </button>
         </FormRow>
       ))}
       <Button
@@ -145,7 +150,8 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
           })
         }
       >
-        + 배포 대상 추가
+        <Icon name="plus" size={14} />
+        배포 대상 추가
       </Button>
 
       {error && <Banner>{error}</Banner>}

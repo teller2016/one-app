@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/types';
 import { statusKey } from '../lib/format';
 import { Button } from '../../../components/Button';
+import { Icon } from '../../../components/Icon';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { ProjectCard } from './ProjectCard';
 import {
@@ -77,7 +78,7 @@ export function DeploySection() {
     const project = projects.find((p) => p.id === projectId);
     const target = project?.targets.find((t) => t.id === targetId);
     const label = [project?.name, target?.name].filter(Boolean).join(' — ');
-    if (!window.confirm(`🚀 ${label} 배포를 시작할까요?`)) return;
+    if (!window.confirm(`${label} 배포를 시작할까요?`)) return;
 
     const key = statusKey(projectId, targetId);
     setStatuses((prev) => ({ ...prev, [key]: { state: 'queued' } }));
@@ -205,21 +206,26 @@ export function DeploySection() {
     <div className="section">
       <div className="deploy__head">
         <SectionHeader
-          title="🚀 배포"
+          icon={<Icon name="rocket" size={18} />}
+          title="배포"
           sub="프로젝트별 젠킨스 잡을 버튼 한 번으로 배포합니다."
         />
         <Button variant="primary" onClick={() => setForm(emptyForm())}>
-          + 프로젝트 추가
+          <Icon name="plus" size={14} />
+          프로젝트 추가
         </Button>
       </div>
 
       {loading ? (
         <p className="hint">불러오는 중...</p>
       ) : projects.length === 0 ? (
-        <div className="deploy__empty">
+        <div className="empty-state">
+          <span className="empty-state__icon">
+            <Icon name="rocket" size={20} />
+          </span>
           <p>등록된 프로젝트가 없습니다.</p>
           <p className="hint">
-            [+ 프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요.
+            [프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요.
           </p>
         </div>
       ) : (

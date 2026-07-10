@@ -1,5 +1,6 @@
 import type { DeployBuildDetail } from '../../../../shared/types';
 import { formatTime, formatDuration } from '../lib/format';
+import { Icon } from '../../../components/Icon';
 
 /** 커밋 내역 펼침 패널 상태 */
 export type DetailState = {
@@ -12,14 +13,23 @@ export type DetailState = {
 /** 빌드 상세(커밋 내역·시작자·revision) 패널 */
 export function BuildDetailPanel({ state }: { state: DetailState }) {
   if (state.loading)
-    return <div className="deploy__detail">불러오는 중...</div>;
+    return (
+      <div className="panel-sunken deploy__detail deploy__detail--loading">
+        불러오는 중...
+      </div>
+    );
   if (state.error)
-    return <div className="deploy__detail">⚠️ {state.error}</div>;
+    return (
+      <div className="panel-sunken deploy__detail deploy__detail--error">
+        <Icon name="alert-triangle" size={14} />
+        {state.error}
+      </div>
+    );
   const d = state.detail;
   if (!d) return null;
 
   return (
-    <div className="deploy__detail">
+    <div className="panel-sunken deploy__detail">
       <div className="deploy__detail-head">
         <b>#{d.number}</b>
         {d.timestamp ? ` · 시작 ${formatTime(d.timestamp)}` : ''}

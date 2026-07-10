@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { Icon } from './Icon';
 
 type CollapsibleProps = {
-  /** 그룹 제목 (이모지 포함 가능) */
+  /** 그룹 제목 */
   title: string;
+  /** 제목 왼쪽 아이콘 (Icon 컴포넌트 — 이모지 금지) */
+  icon?: ReactNode;
   /** 지정하면 열림/닫힘 상태를 localStorage 에 기억한다 */
   storageKey?: string;
   /** 저장된 상태가 없을 때 기본 열림 여부 (기본 열림) */
@@ -17,6 +20,7 @@ type CollapsibleProps = {
  */
 export function Collapsible({
   title,
+  icon,
   storageKey,
   defaultOpen = true,
   children,
@@ -37,7 +41,13 @@ export function Collapsible({
         if (storageKey) localStorage.setItem(storageKey, next ? '1' : '0');
       }}
     >
-      <summary className="collapsible__head">{title}</summary>
+      <summary className="collapsible__head">
+        <span className="collapsible__chev">
+          <Icon name="chevron-right" size={14} />
+        </span>
+        {icon}
+        {title}
+      </summary>
       <div className="collapsible__body">{children}</div>
     </details>
   );

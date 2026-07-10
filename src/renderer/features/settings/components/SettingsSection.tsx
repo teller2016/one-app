@@ -4,6 +4,8 @@ import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
 import { Collapsible } from '../../../components/Collapsible';
+import { Icon } from '../../../components/Icon';
+import { useToast } from '../../../components/Toast';
 import type { ReminderConfig, DayReminderConfig } from '../../../../shared/types';
 
 const DAY_LABELS: Record<number, string> = {
@@ -32,7 +34,8 @@ export function SettingsSection() {
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatMinutes, setRepeatMinutes] = useState('10');
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     window.oneApp?.settings.get().then((s) => {
@@ -64,38 +67,52 @@ export function SettingsSection() {
   };
 
   const save = async () => {
-    setStatus('저장 중...');
-    const res = await window.oneApp.settings.set({
-      bizboxId,
-      password,
-      notifyDeploy,
-    });
-    const savedReminders: ReminderConfig =
-      await window.oneApp.attendance.setReminders({
-        days: reminders,
-        repeat: { enabled: repeatEnabled, minutes: Number(repeatMinutes) || 10 },
+    setSaving(true);
+    try {
+      const res = await window.oneApp.settings.set({
+        bizboxId,
+        password,
+        notifyDeploy,
       });
-    setHasPassword(res.hasPassword);
-    setNotifyDeploy(res.notifyDeploy);
-    if (savedReminders.days?.length) setReminders(savedReminders.days);
-    if (savedReminders.repeat) {
-      setRepeatEnabled(savedReminders.repeat.enabled);
-      setRepeatMinutes(String(savedReminders.repeat.minutes));
+      const savedReminders: ReminderConfig =
+        await window.oneApp.attendance.setReminders({
+          days: reminders,
+          repeat: {
+            enabled: repeatEnabled,
+            minutes: Number(repeatMinutes) || 10,
+          },
+        });
+      setHasPassword(res.hasPassword);
+      setNotifyDeploy(res.notifyDeploy);
+      if (savedReminders.days?.length) setReminders(savedReminders.days);
+      if (savedReminders.repeat) {
+        setRepeatEnabled(savedReminders.repeat.enabled);
+        setRepeatMinutes(String(savedReminders.repeat.minutes));
+      }
+      setPassword('');
+      toast('저장되었습니다');
+    } catch {
+      // IPC/파일 쓰기 실패 시 침묵하지 않고 알린다
+      toast('저장에 실패했습니다. 다시 시도해 주세요.', 'fail');
+    } finally {
+      setSaving(false);
     }
-    setPassword('');
-    setStatus('✅ 저장되었습니다.');
-    setTimeout(() => setStatus(''), 2500);
   };
 
   return (
     <div className="section">
       <SectionHeader
-        title="⚙️ 환경설정"
+        title="환경설정"
+        icon={<Icon name="settings" size={18} />}
         sub="계정 · 알림 · 출퇴근 리마인더를 관리합니다."
       />
 
-      <Collapsible title="🔑 비즈박스 계정" storageKey="settings:group:account">
-        <p className="hint" style={{ margin: '0 0 12px' }}>
+      <Collapsible
+        title="비즈박스 계정"
+        icon={<Icon name="key" size={14} />}
+        storageKey="settings:group:account"
+      >
+        <p className="hint settings__group-desc">
           그룹웨어 로그인 계정 — 일정 등록 · 출퇴근 · 주간보고에 공용으로
           사용됩니다.
         </p>
@@ -122,12 +139,16 @@ export function SettingsSection() {
         </FormRow>
 
         <p className="note">
-          🔒 비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
-          저장됩니다. (평문 저장 아님)
+          비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
+          (평문 저장 아님)
         </p>
       </Collapsible>
 
-      <Collapsible title="🔔 알림" storageKey="settings:group:notify">
+      <Collapsible
+        title="알림"
+        icon={<Icon name="bell" size={14} />}
+        storageKey="settings:group:notify"
+      >
         <label className="settings__check">
           <input
             type="checkbox"
@@ -138,18 +159,19 @@ export function SettingsSection() {
           <span>배포가 끝나면 알림 받기 (성공/실패)</span>
         </label>
         <div className="settings__test-row">
-          <Button onClick={() => window.oneApp?.testNotification()}>
-            🔔 테스트 알림 보내기
+          <Button size="sm" onClick={() => window.oneApp?.testNotification()}>
+            테스트 알림 보내기
           </Button>
           <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
         </div>
       </Collapsible>
 
       <Collapsible
-        title="🕘 출퇴근 리마인더"
+        title="출퇴근 리마인더"
+        icon={<Icon name="clock" size={14} />}
         storageKey="settings:group:reminders"
       >
-        <p className="hint" style={{ margin: '0 0 12px' }}>
+        <p className="hint settings__group-desc">
           요일별로 시각을 정하면 그 시각에 알림을 줍니다. 이미 찍었으면 알리지
           않아요. (평일만)
         </p>
@@ -213,14 +235,14 @@ export function SettingsSection() {
       </Collapsible>
 
       <div className="form-actions">
-        <Button variant="primary" onClick={save} disabled={loading || !bizboxId}>
+        <Button
+          variant="primary"
+          onClick={save}
+          loading={saving}
+          disabled={loading || !bizboxId}
+        >
           저장
         </Button>
-        {status && (
-          <span className="hint" style={{ alignSelf: 'center' }}>
-            {status}
-          </span>
-        )}
       </div>
     </div>
   );

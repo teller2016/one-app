@@ -1,11 +1,5 @@
 // 출퇴근(근태) 위젯 — 사이드바 하단 고정
-
-.sidebar__footer {
-  margin-top: auto;
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--border);
-  -webkit-app-region: no-drag;
-}
+@use './base' as *;
 
 .attend {
   &__head {
@@ -16,9 +10,10 @@
   }
 
   &__title {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    @include type-caption;
   }
 
   &__row {
@@ -26,11 +21,11 @@
     align-items: center;
     justify-content: space-between;
     padding: 2px 0;
-    font-size: 12.5px;
+    @include type-small;
   }
 
   &__label {
-    color: var(--text-dim);
+    color: var(--text-2);
   }
 
   &__time {
@@ -40,22 +35,22 @@
   &__btn {
     width: 100%;
     margin-top: 8px;
-    padding: 7px 0;
-    font-size: 12.5px;
   }
 
   &__done {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     margin: 8px 0 0;
-    font-size: 12px;
-    text-align: center;
-    color: #7bd88f;
+    @include type-small;
+    color: var(--ok);
   }
 
   &__error {
-    margin: 6px 0 0;
-    font-size: 11.5px;
-    line-height: 1.4;
-    color: #ff8a8a;
+    margin: 8px 0 0;
+    @include type-small;
+    color: var(--danger);
     word-break: keep-all;
   }
 }

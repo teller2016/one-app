@@ -1,14 +1,176 @@
-// 전역 변수 · 리셋 · 공통 요소 (버튼, 플레이스홀더)
+// 디자인 토큰 · 리셋 · 공통 요소 — 기준 문서: DESIGN.md
+// 모든 색·크기 값은 여기 토큰에서만 가져온다 (매직넘버 금지).
 
 :root {
-  --bg: #1a1b1e;
-  --bg-sidebar: #202124;
-  --bg-elevated: #26272b;
-  --border: #34363b;
-  --text: #e4e6eb;
-  --text-dim: #9aa0a6;
-  --accent: #4c8dff;
-  --accent-soft: rgba(76, 141, 255, 0.15);
+  // ===== 배경 레이어 (깊은 순) =====
+  --bg-sunken: #0a0b0e; // 로그·코드·중첩 패널
+  --bg: #0e0f13; // 앱 전체 그라운드 — main.ts BrowserWindow backgroundColor와 동기화
+  --surface-1: #16171e; // 카드·입력·collapsible
+  --surface-2: #1d1f27; // hover 표면·팝오버·토스트·세그먼트 on
+
+  // ===== 보더·오버레이 =====
+  --border: #2e3140;
+  --border-strong: #3f4354; // hover 보더·입력 기본 보더·스크롤바 thumb
+  --highlight: rgba(255, 255, 255, 0.045); // 카드 상단 1px 인셋
+  --overlay-faint: rgba(255, 255, 255, 0.03);
+  --overlay-hover: rgba(255, 255, 255, 0.05);
+  --overlay-track: rgba(255, 255, 255, 0.08);
+  --scrollbar-hover: #4a5065;
+
+  // ===== 텍스트 (4단 위계) =====
+  --text: #e9ebf1;
+  --text-2: #a0a6b5; // 보조·캡션·표 헤더·로그 본문
+  --text-3: #828a9e; // 메타·타임스탬프·플레이스홀더
+  --text-disabled: #666c7a; // 비활성 전용
+
+  // ===== 액센트 (블루 유지·정제) =====
+  --accent: #5b87f5; // 링크·활성·아이콘 틴트
+  --accent-hover: #6f97ff; // 링크 hover · surface-2 위 링크는 항상 이 값
+  --accent-btn: #3663db; // primary 버튼 배경 (흰 글자 5.3:1)
+  --accent-btn-hover: #2e5fd0; // primary hover (더 어둡게)
+  --accent-soft: rgba(91, 135, 245, 0.13);
+  --accent-glow: rgba(91, 135, 245, 0.4); // 장식 전용 — 포커스 링 금지
+  --on-accent: #ffffff; // --accent-btn 배경 위에서만
+
+  // ===== 시맨틱 =====
+  --ok: #4cc38a;
+  --ok-soft: rgba(76, 195, 138, 0.13);
+  --warning: #e6c35c;
+  --warning-soft: rgba(230, 195, 92, 0.13);
+  --danger: #f47067;
+  --danger-soft: rgba(244, 112, 103, 0.13);
+  --ot: #f59e6b; // 초과근무(OT) 전용
+  --ot-soft: rgba(245, 158, 107, 0.13);
+  --idle: #7c8494;
+  --idle-soft: rgba(124, 132, 148, 0.13);
+
+  // ===== 차트 카테고리컬 팔레트 (T/OT 쌍 — chartTheme.ts가 읽는 단일 소스) =====
+  --chart-1t: #5b87f5;
+  --chart-1o: #3663db;
+  --chart-2t: #8f7af5;
+  --chart-2o: #7a5fe0;
+  --chart-3t: #22b8cf;
+  --chart-3o: #1a93a8;
+  --chart-4t: #4cc38a;
+  --chart-4o: #3aa374;
+  --chart-5t: #ecb35e;
+  --chart-5o: #cf9543;
+  --chart-6t: #e5484d;
+  --chart-6o: #c23a3f;
+  --chart-7t: #f591bb;
+  --chart-7o: #d1568d;
+  --chart-8t: #35b8a2;
+  --chart-8o: #2a9484;
+  --chart-9t: #c6dd55;
+  --chart-9o: #a4bc3d;
+  --chart-10t: #8b93a5;
+  --chart-10o: #6c7385;
+
+  // ===== 라운드 · 그림자 · 모션 =====
+  --r-sm: 6px; // 칩·아이콘 버튼
+  --r-md: 8px; // 버튼·입력·중첩 패널
+  --r-lg: 12px; // 카드·패널
+  --r-full: 999px; // 필·바
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dur-1: 0.12s; // 색·배경 전환
+  --dur-2: 0.18s; // transform·펼침
+  --dur-pulse: 1.2s; // 상태 점 펄스
+  --ease: cubic-bezier(0.25, 0.6, 0.3, 1);
+
+  // ===== 타이포 (크기만 — 스타일 묶음은 아래 type-* 믹스인이 정본) =====
+  --fs-caption: 11px;
+  --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-emph: 14px;
+  --fs-title: 15px;
+  --fs-h2: 20px;
+  --fs-metric: 24px;
+  --font-mono: 'SF Mono', ui-monospace, Menlo, monospace;
+
+  // ===== 레이아웃 =====
+  --w-content: 760px; // 기본 섹션 폭
+  --w-wide: 1200px; // 주간보고 등 와이드 섹션
+}
+
+// ===== 타이포 믹스인 (정본 — 용도 기준으로 사용) =====
+@mixin type-caption {
+  font-size: var(--fs-caption);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+@mixin type-small {
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+@mixin type-body {
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+@mixin type-emph {
+  font-size: var(--fs-emph);
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+@mixin type-title {
+  font-size: var(--fs-title);
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+@mixin type-h2 {
+  font-size: var(--fs-h2);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+@mixin type-metric {
+  font-size: var(--fs-metric);
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+// ===== 포커스 링 (outline 방식 — box-shadow는 카드 인셋과 상호 파괴라 금지) =====
+@mixin focus-ring($offset: 2px) {
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: $offset;
+  }
+}
+
+// ===== 카드 표면 (기능 scss에서 @include) =====
+@mixin card-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow:
+    inset 0 1px 0 var(--highlight),
+    var(--shadow-1);
+}
+
+// 인터랙티브 카드 — hover는 배경 전환만(translateY 금지), 선택은 단일 링
+@mixin card-interactive {
+  @include card-surface;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
 }
 
 * {
@@ -26,14 +188,28 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
+  @include type-body;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-// 스크롤바 (앱 전역) — 기본 스크롤바가 투박해서 얇고 은은하게 통일.
-// Electron(Chromium)이라 ::-webkit-scrollbar 로 충분하다.
+// 모션 최소화 설정 존중 — 전환·펄스·진입 모션만 끈다 (스피너 회전은 진행 표시라 유지)
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+
+  .status-dot--busy,
+  .toast {
+    animation: none !important;
+  }
+}
+
+// 스크롤바 (앱 전역) — 얇고 은은하게
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -45,93 +221,131 @@ body {
 
 ::-webkit-scrollbar-thumb {
   // 투명 테두리 + padding-box 클립으로 실제 두께가 얇아 보이게
-  background: #45474e;
+  background: var(--border-strong);
   border: 3px solid transparent;
-  border-radius: 99px;
+  border-radius: var(--r-full);
   background-clip: padding-box;
 
   &:hover {
-    background: #585b63;
+    background: var(--scrollbar-hover);
     background-clip: padding-box;
   }
 }
 
-// 스크롤바가 트랙 위에 떠 있어 모서리 배경이 튀지 않게
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-// 공용 버튼
+// ===== 버튼 =====
 .btn {
-  padding: 9px 18px;
-  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: var(--r-md);
   border: 1px solid transparent;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
   transition:
-    filter 0.12s,
-    background 0.12s,
-    border-color 0.12s;
-
-  // hover 시 살짝 밝게, 누르는 순간 살짝 어둡게
-  &:hover:not(:disabled) {
-    filter: brightness(1.12);
-  }
-
-  &:active:not(:disabled) {
-    filter: brightness(0.92);
-  }
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+  @include focus-ring;
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: default;
   }
 
+  &--sm {
+    padding: 6px 12px;
+    font-size: var(--fs-small);
+  }
+
   &--primary {
-    background: var(--accent);
-    color: #fff;
+    background: var(--accent-btn);
+    color: var(--on-accent);
+
+    &:hover:not(:disabled) {
+      background: var(--accent-btn-hover);
+    }
+
+    &:active:not(:disabled) {
+      background: var(--accent-btn-hover);
+      filter: brightness(0.94);
+    }
   }
 
   &--ghost {
-    background: var(--bg-elevated);
+    background: var(--surface-1);
     color: var(--text);
     border-color: var(--border);
 
-    // 어두운 배경이라 밝기 변화가 약해서 테두리도 함께 강조
     &:hover:not(:disabled) {
-      border-color: #4a4d54;
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+    }
+
+    &:active:not(:disabled) {
+      background: var(--surface-1);
     }
   }
 
   &--danger {
-    background: #3a2224;
-    color: #ff8a8a;
-    border-color: #5a2e2e;
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: rgba(244, 112, 103, 0.35);
+
+    &:hover:not(:disabled) {
+      background: rgba(244, 112, 103, 0.2);
+    }
+  }
+
+  // 로딩 스피너 (Button loading 상태)
+  &__spin {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: currentColor;
+    animation: spin 0.9s linear infinite;
   }
 }
 
-// 섹션 컨테이너 + 헤더
+// ===== 섹션 컨테이너 + 헤더 =====
 .section {
-  padding: 22px 26px;
-  max-width: 760px;
+  padding: 24px 28px;
+  max-width: var(--w-content);
   margin: 0 auto;
 }
 
 .section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+
+  &__icon {
+    display: inline-flex;
+    color: var(--accent);
+  }
+
   &__title {
-    margin: 0 0 4px;
-    font-size: 20px;
+    margin: 0;
+    @include type-h2;
   }
 
   &__sub {
     margin: 0 0 20px;
-    font-size: 13px;
-    color: var(--text-dim);
+    @include type-body;
+    color: var(--text-2);
   }
 }
 
-// 폼 공통
+// ===== 폼 공통 =====
 .form-row {
   display: flex;
   align-items: center;
@@ -145,13 +359,14 @@ body {
   }
 
   &__label {
-    font-size: 13px;
-    color: var(--text-dim);
-    min-width: 72px;
+    @include type-body;
+    color: var(--text-2);
+    min-width: 72px; // 라벨 열 정렬용 최소폭
 
     code {
       color: var(--text);
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-small);
     }
   }
 }
@@ -160,128 +375,294 @@ body {
 .form-label {
   display: block;
   margin: 20px 0 6px;
-  font-size: 13px;
+  @include type-body;
+  font-weight: 500;
   color: var(--text);
 }
 
 .form-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
   color: var(--text);
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  transition: border-color var(--dur-1) var(--ease);
+
+  &::placeholder {
+    color: var(--text-3);
+  }
 
   &:focus {
-    outline: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
     border-color: var(--accent);
   }
+
+  &:disabled {
+    opacity: 0.45;
+  }
+
+  &--sm {
+    padding: 6px 10px;
+    font-size: var(--fs-small);
+  }
+
+  // 코드성 텍스트에어리어 (일정 입력 등)
+  &--code {
+    background: var(--bg-sunken);
+    font-family: var(--font-mono);
+    line-height: 1.6;
+    resize: vertical;
+  }
 }
 
-// 열고닫기 그룹 (공용 Collapsible 컴포넌트)
-.collapsible {
+// 파일 선택 등 '입력처럼 보이는 트리거 버튼'
+.filetrigger {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text-2);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+  @include focus-ring;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+// 링크형 버튼 (URL·잡 이름 등)
+.textlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+  @include focus-ring(1px);
+
+  &:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
+
+  &--sm {
+    font-size: var(--fs-small);
+  }
+}
+
+// ===== 세그먼트 토글 (오늘/어제 등) — 배경 승격 방식 =====
+.seg-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-sunken);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  margin-bottom: 12px;
+  border-radius: var(--r-md);
+}
 
-  &__head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 13px 16px;
-    font-size: 13.5px;
-    font-weight: 700;
-    cursor: pointer;
-    user-select: none;
-    list-style: none; // 기본 ▶ 마커 제거
-    border-radius: 9px;
-    transition: background 0.12s;
+.seg {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: var(--r-sm);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+  @include focus-ring(0px);
 
-    &::-webkit-details-marker {
-      display: none;
-    }
-
-    // 접힘 화살표 — 크게, 열리면 90도 회전
-    &::before {
-      content: '▸';
-      color: var(--text-dim);
-      font-size: 17px;
-      line-height: 1;
-      transition:
-        transform 0.15s,
-        color 0.12s;
-    }
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.03);
-
-      &::before {
-        color: var(--text);
-      }
-    }
+  &:hover:not(:disabled) {
+    color: var(--text);
   }
 
-  &[open] > &__head::before {
-    transform: rotate(90deg);
+  &--on {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    color: var(--text);
   }
 
-  &__body {
-    padding: 2px 16px 16px;
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 }
 
-// 경고/안내 배너
-.banner {
-  margin: 0 0 16px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(255, 180, 80, 0.12);
-  border: 1px solid rgba(255, 180, 80, 0.35);
-  color: #f0c675;
-  font-size: 13px;
+// ===== 상태 뱃지 (soft 배경 + 시맨틱 글자 + 점) =====
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  max-width: 100%;
+  min-width: 0;
+
+  // 긴 문구(배포 오류 메시지 등)는 말줄임 — 전체 내용은 title 툴팁으로
+  &__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &--busy {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+
+  &--ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+
+  &--fail {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  &--idle {
+    background: var(--idle-soft);
+    color: var(--idle);
+  }
+
+  // 점 없는 정보형 필 (기간·인원수 등)
+  &--pill {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+  }
 }
 
-.hint {
-  font-size: 12px;
-  color: var(--text-dim);
+// 뱃지 옆 보조 타임스탬프 (음수 마진 금지 — 간격은 부모 gap으로)
+.badge-time {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 
-.note {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--text-dim);
-  opacity: 0.8;
+// ===== 상태 점 =====
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &--md {
+    width: 8px;
+    height: 8px;
+  }
+
+  &--ok {
+    background: var(--ok);
+  }
+
+  &--busy {
+    background: var(--warning);
+    animation: pulse var(--dur-pulse) ease-in-out infinite;
+  }
+
+  &--fail {
+    background: var(--danger);
+  }
+
+  &--idle {
+    background: var(--idle);
+  }
 }
 
-// 아이콘 버튼 (새로고침 등)
+// ===== 칩 (토글 가능 — 주간보고 프로젝트 칩 등) =====
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    opacity var(--dur-1) var(--ease);
+  @include focus-ring;
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  &--excluded {
+    opacity: 0.45;
+    text-decoration: line-through;
+  }
+}
+
+// ===== 아이콘 버튼 (새로고침 등) =====
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-2);
   cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+  @include focus-ring(0px);
 
   &:hover:not(:disabled) {
     color: var(--text);
-    background: var(--bg-elevated);
+    background: var(--surface-2);
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: default;
   }
 
@@ -289,7 +670,6 @@ body {
     width: 28px;
     height: 28px;
     border: 1px solid var(--border);
-    border-radius: 7px;
 
     &:hover:not(:disabled) {
       background: transparent;
@@ -302,43 +682,219 @@ body {
   }
 }
 
+// ===== 열고닫기 그룹 (공용 Collapsible 컴포넌트) =====
+.collapsible {
+  @include card-surface;
+  margin-bottom: 12px;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    list-style: none; // 기본 ▶ 마커 제거
+    border-radius: var(--r-lg);
+    transition: background var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &:hover {
+      background: var(--overlay-hover);
+    }
+  }
+
+  // 펼침 화살표 (SVG chevron) — 열리면 90도 회전
+  &__chev {
+    display: inline-flex;
+    color: var(--text-3);
+    transition:
+      transform var(--dur-2) var(--ease),
+      color var(--dur-1) var(--ease);
+  }
+
+  &__head:hover &__chev {
+    color: var(--text);
+  }
+
+  &[open] > &__head {
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+
+  &[open] > &__head &__chev {
+    transform: rotate(90deg);
+  }
+
+  &__body {
+    padding: 4px 16px 16px;
+  }
+}
+
+// ===== 배너 (경고/오류/안내) =====
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid;
+  @include type-body;
+
+  &__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  &--warning {
+    background: var(--warning-soft);
+    border-color: rgba(230, 195, 92, 0.35);
+    color: var(--warning);
+  }
+
+  &--danger {
+    background: var(--danger-soft);
+    border-color: rgba(244, 112, 103, 0.35);
+    color: var(--danger);
+  }
+
+  &--info {
+    background: var(--accent-soft);
+    border-color: var(--accent-glow);
+    color: var(--accent-hover);
+  }
+}
+
+// ===== 토스트 (전역 — ToastProvider가 렌더) =====
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  @include type-body;
+  animation: toast-in var(--dur-2) var(--ease);
+
+  &__icon {
+    display: inline-flex;
+    color: var(--ok);
+  }
+
+  // 실패 토스트 — 아이콘 색만 위험색으로
+  &--fail &__icon {
+    color: var(--danger);
+  }
+}
+
+// ===== 중첩 패널 (로그·커밋 내역 — 카드보다 한 단계 가라앉음) =====
+.panel-sunken {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+
+  &--log {
+    margin: 0;
+    overflow: auto;
+    font-family: var(--font-mono);
+    @include type-small;
+    line-height: 1.7;
+    color: var(--text-2);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+// ===== 빈 상태 =====
+.empty-state {
+  @include card-surface;
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--text-3);
+  @include type-body;
+
+  &__icon {
+    display: inline-flex;
+    margin-bottom: 8px;
+    color: var(--text-3);
+  }
+}
+
+// ===== 스피너 · 진행바 =====
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+
+  &--lg {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+}
+
+.progress {
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--overlay-track);
+  overflow: hidden;
+
+  &__fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--r-full);
+  }
+}
+
+// ===== 보조 텍스트 =====
+.hint {
+  @include type-small;
+  color: var(--text-3);
+}
+
+.note {
+  margin: 10px 0 0;
+  @include type-small;
+  color: var(--text-3);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-// 미구현 섹션 플레이스홀더
-.placeholder {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--text-dim);
-  padding: 24px;
-
-  &__icon {
-    font-size: 52px;
-    margin-bottom: 12px;
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
   }
+}
 
-  &__title {
-    margin: 0 0 6px;
-    color: var(--text);
-    font-size: 20px;
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
   }
-
-  &__desc {
-    margin: 0 0 4px;
-    font-size: 14px;
-  }
-
-  &__hint {
-    margin-top: 16px;
-    font-size: 12px;
-    color: var(--text-dim);
-    opacity: 0.7;
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }

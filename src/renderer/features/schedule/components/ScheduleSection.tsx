@@ -3,8 +3,18 @@ import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Banner } from '../../../components/Banner';
+import { Icon } from '../../../components/Icon';
+import { Segment } from '../../../components/Segment';
+import { Input } from '../../../components/Input';
+import { Textarea } from '../../../components/Textarea';
 
 type DateType = 'today' | 'yesterday' | 'date';
+
+const DATE_OPTIONS: { value: DateType; label: string }[] = [
+  { value: 'today', label: '오늘' },
+  { value: 'yesterday', label: '어제' },
+  { value: 'date', label: '직접 입력' },
+];
 
 /** 일정 등록 섹션 — 폼 작성 후 버튼을 누르면 앱 내부 매크로가 실행된다. */
 export function ScheduleSection() {
@@ -50,15 +60,15 @@ export function ScheduleSection() {
 
   const run = async (testMode: boolean) => {
     if (!window.oneApp?.schedule) {
-      setLog('❌ 앱 연결(preload)이 되지 않았습니다.\n');
+      setLog('[오류] 앱 연결(preload)이 되지 않았습니다.\n');
       return;
     }
     if (!scheduleText.trim()) {
-      setLog('⚠️ 일정 내용을 입력하세요.\n');
+      setLog('[경고] 일정 내용을 입력하세요.\n');
       return;
     }
     if (dateType === 'date' && !customDate) {
-      setLog('⚠️ 날짜를 선택하세요.\n');
+      setLog('[경고] 날짜를 선택하세요.\n');
       return;
     }
     setLog('');
@@ -85,13 +95,14 @@ export function ScheduleSection() {
   return (
     <div className="section">
       <SectionHeader
-        title="🗓️ 일정 등록"
+        icon={<Icon name="calendar" size={18} />}
+        title="일정 등록"
         sub="비즈박스 그룹웨어에 하루 일정을 자동 등록합니다."
       />
 
       {credsReady === false && (
         <Banner>
-          ⚠️ 비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
+          비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
           먼저 저장하세요.
         </Banner>
       )}
@@ -99,19 +110,14 @@ export function ScheduleSection() {
       {/* 날짜 */}
       <FormRow label="날짜">
         <div className="sched__segment">
-          {(['today', 'yesterday', 'date'] as DateType[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={'seg' + (dateType === t ? ' seg--on' : '')}
-              onClick={() => setDateType(t)}
-              disabled={running}
-            >
-              {t === 'today' ? '오늘' : t === 'yesterday' ? '어제' : '직접 입력'}
-            </button>
-          ))}
+          <Segment<DateType>
+            options={DATE_OPTIONS}
+            value={dateType}
+            onChange={setDateType}
+            disabled={running}
+          />
           {dateType === 'date' && (
-            <input
+            <Input
               type="date"
               className="sched__date"
               value={customDate}
@@ -124,7 +130,7 @@ export function ScheduleSection() {
 
       {/* 시작 시간 */}
       <FormRow label="시작 시간">
-        <input
+        <Input
           type="text"
           className="sched__time"
           value={startTime}
@@ -143,7 +149,8 @@ export function ScheduleSection() {
           </>
         }
       >
-        <textarea
+        <Textarea
+          code
           className="sched__textarea"
           value={scheduleText}
           onChange={(e) => setScheduleText(e.target.value)}
@@ -160,8 +167,8 @@ export function ScheduleSection() {
         <Button onClick={() => run(true)} disabled={running}>
           테스트 (등록 안 함)
         </Button>
-        <Button variant="primary" onClick={() => run(false)} disabled={running}>
-          {running ? '실행 중…' : '일정 등록'}
+        <Button variant="primary" onClick={() => run(false)} loading={running}>
+          일정 등록
         </Button>
         {running && (
           <Button variant="danger" onClick={cancel}>
@@ -176,7 +183,7 @@ export function ScheduleSection() {
 
       {/* 로그 */}
       <label className="form-label">실행 로그</label>
-      <pre className="sched__log" ref={logRef}>
+      <pre className="panel-sunken panel-sunken--log sched__log" ref={logRef}>
         {log || '실행하면 여기에 진행 상황이 표시됩니다.'}
       </pre>
     </div>

@@ -5,7 +5,7 @@
 
 ## 프로젝트 개요
 - **One App**: macOS 데스크톱 앱. 하나의 창에서 사내 도구(일정 등록, VPN 등)를 관리하는 **워크스페이스형 허브**.
-- UX: 왼쪽 **사이드바 + 탭 + 메인 영역**. 기능이 늘수록 사이드바에 섹션이 추가되는 구조.
+- UX: 왼쪽 **사이드바 + 탑바 + 메인 영역**. 기능이 늘수록 사이드바에 섹션이 추가되는 구조. 룩앤필은 `DESIGN.md`(Linear/Raycast 무드 다크 테마) 기준.
 
 ## 기술 스택
 - **Electron + React + TypeScript**
@@ -60,9 +60,11 @@ src/
 ├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
 ├── renderer/                    # 🎨 React UI
 │   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
-│   ├── app/App.tsx              #  앱 셸(사이드바/탭/메인) + SECTIONS
-│   ├── components/              #  공용 UI — Sidebar · Button · Input · FormRow ·
-│   │                            #  SectionHeader · Banner · RefreshButton · Collapsible
+│   ├── app/App.tsx              #  앱 셸(사이드바/탑바/메인) + SECTIONS + ToastProvider
+│   ├── components/              #  공용 UI — Sidebar · Button · Input · Textarea · FormRow ·
+│   │                            #  SectionHeader · Banner · RefreshButton · Collapsible ·
+│   │                            #  Icon(SVG) · Badge · StatusDot · TextLink · FileTrigger ·
+│   │                            #  Segment · Toast(useToast)
 │   ├── features/                #  기능별 폴더 — index.ts 가 공개 API
 │   │   ├── schedule/
 │   │   │   ├── components/ScheduleSection.tsx
@@ -77,9 +79,10 @@ src/
 │   │   └── weekly/              #  주간보고 — 좌우 2단(팀 목록 RosterRow + 상세 Detail). components(Section·RosterRow·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
-│   │   ├── _base.scss           #    변수·리셋·공통(btn, placeholder)
-│   │   ├── _layout.scss         #    사이드바·탭바·메인
-│   │   ├── _schedule.scss       #    일정 등록 (환경설정도 공용)
+│   │   ├── _base.scss           #    디자인 토큰·믹스인·공통 클래스 (DESIGN.md 가 기준)
+│   │   ├── _layout.scss         #    사이드바·탑바·메인 (셸)
+│   │   ├── _schedule.scss       #    일정 등록
+│   │   ├── _settings.scss       #    환경설정
 │   │   ├── _deploy.scss         #    배포
 │   │   ├── _attendance.scss     #    출퇴근 위젯
 │   │   ├── _vpn.scss            #    VPN 위젯
@@ -123,9 +126,11 @@ src/
 
 ## 컨벤션
 - 코드 주석·문서·대화는 **한국어**.
-- **스타일은 SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts`에서 modern-compiler API 사용). BEM 클래스를 `&__`/`&--` 네스팅으로 작성하고, 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss`에 `@use` 추가.
-- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger), 입력 `Input`, 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`, 경고 배너 `Banner`, 새로고침 아이콘 `RefreshButton`, 열고닫기 그룹 `Collapsible`(storageKey 로 마지막 상태 기억). `.btn`/`.input` 등 공통 클래스 직접 사용 금지.
-- 공통 레이아웃 클래스(`_base.scss`): 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`.
+- **UI 스타일 기준은 `DESIGN.md`** — 색·크기·모션은 반드시 `_base.scss` 토큰(`var(--*)`)과 타이포 믹스인(`type-*`)에서 가져온다 (hex·px 매직넘버 금지). 이모지·텍스트 글리프 대신 공용 `Icon` 컴포넌트(Lucide path) 사용.
+- **스타일은 SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts`에서 modern-compiler API 사용). BEM 클래스를 `&__`/`&--` 네스팅으로 작성하고, 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss`에 `@use` 추가. 믹스인이 필요하면 파일 최상단에 `@use './base' as *;`.
+- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger · size: md/sm · loading), 입력 `Input`(small)·`Textarea`(code), 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`(icon), 배너 `Banner`(variant: warning/danger/info), 새로고침 `RefreshButton`, 열고닫기 `Collapsible`(icon·storageKey), 아이콘 `Icon`, 상태 뱃지 `Badge`·`StatusDot`, 링크형 버튼 `TextLink`, 파일 선택 `FileTrigger`, 세그먼트 `Segment`, 토스트 `useToast`. `.btn`/`.input` 등 공통 클래스 직접 사용 금지, 기능 scss 에서 공용 클래스 크기 오버라이드 금지(size variant 사용).
+- 공통 레이아웃 클래스(`_base.scss`): 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`.
+- **테마 배경 변경 시** `_base.scss --bg` 와 `src/main/main.ts` BrowserWindow `backgroundColor` 를 함께 수정 (동기화 안 하면 실행 초기 플래시).
 - 커밋: 한국어 conventional commit (`feat`/`fix`/`refactor`/`docs`/`chore`). **커밋 메시지에 Claude 서명(Co-Authored-By 등) 넣지 말 것.** → **`/commit` 스킬 사용.**
 - 새 라이브러리/기술 도입 전 **공식 문서 확인**. 큰 리팩터링은 사용자 승인 후 진행.
 - 자세한 로드맵은 `ROADMAP.md` 참고.

@@ -43,7 +43,8 @@ const createWindow = () => {
     title: 'One App',
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1a1b1e',
+    // 렌더러 로드 전 창 배경 — _base.scss 의 --bg 와 반드시 동기화 (불일치 시 실행 초기 플래시)
+    backgroundColor: '#0e0f13',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

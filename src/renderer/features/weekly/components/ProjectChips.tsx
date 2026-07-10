@@ -3,6 +3,7 @@ import { type ProjectSummary } from '../lib/report';
 /**
  * 프로젝트 칩 목록 — 구분(프로젝트)별 T/OT 시간·MM 을 분리 표시, 클릭 시 전체 MM 계산에서 제외/포함 토글.
  * 제외 상태는 프로젝트명 기준 전역(모든 사원 공통)이다.
+ * 컨테이너는 공용 .chip(버튼) — 접근성(키보드 토글) 확보.
  */
 export function ProjectChips({
   summaryData,
@@ -19,9 +20,10 @@ export function ProjectChips({
         const isExcluded = excluded.has(it.name);
         const hasT = it.T > 0 || it.OT === 0; // T가 있거나, T·OT 둘 다 0이면 T 0 으로 표시
         return (
-          <span
+          <button
+            type="button"
             key={it.name}
-            className={'weekly-chip' + (isExcluded ? ' weekly-chip--excluded' : '')}
+            className={'chip' + (isExcluded ? ' chip--excluded' : '')}
             title={isExcluded ? 'MM 제외됨 (클릭하여 포함)' : 'MM 포함됨 (클릭하여 제외)'}
             onClick={(e) => {
               e.stopPropagation();
@@ -44,7 +46,7 @@ export function ProjectChips({
                 <span className="weekly-chip__mm">({it.OTMM})</span>
               </span>
             )}
-          </span>
+          </button>
         );
       })}
     </div>

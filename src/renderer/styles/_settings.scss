@@ -1,0 +1,135 @@
+// 환경설정 섹션 — 체크박스 옵션 · 출퇴근 리마인더 표 · 테스트 알림
+// (기존 _schedule.scss 에 동거하던 블록을 분리)
+
+@use './base' as *;
+
+// 체크박스 옵션 행 (알림 토글 등)
+.settings__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  @include type-body;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+}
+
+// 출퇴근 리마인더 요일별 표 (Collapsible 그룹 안이라 자체 박스 없음)
+.settings__reminders {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+// 헤더·행이 같은 grid 셀 구조를 공유 — 별도 들여쓰기 핵 없이 컬럼으로 정렬
+.settings__rem-head,
+.settings__rem-row {
+  display: grid;
+  grid-template-columns: 32px 180px 180px; // 요일 | 출근 슬롯 | 퇴근 슬롯
+  gap: 12px;
+  align-items: center;
+}
+
+.settings__rem-head {
+  @include type-caption;
+  padding-bottom: 2px;
+}
+
+.settings__rem-day {
+  @include type-body;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.settings__rem-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+}
+
+// 시각 입력 — 공용 .input--sm 토큰과 동일 스펙
+.settings__time {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  transition: border-color var(--dur-1) var(--ease);
+
+  &:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+  }
+}
+
+// 반복 알림 행 (안 찍었으면 N분마다)
+.settings__repeat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  @include type-body;
+  color: var(--text);
+}
+
+.settings__minutes {
+  width: 64px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  text-align: center;
+  transition: border-color var(--dur-1) var(--ease);
+
+  &:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+  }
+}
+
+// 테스트 알림 버튼 행 — 버튼 크기는 Button size=sm 사용 (오버라이드 금지)
+.settings__test-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+// Collapsible 그룹 첫머리 설명 (TSX 인라인 스타일 대체)
+.settings__group-desc {
+  margin: 0 0 12px;
+}

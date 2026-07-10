@@ -36,8 +36,9 @@ export function RosterRow({
           <i>/{WEEKLY_STANDARD_HOURS}</i>
         </span>
       </div>
-      <div className="weekly-roster-row__bar">
-        <span style={{ width: `${pct}%` }} />
+      {/* T 진행바 — 트랙은 공용 .progress, 채움 색은 tone 모디파이어가 결정 */}
+      <div className="progress weekly-roster-row__bar">
+        <span className="progress__fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="weekly-roster-row__meta">
         <span className="weekly-roster-row__mm">

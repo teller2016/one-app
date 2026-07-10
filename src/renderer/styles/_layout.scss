@@ -1,4 +1,7 @@
-// 앱 셸 — 사이드바 · 탭바 · 메인 영역
+// 앱 셸 — 사이드바 · 탑바 · 메인 영역
+// 배경은 전부 단일 그라운드(--bg), 구분은 1px 보더로만 (DESIGN.md 셸 스펙)
+
+@use './base' as *;
 
 .app {
   display: flex;
@@ -8,7 +11,7 @@
 .sidebar {
   width: 220px;
   min-width: 220px;
-  background: var(--bg-sidebar);
+  background: var(--bg);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -22,12 +25,12 @@
     gap: 8px;
     padding: 10px 16px 14px;
     font-weight: 700;
-    font-size: 15px;
+    font-size: var(--fs-title);
   }
 
   &__brand-mark {
+    display: inline-flex;
     color: var(--accent);
-    font-size: 16px;
   }
 
   &__nav {
@@ -46,29 +49,49 @@
     width: 100%;
     padding: 8px 10px;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--r-md);
     background: transparent;
-    color: var(--text-dim);
-    font-size: 13.5px;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: var(--fs-body);
+    font-weight: 500;
     text-align: left;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
 
     &:hover {
-      background: var(--bg-elevated);
+      background: var(--surface-1);
       color: var(--text);
     }
 
+    // 활성 = 배경 승격 + 아이콘만 액센트 틴트 (좌측 바·글로우 없음)
     &--active {
       background: var(--accent-soft);
       color: var(--text);
+
+      .sidebar__item-icon {
+        color: var(--accent);
+      }
     }
 
     &-icon {
-      font-size: 15px;
+      display: inline-flex;
       width: 20px;
-      text-align: center;
+      justify-content: center;
+      color: var(--text-3);
+      transition: color var(--dur-1) var(--ease);
     }
+  }
+
+  // 하단 고정 위젯 슬롯 (VPN·근태) — 셸 구조 요소라 여기서 정의
+  &__footer {
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding: 10px 12px 12px;
+    -webkit-app-region: no-drag;
   }
 }
 
@@ -80,31 +103,26 @@
   min-width: 0;
 }
 
-// 탭바
-.tabbar {
-  height: 40px;
+// 탑바 — 현재 섹션 표시 + 창 드래그 영역 (장식 탭 폐지)
+.topbar {
+  height: 44px;
+  flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  padding: 0 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
-}
 
-.tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 8px 8px 0 0;
-  font-size: 13px;
-  color: var(--text-dim);
-  -webkit-app-region: no-drag;
+  &__icon {
+    display: inline-flex;
+    color: var(--accent);
+  }
 
-  &--active {
-    background: var(--bg-elevated);
-    color: var(--text);
+  &__title {
+    font-size: var(--fs-body);
+    font-weight: 600;
   }
 }
 

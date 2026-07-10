@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
+import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
@@ -61,9 +62,12 @@ export function AttendanceWidget() {
   return (
     <div className="attend">
       <div className="attend__head">
-        <span className="attend__title">🏢 근태</span>
+        <span className="attend__title">
+          <Icon name="building" size={12} />
+          근태
+        </span>
         <RefreshButton
-          size={11}
+          size={12}
           spinning={busy === 'fetch'}
           onClick={refresh}
           disabled={busy !== null}
@@ -87,19 +91,20 @@ export function AttendanceWidget() {
       {nextAction && (
         <Button
           variant="primary"
+          size="sm"
           className="attend__btn"
           onClick={() => stamp(nextAction)}
           disabled={busy !== null}
+          loading={busy === 'come' || busy === 'leave'}
         >
-          {busy === 'come' || busy === 'leave'
-            ? '처리중...'
-            : nextAction === 'come'
-              ? '출근하기'
-              : '퇴근하기'}
+          {nextAction === 'come' ? '출근하기' : '퇴근하기'}
         </Button>
       )}
       {info && !nextAction && (
-        <p className="attend__done">✓ 오늘 출퇴근 완료</p>
+        <p className="attend__done">
+          <Icon name="check" size={12} />
+          오늘 출퇴근 완료
+        </p>
       )}
       {error && <p className="attend__error">{error}</p>}
     </div>

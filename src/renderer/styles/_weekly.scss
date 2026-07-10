@@ -1,7 +1,8 @@
-// 주간보고 섹션 — fe-schedule-extension dashboard.css 를 다크 테마로 이식
+// 주간보고 섹션 — 좌우 2단(팀 목록 + 상세) 와이드 레이아웃 (fe-schedule-extension 이식)
+@use './base' as *;
 
 .weekly {
-  max-width: 1200px; // 좌우 2단(팀 목록 + 상세)을 위해 기본 .section 폭을 확장
+  max-width: var(--w-wide); // 좌우 2단(팀 목록 + 상세)을 위해 기본 .section 폭을 확장
 
   &__toolbar {
     display: flex;
@@ -16,17 +17,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-
-    .btn {
-      padding: 5px 11px;
-      font-size: 12px;
-    }
   }
 
   &__weeklabel {
-    min-width: 170px;
+    min-width: 170px; // 주 라벨 고정폭 — 주 이동 시 좌우 버튼이 흔들리지 않도록 (DESIGN.md 5장)
     text-align: center;
-    font-size: 13px;
+    @include type-body;
     font-weight: 600;
   }
 
@@ -34,22 +30,7 @@
     display: flex;
     gap: 8px;
     margin-bottom: 14px;
-  }
-
-  &__period {
-    padding: 4px 10px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-dim);
-
-    &--warn {
-      background: rgba(248, 113, 113, 0.12);
-      border-color: rgba(248, 113, 113, 0.35);
-      color: #f8a1a1;
-    }
+    // 기간·인원수는 공용 Badge(pill), 기준시간 미달·초과는 Badge(fail)
   }
 
   &__loading {
@@ -59,26 +40,12 @@
     justify-content: center;
     gap: 14px;
     padding: 64px 20px;
-    color: var(--text-dim);
-    font-size: 14px;
-  }
+    color: var(--text-2);
+    @include type-body;
 
-  &__spinner {
-    width: 38px;
-    height: 38px;
-    border: 3px solid var(--border);
-    border-top-color: #6366f1;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite; // _base.scss 의 keyframes 재사용
-  }
-
-  &__empty {
-    padding: 36px 20px;
-    border: 1px dashed var(--border);
-    border-radius: 12px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13.5px;
+    p {
+      margin: 0;
+    }
   }
 
   // 좌우 2단 — 왼쪽 팀 목록 + 오른쪽 상세
@@ -93,8 +60,8 @@
     min-width: 240px;
     display: flex;
     flex-direction: column;
-    gap: 7px;
-    // 상세를 스크롤해도 팀 목록은 화면에 고정 (인원 많으면 목록만 스크롤)
+    gap: 8px;
+    // 상세를 스크롤해도 팀 목록은 화면에 고정 (인원 많으면 목록만 스크롤) — 보존 필수
     position: sticky;
     top: 6px;
     max-height: calc(100vh - 168px);
@@ -106,7 +73,7 @@
     min-width: 0;
   }
 
-  // 좁은 창에서는 2단을 위아래로 쌓고, 목록은 가로로 흐르게
+  // 브레이크포인트 980px — 좁은 창에서 2단을 위아래로 쌓고, 목록은 가로로 흐르게 (DESIGN.md 5장)
   @media (max-width: 980px) {
     &__panes {
       flex-direction: column;
@@ -127,63 +94,47 @@
   }
 }
 
-// T 합계 표시 (카드·상세 공용) — 40시간 미달/초과 시 경고색
+// T 합계 표시 (상세 헤더) — 38시간 미달/초과 시 경고색
 .weekly-hours {
-  font-size: 13px;
+  @include type-body;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 
   &__big {
-    font-size: 20px;
+    @include type-metric;
   }
 
   &__den {
-    color: var(--text-dim);
+    color: var(--text-2);
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-body);
   }
 
   &--warn {
-    color: #f87171;
+    color: var(--danger);
   }
 
   &--good {
-    color: #4ade80;
+    color: var(--ok);
   }
 }
 
-// 팀 목록 사원 한 줄 (좌측 목록)
+// 팀 목록 사원 한 줄 (좌측 목록) — 시간·진행바 색으로만 상태 구분 (좌측 보더 없음)
 .weekly-roster-row {
+  @include card-interactive;
+  @include focus-ring;
   width: 100%;
   text-align: left;
   font: inherit;
   color: var(--text);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  border-radius: 10px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  cursor: pointer;
-  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
-
-  &:hover {
-    border-color: #565aa8;
-  }
-
-  &--warn {
-    border-left-color: #f87171;
-  }
-
-  &--good {
-    border-left-color: #4ade80;
-  }
+  gap: 8px;
 
   &.is-selected {
-    border-color: #6366f1;
+    border-color: var(--accent);
     background: var(--accent-soft);
-    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.22);
   }
 
   &__line {
@@ -194,58 +145,45 @@
   }
 
   &__name {
-    font-size: 14px;
-    font-weight: 700;
+    @include type-emph;
   }
 
   &__hours {
-    font-size: 15px;
-    font-weight: 800;
+    font-size: var(--fs-title);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 
     i {
       font-style: normal;
-      font-size: 12px;
+      font-size: var(--fs-small);
       font-weight: 600;
-      color: var(--text-dim);
+      color: var(--text-2);
     }
   }
 
   &--warn &__hours {
-    color: #f87171;
+    color: var(--danger);
   }
 
   &--good &__hours {
-    color: #4ade80;
+    color: var(--ok);
   }
 
-  // T 진행바 (40시간 기준)
-  &__bar {
-    height: 4px;
-    border-radius: 99px;
-    background: rgba(255, 255, 255, 0.08);
-    overflow: hidden;
-
-    > span {
-      display: block;
-      height: 100%;
-      border-radius: 99px;
-    }
+  // T 진행바 (38시간 기준) — 트랙은 공용 .progress, 채움 색만 tone 별로
+  &--warn &__bar .progress__fill {
+    background: var(--danger);
   }
 
-  &--warn &__bar > span {
-    background: #f87171;
-  }
-
-  &--good &__bar > span {
-    background: #4ade80;
+  &--good &__bar .progress__fill {
+    background: var(--ok);
   }
 
   &__meta {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11.5px;
-    color: var(--text-dim);
+    @include type-small;
+    color: var(--text-2);
   }
 
   &__mm {
@@ -258,78 +196,52 @@
   }
 }
 
-// 프로젝트 칩 (시간·MM, 클릭 시 MM 제외 토글)
+// 프로젝트 칩 목록 — 칩 자체는 공용 .chip(버튼), 아래는 칩 내부 표기만
 .weekly-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.weekly-chip {
-  font-size: 12px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
+.weekly-chip__nm {
+  font-weight: 600;
+}
+
+.weekly-chip__seg {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  cursor: pointer;
-  transition: 0.12s;
-  user-select: none;
+}
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
+.weekly-chip__lbl {
+  @include type-caption;
+
+  &--ot {
+    color: var(--ot);
   }
+}
 
-  &__nm {
-    font-weight: 600;
-  }
+.weekly-chip__sep {
+  color: var(--text-2);
+  opacity: 0.6;
+}
 
-  &__seg {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
+.weekly-chip__hr {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
-  &__lbl {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-dim);
-
-    &--ot {
-      color: #f0a06a;
-    }
-  }
-
-  &__sep {
-    color: var(--text-dim);
-    opacity: 0.6;
-  }
-
-  &__hr {
-    font-weight: 700;
-  }
-
-  &__mm {
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-
-  &--excluded {
-    opacity: 0.45;
-    text-decoration: line-through;
-  }
+.weekly-chip__mm {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
 }
 
 // 하단 상세 (선택한 사원 1명)
 .weekly-detail {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-top: 3px solid #6366f1;
-  border-radius: 14px;
-  padding: 22px;
-  min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록
+  @include card-surface;
+  border-top: 3px solid var(--accent);
+  padding: 20px;
+  min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록 — 보존 필수
 
   &__head {
     display: flex;
@@ -339,14 +251,13 @@
 
     h3 {
       margin: 0;
-      font-size: 22px;
-      font-weight: 800;
+      @include type-h2;
     }
   }
 
   &__mm {
-    font-size: 13px;
-    color: var(--text-dim);
+    @include type-body;
+    color: var(--text-2);
     margin-bottom: 14px;
 
     b {
@@ -356,41 +267,39 @@
   }
 
   .weekly-chips {
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
 
   &__duo {
     display: grid;
-    // minmax(0, …) 로 트랙이 canvas 최소폭 아래로도 줄어들게 (안 하면 가로 오버플로)
+    // minmax(0, …) 로 트랙이 canvas 최소폭 아래로도 줄어들게 (안 하면 가로 오버플로) — 보존 필수
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
     gap: 14px;
     margin-bottom: 14px;
 
+    // 브레이크포인트 1100px — 차트 2열 → 1열 (DESIGN.md 5장)
     @media (max-width: 1100px) {
       grid-template-columns: minmax(0, 1fr);
     }
   }
 }
 
+// 상세 내부 패널 (차트·상세 일정) — 카드(r-lg) 안 중첩 표면이라 한 단계 작은 r-md
 .weekly-panel {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   padding: 16px;
-  min-width: 0; // 내부 canvas 가 패널 폭을 밀어내지 않도록
+  min-width: 0; // 내부 canvas 가 패널 폭을 밀어내지 않도록 — 보존 필수
   overflow: hidden;
 
   &__title {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-dim);
+    @include type-caption;
     margin-bottom: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
   }
 
   canvas {
     max-width: 100%;
-    max-height: 200px;
+    max-height: 200px; // 차트 높이 제한 — 보존 필수 (제거 시 세로로 무한 성장)
   }
 }
 
@@ -403,20 +312,21 @@
   }
 }
 
+// 프로젝트 태그 — 색은 chartTheme.getColor 인라인(팔레트 인덱스 기반)
 .weekly-ptag {
   display: inline-block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 700;
-  padding: 4px 11px;
-  border-radius: 8px;
+  padding: 4px 12px;
+  border-radius: var(--r-sm); // 칩 계열은 --r-sm (DESIGN.md 3장)
   margin-bottom: 8px;
 }
 
 .weekly-sblock {
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  padding: 16px 18px;
+  background: var(--overlay-faint);
+  border-radius: var(--r-sm); // 패널(r-md) 안 중첩 — 한 단계 작게
+  padding: 12px 16px;
   margin-bottom: 10px;
 
   &__head {
@@ -428,30 +338,15 @@
 }
 
 .weekly-stype {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: var(--fs-title);
+  font-weight: 700;
 
   &--t {
     color: var(--text);
   }
 
   &--ot {
-    color: #f87171;
-  }
-}
-
-.weekly-copy {
-  border: 1px solid var(--border);
-  background: transparent;
-  border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  cursor: pointer;
-
-  &:hover {
-    border-color: #6366f1;
-    color: #a5b4fc;
+    color: var(--ot);
   }
 }
 
@@ -461,46 +356,16 @@
   list-style: none;
 
   li {
-    font-size: 13px;
+    @include type-body;
     color: var(--text);
-    padding: 5px 0 5px 15px;
+    padding: 5px 0 5px 16px;
     position: relative;
 
     &::before {
       content: '-';
       position: absolute;
       left: 2px;
-      color: var(--text-dim);
+      color: var(--text-2);
     }
-  }
-}
-
-// 복사 토스트
-.weekly-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 40px;
-  transform: translateX(-50%);
-  z-index: 100;
-  background: #2c2d31;
-  color: var(--text);
-  border: 1px solid var(--border);
-  font-size: 13px;
-  padding: 10px 18px;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: weekly-toast-in 0.25s ease-out;
-  pointer-events: none;
-}
-
-@keyframes weekly-toast-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
   }
 }

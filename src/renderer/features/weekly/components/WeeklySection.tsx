@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
+import { Badge } from '../../../components/Badge';
+import { Icon } from '../../../components/Icon';
+import { useToast } from '../../../components/Toast';
 import { RosterRow } from './RosterRow';
 import { EmployeeDetail } from './EmployeeDetail';
 import {
@@ -50,8 +53,7 @@ export function WeeklySection() {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded);
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toast = useToast();
 
   // 수집 진행 단계 구독
   useEffect(() => {
@@ -69,24 +71,10 @@ export function WeeklySection() {
       .then((s) => setCredsReady(!!s.bizboxId && s.hasPassword));
   }, []);
 
-  // 토스트 타이머 정리
-  useEffect(
-    () => () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    },
-    [],
-  );
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 1500);
-  };
-
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text).then(
-      () => showToast('복사되었습니다'),
-      () => showToast('복사 실패'),
+      () => toast('복사되었습니다'),
+      () => toast('복사 실패', 'fail'),
     );
   };
 
@@ -145,13 +133,14 @@ export function WeeklySection() {
   return (
     <div className="section weekly">
       <SectionHeader
-        title="📊 주간보고"
+        icon={<Icon name="bar-chart" size={18} />}
+        title="주간보고"
         sub="FE챕터 개인별 주간 일정을 분석해 팀원별 T/OT·MM 을 보여줍니다."
       />
 
       {credsReady === false && (
         <Banner>
-          ⚠️ 비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
+          비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
           먼저 저장하세요.
         </Banner>
       )}
@@ -160,11 +149,12 @@ export function WeeklySection() {
       <div className="weekly__toolbar">
         <div className="weekly__weeknav">
           <Button
+            size="sm"
             onClick={() => setWeekOffset((v) => Math.max(v - 1, -MAX_OFFSET))}
             disabled={loading || weekOffset <= -MAX_OFFSET}
             aria-label="이전 주"
           >
-            ◀
+            <Icon name="chevron-left" size={12} />
           </Button>
           <span className="weekly__weeklabel">
             {weekOffset === 0
@@ -174,29 +164,30 @@ export function WeeklySection() {
                 : `${weekOffset > 0 ? '+' : ''}${weekOffset}주 (${weekRangeLabel(weekOffset)})`}
           </span>
           <Button
+            size="sm"
             onClick={() => setWeekOffset((v) => Math.min(v + 1, MAX_OFFSET))}
             disabled={loading || weekOffset >= MAX_OFFSET}
             aria-label="다음 주"
           >
-            ▶
+            <Icon name="chevron-right" size={12} />
           </Button>
           {weekOffset !== 0 && (
-            <Button onClick={() => setWeekOffset(0)} disabled={loading}>
+            <Button size="sm" onClick={() => setWeekOffset(0)} disabled={loading}>
               이번주
             </Button>
           )}
         </div>
-        <Button variant="primary" onClick={run} disabled={loading}>
-          {loading ? '분석 중…' : '주간보고 분석'}
+        <Button variant="primary" onClick={run} loading={loading}>
+          주간보고 분석
         </Button>
       </div>
 
-      {error && <Banner>⚠️ {error}</Banner>}
+      {error && <Banner>{error}</Banner>}
 
       {/* 로딩 */}
       {loading && (
         <div className="weekly__loading">
-          <div className="weekly__spinner" />
+          <div className="spinner spinner--lg" />
           <p>{progressStep || '일정 데이터를 불러오는 중…'}</p>
         </div>
       )}
@@ -206,20 +197,25 @@ export function WeeklySection() {
         <>
           <div className="weekly__meta">
             {period && (
-              <span className="weekly__period">
+              <Badge variant="pill">
                 {period.start} ~ {period.end}
-              </span>
+              </Badge>
             )}
-            <span className="weekly__period">{report.nameList.length}명</span>
+            <Badge variant="pill">{report.nameList.length}명</Badge>
             {offCount > 0 && (
-              <span className="weekly__period weekly__period--warn">
-                {WEEKLY_STANDARD_HOURS}시간 ≠ {offCount}명
-              </span>
+              <Badge variant="fail">
+                기준 {WEEKLY_STANDARD_HOURS}시간 미달·초과 {offCount}명
+              </Badge>
             )}
           </div>
 
           {report.nameList.length === 0 ? (
-            <div className="weekly__empty">표시할 사원 데이터가 없습니다.</div>
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Icon name="bar-chart" size={20} />
+              </span>
+              <div>표시할 사원 데이터가 없습니다.</div>
+            </div>
           ) : (
             <div className="weekly__panes">
               {/* 왼쪽: 팀 목록 (항상 보임, 스크롤 시 고정) */}
@@ -256,13 +252,16 @@ export function WeeklySection() {
 
       {/* 최초 안내 */}
       {!loading && !report && !error && (
-        <div className="weekly__empty">
-          [주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
-          팀원별로 정리합니다. (백그라운드 브라우저 — 수십 초 걸릴 수 있어요)
+        <div className="empty-state">
+          <span className="empty-state__icon">
+            <Icon name="info" size={20} />
+          </span>
+          <div>
+            [주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
+            팀원별로 정리합니다. (백그라운드 브라우저 — 수십 초 걸릴 수 있어요)
+          </div>
         </div>
       )}
-
-      {toast && <div className="weekly-toast">{toast}</div>}
     </div>
   );
 }

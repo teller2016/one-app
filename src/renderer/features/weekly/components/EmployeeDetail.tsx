@@ -3,44 +3,67 @@ import { Chart, registerables } from 'chart.js';
 import type { ChartOptions, Plugin } from 'chart.js';
 
 Chart.register(...registerables);
+import { Button } from '../../../components/Button';
+import { Icon } from '../../../components/Icon';
 import { ProjectChips } from './ProjectChips';
-import { calcTotalMM, getColor, WEEKLY_STANDARD_HOURS, type EmployeeReport } from '../lib/report';
+import {
+  calcTotalMM,
+  WEEKLY_STANDARD_HOURS,
+  type EmployeeReport,
+} from '../lib/report';
+import { readChartTheme, type ChartTheme } from '../lib/chartTheme';
 
-// 다크 테마 차트 색 (_base.scss 변수와 톤 맞춤)
-const TICK_COLOR = '#9aa0a6';
-const GRID_COLOR = '#34363b';
-
-const barOptions: ChartOptions<'bar'> = {
+// 차트 옵션 — 색·폰트는 호출 시점의 chartTheme(CSS 토큰)에서 주입한다
+const barOptions = (theme: ChartTheme): ChartOptions<'bar'> => ({
   responsive: true,
   maintainAspectRatio: false,
   scales: {
-    x: { ticks: { color: TICK_COLOR, font: { size: 11 } }, grid: { display: false } },
+    x: {
+      ticks: {
+        color: theme.tickColor,
+        font: { size: theme.captionSize, family: theme.fontFamily },
+      },
+      grid: { display: false },
+    },
     y: {
       stacked: true,
       beginAtZero: true,
-      ticks: { color: TICK_COLOR, font: { size: 11 } },
-      grid: { color: GRID_COLOR },
+      ticks: {
+        color: theme.tickColor,
+        font: { size: theme.captionSize, family: theme.fontFamily },
+      },
+      grid: { color: theme.gridColor },
     },
   },
   plugins: {
-    legend: { labels: { color: TICK_COLOR, boxWidth: 10, font: { size: 10 } } },
+    legend: {
+      labels: {
+        color: theme.legendColor,
+        boxWidth: 10,
+        font: { size: theme.captionSize, family: theme.fontFamily },
+      },
+    },
   },
-};
+});
 
-const roundOptions: ChartOptions<'doughnut'> = {
+const roundOptions = (theme: ChartTheme): ChartOptions<'doughnut'> => ({
   responsive: true,
   maintainAspectRatio: false,
   cutout: '68%',
   plugins: {
     legend: {
       position: 'right',
-      labels: { color: TICK_COLOR, boxWidth: 10, font: { size: 10 } },
+      labels: {
+        color: theme.legendColor,
+        boxWidth: 10,
+        font: { size: theme.captionSize, family: theme.fontFamily },
+      },
     },
   },
-};
+});
 
 /** 도넛 중앙에 총 시간 표시 */
-const centerTextPlugin = (val: number): Plugin<'doughnut'> => ({
+const centerTextPlugin = (val: number, theme: ChartTheme): Plugin<'doughnut'> => ({
   id: 'weeklyCenterText',
   afterDraw(chart) {
     const meta = chart.getDatasetMeta(0);
@@ -50,11 +73,11 @@ const centerTextPlugin = (val: number): Plugin<'doughnut'> => ({
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#e4e6eb';
-    ctx.font = '700 21px sans-serif';
+    ctx.fillStyle = theme.centerTextColor;
+    ctx.font = theme.centerTextFont;
     ctx.fillText(String(val), el.x, el.y - 6);
-    ctx.fillStyle = TICK_COLOR;
-    ctx.font = '400 10px sans-serif';
+    ctx.fillStyle = theme.centerSubColor;
+    ctx.font = theme.centerSubFont;
     ctx.fillText('시간', el.x, el.y + 13);
     ctx.restore();
   },
@@ -82,15 +105,33 @@ export function EmployeeDetail({
   const tone = total.T !== WEEKLY_STANDARD_HOURS ? 'warn' : 'good';
   const mm = calcTotalMM(data.summaryData, excluded);
 
+  // ptag 인라인 색용 — 렌더 시점에 토큰을 읽는다 (비용 무시 가능)
+  const theme = readChartTheme();
+
   // 차트 생성/파기 — 사원 변경 시 다시 그린다
   useEffect(() => {
+    // 토큰은 차트 생성 시점에 읽는다 (모듈 톱레벨 평가 금지 — chartTheme.ts 참고)
+    const chartTheme = readChartTheme();
     const charts: Chart[] = [];
     if (barRef.current && data.barChartData.datasets.length) {
       charts.push(
         new Chart(barRef.current, {
           type: 'bar',
-          data: data.barChartData,
-          options: barOptions,
+          data: {
+            labels: data.barChartData.labels,
+            datasets: data.barChartData.datasets.map((ds) => ({
+              label: ds.label,
+              data: ds.data,
+              stack: ds.stack,
+              backgroundColor: chartTheme.getColor(
+                ds.colorIndex,
+                ds.stack === 'OT' ? 1 : 0,
+              ),
+              // 스택 세그먼트 사이 1px 경계 — 색각 보정 (DESIGN.md)
+              ...chartTheme.segmentBorder,
+            })),
+          },
+          options: barOptions(chartTheme),
         }),
       );
     }
@@ -98,9 +139,21 @@ export function EmployeeDetail({
       charts.push(
         new Chart(roundRef.current, {
           type: 'doughnut',
-          data: data.roundChartData,
-          options: roundOptions,
-          plugins: [centerTextPlugin(total.T + total.OT)],
+          data: {
+            labels: data.roundChartData.labels,
+            datasets: [
+              {
+                data: data.roundChartData.datasets[0].data,
+                backgroundColor: data.roundChartData.colorIndexes.map((ci) =>
+                  chartTheme.getColor(ci, 0),
+                ),
+                // 도넛 세그먼트 사이 1px 경계 — 색각 보정 (DESIGN.md)
+                ...chartTheme.segmentBorder,
+              },
+            ],
+          },
+          options: roundOptions(chartTheme),
+          plugins: [centerTextPlugin(total.T + total.OT, chartTheme)],
         }) as Chart,
       );
     }
@@ -143,7 +196,7 @@ export function EmployeeDetail({
         <div className="weekly-panel__title">상세 일정</div>
         {Object.entries(data.scheduleData).map(([proj, pd]) => {
           if (!pd.T.length && !pd.OT.length) return null;
-          const color = getColor(projectList.indexOf(proj));
+          const color = theme.getColor(projectList.indexOf(proj));
           return (
             <div key={proj} className="weekly-srow">
               <span
@@ -161,16 +214,16 @@ export function EmployeeDetail({
                       <span className={`weekly-stype weekly-stype--${type.toLowerCase()}`}>
                         {type}
                       </span>
-                      <button
-                        type="button"
-                        className="weekly-copy"
+                      <Button
+                        size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           onCopy(`[${proj}]\n${list.join('\n')}`);
                         }}
                       >
+                        <Icon name="copy" size={12} />
                         Copy
-                      </button>
+                      </Button>
                     </div>
                     <ul className="weekly-slist">
                       {list.map((s) => (

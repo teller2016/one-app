@@ -21,23 +21,8 @@ export const WEEKLY_STANDARD_HOURS = DAILY_STANDARD_HOURS * 4 + FRIDAY_STANDARD_
 const standardHoursOf = (day: string): number =>
   day.includes('(금)') ? FRIDAY_STANDARD_HOURS : DAILY_STANDARD_HOURS;
 
-// 프로젝트별 [기본, 보조] 색 팔레트 (막대 T/OT · 도넛 · 태그에 공용)
-const COLOR_PAIRS: [string, string][] = [
-  ['#6366f1', '#4f46e5'], // 인디고
-  ['#a1a1aa', '#71717a'], // 그레이 (다크 배경용으로 밝게 조정)
-  ['#10b981', '#059669'], // 에메랄드
-  ['#f59e0b', '#d97706'], // 앰버
-  ['#ef4444', '#dc2626'], // 레드
-  ['#06b6d4', '#0891b2'], // 시안
-  ['#ec4899', '#db2777'], // 핑크
-  ['#8b5cf6', '#7c3aed'], // 바이올렛
-  ['#84cc16', '#65a30d'], // 라임
-];
-
-export const getColor = (index = 0, type: 0 | 1 = 0): string => {
-  const i = index < 0 ? 0 : index;
-  return COLOR_PAIRS[i % COLOR_PAIRS.length][type];
-};
+// 색은 여기서 다루지 않는다 — 팔레트 인덱스(colorIndex)만 계산하고,
+// 실제 색은 EmployeeDetail 이 lib/chartTheme.ts 로 입힌다 (프레젠테이션 분리).
 
 export type ProjectSummary = {
   name: string;
@@ -52,14 +37,15 @@ export type BarChartData = {
   datasets: {
     label: string;
     data: number[];
-    stack: string;
-    backgroundColor: string;
+    stack: string; // 'T' | 'OT'
+    colorIndex: number; // 팔레트 인덱스 — 색은 chartTheme.getColor 가 입힌다
   }[];
 };
 
 export type RoundChartData = {
   labels: string[];
-  datasets: { data: number[]; backgroundColor: string[] }[];
+  colorIndexes: number[]; // labels 와 같은 순서의 팔레트 인덱스
+  datasets: { data: number[] }[];
 };
 
 /** 프로젝트별 상세 일정명 (T/OT) */
@@ -263,7 +249,7 @@ const toBarChartData = (data: ProjectMap, projectList: string[]): BarChartData =
         label: `${project.name} T`,
         data: project.getValues('T'),
         stack: 'T',
-        backgroundColor: getColor(ci, 0),
+        colorIndex: ci,
       });
     }
     if (project.getSum('OT')) {
@@ -271,7 +257,7 @@ const toBarChartData = (data: ProjectMap, projectList: string[]): BarChartData =
         label: `${project.name} OT`,
         data: project.getValues('OT'),
         stack: 'OT',
-        backgroundColor: getColor(ci, 1),
+        colorIndex: ci,
       });
     }
   });
@@ -281,16 +267,16 @@ const toBarChartData = (data: ProjectMap, projectList: string[]): BarChartData =
 
 const toRoundChartData = (data: ProjectMap, projectList: string[]): RoundChartData => {
   const labels: string[] = [];
-  const datasets: RoundChartData['datasets'] = [{ data: [], backgroundColor: [] }];
+  const colorIndexes: number[] = [];
+  const datasets: RoundChartData['datasets'] = [{ data: [] }];
 
   Object.values(data).forEach((project, index) => {
-    const ci = colorIndexOf(project.name, index, projectList);
     labels.push(project.name);
+    colorIndexes.push(colorIndexOf(project.name, index, projectList));
     datasets[0].data.push(project.getSum('T') + project.getSum('OT'));
-    datasets[0].backgroundColor.push(getColor(ci, 0));
   });
 
-  return { labels, datasets };
+  return { labels, colorIndexes, datasets };
 };
 
 const toSummaryData = (data: ProjectMap): ProjectSummary[] =>
