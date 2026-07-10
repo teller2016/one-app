@@ -9,6 +9,18 @@ export const calculateMM = (totalWorkTime: number): string =>
 /** 전체 MM 계산에서 기본 제외할 프로젝트 (칩 클릭으로 조정 가능) */
 export const DEFAULT_MM_EXCLUDED = ['FE', '전사', '본부', '휴가', '연차', '시차'];
 
+/** 하루 정규 근무시간(T) 기준 — 초과분은 OT */
+const DAILY_STANDARD_HOURS = 8;
+/** 금요일 정규 근무시간 — 2시간 조기퇴근 반영 */
+const FRIDAY_STANDARD_HOURS = 6;
+
+/** 주간 정규 근무시간 (월~목 8h × 4 + 금 6h = 38h) — T합계 기준·진행바용 */
+export const WEEKLY_STANDARD_HOURS = DAILY_STANDARD_HOURS * 4 + FRIDAY_STANDARD_HOURS;
+
+/** 해당 일자의 정규 근무시간 기준 (day 예: "06.29 (금)") */
+const standardHoursOf = (day: string): number =>
+  day.includes('(금)') ? FRIDAY_STANDARD_HOURS : DAILY_STANDARD_HOURS;
+
 // 프로젝트별 [기본, 보조] 색 팔레트 (막대 T/OT · 도넛 · 태그에 공용)
 const COLOR_PAIRS: [string, string][] = [
   ['#6366f1', '#4f46e5'], // 인디고
@@ -164,7 +176,7 @@ export const getProjectList = (rows: WeeklyRawRow[]): string[] => {
 
 // ── 한 사람의 주간 데이터 가공 ─────────────────────────────────
 
-/** name 이 일정대상자에 포함된 행을 프로젝트별 T/OT 로 집계 (하루 8시간까지 T, 초과분 OT) */
+/** name 이 일정대상자에 포함된 행을 프로젝트별 T/OT 로 집계 (하루 정규시간까지 T, 초과분 OT — 금요일 6시간·그 외 8시간) */
 const filterWeekAll = (rows: WeeklyRawRow[], name: string): ProjectMap => {
   const result: ProjectMap = {};
   const daySet = new Set<string>();
@@ -194,6 +206,7 @@ const filterWeekAll = (rows: WeeklyRawRow[], name: string): ProjectMap => {
 
   // 날짜별로 T/OT 계산
   Object.keys(dailySchedules).forEach((day) => {
+    const standard = standardHoursOf(day); // 금요일은 6시간, 그 외 8시간
     let totalWorkTime = 0;
     dailySchedules[day].forEach((schedule) => {
       const endTime = schedule.endTime === 0 ? 24 : schedule.endTime; // 00시까지 근무한 경우
@@ -201,10 +214,10 @@ const filterWeekAll = (rows: WeeklyRawRow[], name: string): ProjectMap => {
 
       let t = 0;
       let ot = 0;
-      if (totalWorkTime >= 8) {
+      if (totalWorkTime >= standard) {
         ot = workTime;
-      } else if (totalWorkTime + workTime > 8) {
-        t = 8 - totalWorkTime;
+      } else if (totalWorkTime + workTime > standard) {
+        t = standard - totalWorkTime;
         ot = workTime - t;
       } else {
         t = workTime;
