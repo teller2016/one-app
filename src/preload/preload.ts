@@ -108,6 +108,13 @@ contextBridge.exposeInMainWorld('oneApp', {
       ipcRenderer.on('attendance:changed', listener);
       return () => ipcRenderer.removeListener('attendance:changed', listener);
     },
+    // 리마인더 알럿에서 찍는 동안('come'/'leave') 위젯을 '처리중'으로, 끝나면(null) 해제. 해제 함수 반환.
+    onStamping: (cb: (action: 'come' | 'leave' | null) => void) => {
+      const listener = (_e: unknown, action: 'come' | 'leave' | null) =>
+        cb(action);
+      ipcRenderer.on('attendance:stamping', listener);
+      return () => ipcRenderer.removeListener('attendance:stamping', listener);
+    },
   },
   weekly: {
     // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주

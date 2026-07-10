@@ -23,11 +23,19 @@ export function AttendanceWidget() {
   useEffect(() => {
     void refresh();
     // 리마인더 알럿의 '지금 찍기'로 찍었을 때 메인이 보내주는 변경 이벤트 → 즉시 반영
-    const off = window.oneApp.attendance.onChanged((next) => {
+    const offChanged = window.oneApp.attendance.onChanged((next) => {
       setInfo(next);
       setError('');
     });
-    return () => off();
+    // 알럿에서 찍는 동안엔 위젯도 앱에서 누른 것처럼 '처리중' 비활성 상태로 동기화
+    const offStamping = window.oneApp.attendance.onStamping((action) => {
+      setBusy(action);
+      if (action) setError('');
+    });
+    return () => {
+      offChanged();
+      offStamping();
+    };
   }, []);
 
   const stamp = async (action: 'come' | 'leave') => {

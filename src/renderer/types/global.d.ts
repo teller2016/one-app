@@ -72,6 +72,9 @@ declare global {
         getReminders: () => Promise<ReminderConfig>;
         setReminders: (config: ReminderConfig) => Promise<ReminderConfig>;
         onChanged: (cb: (info: AttendanceInfo) => void) => () => void;
+        onStamping: (
+          cb: (action: 'come' | 'leave' | null) => void,
+        ) => () => void;
       };
       weekly: {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;

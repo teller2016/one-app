@@ -94,6 +94,8 @@ async function stampFromAlert(
   cred: NonNullable<ReturnType<typeof getCredentials>>,
 ) {
   const label = type === 'come' ? '출근' : '퇴근';
+  // 알럿에서 찍기 시작 → 사이드바 위젯도 앱에서 누른 것처럼 '처리중' 비활성 상태로
+  pushStamping(type);
   try {
     const info = await runAttendance(type, cred);
     doneToday.add(key);
@@ -111,12 +113,20 @@ async function stampFromAlert(
       title: `❌ ${label} 찍기 실패`,
       body: `${msg}\n사이드바 근태 위젯에서 직접 시도해주세요.`,
     });
+  } finally {
+    // 성공·실패 모두 위젯의 '처리중' 상태를 푼다 (성공은 changed 로 시각도 갱신됨)
+    pushStamping(null);
   }
 }
 
 // 알럿에서 찍으면 사이드바 근태 위젯이 즉시 갱신되도록 렌더러에 알린다
 function pushAttendanceChanged(info: AttendanceInfo) {
   getNotifyWindow()?.webContents.send('attendance:changed', info);
+}
+
+// 알럿에서 찍는 동안 위젯 버튼을 비활성('처리중')으로 동기화한다. 끝나면 null 로 해제.
+function pushStamping(action: 'come' | 'leave' | null) {
+  getNotifyWindow()?.webContents.send('attendance:stamping', action);
 }
 
 function tick() {
