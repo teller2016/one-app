@@ -291,6 +291,27 @@
     font-weight: 600;
   }
 
+  &__seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__lbl {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+
+    &--ot {
+      color: #f0a06a;
+    }
+  }
+
+  &__sep {
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+
   &__hr {
     font-weight: 700;
   }
