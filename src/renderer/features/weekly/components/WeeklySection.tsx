@@ -4,7 +4,12 @@ import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
 import { RosterRow } from './RosterRow';
 import { EmployeeDetail } from './EmployeeDetail';
-import { buildReport, DEFAULT_MM_EXCLUDED, type WeeklyReport } from '../lib/report';
+import {
+  buildReport,
+  DEFAULT_MM_EXCLUDED,
+  WEEKLY_STANDARD_HOURS,
+  type WeeklyReport,
+} from '../lib/report';
 import type { WeeklyPeriod } from '../../../../shared/types';
 
 const LS_KEY = 'weekly:mmExcluded';
@@ -130,10 +135,11 @@ export function WeeklySection() {
   const selected =
     report && selectedName ? report.byName[selectedName] : undefined;
 
-  // T 40시간 미달/초과(≠40)인 인원 수 — 상단 요약에 표시
+  // T 정규시간(38h) 미달/초과(≠38)인 인원 수 — 상단 요약에 표시
   const offCount = report
-    ? report.nameList.filter((n) => report.byName[n].summaryTotalData.T !== 40)
-        .length
+    ? report.nameList.filter(
+        (n) => report.byName[n].summaryTotalData.T !== WEEKLY_STANDARD_HOURS,
+      ).length
     : 0;
 
   return (
@@ -207,7 +213,7 @@ export function WeeklySection() {
             <span className="weekly__period">{report.nameList.length}명</span>
             {offCount > 0 && (
               <span className="weekly__period weekly__period--warn">
-                40시간 ≠ {offCount}명
+                {WEEKLY_STANDARD_HOURS}시간 ≠ {offCount}명
               </span>
             )}
           </div>

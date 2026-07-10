@@ -4,7 +4,7 @@ import type { ChartOptions, Plugin } from 'chart.js';
 
 Chart.register(...registerables);
 import { ProjectChips } from './ProjectChips';
-import { calcTotalMM, getColor, type EmployeeReport } from '../lib/report';
+import { calcTotalMM, getColor, WEEKLY_STANDARD_HOURS, type EmployeeReport } from '../lib/report';
 
 // 다크 테마 차트 색 (_base.scss 변수와 톤 맞춤)
 const TICK_COLOR = '#9aa0a6';
@@ -79,7 +79,8 @@ export function EmployeeDetail({
   const barRef = useRef<HTMLCanvasElement>(null);
   const roundRef = useRef<HTMLCanvasElement>(null);
   const total = data.summaryTotalData;
-  const tone = total.T !== 40 ? 'warn' : 'good';
+  const tone = total.T !== WEEKLY_STANDARD_HOURS ? 'warn' : 'good';
+  const mm = calcTotalMM(data.summaryData, excluded);
 
   // 차트 생성/파기 — 사원 변경 시 다시 그린다
   useEffect(() => {
@@ -112,11 +113,11 @@ export function EmployeeDetail({
         <h3>{name}</h3>
         <span className={`weekly-hours weekly-hours--${tone}`}>
           <span className="weekly-hours__big">{total.T}</span>
-          <span className="weekly-hours__den">/40</span>
+          <span className="weekly-hours__den">/{WEEKLY_STANDARD_HOURS}</span>
         </span>
       </div>
       <div className="weekly-detail__mm">
-        전체 MM <b>{calcTotalMM(data.summaryData, excluded)}</b>
+        전체 MM — T <b>{mm.T}</b> · OT <b>{mm.OT}</b>
       </div>
 
       <ProjectChips

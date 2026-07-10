@@ -346,14 +346,18 @@ export function buildReport(rows: WeeklyRawRow[]): WeeklyReport {
   return { nameList, projectList, byName };
 }
 
-/** 제외 목록을 반영한 전체 MM (칩 토글용) */
+/** 제외 목록을 반영한 전체 MM — T/OT 분리 (칩 토글용) */
 export const calcTotalMM = (
   summaryData: ProjectSummary[],
   excluded: Set<string>,
-): string => {
-  let sum = 0;
+): { T: string; OT: string } => {
+  let sumT = 0;
+  let sumOT = 0;
   summaryData.forEach((it) => {
-    if (!excluded.has(it.name)) sum += it.T + it.OT;
+    if (!excluded.has(it.name)) {
+      sumT += it.T;
+      sumOT += it.OT;
+    }
   });
-  return calculateMM(sum);
+  return { T: calculateMM(sumT), OT: calculateMM(sumOT) };
 };
