@@ -33,6 +33,16 @@ ipcMain.handle('app:openExternal', async (_e, url: string) => {
   return { ok: false };
 });
 
+// 로그인 시 자동 시작 — OS(로그인 아이템)가 원본이라 파일 저장 없이 그대로 읽고 쓴다
+// (개발 모드에선 Electron 바이너리가 등록되므로 패키징 앱에서만 실질 동작)
+ipcMain.handle('app:autostart:get', () => ({
+  enabled: app.getLoginItemSettings().openAtLogin,
+}));
+ipcMain.handle('app:autostart:set', (_e, enabled: boolean) => {
+  app.setLoginItemSettings({ openAtLogin: !!enabled });
+  return { enabled: app.getLoginItemSettings().openAtLogin };
+});
+
 const createWindow = () => {
   // 메인 창 생성
   const mainWindow = new BrowserWindow({

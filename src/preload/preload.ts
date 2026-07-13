@@ -139,6 +139,10 @@ contextBridge.exposeInMainWorld('oneApp', {
       return () => ipcRenderer.removeListener('weekly:progress', listener);
     },
   },
+  // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
+  getAutostart: () => ipcRenderer.invoke('app:autostart:get'),
+  setAutostart: (enabled: boolean) =>
+    ipcRenderer.invoke('app:autostart:set', enabled),
   // 알림 미리보기 — 샘플 데스크톱 알림을 즉시 띄운다 (권한 확인·모양 확인용)
   testNotification: () => ipcRenderer.invoke('notify:test'),
   // 기본 브라우저로 링크 열기 (http/https 만 허용)

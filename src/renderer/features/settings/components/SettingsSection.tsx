@@ -30,6 +30,7 @@ export function SettingsSection() {
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
+  const [autostart, setAutostart] = useState(false);
   const [jiraUrl, setJiraUrl] = useState('');
   const [giteaUrl, setGiteaUrl] = useState('');
   const [giteaToken, setGiteaToken] = useState('');
@@ -51,6 +52,7 @@ export function SettingsSection() {
       setHasGiteaToken(s.hasGiteaToken);
       setLoading(false);
     });
+    window.oneApp?.getAutostart().then((r) => setAutostart(r.enabled));
     window.oneApp?.attendance.getReminders().then((r) => {
       if (r.days?.length) setReminders(r.days);
       if (r.repeat) {
@@ -92,6 +94,8 @@ export function SettingsSection() {
             minutes: Number(repeatMinutes) || 10,
           },
         });
+      const auto = await window.oneApp.setAutostart(autostart);
+      setAutostart(auto.enabled);
       setHasPassword(res.hasPassword);
       setNotifyDeploy(res.notifyDeploy);
       setJiraUrl(res.jiraUrl);
@@ -178,6 +182,25 @@ export function SettingsSection() {
           </Button>
           <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
         </div>
+      </Collapsible>
+
+      <Collapsible
+        title="일반"
+        icon={<Icon name="settings" size={14} />}
+        storageKey="settings:group:general"
+      >
+        <label className="settings__check">
+          <input
+            type="checkbox"
+            checked={autostart}
+            onChange={(e) => setAutostart(e.target.checked)}
+            disabled={loading}
+          />
+          <span>로그인 시 One App 자동 시작</span>
+        </label>
+        <p className="note">
+          macOS 로그인 아이템에 등록됩니다. (패키징된 앱에서 동작)
+        </p>
       </Collapsible>
 
       <Collapsible
