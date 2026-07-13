@@ -8,6 +8,13 @@
     display: flex;
     align-items: center;
     gap: 8px;
+
+    // 직접 입력 인풋을 세그먼트 트랙 높이에 정렬 —
+    // date 인풋은 고유 높이가 살짝 달라(37px) 명시하지 않으면 줄이 어긋난다
+    // 35px = 세그 버튼(6px 패딩 + 12px 글자 라인) + 트랙 패딩 2px×2 + 보더 1px×2
+    .input {
+      height: 35px;
+    }
   }
 
   // 날짜 입력 — 공용 Input 사용, 행 안에서 내용 폭만큼만 차지

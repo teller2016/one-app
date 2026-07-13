@@ -16,10 +16,20 @@ const DATE_OPTIONS: { value: DateType; label: string }[] = [
   { value: 'date', label: '직접 입력' },
 ];
 
+// 시작 시간 — 자주 쓰는 9시/9시 반은 바로 선택, 그 외엔 직접 입력
+type TimeType = '9' | '9.5' | 'custom';
+
+const TIME_OPTIONS: { value: TimeType; label: string }[] = [
+  { value: '9', label: '09:00' },
+  { value: '9.5', label: '09:30' },
+  { value: 'custom', label: '직접 입력' },
+];
+
 /** 일정 등록 섹션 — 폼 작성 후 버튼을 누르면 앱 내부 매크로가 실행된다. */
 export function ScheduleSection() {
   const [scheduleText, setScheduleText] = useState('');
-  const [startTime, setStartTime] = useState('9.5');
+  const [timeType, setTimeType] = useState<TimeType>('9.5');
+  const [customTime, setCustomTime] = useState('');
   const [dateType, setDateType] = useState<DateType>('today');
   const [customDate, setCustomDate] = useState('');
   const [running, setRunning] = useState(false);
@@ -69,6 +79,11 @@ export function ScheduleSection() {
     }
     if (dateType === 'date' && !customDate) {
       setLog('[경고] 날짜를 선택하세요.\n');
+      return;
+    }
+    const startTime = timeType === 'custom' ? customTime.trim() : timeType;
+    if (!startTime || !Number.isFinite(Number(startTime))) {
+      setLog('[경고] 시작 시간을 숫자로 입력하세요. (예: 10, 13.5)\n');
       return;
     }
     setLog('');
@@ -128,16 +143,29 @@ export function ScheduleSection() {
         </div>
       </FormRow>
 
-      {/* 시작 시간 */}
+      {/* 시작 시간 — 9시/9시 반은 바로 선택, 그 외엔 직접 입력 */}
       <FormRow label="시작 시간">
-        <Input
-          type="text"
-          className="sched__time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          disabled={running}
-        />
-        <span className="hint">예: 9 = 09:00, 9.5 = 09:30</span>
+        <div className="sched__segment">
+          <Segment<TimeType>
+            options={TIME_OPTIONS}
+            value={timeType}
+            onChange={setTimeType}
+            disabled={running}
+          />
+          {timeType === 'custom' && (
+            <>
+              <Input
+                type="text"
+                className="sched__time"
+                value={customTime}
+                onChange={(e) => setCustomTime(e.target.value)}
+                placeholder="예: 10"
+                disabled={running}
+              />
+              <span className="hint">숫자 — 10 = 10:00, 13.5 = 13:30</span>
+            </>
+          )}
+        </div>
       </FormRow>
 
       {/* 일정 입력 */}
