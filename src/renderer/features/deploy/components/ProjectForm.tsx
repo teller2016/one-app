@@ -15,6 +15,7 @@ export type ProjectFormState = {
   username: string;
   secret: string;
   hasSecret: boolean; // 기존에 토큰이 저장돼 있는지 (placeholder 표시용)
+  production: boolean; // 운영(PROD) — 배포 시 강한 확인
   targets: TargetFormState[];
 };
 
@@ -24,6 +25,7 @@ export const emptyForm = (): ProjectFormState => ({
   username: '',
   secret: '',
   hasSecret: false,
+  production: false,
   targets: [{ name: '', jobPath: '' }],
 });
 
@@ -34,6 +36,7 @@ export const toForm = (p: DeployProjectView): ProjectFormState => ({
   username: p.username,
   secret: '',
   hasSecret: p.hasSecret,
+  production: p.production,
   targets: p.targets.map((t) => ({ ...t })),
 });
 
@@ -108,6 +111,17 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
         있습니다. 값은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
         저장됩니다.
       </p>
+
+      <label className="deploy__prod-check">
+        <input
+          type="checkbox"
+          checked={form.production}
+          onChange={(e) => onChange({ ...form, production: e.target.checked })}
+        />
+        <span>
+          운영(PROD) 프로젝트 — 배포할 때 대상 이름을 입력해야 실행됩니다
+        </span>
+      </label>
 
       <label className="form-label">배포 대상</label>
       {form.targets.map((t, i) => (

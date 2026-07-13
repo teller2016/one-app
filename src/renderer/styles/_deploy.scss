@@ -40,16 +40,36 @@
     margin-left: 8px;
   }
 
+  // 대상 = 세로 컨테이너: 1줄(이름·배포·상태·커밋내역) + 빌드중일 때 2줄(진행바·중지)
   &__target {
-    display: flex;
-    align-items: center;
-    gap: 12px;
     padding: 8px 4px;
     border-top: 1px solid var(--border);
+
+    &-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
 
     // 대상명 열 정렬용 최소폭 — 배포 버튼 시작 위치를 맞춘다 (유지)
     &-name {
       min-width: 120px;
+    }
+
+    // 버튼 라벨 줄바꿈 방지
+    .btn {
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    // 빌드중 보조 줄 — 진행바가 남는 폭을 전부 차지
+    &-sub {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+      padding-left: 2px;
     }
   }
 
@@ -65,16 +85,17 @@
     margin-left: auto;
   }
 
-  // 빌드중 진행률 — 경과/예상 시간과 진행바 (트랙은 공용 .progress)
+  // 빌드중 진행률 — 보조 줄에서 남는 폭을 전부 차지 (트랙은 공용 .progress)
   &__build-progress {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    flex: 1;
     min-width: 0;
 
     .progress {
-      width: 110px;
-      flex-shrink: 0;
+      flex: 1;
+      min-width: 60px;
     }
 
     .progress__fill {
@@ -85,6 +106,7 @@
       @include type-caption;
       color: var(--text-3);
       white-space: nowrap;
+      flex-shrink: 0;
     }
   }
 
@@ -215,4 +237,111 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+// 운영(PROD) 프로젝트 표시·확인
+.deploy__prod-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--danger-soft);
+  color: var(--danger);
+  @include type-caption;
+}
+
+// 프로젝트 폼 — 운영 체크박스 행
+.deploy__prod-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 14px;
+  @include type-body;
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--danger);
+    cursor: pointer;
+  }
+}
+
+// 배포 확인 모달 — 미리보기·타이핑 확인
+.deploy__preview-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 14px;
+  @include type-small;
+  color: var(--text-3);
+
+  &--warn {
+    color: var(--warning);
+  }
+}
+
+.deploy__preview {
+  margin-bottom: 14px;
+
+  &-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    @include type-small;
+    color: var(--text-2);
+
+    b {
+      color: var(--text);
+    }
+  }
+
+  &-list {
+    margin: 0;
+    padding: 4px 14px;
+    list-style: none;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    max-height: 260px;
+    overflow-y: auto;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 0;
+
+      + li {
+        border-top: 1px solid var(--border);
+      }
+    }
+  }
+
+  &-msg {
+    @include type-body;
+    font-weight: 600;
+    word-break: break-word;
+  }
+
+  &-meta {
+    @include type-caption;
+    color: var(--text-3);
+  }
+}
+
+.deploy__prod-confirm {
+  margin-bottom: 4px;
+
+  code {
+    color: var(--danger);
+    font-family: var(--font-mono);
+  }
+
+  .form-label {
+    margin-top: 4px;
+  }
 }

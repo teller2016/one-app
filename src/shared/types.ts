@@ -27,12 +27,18 @@ export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
+  jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
+  giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
+  hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
 };
 
 export type SaveSettingsInput = {
   bizboxId: string;
   password?: string; // 빈 값이면 기존 비밀번호 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
+  jiraUrl?: string; // 미지정이면 기존 유지
+  giteaUrl?: string; // 미지정이면 기존 유지
+  giteaToken?: string; // 빈 값이면 기존 유지
 };
 
 // ── 배포 (젠킨스) ──
@@ -51,6 +57,7 @@ export type DeployProjectView = {
   jenkinsUrl: string;
   username: string;
   hasSecret: boolean; // API 토큰/비밀번호 저장 여부
+  production: boolean; // 운영(PROD) 프로젝트 — 배포 시 강한 확인
   targets: DeployTarget[];
 };
 
@@ -60,6 +67,7 @@ export type SaveDeployProjectInput = {
   jenkinsUrl: string;
   username: string;
   secret?: string; // API 토큰 또는 비밀번호. 빈 값이면 기존 유지
+  production?: boolean;
   targets: { id?: string; name: string; jobPath: string }[];
 };
 
@@ -144,6 +152,18 @@ export type DeployLogResult = {
 };
 
 export type DeployStopResult = { ok: boolean; error?: string };
+
+/** 배포 미리보기 — 마지막 빌드 이후 저장소에 새로 쌓인 커밋 (Gitea 비교) */
+export type DeployPreviewResult = {
+  ok: boolean;
+  configured: boolean; // Gitea 주소가 설정돼 있는지 (false 면 미리보기 생략)
+  commits?: DeployCommit[];
+  totalCommits?: number;
+  baseRevision?: string; // 비교 기준(마지막 빌드) 커밋
+  branch?: string;
+  compareUrl?: string; // Gitea 비교 페이지
+  error?: string;
+};
 
 // ── VPN (OpenVPN) ──
 export type VpnState = 'disconnected' | 'connecting' | 'connected' | 'error';

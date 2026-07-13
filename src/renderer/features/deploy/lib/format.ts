@@ -41,3 +41,37 @@ export const formatRelative = (ts: number) => {
   if (day < 7) return `${day}일 전`;
   return new Date(ts).toLocaleDateString('ko-KR');
 };
+
+/** 저장소 URL 에서 owner/repo 추출 (젠킨스가 기록한 내부망 주소도 경로만 사용) */
+export const parseOwnerRepo = (
+  repoUrl: string,
+): { owner: string; repo: string } | null => {
+  try {
+    const u = new URL(repoUrl);
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    return {
+      owner: parts[parts.length - 2],
+      repo: parts[parts.length - 1].replace(/\.git$/, ''),
+    };
+  } catch {
+    return null;
+  }
+};
+
+/** Gitea 커밋 페이지 URL 베이스 — giteaUrl 미설정이거나 저장소 해석 실패면 null */
+export const giteaCommitBase = (
+  giteaUrl: string,
+  repoUrl?: string,
+): string | null => {
+  if (!giteaUrl || !repoUrl) return null;
+  const parsed = parseOwnerRepo(repoUrl);
+  if (!parsed) return null;
+  return `${giteaUrl.replace(/\/+$/, '')}/${parsed.owner}/${parsed.repo}/commit/`;
+};
+
+/** Jira 이슈 키 패턴 — 예: BBJ-1234 */
+export const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
+
+export const jiraIssueUrl = (jiraUrl: string, key: string) =>
+  `${jiraUrl.replace(/\/+$/, '')}/browse/${key}`;

@@ -8,6 +8,9 @@ interface StoredSettings {
   bizboxId: string;
   bizboxPasswordEnc?: string; // safeStorage 로 암호화된 비밀번호(base64)
   notifyDeploy?: boolean; // 배포 완료/실패 알림 (기본 on)
+  jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
+  giteaUrl?: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기)
+  giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
 }
 
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
@@ -31,6 +34,9 @@ export function getSettingsForRenderer(): AppSettingsView {
     bizboxId: s.bizboxId ?? '',
     hasPassword: !!s.bizboxPasswordEnc,
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
+    jiraUrl: s.jiraUrl ?? '',
+    giteaUrl: s.giteaUrl ?? '',
+    hasGiteaToken: !!s.giteaTokenEnc,
   };
 }
 
@@ -49,8 +55,39 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   if (typeof input.notifyDeploy === 'boolean') {
     next.notifyDeploy = input.notifyDeploy;
   }
+  // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
+  if (typeof input.jiraUrl === 'string') {
+    next.jiraUrl = input.jiraUrl.trim().replace(/\/+$/, '');
+  }
+  if (typeof input.giteaUrl === 'string') {
+    next.giteaUrl = input.giteaUrl.trim().replace(/\/+$/, '');
+  }
+  // Gitea 토큰은 입력이 있을 때만 갱신 (빈 값이면 기존 유지)
+  if (input.giteaToken && input.giteaToken.length > 0) {
+    next.giteaTokenEnc = safeStorage.isEncryptionAvailable()
+      ? safeStorage.encryptString(input.giteaToken).toString('base64')
+      : Buffer.from(input.giteaToken, 'utf8').toString('base64');
+  }
   writeStored(next);
   return getSettingsForRenderer();
+}
+
+/** Gitea 연동 설정 (주소 미설정이면 null). 토큰은 없으면 null — 익명 조회 시도 */
+export function getGiteaConfig(): { url: string; token: string | null } | null {
+  const s = readStored();
+  if (!s.giteaUrl) return null;
+  let token: string | null = null;
+  if (s.giteaTokenEnc) {
+    try {
+      const buf = Buffer.from(s.giteaTokenEnc, 'base64');
+      token = safeStorage.isEncryptionAvailable()
+        ? safeStorage.decryptString(buf)
+        : buf.toString('utf8');
+    } catch {
+      token = null;
+    }
+  }
+  return { url: s.giteaUrl.replace(/\/+$/, ''), token };
 }
 
 /** 배포 완료 알림이 켜져 있는지 (기본 on) */

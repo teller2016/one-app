@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('oneApp', {
     // 진행 중 빌드 중지
     stopBuild: (projectId: string, targetId: string, buildNumber: number) =>
       ipcRenderer.invoke('deploy:stop', projectId, targetId, buildNumber),
+    // 배포 미리보기 — 마지막 빌드 이후 저장소에 쌓인 커밋 (Gitea 비교)
+    getPreview: (projectId: string, targetId: string) =>
+      ipcRenderer.invoke('deploy:preview', projectId, targetId),
     // 배포 상태 이벤트 구독. 해제 함수를 반환한다.
     onStatus: (cb: (evt: DeployStatusEvent) => void) => {
       const listener = (_e: unknown, evt: DeployStatusEvent) => cb(evt);

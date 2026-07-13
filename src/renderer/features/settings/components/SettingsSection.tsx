@@ -30,6 +30,10 @@ export function SettingsSection() {
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
+  const [jiraUrl, setJiraUrl] = useState('');
+  const [giteaUrl, setGiteaUrl] = useState('');
+  const [giteaToken, setGiteaToken] = useState('');
+  const [hasGiteaToken, setHasGiteaToken] = useState(false);
   const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatMinutes, setRepeatMinutes] = useState('10');
@@ -42,6 +46,9 @@ export function SettingsSection() {
       setBizboxId(s.bizboxId);
       setHasPassword(s.hasPassword);
       setNotifyDeploy(s.notifyDeploy);
+      setJiraUrl(s.jiraUrl);
+      setGiteaUrl(s.giteaUrl);
+      setHasGiteaToken(s.hasGiteaToken);
       setLoading(false);
     });
     window.oneApp?.attendance.getReminders().then((r) => {
@@ -73,6 +80,9 @@ export function SettingsSection() {
         bizboxId,
         password,
         notifyDeploy,
+        jiraUrl,
+        giteaUrl,
+        giteaToken,
       });
       const savedReminders: ReminderConfig =
         await window.oneApp.attendance.setReminders({
@@ -84,6 +94,10 @@ export function SettingsSection() {
         });
       setHasPassword(res.hasPassword);
       setNotifyDeploy(res.notifyDeploy);
+      setJiraUrl(res.jiraUrl);
+      setGiteaUrl(res.giteaUrl);
+      setHasGiteaToken(res.hasGiteaToken);
+      setGiteaToken('');
       if (savedReminders.days?.length) setReminders(savedReminders.days);
       if (savedReminders.repeat) {
         setRepeatEnabled(savedReminders.repeat.enabled);
@@ -164,6 +178,52 @@ export function SettingsSection() {
           </Button>
           <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
         </div>
+      </Collapsible>
+
+      <Collapsible
+        title="연동 (Jira · Gitea)"
+        icon={<Icon name="building" size={14} />}
+        storageKey="settings:group:integrations"
+      >
+        <p className="hint settings__group-desc">
+          배포 커밋 내역의 이슈 키·커밋 해시 링크화와 배포 전 커밋 미리보기에
+          사용됩니다. 비워두면 해당 기능만 꺼집니다.
+        </p>
+        <FormRow label="Jira 주소">
+          <Input
+            type="text"
+            value={jiraUrl}
+            onChange={(e) => setJiraUrl(e.target.value)}
+            placeholder="예: https://myteam.atlassian.net"
+            disabled={loading}
+          />
+        </FormRow>
+        <FormRow label="Gitea 주소">
+          <Input
+            type="text"
+            value={giteaUrl}
+            onChange={(e) => setGiteaUrl(e.target.value)}
+            placeholder="예: http://3.36.200.205"
+            disabled={loading}
+          />
+        </FormRow>
+        <FormRow label="Gitea 토큰">
+          <Input
+            type="password"
+            value={giteaToken}
+            onChange={(e) => setGiteaToken(e.target.value)}
+            placeholder={
+              hasGiteaToken
+                ? '●●●●●●  (저장됨 — 바꿀 때만 입력)'
+                : '(선택) 비공개 저장소 조회용'
+            }
+            disabled={loading}
+          />
+        </FormRow>
+        <p className="note">
+          토큰은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
+          익명 조회가 되는 서버라면 비워둬도 됩니다.
+        </p>
       </Collapsible>
 
       <Collapsible

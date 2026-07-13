@@ -4,13 +4,14 @@ import type {
   DeployStatus,
   SaveDeployProjectInput,
 } from '../../../../shared/types';
-import { statusKey, jenkinsJobUrl } from '../lib/format';
+import { statusKey, jenkinsJobUrl, giteaCommitBase } from '../lib/format';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { ProjectCard } from './ProjectCard';
 import { BuildDetailPanel } from './BuildDetailPanel';
+import { DeployConfirmModal, PreviewState } from './DeployConfirmModal';
 import {
   ProjectForm,
   ProjectFormState,
@@ -29,6 +30,20 @@ export function DeploySection() {
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
+  // 배포 확인 모달 (미리보기 + PROD 타이핑 확인)
+  const [confirm, setConfirm] = useState<{
+    projectId: string;
+    targetId: string;
+  } | null>(null);
+  const [preview, setPreview] = useState<PreviewState>({ loading: false });
+  // 커밋 링크화 설정 (환경설정의 Jira/Gitea 주소)
+  const [linkCfg, setLinkCfg] = useState({ jiraUrl: '', giteaUrl: '' });
+
+  useEffect(() => {
+    window.oneApp?.settings
+      .get()
+      .then((s) => setLinkCfg({ jiraUrl: s.jiraUrl, giteaUrl: s.giteaUrl }));
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setClock((t) => t + 1), 60_000);
@@ -91,14 +106,24 @@ export function DeploySection() {
     return () => clearInterval(id);
   }, [projects]);
 
-  // ── 배포 실행 ──
-  const deploy = async (projectId: string, targetId: string) => {
-    // 실수 방지 — 무엇을 배포하는지 확인받고 진행
-    const project = projects.find((p) => p.id === projectId);
-    const target = project?.targets.find((t) => t.id === targetId);
-    const label = [project?.name, target?.name].filter(Boolean).join(' — ');
-    if (!window.confirm(`${label} 배포를 시작할까요?`)) return;
+  // ── 배포 실행 — 확인 모달을 열고, 모달에서 [배포]를 눌러야 트리거된다 ──
+  const openDeployConfirm = (projectId: string, targetId: string) => {
+    setConfirm({ projectId, targetId });
+    // 이번 배포에 포함될 커밋 미리보기 (Gitea 미설정이면 즉시 configured:false)
+    setPreview({ loading: true });
+    void window.oneApp.deploy
+      .getPreview(projectId, targetId)
+      .then((result) => setPreview({ loading: false, result }))
+      .catch((err: Error) =>
+        setPreview({
+          loading: false,
+          result: { ok: false, configured: true, error: err.message },
+        }),
+      );
+  };
 
+  const doDeploy = async (projectId: string, targetId: string) => {
+    setConfirm(null);
     const key = statusKey(projectId, targetId);
     setStatuses((prev) => ({ ...prev, [key]: { state: 'queued' } }));
     const res = await window.oneApp.deploy.trigger(projectId, targetId);
@@ -328,6 +353,7 @@ export function DeploySection() {
       jenkinsUrl: form.jenkinsUrl,
       username: form.username,
       secret: form.secret || undefined,
+      production: form.production,
       targets,
     };
     const list = await window.oneApp.deploy.saveProject(input);
@@ -392,7 +418,7 @@ export function DeploySection() {
             project={p}
             statuses={statuses}
             refreshing={refreshingIds.has(p.id)}
-            onDeploy={(targetId) => deploy(p.id, targetId)}
+            onDeploy={(targetId) => openDeployConfirm(p.id, targetId)}
             onStop={(targetId, buildNumber) =>
               void stopBuild(p.id, targetId, buildNumber)
             }
@@ -423,6 +449,10 @@ export function DeploySection() {
           >
             <BuildDetailPanel
               state={st}
+              links={{
+                commitBase: giteaCommitBase(linkCfg.giteaUrl, st.detail?.repoUrl),
+                jiraUrl: linkCfg.jiraUrl,
+              }}
               onSelectBuild={(n) => selectBuild(projectId, targetId, n)}
               onToggleLog={() => toggleLog(projectId, targetId)}
               onRefreshLog={() => refreshLog(projectId, targetId)}
@@ -436,6 +466,23 @@ export function DeploySection() {
           </Modal>
         );
       })()}
+
+      {/* 배포 확인 모달 — 미리보기 + PROD 타이핑 확인 */}
+      {confirm &&
+        (() => {
+          const project = projects.find((p) => p.id === confirm.projectId);
+          const target = project?.targets.find((t) => t.id === confirm.targetId);
+          if (!project || !target) return null;
+          return (
+            <DeployConfirmModal
+              project={project}
+              target={target}
+              preview={preview}
+              onConfirm={() => void doDeploy(confirm.projectId, confirm.targetId)}
+              onClose={() => setConfirm(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

@@ -5,8 +5,14 @@ import {
   deleteProject,
   getProjectCredentials,
 } from './store';
+import {
+  parseOwnerRepo,
+  normalizeBranch,
+  fetchCompareCommits,
+  compareWebUrl,
+} from './gitea';
 import { notify } from '../notify/notify';
-import { isDeployNotifyEnabled } from '../settings/store';
+import { isDeployNotifyEnabled, getGiteaConfig } from '../settings/store';
 import {
   triggerBuild,
   watchBuild,
@@ -26,6 +32,7 @@ import type {
   DeployHistoryResult,
   DeployLogResult,
   DeployStopResult,
+  DeployPreviewResult,
 } from '../../../shared/types';
 
 /** projectId·targetId 로 젠킨스 인증·잡 경로를 찾는다 (없으면 사용자용 오류 메시지) */
@@ -148,6 +155,63 @@ export function registerDeployIpc() {
         return { ok: true, text, truncated };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 배포 미리보기 — 마지막 빌드 revision 과 저장소 HEAD 를 비교해 이번에 나갈 커밋 목록
+  ipcMain.handle(
+    'deploy:preview',
+    async (_e, projectId: string, targetId: string): Promise<DeployPreviewResult> => {
+      const gitea = getGiteaConfig();
+      if (!gitea) return { ok: true, configured: false }; // 미설정 — 미리보기 생략
+
+      const r = resolveTarget(projectId, targetId);
+      if ('error' in r) return { ok: false, configured: true, error: r.error };
+      try {
+        // 마지막 빌드의 git 정보 (revision·branch·저장소)
+        const last = await fetchBuildDetail(r.auth, r.jobPath);
+        if (!last.revision || !last.repoUrl) {
+          return {
+            ok: false,
+            configured: true,
+            error: '마지막 빌드에서 git 정보(revision)를 찾을 수 없습니다.',
+          };
+        }
+        const parsed = parseOwnerRepo(last.repoUrl);
+        if (!parsed) {
+          return {
+            ok: false,
+            configured: true,
+            error: `저장소 주소를 해석할 수 없습니다: ${last.repoUrl}`,
+          };
+        }
+        const branch = normalizeBranch(last.branch ?? 'develop');
+        const { totalCommits, commits } = await fetchCompareCommits(
+          gitea.url,
+          gitea.token,
+          parsed.owner,
+          parsed.repo,
+          last.revision,
+          branch,
+        );
+        return {
+          ok: true,
+          configured: true,
+          commits,
+          totalCommits,
+          baseRevision: last.revision,
+          branch,
+          compareUrl: compareWebUrl(
+            gitea.url,
+            parsed.owner,
+            parsed.repo,
+            last.revision,
+            branch,
+          ),
+        };
+      } catch (err) {
+        return { ok: false, configured: true, error: (err as Error).message };
       }
     },
   );

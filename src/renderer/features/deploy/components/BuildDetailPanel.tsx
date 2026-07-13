@@ -1,12 +1,52 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type {
   DeployBuildDetail,
   DeployBuildSummary,
 } from '../../../../shared/types';
-import { formatTime, formatDuration } from '../lib/format';
+import {
+  formatTime,
+  formatDuration,
+  JIRA_KEY_RE,
+  jiraIssueUrl,
+} from '../lib/format';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { TextLink } from '../../../components/TextLink';
+
+/** 외부 링크 설정 — 커밋 해시(Gitea)·이슈 키(Jira) 링크화용 (미설정이면 평문) */
+export type DetailLinks = {
+  commitBase?: string | null; // 예: http://gitea/{owner}/{repo}/commit/
+  jiraUrl?: string;
+};
+
+/** 텍스트 속 Jira 이슈 키(BBJ-1234)를 클릭 가능한 링크로 치환 */
+function JiraText({ text, jiraUrl }: { text: string; jiraUrl?: string }) {
+  if (!jiraUrl) return <>{text}</>;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(JIRA_KEY_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) nodes.push(text.slice(last, idx));
+    const key = m[0];
+    nodes.push(
+      <TextLink
+        key={`${key}-${idx}`}
+        small
+        title={`Jira 이슈 열기 — ${key}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          void window.oneApp.openExternal(jiraIssueUrl(jiraUrl, key));
+        }}
+      >
+        {key}
+      </TextLink>,
+    );
+    last = idx + key.length;
+  }
+  if (nodes.length === 0) return <>{text}</>;
+  if (last < text.length) nodes.push(text.slice(last));
+  return <>{nodes}</>;
+}
 
 /** 콘솔 로그 박스 상태 */
 export type LogState = {
@@ -45,17 +85,23 @@ const histTitle = (b: DeployBuildSummary) =>
 /** 빌드 상세 패널 — 이력 스트립 + 선택 빌드 커밋 내역 + 콘솔 로그 */
 export function BuildDetailPanel({
   state,
+  links,
   onSelectBuild,
   onToggleLog,
   onRefreshLog,
   onOpenConsole,
 }: {
   state: DetailState;
+  links?: DetailLinks;
   onSelectBuild: (buildNumber: number) => void;
   onToggleLog: () => void;
   onRefreshLog: () => void;
   onOpenConsole: (buildNumber: number) => void;
 }) {
+  const openCommit = (sha: string) => {
+    if (!links?.commitBase) return;
+    void window.oneApp.openExternal(`${links.commitBase}${sha}`);
+  };
   const logRef = useRef<HTMLPreElement>(null);
   const log = state.log;
 
@@ -111,7 +157,18 @@ export function BuildDetailPanel({
           </div>
           {(d.revision || d.branch || d.repoUrl) && (
             <div className="deploy__detail-git">
-              {d.revision && <code>{d.revision.slice(0, 8)}</code>}
+              {d.revision &&
+                (links?.commitBase ? (
+                  <TextLink
+                    small
+                    title="Gitea 에서 커밋 보기"
+                    onClick={() => openCommit(d.revision as string)}
+                  >
+                    <code>{d.revision.slice(0, 8)}</code>
+                  </TextLink>
+                ) : (
+                  <code>{d.revision.slice(0, 8)}</code>
+                ))}
               {d.branch && <span> · {d.branch}</span>}
               {d.repoUrl && <span> · {d.repoUrl}</span>}
             </div>
@@ -126,12 +183,32 @@ export function BuildDetailPanel({
               const body = rest.join('\n').trim();
               return (
                 <div className="deploy__commit" key={c.id || i}>
-                  <div className="deploy__commit-title">{title}</div>
-                  {body && <pre className="deploy__commit-body">{body}</pre>}
+                  <div className="deploy__commit-title">
+                    <JiraText text={title} jiraUrl={links?.jiraUrl} />
+                  </div>
+                  {body && (
+                    <pre className="deploy__commit-body">
+                      <JiraText text={body} jiraUrl={links?.jiraUrl} />
+                    </pre>
+                  )}
                   <div className="deploy__commit-meta">
                     {c.author}
                     {c.timestamp ? ` · ${formatTime(c.timestamp)}` : ''}
-                    {c.id ? ` · ${c.id.slice(0, 7)}` : ''}
+                    {c.id &&
+                      (links?.commitBase ? (
+                        <>
+                          {' · '}
+                          <TextLink
+                            small
+                            title="Gitea 에서 커밋 보기"
+                            onClick={() => openCommit(c.id)}
+                          >
+                            {c.id.slice(0, 7)}
+                          </TextLink>
+                        </>
+                      ) : (
+                        ` · ${c.id.slice(0, 7)}`
+                      ))}
                   </div>
                 </div>
               );

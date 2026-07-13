@@ -36,6 +36,11 @@ export function ProjectCard({
       <div className="deploy__card-head">
         <div>
           <span className="deploy__project-name">{p.name}</span>
+          {p.production && (
+            <span className="deploy__prod-badge" title="운영 프로젝트 — 배포 시 강한 확인">
+              PROD
+            </span>
+          )}
           <TextLink
             small
             external
@@ -75,8 +80,9 @@ export function ProjectCard({
         const status = statuses[key];
         const building = status?.state === 'building';
         return (
-          <div key={t.id}>
-            <div className="deploy__target">
+          <div key={t.id} className="deploy__target">
+            {/* 1줄: 대상명 · 배포 · 상태 · 커밋 내역 (항상 동일) */}
+            <div className="deploy__target-row">
               <TextLink
                 className="deploy__target-name"
                 onClick={() =>
@@ -97,17 +103,6 @@ export function ProjectCard({
                 배포
               </Button>
               <StatusBadge status={status} />
-              {building && status && <BuildProgress status={status} />}
-              {building && status?.buildNumber != null && (
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => onStop(t.id, status.buildNumber as number)}
-                  title="진행 중인 빌드 중지"
-                >
-                  중지
-                </Button>
-              )}
               <Button
                 size="sm"
                 className="deploy__detail-toggle"
@@ -119,6 +114,23 @@ export function ProjectCard({
                 <Icon name="chevron-right" size={12} />
               </Button>
             </div>
+
+            {/* 2줄(빌드중일 때만): 진행바(가변 폭) + 중지 */}
+            {building && status && (
+              <div className="deploy__target-sub">
+                <BuildProgress status={status} />
+                {status.buildNumber != null && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => onStop(t.id, status.buildNumber as number)}
+                    title="진행 중인 빌드 중지"
+                  >
+                    중지
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         );
       })}

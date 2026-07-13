@@ -15,6 +15,7 @@ import type {
   DeployHistoryResult,
   DeployLogResult,
   DeployStopResult,
+  DeployPreviewResult,
   AttendanceResult,
   AttendanceInfo,
   VpnSettingsView,
@@ -72,6 +73,10 @@ declare global {
           targetId: string,
           buildNumber: number,
         ) => Promise<DeployStopResult>;
+        getPreview: (
+          projectId: string,
+          targetId: string,
+        ) => Promise<DeployPreviewResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
       };
       vpn: {

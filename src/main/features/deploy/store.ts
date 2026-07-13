@@ -15,6 +15,7 @@ interface StoredDeployProject {
   jenkinsUrl: string;
   username: string;
   secretEnc?: string; // safeStorage 로 암호화된 API 토큰/비밀번호(base64)
+  production?: boolean; // 운영(PROD) 프로젝트 — 배포 시 강한 확인
   targets: DeployTarget[];
 }
 
@@ -46,6 +47,7 @@ const toView = (p: StoredDeployProject): DeployProjectView => ({
   jenkinsUrl: p.jenkinsUrl,
   username: p.username,
   hasSecret: !!p.secretEnc,
+  production: !!p.production,
   targets: p.targets,
 });
 
@@ -67,6 +69,7 @@ export function saveProject(
     jenkinsUrl: input.jenkinsUrl.trim().replace(/\/+$/, ''), // 끝 슬래시 제거
     username: input.username.trim(),
     secretEnc: existing?.secretEnc,
+    production: !!input.production,
     targets: input.targets
       .map((t) => ({
         id: t.id ?? crypto.randomUUID(),
