@@ -898,3 +898,75 @@ body {
     transform: translate(-50%, 0);
   }
 }
+
+// ===== 모달 (전역 — Modal 컴포넌트) =====
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90; // 토스트(100)보다 아래
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 24px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: modal-fade var(--dur-1) var(--ease);
+}
+
+.modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  animation: modal-pop var(--dur-2) var(--ease);
+
+  // 넓은 콘텐츠(로그·표)용
+  &--wide {
+    max-width: 880px;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    margin: 0;
+    @include type-title;
+  }
+
+  &__body {
+    padding: 16px 18px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

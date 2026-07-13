@@ -68,7 +68,7 @@ export function BuildDetailPanel({
   const selectedNumber = state.selected ?? d?.number;
 
   return (
-    <div className="panel-sunken deploy__detail">
+    <div className="deploy__detail">
       {/* 빌드 이력 — 클릭하면 해당 빌드의 커밋 내역으로 전환 */}
       {state.historyError ? (
         <p className="deploy__detail-empty">이력 조회 실패 — {state.historyError}</p>

@@ -4,11 +4,13 @@ import type {
   DeployStatus,
   SaveDeployProjectInput,
 } from '../../../../shared/types';
-import { statusKey } from '../lib/format';
+import { statusKey, jenkinsJobUrl } from '../lib/format';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { Modal } from '../../../components/Modal';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { ProjectCard } from './ProjectCard';
+import { BuildDetailPanel } from './BuildDetailPanel';
 import {
   ProjectForm,
   ProjectFormState,
@@ -166,16 +168,17 @@ export function DeploySection() {
     });
   };
 
-  // ── 커밋 내역 패널 열기/닫기 (열 때마다 상세+이력 새로 조회) ──
-  const toggleDetail = (projectId: string, targetId: string) => {
+  // ── 커밋 내역 모달 열기 (열 때마다 상세+이력 새로 조회) ──
+  const openDetail = (projectId: string, targetId: string) => {
     const key = statusKey(projectId, targetId);
-    const cur = details[key];
-    if (cur?.open) {
-      setDetails((prev) => ({ ...prev, [key]: { ...cur, open: false } }));
-      return;
-    }
     void loadDetail(projectId, targetId, statuses[key]?.buildNumber);
     void loadHistory(projectId, targetId);
+  };
+
+  const closeDetail = (key: string) => {
+    setDetails((prev) =>
+      prev[key] ? { ...prev, [key]: { ...prev[key], open: false } } : prev,
+    );
   };
 
   // ── 이력에서 특정 빌드 선택 → 그 빌드의 커밋 내역으로 전환 ──
@@ -388,24 +391,51 @@ export function DeploySection() {
             key={p.id}
             project={p}
             statuses={statuses}
-            details={details}
             refreshing={refreshingIds.has(p.id)}
             onDeploy={(targetId) => deploy(p.id, targetId)}
             onStop={(targetId, buildNumber) =>
               void stopBuild(p.id, targetId, buildNumber)
             }
-            onToggleDetail={(targetId) => toggleDetail(p.id, targetId)}
-            onSelectBuild={(targetId, buildNumber) =>
-              selectBuild(p.id, targetId, buildNumber)
-            }
-            onToggleLog={(targetId) => toggleLog(p.id, targetId)}
-            onRefreshLog={(targetId) => refreshLog(p.id, targetId)}
+            onOpenDetail={(targetId) => openDetail(p.id, targetId)}
             onRefresh={() => refreshProject(p)}
             onEdit={() => setForm(toForm(p))}
             onDelete={() => removeProject(p)}
           />
         ))
       )}
+
+      {/* 커밋 내역 모달 — 열린 대상(details.open)이 있을 때만 렌더 */}
+      {(() => {
+        const openEntry = Object.entries(details).find(([, v]) => v.open);
+        if (!openEntry) return null;
+        const [key, st] = openEntry;
+        const sep = key.indexOf(':');
+        const projectId = key.slice(0, sep);
+        const targetId = key.slice(sep + 1);
+        const project = projects.find((p) => p.id === projectId);
+        const target = project?.targets.find((t) => t.id === targetId);
+        const title = [project?.name, target?.name].filter(Boolean).join(' — ');
+        return (
+          <Modal
+            wide
+            title={`${title} 빌드 내역`}
+            onClose={() => closeDetail(key)}
+          >
+            <BuildDetailPanel
+              state={st}
+              onSelectBuild={(n) => selectBuild(projectId, targetId, n)}
+              onToggleLog={() => toggleLog(projectId, targetId)}
+              onRefreshLog={() => refreshLog(projectId, targetId)}
+              onOpenConsole={(n) => {
+                if (!project || !target) return;
+                void window.oneApp.openExternal(
+                  `${jenkinsJobUrl(project.jenkinsUrl, target.jobPath)}${n}/console`,
+                );
+              }}
+            />
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

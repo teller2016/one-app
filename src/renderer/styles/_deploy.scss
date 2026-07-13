@@ -146,9 +146,8 @@
     max-width: 180px;
   }
 
-  // 빌드 상세(커밋 내역) 패널 — 룩은 공용 .panel-sunken, 여기는 배치·내부 타이포
+  // 빌드 상세(커밋 내역) — 공통 Modal 안에 렌더된다 (배치·내부 타이포만)
   &__detail {
-    margin: 0 4px 6px;
     @include type-small;
 
     // 로딩·에러·빈 3상태 (DESIGN.md 중첩 패널 스펙)

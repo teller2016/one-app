@@ -6,36 +6,27 @@ import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { TextLink } from '../../../components/TextLink';
 import { StatusBadge, BuildProgress } from './StatusBadge';
-import { BuildDetailPanel, DetailState } from './BuildDetailPanel';
 
 type Props = {
   project: DeployProjectView;
   statuses: Record<string, DeployStatus>;
-  details: Record<string, DetailState>;
   refreshing: boolean;
   onDeploy: (targetId: string) => void;
   onStop: (targetId: string, buildNumber: number) => void;
-  onToggleDetail: (targetId: string) => void;
-  onSelectBuild: (targetId: string, buildNumber: number) => void;
-  onToggleLog: (targetId: string) => void;
-  onRefreshLog: (targetId: string) => void;
+  onOpenDetail: (targetId: string) => void;
   onRefresh: () => void;
   onEdit: () => void;
   onDelete: () => void;
 };
 
-/** 프로젝트 카드 — 배포 대상별 배포 버튼·상태·진행률·이력·커밋 내역 */
+/** 프로젝트 카드 — 배포 대상별 배포 버튼·상태·진행률. 커밋 내역은 모달로 연다 */
 export function ProjectCard({
   project: p,
   statuses,
-  details,
   refreshing,
   onDeploy,
   onStop,
-  onToggleDetail,
-  onSelectBuild,
-  onToggleLog,
-  onRefreshLog,
+  onOpenDetail,
   onRefresh,
   onEdit,
   onDelete,
@@ -82,7 +73,6 @@ export function ProjectCard({
       {p.targets.map((t) => {
         const key = statusKey(p.id, t.id);
         const status = statuses[key];
-        const detail = details[key];
         const building = status?.state === 'building';
         return (
           <div key={t.id}>
@@ -121,29 +111,14 @@ export function ProjectCard({
               <Button
                 size="sm"
                 className="deploy__detail-toggle"
-                onClick={() => onToggleDetail(t.id)}
+                onClick={() => onOpenDetail(t.id)}
                 disabled={!p.hasSecret}
+                title="빌드 이력·커밋 내역·콘솔 로그 보기"
               >
                 커밋 내역
-                <Icon
-                  name={detail?.open ? 'chevron-down' : 'chevron-right'}
-                  size={12}
-                />
+                <Icon name="chevron-right" size={12} />
               </Button>
             </div>
-            {detail?.open && (
-              <BuildDetailPanel
-                state={detail}
-                onSelectBuild={(n) => onSelectBuild(t.id, n)}
-                onToggleLog={() => onToggleLog(t.id)}
-                onRefreshLog={() => onRefreshLog(t.id)}
-                onOpenConsole={(n) =>
-                  void window.oneApp.openExternal(
-                    `${jenkinsJobUrl(p.jenkinsUrl, t.jobPath)}${n}/console`,
-                  )
-                }
-              />
-            )}
           </div>
         );
       })}
