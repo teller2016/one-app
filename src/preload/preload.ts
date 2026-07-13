@@ -64,6 +64,15 @@ contextBridge.exposeInMainWorld('oneApp', {
       buildNumber?: number,
     ) =>
       ipcRenderer.invoke('deploy:build:detail', projectId, targetId, buildNumber),
+    // 최근 빌드 이력 목록 조회
+    getHistory: (projectId: string, targetId: string) =>
+      ipcRenderer.invoke('deploy:history:fetch', projectId, targetId),
+    // 콘솔 로그 tail 조회
+    getLog: (projectId: string, targetId: string, buildNumber: number) =>
+      ipcRenderer.invoke('deploy:log:fetch', projectId, targetId, buildNumber),
+    // 진행 중 빌드 중지
+    stopBuild: (projectId: string, targetId: string, buildNumber: number) =>
+      ipcRenderer.invoke('deploy:stop', projectId, targetId, buildNumber),
     // 배포 상태 이벤트 구독. 해제 함수를 반환한다.
     onStatus: (cb: (evt: DeployStatusEvent) => void) => {
       const listener = (_e: unknown, evt: DeployStatusEvent) => cb(evt);

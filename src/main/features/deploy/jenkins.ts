@@ -4,6 +4,7 @@
 import type {
   DeployStatus,
   DeployBuildDetail,
+  DeployBuildSummary,
   DeployCommit,
 } from '../../../shared/types';
 
@@ -130,10 +131,20 @@ export async function fetchLastStatus(
       result: string | null;
       timestamp?: number;
       duration?: number;
+      estimatedDuration?: number;
     };
     const buildUrl = `${jobUrl(a, jobPath)}/${b.number}/`;
     if (b.building)
-      return { state: 'building', buildNumber: b.number, buildUrl };
+      return {
+        state: 'building',
+        buildNumber: b.number,
+        buildUrl,
+        startedAt: b.timestamp,
+        estimatedMs:
+          b.estimatedDuration && b.estimatedDuration > 0
+            ? b.estimatedDuration
+            : undefined,
+      };
     if (!b.result) return { state: 'idle', buildNumber: b.number };
     return {
       state: b.result === 'SUCCESS' ? 'success' : 'failure',
@@ -288,6 +299,7 @@ export async function watchBuild(
   // 2) 빌드 진행 → 완료
   const buildUrl = `${jobUrl(a, jobPath)}/${buildNumber}/`;
   onStatus({ state: 'building', buildNumber, buildUrl });
+  let metaPushed = false; // 시작 시각·예상 소요는 첫 폴링에서 한 번만 보강
 
   for (;;) {
     if (Date.now() > deadline) {
@@ -301,7 +313,22 @@ export async function watchBuild(
       const b = (await res.json()) as {
         building: boolean;
         result: string | null;
+        timestamp?: number;
+        estimatedDuration?: number;
       };
+      if (b.building && !metaPushed && b.timestamp) {
+        metaPushed = true;
+        onStatus({
+          state: 'building',
+          buildNumber,
+          buildUrl,
+          startedAt: b.timestamp,
+          estimatedMs:
+            b.estimatedDuration && b.estimatedDuration > 0
+              ? b.estimatedDuration
+              : undefined,
+        });
+      }
       if (!b.building && b.result) {
         onStatus({
           state: b.result === 'SUCCESS' ? 'success' : 'failure',
@@ -316,4 +343,125 @@ export async function watchBuild(
       // 재시도
     }
   }
+}
+
+// 빌드 이력 목록에서 필요한 필드만 (최근 10개)
+const HISTORY_TREE =
+  'builds[number,building,result,timestamp,duration,' +
+  'actions[causes[shortDescription,userName]]]{0,10}';
+
+/** 최근 빌드 이력 조회 — 번호·결과·시각·소요·시작자 */
+export async function fetchBuildHistory(
+  a: JenkinsAuth,
+  jobPath: string,
+): Promise<DeployBuildSummary[]> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${jobUrl(a, jobPath)}/api/json?tree=${encodeURIComponent(HISTORY_TREE)}`,
+      { headers: { Authorization: authHeader(a) } },
+    );
+  } catch {
+    throw new Error('젠킨스에 연결할 수 없습니다.');
+  }
+  if (res.status === 401)
+    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+  if (res.status === 404) throw new Error(`잡을 찾을 수 없습니다: ${jobPath}`);
+  if (!res.ok) throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
+
+  const data = (await res.json()) as {
+    builds?: {
+      number: number;
+      building?: boolean;
+      result?: string | null;
+      timestamp?: number;
+      duration?: number;
+      actions?: ({ causes?: { shortDescription?: string; userName?: string }[] } | null)[];
+    }[];
+  };
+  return (data.builds ?? []).map((b) => {
+    const cause = (b.actions ?? [])
+      .filter(Boolean)
+      .find((x) => Array.isArray(x?.causes))?.causes?.[0];
+    return {
+      number: b.number,
+      building: !!b.building,
+      result: b.result ?? null,
+      timestamp: b.timestamp,
+      duration: b.duration,
+      startedBy: cause?.userName ?? cause?.shortDescription,
+    };
+  });
+}
+
+/**
+ * 콘솔 로그 tail 조회 — 마지막 maxBytes 만 가져온다.
+ * progressiveText 는 start 가 로그 크기보다 크면 본문 없이 X-Text-Size 헤더만 주므로,
+ * 먼저 크기를 알아낸 뒤 끝부분만 다시 요청한다.
+ */
+export async function fetchConsoleTail(
+  a: JenkinsAuth,
+  jobPath: string,
+  buildNumber: number,
+  maxBytes = 64_000,
+): Promise<{ text: string; truncated: boolean }> {
+  const base = `${jobUrl(a, jobPath)}/${buildNumber}/logText/progressiveText`;
+  const headers = { Authorization: authHeader(a) };
+
+  let probe: Response;
+  try {
+    probe = await fetch(`${base}?start=2000000000`, { headers });
+  } catch {
+    throw new Error('젠킨스에 연결할 수 없습니다.');
+  }
+  if (probe.status === 404) throw new Error('해당 빌드의 로그가 없습니다.');
+  if (probe.status === 401)
+    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+  if (!probe.ok) throw new Error(`로그 조회 실패 (HTTP ${probe.status})`);
+
+  const size = Number(probe.headers.get('x-text-size') ?? '0');
+  const start = Math.max(0, size - maxBytes);
+
+  const res = await fetch(`${base}?start=${start}`, { headers });
+  if (!res.ok) throw new Error(`로그 조회 실패 (HTTP ${res.status})`);
+  const text = await res.text();
+  return { text, truncated: start > 0 };
+}
+
+/** 진행 중인 빌드 중지 (젠킨스 /stop) — 비밀번호 인증은 crumb 재시도 */
+export async function stopBuild(
+  a: JenkinsAuth,
+  jobPath: string,
+  buildNumber: number,
+): Promise<void> {
+  const url = `${jobUrl(a, jobPath)}/${buildNumber}/stop`;
+  let crumbHeaders: Record<string, string> = {};
+  const doPost = () =>
+    fetch(url, {
+      method: 'POST',
+      headers: { Authorization: authHeader(a), ...crumbHeaders },
+    });
+
+  let res: Response;
+  try {
+    res = await doPost();
+    if (res.status === 403) {
+      const crumb = await fetchCrumbHeaders(a);
+      if (crumb) {
+        crumbHeaders = crumb;
+        res = await doPost();
+      }
+    }
+  } catch {
+    throw new Error('젠킨스에 연결할 수 없습니다.');
+  }
+
+  // 성공 시 잡 페이지로 302 리다이렉트되는 것이 일반적 (fetch 가 따라가면 res.ok)
+  if (res.ok || res.status === 302) return;
+  if (res.status === 401)
+    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+  if (res.status === 403)
+    throw new Error('권한 없음(403) — 계정에 중지 권한이 있는지 확인하세요.');
+  if (res.status === 404) throw new Error('빌드를 찾을 수 없습니다.');
+  throw new Error(`중지 요청 실패 (HTTP ${res.status})`);
 }

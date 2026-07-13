@@ -65,6 +65,82 @@
     margin-left: auto;
   }
 
+  // 빌드중 진행률 — 경과/예상 시간과 진행바 (트랙은 공용 .progress)
+  &__build-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+
+    .progress {
+      width: 110px;
+      flex-shrink: 0;
+    }
+
+    .progress__fill {
+      background: var(--warning);
+    }
+
+    &-text {
+      @include type-caption;
+      color: var(--text-3);
+      white-space: nowrap;
+    }
+  }
+
+  // 빌드 이력 스트립 (커밋 패널 상단) — 결과별 soft 색, 선택은 테두리
+  &__hist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+
+    &-item {
+      padding: 2px 9px;
+      border: 1px solid transparent;
+      border-radius: var(--r-full);
+      cursor: pointer;
+      @include type-caption;
+      font-family: var(--font-mono);
+
+      &--ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+
+      &--fail {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      &--busy {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      &:hover {
+        filter: brightness(1.15);
+      }
+
+      &.is-selected {
+        border-color: currentColor;
+      }
+    }
+  }
+
+  // 콘솔 로그 — 박스 룩은 공용 .panel-sunken--log
+  &__log-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  &__log {
+    margin-top: 8px;
+    max-height: 280px;
+  }
+
   // 폼: 배포 대상 표시명 입력 고정폭 — 잡 이름 입력과 구분 (유지)
   &__form-target-name {
     max-width: 180px;

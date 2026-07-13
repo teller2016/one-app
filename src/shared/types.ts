@@ -78,6 +78,8 @@ export type DeployStatus = {
   result?: string; // 젠킨스 result 원문 (SUCCESS/FAILURE/ABORTED ...)
   error?: string;
   finishedAt?: number; // epoch ms
+  startedAt?: number; // 빌드 시작 시각 (building 일 때 — 진행률 계산용)
+  estimatedMs?: number; // 예상 소요 시간 (building 일 때, 젠킨스 estimatedDuration)
 };
 
 /** 메인 → 렌더러로 보내는 배포 상태 이벤트 */
@@ -116,6 +118,32 @@ export type DeployBuildDetailResult = {
   detail?: DeployBuildDetail;
   error?: string;
 };
+
+/** 빌드 이력 한 건 (목록용 요약) */
+export type DeployBuildSummary = {
+  number: number;
+  building: boolean;
+  result: string | null; // SUCCESS/FAILURE/ABORTED … (빌드중이면 null)
+  timestamp?: number; // 시작 시각 (epoch ms)
+  duration?: number; // 소요 (ms)
+  startedBy?: string; // 시작한 사용자 (또는 트리거 설명)
+};
+
+export type DeployHistoryResult = {
+  ok: boolean;
+  builds?: DeployBuildSummary[];
+  error?: string;
+};
+
+/** 콘솔 로그 tail 조회 결과 */
+export type DeployLogResult = {
+  ok: boolean;
+  text?: string;
+  truncated?: boolean; // 앞부분이 잘렸는지 (마지막 일부만 가져옴)
+  error?: string;
+};
+
+export type DeployStopResult = { ok: boolean; error?: string };
 
 // ── VPN (OpenVPN) ──
 export type VpnState = 'disconnected' | 'connecting' | 'connected' | 'error';

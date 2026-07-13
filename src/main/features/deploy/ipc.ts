@@ -12,6 +12,9 @@ import {
   watchBuild,
   fetchLastStatus,
   fetchBuildDetail,
+  fetchBuildHistory,
+  fetchConsoleTail,
+  stopBuild,
   JenkinsAuth,
 } from './jenkins';
 import type {
@@ -20,7 +23,32 @@ import type {
   DeployStatusEvent,
   DeployTriggerResult,
   DeployBuildDetailResult,
+  DeployHistoryResult,
+  DeployLogResult,
+  DeployStopResult,
 } from '../../../shared/types';
+
+/** projectId·targetId 로 젠킨스 인증·잡 경로를 찾는다 (없으면 사용자용 오류 메시지) */
+function resolveTarget(
+  projectId: string,
+  targetId: string,
+): { auth: JenkinsAuth; jobPath: string } | { error: string } {
+  const cred = getProjectCredentials(projectId);
+  if (!cred)
+    return {
+      error: '젠킨스 계정 정보가 없습니다. 프로젝트를 편집해 계정을 저장하세요.',
+    };
+  const target = cred.targets.find((t) => t.id === targetId);
+  if (!target) return { error: '배포 대상을 찾을 수 없습니다.' };
+  return {
+    auth: {
+      baseUrl: cred.jenkinsUrl,
+      username: cred.username,
+      secret: cred.secret,
+    },
+    jobPath: target.jobPath,
+  };
+}
 
 // 진행 중인 배포 (projectId:targetId) — 같은 대상 중복 트리거 방지
 const inFlight = new Set<string>();
@@ -80,6 +108,64 @@ export function registerDeployIpc() {
           buildNumber,
         );
         return { ok: true, detail };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 최근 빌드 이력 조회 (커밋 내역 패널 상단 목록)
+  ipcMain.handle(
+    'deploy:history:fetch',
+    async (_e, projectId: string, targetId: string): Promise<DeployHistoryResult> => {
+      const r = resolveTarget(projectId, targetId);
+      if ('error' in r) return { ok: false, error: r.error };
+      try {
+        return { ok: true, builds: await fetchBuildHistory(r.auth, r.jobPath) };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 콘솔 로그 tail 조회
+  ipcMain.handle(
+    'deploy:log:fetch',
+    async (
+      _e,
+      projectId: string,
+      targetId: string,
+      buildNumber: number,
+    ): Promise<DeployLogResult> => {
+      const r = resolveTarget(projectId, targetId);
+      if ('error' in r) return { ok: false, error: r.error };
+      try {
+        const { text, truncated } = await fetchConsoleTail(
+          r.auth,
+          r.jobPath,
+          buildNumber,
+        );
+        return { ok: true, text, truncated };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 진행 중 빌드 중지
+  ipcMain.handle(
+    'deploy:stop',
+    async (
+      _e,
+      projectId: string,
+      targetId: string,
+      buildNumber: number,
+    ): Promise<DeployStopResult> => {
+      const r = resolveTarget(projectId, targetId);
+      if ('error' in r) return { ok: false, error: r.error };
+      try {
+        await stopBuild(r.auth, r.jobPath, buildNumber);
+        return { ok: true };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }

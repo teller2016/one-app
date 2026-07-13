@@ -1,6 +1,37 @@
 import type { DeployStatus } from '../../../../shared/types';
-import { formatRelative, formatTime } from '../lib/format';
+import { formatDuration, formatRelative, formatTime } from '../lib/format';
 import { Badge } from '../../../components/Badge';
+
+/** 빌드중 진행률 — 경과 시간과 예상 소요 대비 진행바 (예상치 없으면 경과만) */
+export function BuildProgress({ status }: { status: DeployStatus }) {
+  if (status.state !== 'building' || !status.startedAt) return null;
+  const elapsed = Date.now() - status.startedAt;
+  if (elapsed < 0) return null;
+  // 예상보다 오래 걸려도 바가 넘치지 않게 97%에서 멈춘다
+  const pct = status.estimatedMs
+    ? Math.min(97, Math.round((elapsed / status.estimatedMs) * 100))
+    : null;
+  return (
+    <span
+      className="deploy__build-progress"
+      title={
+        status.estimatedMs
+          ? `예상 소요 약 ${formatDuration(status.estimatedMs)} (최근 빌드 기준)`
+          : undefined
+      }
+    >
+      {pct != null && (
+        <span className="progress">
+          <span className="progress__fill" style={{ width: `${pct}%` }} />
+        </span>
+      )}
+      <span className="deploy__build-progress-text">
+        {formatDuration(elapsed)}
+        {status.estimatedMs ? ` / 약 ${formatDuration(status.estimatedMs)}` : ' 경과'}
+      </span>
+    </span>
+  );
+}
 
 // 배지 옆 마지막 배포(완료) 시각 — 호버 시 정확한 완료 일시 툴팁
 function FinishedTime({ ts }: { ts?: number }) {

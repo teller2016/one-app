@@ -33,6 +33,16 @@ export function DeploySection() {
     return () => clearInterval(id);
   }, []);
 
+  // 빌드중이면 5초 틱으로 진행률(경과 시간)을 갱신
+  const anyBuilding = Object.values(statuses).some(
+    (s) => s?.state === 'building',
+  );
+  useEffect(() => {
+    if (!anyBuilding) return;
+    const id = setInterval(() => setClock((t) => t + 1), 5_000);
+    return () => clearInterval(id);
+  }, [anyBuilding]);
+
   // 프로젝트 목록의 최근 빌드 상태 조회
   const refreshStatuses = async (list: DeployProjectView[]) => {
     await Promise.all(
@@ -72,6 +82,13 @@ export function DeploySection() {
     return () => off?.();
   }, []);
 
+  // 배포 탭을 보는 동안 1분마다 상태 자동 새로고침 (젠킨스에서 직접 돌린 빌드도 반영)
+  useEffect(() => {
+    if (projects.length === 0) return;
+    const id = setInterval(() => void refreshStatuses(projects), 60_000);
+    return () => clearInterval(id);
+  }, [projects]);
+
   // ── 배포 실행 ──
   const deploy = async (projectId: string, targetId: string) => {
     // 실수 방지 — 무엇을 배포하는지 확인받고 진행
@@ -102,7 +119,13 @@ export function DeploySection() {
     setDetails((prev) => {
       const next: Record<string, DetailState> = {};
       for (const [k, v] of Object.entries(prev)) next[k] = { ...v, open: false };
-      next[key] = { open: true, loading: true };
+      next[key] = {
+        ...prev[key], // 이력·로그 상태는 유지
+        open: true,
+        loading: true,
+        error: undefined,
+        selected: buildNumber ?? prev[key]?.selected,
+      };
       return next;
     });
     const res = await window.oneApp.deploy.getBuildDetail(
@@ -113,16 +136,37 @@ export function DeploySection() {
     setDetails((prev) => ({
       ...prev,
       [key]: {
+        ...prev[key],
         // 조회 중에 다른 패널을 열었으면(=이 패널은 닫힘) 닫힌 상태를 유지한다
         open: prev[key]?.open ?? false,
         loading: false,
         detail: res.detail,
         error: res.ok ? undefined : res.error ?? '조회 실패',
+        // 최근 빌드 기준 조회면 실제 번호로 동기화
+        selected: res.detail?.number ?? prev[key]?.selected,
       },
     }));
   };
 
-  // ── 커밋 내역 패널 열기/닫기 (열 때마다 새로 조회) ──
+  // ── 빌드 이력 조회 (패널 상단 스트립) ──
+  const loadHistory = async (projectId: string, targetId: string) => {
+    const key = statusKey(projectId, targetId);
+    const res = await window.oneApp.deploy.getHistory(projectId, targetId);
+    setDetails((prev) => {
+      const cur = prev[key];
+      if (!cur?.open) return prev; // 그 사이 패널이 닫혔으면 무시
+      return {
+        ...prev,
+        [key]: {
+          ...cur,
+          history: res.builds,
+          historyError: res.ok ? undefined : res.error ?? '이력 조회 실패',
+        },
+      };
+    });
+  };
+
+  // ── 커밋 내역 패널 열기/닫기 (열 때마다 상세+이력 새로 조회) ──
   const toggleDetail = (projectId: string, targetId: string) => {
     const key = statusKey(projectId, targetId);
     const cur = details[key];
@@ -131,6 +175,115 @@ export function DeploySection() {
       return;
     }
     void loadDetail(projectId, targetId, statuses[key]?.buildNumber);
+    void loadHistory(projectId, targetId);
+  };
+
+  // ── 이력에서 특정 빌드 선택 → 그 빌드의 커밋 내역으로 전환 ──
+  const selectBuild = (
+    projectId: string,
+    targetId: string,
+    buildNumber: number,
+  ) => {
+    const key = statusKey(projectId, targetId);
+    void loadDetail(projectId, targetId, buildNumber);
+    // 로그가 열려 있으면 선택한 빌드 기준으로 다시 조회
+    if (details[key]?.log?.open) {
+      setDetails((prev) => ({
+        ...prev,
+        [key]: { ...prev[key], log: { open: true, loading: true } },
+      }));
+      void fetchLogInto(projectId, targetId, buildNumber);
+    }
+  };
+
+  // ── 콘솔 로그 조회/토글 ──
+  const fetchLogInto = async (
+    projectId: string,
+    targetId: string,
+    buildNumber: number,
+  ) => {
+    const key = statusKey(projectId, targetId);
+    const res = await window.oneApp.deploy.getLog(
+      projectId,
+      targetId,
+      buildNumber,
+    );
+    setDetails((prev) => {
+      const cur = prev[key];
+      if (!cur?.log?.open) return prev; // 그 사이 로그를 닫았으면 무시
+      return {
+        ...prev,
+        [key]: {
+          ...cur,
+          log: {
+            open: true,
+            loading: false,
+            text: res.text,
+            truncated: res.truncated,
+            error: res.ok ? undefined : res.error ?? '로그 조회 실패',
+          },
+        },
+      };
+    });
+  };
+
+  const toggleLog = (projectId: string, targetId: string) => {
+    const key = statusKey(projectId, targetId);
+    const cur = details[key];
+    if (!cur) return;
+    if (cur.log?.open) {
+      setDetails((prev) => ({
+        ...prev,
+        [key]: { ...cur, log: { ...(cur.log as NonNullable<typeof cur.log>), open: false } },
+      }));
+      return;
+    }
+    const n = cur.selected ?? cur.detail?.number;
+    if (n == null) return;
+    setDetails((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], log: { open: true, loading: true } },
+    }));
+    void fetchLogInto(projectId, targetId, n);
+  };
+
+  const refreshLog = (projectId: string, targetId: string) => {
+    const key = statusKey(projectId, targetId);
+    const cur = details[key];
+    const n = cur?.selected ?? cur?.detail?.number;
+    if (n == null) return;
+    setDetails((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], log: { ...prev[key]?.log, open: true, loading: true } },
+    }));
+    void fetchLogInto(projectId, targetId, n);
+  };
+
+  // ── 진행 중 빌드 중지 ──
+  const stopBuild = async (
+    projectId: string,
+    targetId: string,
+    buildNumber: number,
+  ) => {
+    const project = projects.find((p) => p.id === projectId);
+    const target = project?.targets.find((t) => t.id === targetId);
+    const label = [project?.name, target?.name].filter(Boolean).join(' — ');
+    if (!window.confirm(`${label} 빌드 #${buildNumber} 을(를) 중지할까요?`)) return;
+
+    const res = await window.oneApp.deploy.stopBuild(
+      projectId,
+      targetId,
+      buildNumber,
+    );
+    if (!res.ok) {
+      window.alert(`중지 실패: ${res.error ?? '알 수 없는 오류'}`);
+      return;
+    }
+    // 젠킨스가 중단을 반영할 시간을 준 뒤 상태 갱신
+    // (앱에서 트리거한 빌드는 watchBuild 가 ABORTED 를 곧 감지한다)
+    setTimeout(() => {
+      if (project) void refreshStatuses([project]);
+    }, 2000);
   };
 
   // ── 프로젝트 단위 새로고침 — 상태 배지 + 열려있는 커밋 패널 재조회 ──
@@ -142,6 +295,7 @@ export function DeploySection() {
         if (!st?.open || !key.startsWith(`${p.id}:`)) return;
         const targetId = key.slice(p.id.length + 1);
         void loadDetail(p.id, targetId); // 최근 빌드 기준으로 갱신
+        void loadHistory(p.id, targetId);
       });
     } finally {
       setRefreshingIds((prev) => {
@@ -237,7 +391,15 @@ export function DeploySection() {
             details={details}
             refreshing={refreshingIds.has(p.id)}
             onDeploy={(targetId) => deploy(p.id, targetId)}
+            onStop={(targetId, buildNumber) =>
+              void stopBuild(p.id, targetId, buildNumber)
+            }
             onToggleDetail={(targetId) => toggleDetail(p.id, targetId)}
+            onSelectBuild={(targetId, buildNumber) =>
+              selectBuild(p.id, targetId, buildNumber)
+            }
+            onToggleLog={(targetId) => toggleLog(p.id, targetId)}
+            onRefreshLog={(targetId) => refreshLog(p.id, targetId)}
             onRefresh={() => refreshProject(p)}
             onEdit={() => setForm(toForm(p))}
             onDelete={() => removeProject(p)}
