@@ -16,6 +16,15 @@ import type {
   DeployLogResult,
   DeployStopResult,
   DeployPreviewResult,
+  PrListResult,
+  PrsConfig,
+  PrBranchesResult,
+  PrCommitsResult,
+  PrCreateInput,
+  PrCreateResult,
+  PrMergeInfoResult,
+  PrMergeMethod,
+  PrMergeResult,
   AttendanceResult,
   AttendanceInfo,
   VpnSettingsView,
@@ -101,6 +110,24 @@ declare global {
       weekly: {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;
         onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
+      };
+      prs: {
+        fetch: () => Promise<PrListResult>;
+        getConfig: () => Promise<PrsConfig>;
+        setConfig: (config: PrsConfig) => Promise<PrsConfig>;
+        getBranches: (repo: string) => Promise<PrBranchesResult>;
+        getBranchCommits: (
+          repo: string,
+          base: string,
+          head: string,
+        ) => Promise<PrCommitsResult>;
+        create: (input: PrCreateInput) => Promise<PrCreateResult>;
+        getMergeInfo: (repo: string, number: number) => Promise<PrMergeInfoResult>;
+        merge: (
+          repo: string,
+          number: number,
+          method: PrMergeMethod,
+        ) => Promise<PrMergeResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

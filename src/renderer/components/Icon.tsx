@@ -27,6 +27,7 @@ export type IconName =
   | 'chevron-down'
   | 'chevron-left'
   | 'arrow-up-right'
+  | 'git-pull-request'
   | 'x'
   | 'check'
   | 'plus'
@@ -151,6 +152,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="10" />
       <path d="M12 16v-4" />
       <path d="M12 8h.01" />
+    </>
+  ),
+  'git-pull-request': (
+    <>
+      <circle cx="18" cy="18" r="3" />
+      <circle cx="6" cy="6" r="3" />
+      <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+      <path d="M6 9v12" />
     </>
   ),
 };

@@ -11,6 +11,9 @@ import type {
   WeeklyProgress,
   ReminderConfig,
   AttendanceInfo,
+  PrsConfig,
+  PrCreateInput,
+  PrMergeMethod,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -138,6 +141,26 @@ contextBridge.exposeInMainWorld('oneApp', {
       ipcRenderer.on('weekly:progress', listener);
       return () => ipcRenderer.removeListener('weekly:progress', listener);
     },
+  },
+  prs: {
+    // 열린 PR 목록 조회 (Gitea — 주소 미설정이면 configured:false)
+    fetch: () => ipcRenderer.invoke('prs:fetch'),
+    // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장
+    getConfig: () => ipcRenderer.invoke('prs:config:get'),
+    setConfig: (config: PrsConfig) => ipcRenderer.invoke('prs:config:set', config),
+    // 저장소의 최근 브랜치 목록 (빠른 PR 후보)
+    getBranches: (repo: string) => ipcRenderer.invoke('prs:branches', repo),
+    // base 대비 head 커밋 목록 (PR 제목/본문 자동 생성용)
+    getBranchCommits: (repo: string, base: string, head: string) =>
+      ipcRenderer.invoke('prs:branch-commits', repo, base, head),
+    // PR 생성 (Gitea 토큰 필요)
+    create: (input: PrCreateInput) => ipcRenderer.invoke('prs:create', input),
+    // 머지 전 상태 확인 (컨플릭트 여부)
+    getMergeInfo: (repo: string, number: number) =>
+      ipcRenderer.invoke('prs:merge-info', repo, number),
+    // PR 머지 (Gitea 토큰 필요)
+    merge: (repo: string, number: number, method: PrMergeMethod) =>
+      ipcRenderer.invoke('prs:merge', repo, number, method),
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
   getAutostart: () => ipcRenderer.invoke('app:autostart:get'),

@@ -9,6 +9,9 @@ import { registerVpnIpc } from './features/vpn/ipc';
 import { registerWeeklyIpc } from './features/weekly/ipc';
 import { setNotifyWindow, registerNotifyIpc } from './features/notify/notify';
 import { startReminderScheduler } from './features/attendance/scheduler';
+import { registerPrsIpc } from './features/prs/ipc';
+import { startPrPoller } from './features/prs/poller';
+import { createTray } from './features/tray/tray';
 
 // Windows 설치/제거 시 바로가기 처리
 if (started) {
@@ -23,6 +26,7 @@ registerAttendanceIpc();
 registerVpnIpc();
 registerWeeklyIpc();
 registerNotifyIpc();
+registerPrsIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle('app:openExternal', async (_e, url: string) => {
@@ -88,6 +92,20 @@ app.on('ready', () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
+  // 새 PR 알림 폴러 (Gitea 설정 시)
+  startPrPoller();
+  // 메뉴바 트레이 — 창이 닫혀 있어도 열기·출퇴근 찍기 가능
+  createTray(() => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    } else {
+      createWindow();
+    }
+    app.focus({ steal: true });
+  });
 });
 
 // 모든 창이 닫히면 종료 (macOS 제외)

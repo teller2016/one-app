@@ -1,0 +1,215 @@
+// PR 대시보드 — 열린 PR 목록 (룩은 공용 클래스, 여기는 배치)
+@use './base' as *;
+
+.prs {
+  &__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  // 조직(프로젝트) 필터 칩 줄
+  &__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  &__chip-count {
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  // 조직별 그룹
+  &__group {
+    margin-bottom: 16px;
+  }
+
+  &__group-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  &__group-name {
+    @include type-emph;
+  }
+
+  &__group-count {
+    padding: 1px 8px;
+    border-radius: var(--r-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    @include type-caption;
+    color: var(--text-2);
+  }
+
+  &__list {
+    @include card-surface;
+    padding: 4px 16px;
+  }
+
+  &__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+
+    + .prs__row {
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &__repo {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: var(--r-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    @include type-caption;
+    color: var(--text-2);
+  }
+
+  // 제목 링크 — 길면 말줄임
+  &__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    @include type-body;
+    font-weight: 600;
+  }
+
+  &__number {
+    flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__sub {
+    @include type-caption;
+    color: var(--text-3);
+  }
+}
+
+// 빠른 PR (push 브랜치 → PR 생성)
+.prs__quick {
+  @include card-surface;
+  padding: 12px 16px 14px;
+  margin-bottom: 16px;
+
+  &-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+
+    .form-label {
+      margin: 0;
+    }
+  }
+
+  &-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+
+    + .prs__quick-row {
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &-error {
+    @include type-small;
+    color: var(--danger);
+  }
+
+  &-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+
+    .input {
+      max-width: 420px;
+    }
+  }
+}
+
+// 브랜치 선택 — 공용 input 룩과 톤 맞춤 (네이티브 select)
+.prs__branch-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 360px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-md);
+  @include type-small;
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+}
+
+// PR 생성 모달
+.prs__create-route {
+  margin: 0 0 10px;
+  @include type-body;
+  color: var(--text-2);
+
+  code {
+    color: var(--accent);
+    font-family: var(--font-mono);
+  }
+}
+
+.prs__create-count {
+  margin: 0 0 10px;
+}
+
+.prs__create-body {
+  min-height: 120px;
+}
+
+// 머지 모달
+.prs__merge-title {
+  margin: 0 0 12px;
+  @include type-emph;
+}
+
+.prs__merge-method {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+
+  .form-label {
+    margin: 0;
+  }
+}
+
+// 목록 행 머지 버튼 — 오른쪽 끝
+.prs__merge-btn {
+  margin-left: auto;
+}

@@ -30,6 +30,7 @@ export function SettingsSection() {
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
+  const [notifyPr, setNotifyPr] = useState(true);
   const [autostart, setAutostart] = useState(false);
   const [jiraUrl, setJiraUrl] = useState('');
   const [giteaUrl, setGiteaUrl] = useState('');
@@ -47,6 +48,7 @@ export function SettingsSection() {
       setBizboxId(s.bizboxId);
       setHasPassword(s.hasPassword);
       setNotifyDeploy(s.notifyDeploy);
+      setNotifyPr(s.notifyPr);
       setJiraUrl(s.jiraUrl);
       setGiteaUrl(s.giteaUrl);
       setHasGiteaToken(s.hasGiteaToken);
@@ -82,6 +84,7 @@ export function SettingsSection() {
         bizboxId,
         password,
         notifyDeploy,
+        notifyPr,
         jiraUrl,
         giteaUrl,
         giteaToken,
@@ -98,6 +101,7 @@ export function SettingsSection() {
       setAutostart(auto.enabled);
       setHasPassword(res.hasPassword);
       setNotifyDeploy(res.notifyDeploy);
+      setNotifyPr(res.notifyPr);
       setJiraUrl(res.jiraUrl);
       setGiteaUrl(res.giteaUrl);
       setHasGiteaToken(res.hasGiteaToken);
@@ -176,6 +180,15 @@ export function SettingsSection() {
           />
           <span>배포가 끝나면 알림 받기 (성공/실패)</span>
         </label>
+        <label className="settings__check">
+          <input
+            type="checkbox"
+            checked={notifyPr}
+            onChange={(e) => setNotifyPr(e.target.checked)}
+            disabled={loading}
+          />
+          <span>새 PR 이 올라오면 알림 받기 (Gitea 주소 설정 시, 5분 간격 확인)</span>
+        </label>
         <div className="settings__test-row">
           <Button size="sm" onClick={() => window.oneApp?.testNotification()}>
             테스트 알림 보내기
@@ -199,7 +212,8 @@ export function SettingsSection() {
           <span>로그인 시 One App 자동 시작</span>
         </label>
         <p className="note">
-          macOS 로그인 아이템에 등록됩니다. (패키징된 앱에서 동작)
+          메뉴바 아이콘은 항상 표시됩니다 — 창을 닫아도 메뉴바에서 열기·출퇴근
+          찍기를 할 수 있어요. (자동 시작은 패키징된 앱에서 동작)
         </p>
       </Collapsible>
 

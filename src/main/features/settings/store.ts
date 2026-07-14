@@ -8,6 +8,7 @@ interface StoredSettings {
   bizboxId: string;
   bizboxPasswordEnc?: string; // safeStorage 로 암호화된 비밀번호(base64)
   notifyDeploy?: boolean; // 배포 완료/실패 알림 (기본 on)
+  notifyPr?: boolean; // 새 PR 알림 (기본 on)
   jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
   giteaUrl?: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기)
   giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
@@ -34,6 +35,7 @@ export function getSettingsForRenderer(): AppSettingsView {
     bizboxId: s.bizboxId ?? '',
     hasPassword: !!s.bizboxPasswordEnc,
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
+    notifyPr: s.notifyPr !== false, // 기본값 on (Gitea 미설정이면 폴러가 조용히 쉼)
     jiraUrl: s.jiraUrl ?? '',
     giteaUrl: s.giteaUrl ?? '',
     hasGiteaToken: !!s.giteaTokenEnc,
@@ -54,6 +56,9 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   // 알림 토글은 명시적으로 넘어온 경우만 갱신
   if (typeof input.notifyDeploy === 'boolean') {
     next.notifyDeploy = input.notifyDeploy;
+  }
+  if (typeof input.notifyPr === 'boolean') {
+    next.notifyPr = input.notifyPr;
   }
   // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
   if (typeof input.jiraUrl === 'string') {
@@ -108,4 +113,9 @@ export function getCredentials(): { id: string; password: string } | null {
   } catch {
     return null;
   }
+}
+
+/** 새 PR 알림이 켜져 있는지 (기본 on) */
+export function isPrNotifyEnabled(): boolean {
+  return readStored().notifyPr !== false;
 }

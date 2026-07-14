@@ -27,6 +27,7 @@ export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
+  notifyPr: boolean; // 새 PR 알림 on/off (Gitea 주소 설정 시)
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
@@ -36,6 +37,7 @@ export type SaveSettingsInput = {
   bizboxId: string;
   password?: string; // 빈 값이면 기존 비밀번호 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
+  notifyPr?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   giteaUrl?: string; // 미지정이면 기존 유지
   giteaToken?: string; // 빈 값이면 기존 유지
@@ -152,6 +154,80 @@ export type DeployLogResult = {
 };
 
 export type DeployStopResult = { ok: boolean; error?: string };
+
+// ── PR 대시보드 (Gitea) ──
+
+/** 열린 PR 한 건 */
+export type PrItem = {
+  repo: string; // owner/repo
+  number: number;
+  title: string;
+  author: string;
+  createdAt?: number; // epoch ms
+  updatedAt?: number;
+  url: string; // 브라우저로 열 PR 페이지
+  approvals?: number; // 승인(APPROVED) 리뷰어 수 — 조회 실패 시 undefined
+};
+
+export type PrListResult = {
+  ok: boolean;
+  configured: boolean; // Gitea 주소가 설정돼 있는지
+  prs?: PrItem[];
+  error?: string;
+};
+
+/** PR 탭 설정 — 조직 제외 필터(목록·알림 공용) + 빠른 PR 저장소 목록 */
+export type PrsConfig = {
+  excludedOrgs: string[];
+  repos: string[]; // "owner/repo" — 빠른 PR(생성)에 쓸 즐겨찾기 저장소
+};
+
+/** 원격 브랜치 요약 (빠른 PR 후보) */
+export type PrBranch = {
+  name: string;
+  committedAt?: number; // 마지막 커밋 시각 (epoch ms)
+  lastMessage?: string; // 마지막 커밋 제목
+};
+
+export type PrBranchesResult = {
+  ok: boolean;
+  branches?: PrBranch[];
+  error?: string;
+};
+
+/** head 브랜치가 base 대비 갖고 있는 커밋 (PR 제목/본문 자동 생성용) */
+export type PrCommitsResult = {
+  ok: boolean;
+  commits?: DeployCommit[];
+  error?: string;
+};
+
+export type PrCreateInput = {
+  repo: string; // owner/repo
+  head: string;
+  base: string;
+  title: string;
+  body?: string;
+};
+
+export type PrCreateResult = {
+  ok: boolean;
+  number?: number;
+  url?: string;
+  error?: string;
+};
+
+/** 머지 전 상태 — mergeable(컨플릭트 없음) 여부 */
+export type PrMergeInfoResult = {
+  ok: boolean;
+  mergeable?: boolean;
+  title?: string;
+  error?: string;
+};
+
+export type PrMergeMethod = 'merge' | 'squash' | 'rebase';
+
+export type PrMergeResult = { ok: boolean; error?: string };
 
 /** 배포 미리보기 — 마지막 빌드 이후 저장소에 새로 쌓인 커밋 (Gitea 비교) */
 export type DeployPreviewResult = {

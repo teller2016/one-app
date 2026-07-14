@@ -5,6 +5,7 @@ import { ToastProvider } from '../components/Toast';
 import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
+import { PrSection } from '../features/prs';
 import { WeeklySection } from '../features/weekly';
 import { AttendanceWidget } from '../features/attendance';
 import { VpnWidget } from '../features/vpn';
@@ -13,6 +14,7 @@ const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
   { id: 'weekly', label: '주간보고', icon: <Icon name="bar-chart" size={16} /> },
   { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
+  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
   { id: 'settings', label: '환경설정', icon: <Icon name="settings" size={16} /> },
 ];
 
@@ -36,6 +38,8 @@ export function App() {
         return <WeeklySection />;
       case 'deploy':
         return <DeploySection />;
+      case 'prs':
+        return <PrSection />;
       case 'settings':
         return <SettingsSection />;
       default:
