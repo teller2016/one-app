@@ -27,7 +27,6 @@ export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
-  notifyPr: boolean; // 새 PR 알림 on/off (Gitea 주소 설정 시)
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
@@ -37,7 +36,6 @@ export type SaveSettingsInput = {
   bizboxId: string;
   password?: string; // 빈 값이면 기존 비밀번호 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
-  notifyPr?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   giteaUrl?: string; // 미지정이면 기존 유지
   giteaToken?: string; // 빈 값이면 기존 유지

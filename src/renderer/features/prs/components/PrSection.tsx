@@ -184,7 +184,9 @@ export function PrSection() {
                   ? '필터에 해당하는 열린 PR 이 없습니다.'
                   : '열린 PR 이 없습니다.'}
               </p>
-              <p className="hint">새 PR 이 올라오면 알림으로도 알려드려요.</p>
+              <p className="hint">
+                위 [빠른 PR]에서 브랜치를 골라 PR 을 만들 수 있어요.
+              </p>
             </div>
           ) : (
             groups.map(({ org, items }) => (
