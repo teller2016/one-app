@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DeployCommit } from '../../../../shared/types';
+import type { DeployCommit, PrChangedFile } from '../../../../shared/types';
 import { Modal } from '../../../components/Modal';
 import { Button } from '../../../components/Button';
 import { Banner } from '../../../components/Banner';
@@ -31,6 +31,8 @@ export function CreatePrModal({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [commits, setCommits] = useState<DeployCommit[] | null>(null);
+  const [files, setFiles] = useState<PrChangedFile[]>([]);
+  const [stats, setStats] = useState<{ additions: number; deletions: number } | null>(null);
   const [loadError, setLoadError] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -47,6 +49,8 @@ export function CreatePrModal({
       }
       const list = res.commits ?? [];
       setCommits(list);
+      setFiles(res.files ?? []);
+      setStats(res.stats ?? null);
       const key = issueKeyOf(head);
       const firstTitle = list[0]?.message.split('\n')[0] ?? head;
       setTitle(`${key ? `[${key}] ` : ''}${firstTitle}`.slice(0, 100));
@@ -91,7 +95,30 @@ export function CreatePrModal({
           <b>develop 과 커밋 차이가 없습니다</b> — push 를 먼저 했는지 확인하세요.
         </Banner>
       ) : (
-        <p className="hint prs__create-count">포함될 커밋 {commits.length}개</p>
+        <>
+          <p className="hint prs__create-count">
+            포함될 커밋 {commits.length}개 · 변경 파일 {files.length}개
+            {stats && (
+              <>
+                {' · '}
+                <span className="prs__stat-add">+{stats.additions}</span>{' '}
+                <span className="prs__stat-del">−{stats.deletions}</span>
+              </>
+            )}
+          </p>
+          {files.length > 0 && (
+            <ul className="prs__create-files">
+              {files.map((f) => (
+                <li key={f.path} className={`prs__create-file prs__create-file--${f.status}`}>
+                  <span className="prs__create-file-status">
+                    {f.status === 'added' ? 'A' : f.status === 'removed' || f.status === 'deleted' ? 'D' : f.status === 'renamed' ? 'R' : 'M'}
+                  </span>
+                  <span className="prs__create-file-path">{f.path}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       <FormRow label="제목">

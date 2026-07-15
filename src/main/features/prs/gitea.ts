@@ -4,6 +4,7 @@ import type {
   PrItem,
   DeployCommit,
   PrBranch,
+  PrChangedFile,
   PrCreateInput,
   PrMergeMethod,
 } from '../../../shared/types';
@@ -144,7 +145,11 @@ export async function fetchBranchCommits(
   repo: string,
   base: string,
   head: string,
-): Promise<DeployCommit[]> {
+): Promise<{
+  commits: DeployCommit[];
+  files: PrChangedFile[];
+  stats: { additions: number; deletions: number };
+}> {
   let res: Response;
   try {
     res = await fetch(
@@ -159,9 +164,13 @@ export async function fetchBranchCommits(
     commits?: {
       sha?: string;
       commit?: { message?: string; author?: { name?: string; date?: string } };
+      files?: { filename?: string; status?: string }[];
+      stats?: { additions?: number; deletions?: number };
     }[];
   };
-  return (data.commits ?? [])
+  const raw = data.commits ?? [];
+
+  const commits = raw
     .map((c) => ({
       id: c.sha ?? '',
       message: (c.commit?.message ?? '').trim(),
@@ -169,6 +178,22 @@ export async function fetchBranchCommits(
       timestamp: c.commit?.author?.date ? Date.parse(c.commit.author.date) : undefined,
     }))
     .reverse();
+
+  // 변경 파일: 커밋 전체에서 경로 기준 중복 제거 (뒤 커밋 상태가 이김)
+  const fileMap = new Map<string, string>();
+  const stats = { additions: 0, deletions: 0 };
+  for (const c of raw) {
+    for (const f of c.files ?? []) {
+      if (f.filename) fileMap.set(f.filename, f.status ?? 'modified');
+    }
+    stats.additions += c.stats?.additions ?? 0;
+    stats.deletions += c.stats?.deletions ?? 0;
+  }
+  const files: PrChangedFile[] = [...fileMap.entries()]
+    .map(([path, status]) => ({ path, status }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return { commits, files, stats };
 }
 
 /** PR 생성 — 성공 시 번호·URL 반환 (토큰 필수) */

@@ -195,10 +195,18 @@ export type PrBranchesResult = {
   error?: string;
 };
 
-/** head 브랜치가 base 대비 갖고 있는 커밋 (PR 제목/본문 자동 생성용) */
+/** 변경 파일 한 건 (PR 생성 미리보기용) */
+export type PrChangedFile = {
+  path: string;
+  status: string; // added / modified / removed …
+};
+
+/** head 브랜치가 base 대비 갖고 있는 커밋·변경 요약 (PR 생성 미리보기용) */
 export type PrCommitsResult = {
   ok: boolean;
   commits?: DeployCommit[];
+  files?: PrChangedFile[]; // 커밋 전체에서 중복 제거한 변경 파일
+  stats?: { additions: number; deletions: number }; // 커밋별 증감 합산 (근사치)
   error?: string;
 };
 

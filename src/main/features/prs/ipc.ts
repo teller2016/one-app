@@ -69,10 +69,14 @@ export function registerPrsIpc() {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       try {
-        return {
-          ok: true,
-          commits: await fetchBranchCommits(gitea.url, gitea.token, repo, base, head),
-        };
+        const { commits, files, stats } = await fetchBranchCommits(
+          gitea.url,
+          gitea.token,
+          repo,
+          base,
+          head,
+        );
+        return { ok: true, commits, files, stats };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }

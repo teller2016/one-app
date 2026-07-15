@@ -213,3 +213,61 @@
 .prs__merge-btn {
   margin-left: auto;
 }
+
+// PR 생성 모달 — 변경 파일 요약
+.prs__stat-add {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.prs__stat-del {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.prs__create-files {
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  list-style: none;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.prs__create-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  @include type-small;
+  font-family: var(--font-mono);
+
+  &-status {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &--added &-status {
+    color: var(--ok);
+  }
+
+  &--removed &-status,
+  &--deleted &-status {
+    color: var(--danger);
+  }
+
+  &-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-2);
+    direction: rtl; // 긴 경로는 앞부분을 생략하고 파일명이 보이게
+    text-align: left;
+  }
+}
