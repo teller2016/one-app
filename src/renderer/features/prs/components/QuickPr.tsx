@@ -109,29 +109,32 @@ export function QuickPr({
                 ))}
               </select>
             )}
-            <RefreshButton
-              size={12}
-              spinning={!!st?.loading}
-              onClick={() => void loadBranches(repo)}
-              title="브랜치 목록 새로고침 (push 직후 누르세요)"
-            />
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={!selected[repo] && list.length === 0}
-              onClick={() => onCreate(repo, selected[repo] ?? list[0]?.name)}
-            >
-              PR 만들기
-            </Button>
-            <button
-              type="button"
-              className="icon-btn"
-              title="저장소 제거"
-              aria-label="저장소 제거"
-              onClick={() => onRemoveRepo(repo)}
-            >
-              <Icon name="x" size={12} />
-            </button>
+            {/* 액션 클러스터 — 오른쪽 끝 정렬 (PR 목록 행의 머지 버튼과 동일 패턴) */}
+            <div className="prs__quick-actions">
+              <RefreshButton
+                size={12}
+                spinning={!!st?.loading}
+                onClick={() => void loadBranches(repo)}
+                title="브랜치 목록 새로고침 (push 직후 누르세요)"
+              />
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!selected[repo] && list.length === 0}
+                onClick={() => onCreate(repo, selected[repo] ?? list[0]?.name)}
+              >
+                PR 만들기
+              </Button>
+              <button
+                type="button"
+                className="icon-btn"
+                title="저장소 제거"
+                aria-label="저장소 제거"
+                onClick={() => onRemoveRepo(repo)}
+              >
+                <Icon name="x" size={12} />
+              </button>
+            </div>
           </div>
         );
       })}

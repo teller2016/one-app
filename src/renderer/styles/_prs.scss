@@ -137,6 +137,15 @@
     }
   }
 
+  // 행 오른쪽 끝의 액션 묶음 (새로고침·PR 만들기·제거) — 왼쪽 쏠림 방지
+  &-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
   &-error {
     @include type-small;
     color: var(--danger);
@@ -147,10 +156,7 @@
     align-items: center;
     gap: 8px;
     margin-top: 10px;
-
-    .input {
-      max-width: 420px;
-    }
+    // 입력이 남는 폭을 채워 [저장소 추가] 버튼이 카드 오른쪽 끝에 붙는다
   }
 }
 
