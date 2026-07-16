@@ -11,7 +11,8 @@
 .sidebar {
   width: 220px;
   min-width: 220px;
-  background: var(--bg);
+  // 비브런시 — 창 재질(vibrancy: 'sidebar')이 그대로 비치도록 투명 (Finder 류)
+  background: transparent;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -63,7 +64,8 @@
     @include focus-ring(-2px);
 
     &:hover {
-      background: var(--surface-1);
+      // 비브런시 위라 불투명 표면 대신 은은한 오버레이 (macOS 사이드바 hover)
+      background: var(--overlay-hover);
       color: var(--text);
     }
 
@@ -95,23 +97,28 @@
   }
 }
 
-// 콘텐츠 영역
+// 콘텐츠 영역 — 비브런시 창에서 유일하게 불투명한 면 (사이드바만 재질이 비침)
 .content {
+  position: relative; // 프로스트 탑바 오버레이 기준
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
+  background: var(--bg);
 }
 
-// 탑바 — 현재 섹션 표시 + 창 드래그 영역 (장식 탭 폐지)
+// 탑바 — 프로스트 글라스: 콘텐츠가 바 밑으로 스크롤되며 블러로 비친다 (macOS 툴바)
 .topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
   height: 44px;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 16px;
-  background: var(--bg);
+  background: var(--frost);
+  backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 
@@ -126,9 +133,10 @@
   }
 }
 
-// 메인 영역
+// 메인 영역 — 탑바 밑까지 차지하고, 콘텐츠는 패딩으로 바 아래에서 시작
 .main {
-  flex: 1;
+  height: 100%;
+  padding-top: 44px; // .topbar 높이와 동기화
   overflow: auto;
   min-height: 0;
 }

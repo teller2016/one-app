@@ -49,12 +49,11 @@ ipcMain.handle('app:autostart:set', (_e, enabled: boolean) => {
   return { enabled: app.getLoginItemSettings().openAtLogin };
 });
 
-// 저장된 테마 설정 기준 다크 여부 — system 이면 macOS 화면 모드를 따른다
-const isDarkTheme = () =>
-  getThemePref() === 'dark' ||
-  (getThemePref() === 'system' && nativeTheme.shouldUseDarkColors);
-
 const createWindow = () => {
+  // 저장된 테마 설정을 네이티브에도 반영 — 비브런시 재질·신호등·다이얼로그가 앱 테마를 따르고,
+  // 렌더러의 prefers-color-scheme(theme.ts 의 system 해석)도 이 값을 따라간다
+  nativeTheme.themeSource = getThemePref();
+
   // 메인 창 생성
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -64,8 +63,11 @@ const createWindow = () => {
     title: 'One App',
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: 'hiddenInset',
-    // 렌더러 로드 전 창 배경 — _base.scss 의 --bg(라이트)/다크 오버라이드와 반드시 동기화 (불일치 시 실행 초기 플래시)
-    backgroundColor: isDarkTheme() ? '#1c1c1e' : '#f5f5f7',
+    // 비브런시 사이드바 — 창 배경이 반투명 재질(Finder 류). CSS 에서 html/body/.sidebar 를
+    // 투명하게 두고 .content 만 --bg 로 불투명하게 칠해 사이드바에만 재질이 비친다.
+    // (backgroundColor 를 칠하면 재질이 가려지므로 지정하지 않는다 — 로드 전 배경도 재질이라 플래시 없음)
+    vibrancy: 'sidebar',
+    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

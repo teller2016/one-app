@@ -64,8 +64,8 @@ typography:
   body:    { size: 13px, weight: 400, tracking: -0.008em }
   emph:    { size: 14px, weight: 600 }
   title:   { size: 15px, weight: 600 }
-  h2:      { size: 20px, weight: 600, tracking: -0.011em }   # "애플 타이트" 음수 자간
-  metric:  { size: 24px, weight: 600, numeric: tabular-nums }
+  h2:      { size: 26px, weight: 600, tracking: -0.013em }   # 타이포 드라마 — 큰 제목 + "애플 타이트" 자간
+  metric:  { size: 28px, weight: 600, numeric: tabular-nums }
 
 radius: { sm: 8px, md: 11px, lg: 18px, full: 999px }   # 필=액션 문법. 중첩 표면은 부모보다 한 단계 작게
 spacing: [4, 8, 12, 16, 20, 24, 32]                    # 4px 그리드
@@ -205,8 +205,8 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 | `type-body` | 13px/1.5 · 400 · ls -0.008em | 기본 UI·입력·버튼 |
 | `type-emph` | 14px/1.45 · 600 | 목록 이름(roster)·강조 본문 |
 | `type-title` | 15px/1.4 · 600 | 카드 제목(프로젝트명) |
-| `type-h2` | 20px/1.3 · **600** · ls **-0.011em** | 섹션 제목·상세 카드 큰 제목 — 700 금지, 타이트 자간이 시그니처 |
-| `type-metric` | 24px/1.1 · **600** · tabular-nums | 큰 숫자 (애플은 볼드 대신 세미볼드) |
+| `type-h2` | **26px**/1.25 · **600** · ls **-0.013em** | 섹션 제목·상세 카드 큰 제목 — 700 금지, 큰 크기+타이트 자간의 "타이포 드라마"가 시그니처 |
+| `type-metric` | **28px**/1.1 · **600** · tabular-nums | 큰 숫자 (애플은 볼드 대신 세미볼드) |
 
 숫자 정렬(시각·합계)은 `font-variant-numeric: tabular-nums`. 버튼 라벨은 **400**(애플 필 버튼 웨이트).
 
@@ -285,11 +285,12 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 ### Spinner (`.spinner`) — 보더 스피너(accent) / ProgressBar — 트랙 --overlay-track + --r-full, 채움은 시맨틱 색
 ### 중첩 패널 (`.panel-sunken` — 로그·커밋 패널 공용) — **panel-dark** + --r-md. 로그: --font-mono type-small + --text-2(→on-dark-2 자동). 커밋 항목: 제목 type-body 600 / 본문 --font-mono type-small / 메타 type-caption --text-3. 로딩·에러·빈 3상태 정의(에러는 --danger + alert-triangle — 다크 안에선 danger-on-dark 자동)
 
-### 셸
-- **사이드바**: 220px, 배경 --bg(파치먼트) + border-right --border. 활성 항목: **accent-soft(블루 틴트) 배경 + --text + 아이콘만 --accent 틴트** (macOS 사이드바 문법). 브랜드 SVG 로고 마크(accent)
-- **탑바**(`.topbar`): 44px 헤더(애플 글로벌 내브와 같은 높이 — 현재 섹션 아이콘+이름, 하단 --border). **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
+### 셸 (macOS 네이티브 시그니처 — 비브런시 + 프로스트)
+- **비브런시 사이드바**: 220px, `BrowserWindow vibrancy: 'sidebar'` 재질이 그대로 비치도록 **배경 transparent**(Finder 류). html/body 도 투명 유지, **불투명 채색은 `.content`(--bg)에서만** — 다른 곳을 불투명하게 칠하면 재질이 가려진다. 항목 hover 는 표면 승격이 아니라 `--overlay-hover`(재질 위 은은한 오버레이), 활성은 **accent-soft + 아이콘 --accent 틴트**. `nativeTheme.themeSource` 를 테마 설정과 연동해 재질·신호등이 앱 테마를 따른다(main.ts·settings ipc).
+- **프로스트 탑바**(`.topbar`): `.content` 위 **absolute 오버레이**(z-index 10) — `.main` 이 `padding-top: 44px` 로 바 밑까지 차지해 **콘텐츠가 블러 뒤로 스크롤돼 지나간다**. `background: var(--frost)` + `backdrop-filter: blur(20px) saturate(180%)` (macOS 툴바·apple.com 서브내브). 높이 44px 변경 시 .main padding-top 동기화. **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
 - **스크롤바**: thumb --border-strong, hover --scrollbar-hover
 - **macOS 신호등 여백**(padding-top 28px)·`hiddenInset` 보존
+- ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질이 가려짐(로드 전 배경도 재질이라 플래시 없음)
 
 ### Icon (`Icon.tsx`)
 - **Lucide path 이식**(ISC — 파일 상단 라이선스 고지 주석, 의존성 추가 없음). viewBox 24 / stroke-width 2 / `currentColor`
@@ -298,7 +299,8 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 
 ## 5. 레이아웃
 
-- 콘텐츠 폭: `--w-content: 760px`(기본 .section) / `--w-wide: 1200px`(주간보고)
+- **여백은 콘텐츠의 pedestal** — 기본 섹션 패딩 `44px 44px 48px`(밀도보다 호흡). 섹션 리드(`.section-head__sub`)는 fs-emph 로 본문보다 한 단계 크게, 아래 여백 28px.
+- 콘텐츠 폭: `--w-content: 800px`(기본 .section — 패딩 확대에 맞춰 상향) / `--w-wide: 1200px`(주간보고)
 - 브레이크포인트(주간보고): 980px(2단→1단) · 1100px(차트 2열→1열) — SCSS 상수로 기록
 - roster sticky `max-height: calc(100vh - 168px)`·차트 canvas `max-height 200px + minmax(0)/min-width:0` 오버플로 제약은 **보존**(주석 유지)
 - 고정 min-width(라벨 72px·대상명 120px·주 라벨 170px)는 유지 시 주석 필수
@@ -346,6 +348,5 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 
 - `window.confirm`(배포·출퇴근·삭제 확인) → 앱 내 커스텀 다이얼로그
 - 네이티브 폼 컨트롤(checkbox·time 피커·number 스피너) 커스텀 렌더링 — macOS 네이티브와 톤이 맞아 위화감 적음
-- 서브내브 frosted glass(`backdrop-filter: blur + 80% 불투명`) — 탑바에 적용 검토
-- BrowserWindow vibrancy(반투명) · ~~다크 테마 재지원~~ → **완료(2026-07 테마 설정)** — §1 다크 모드 참조
+- ~~서브내브 frosted glass~~ · ~~BrowserWindow vibrancy~~ → **완료(2026-07 셸 강화)** — §4 셸 참조 · ~~다크 테마 재지원~~ → **완료(2026-07 테마 설정)** — §1 다크 모드 참조
 - 배포 폼 화면 전환 → 모달/사이드 패널 검토

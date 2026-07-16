@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, nativeTheme } from 'electron';
 import { getSettingsForRenderer, saveSettings, saveTheme } from './store';
 import type { SaveSettingsInput, ThemePref } from '../../../shared/types';
 
@@ -9,7 +9,9 @@ export function registerSettingsIpc() {
     saveSettings(input),
   );
   // 테마는 세그먼트 변경 즉시 단독 저장 (bizboxId 등 다른 필드에 영향 없음)
-  ipcMain.handle('settings:theme:set', async (_e, theme: ThemePref) =>
-    saveTheme(theme),
-  );
+  // nativeTheme 도 함께 갱신 — 비브런시 재질·신호등이 즉시 새 테마를 따른다
+  ipcMain.handle('settings:theme:set', async (_e, theme: ThemePref) => {
+    nativeTheme.themeSource = theme;
+    return saveTheme(theme);
+  });
 }
