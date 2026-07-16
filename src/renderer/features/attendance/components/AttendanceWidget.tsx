@@ -66,54 +66,64 @@ export function AttendanceWidget() {
         ? 'leave'
         : null;
 
+  // 한 줄 요약 문구 — 다음 행동에 맞춰 필요한 시각만 보여준다
+  const summary =
+    busy === 'fetch' && !info ? (
+      '근태 확인 중…'
+    ) : !info ? (
+      '근태 · —'
+    ) : nextAction === 'come' ? (
+      '근태 · 출근 전'
+    ) : nextAction === 'leave' ? (
+      <>
+        출근 <span className="sbw__time">{info.comeTime}</span>
+      </>
+    ) : (
+      <>
+        <span className="sbw__time">{info.comeTime}</span>
+        {' → '}
+        <span className="sbw__time">{info.leaveTime}</span>
+      </>
+    );
+
   return (
-    <div className="attend">
-      <div className="attend__head">
-        <span className="attend__title">
+    <div className="sbw">
+      {/* 한 줄: 아이콘 · 요약(다음 행동 기준) · 우측 액션 (새로고침 + 출근/퇴근) */}
+      <div className="sbw__row">
+        <span className="sbw__icon">
           <Icon name="building" size={12} />
-          근태
         </span>
-        <RefreshButton
-          size={12}
-          spinning={busy === 'fetch'}
-          onClick={refresh}
-          disabled={busy !== null}
-          title="출퇴근 시각 새로고침"
-        />
+        <span className="sbw__label">
+          <span className="sbw__text">{summary}</span>
+          {info && !nextAction && (
+            <span className="sbw__ok" title="오늘 출퇴근 완료">
+              <Icon name="check" size={12} />
+            </span>
+          )}
+        </span>
+        <span className="sbw__actions">
+          <RefreshButton
+            size={12}
+            spinning={busy === 'fetch'}
+            onClick={refresh}
+            disabled={busy !== null}
+            title="출퇴근 시각 새로고침"
+          />
+          {nextAction && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => stamp(nextAction)}
+              disabled={busy !== null}
+              loading={busy === 'come' || busy === 'leave'}
+            >
+              {nextAction === 'come' ? '출근' : '퇴근'}
+            </Button>
+          )}
+        </span>
       </div>
 
-      <div className="attend__row">
-        <span className="attend__label">출근</span>
-        <span className="attend__time">
-          {busy === 'fetch' && !info ? '…' : (info?.comeTime ?? '--:--')}
-        </span>
-      </div>
-      <div className="attend__row">
-        <span className="attend__label">퇴근</span>
-        <span className="attend__time">
-          {busy === 'fetch' && !info ? '…' : (info?.leaveTime ?? '--:--')}
-        </span>
-      </div>
-
-      {nextAction && (
-        <Button
-          variant="primary"
-          size="sm"
-          className="attend__btn"
-          onClick={() => stamp(nextAction)}
-          disabled={busy !== null}
-          loading={busy === 'come' || busy === 'leave'}
-        >
-          {nextAction === 'come' ? '출근하기' : '퇴근하기'}
-        </Button>
-      )}
-      {info && !nextAction && (
-        <p className="attend__done">
-          <Icon name="check" size={12} />
-          오늘 출퇴근 완료
-        </p>
-      )}
-      {error && <p className="attend__error">{error}</p>}
+      {error && <p className="sbw__error">{error}</p>}
     </div>
   );
 }

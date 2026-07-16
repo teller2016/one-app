@@ -50,68 +50,61 @@ export function MirrorWidget() {
   const canStart = !!status?.installed && !!status?.device;
 
   return (
-    <div className="mirw">
-      <div className="mirw__head">
-        <span className="mirw__title">
-          <Icon name="smartphone" size={12} />폰 미러링
+    <div className="sbw">
+      {/* 한 줄: 아이콘 · 기기/상태 · 우측 액션 — 기기 없으면 새로고침만, 있으면 모드 버튼 */}
+      <div className="sbw__row">
+        <span className="sbw__icon">
+          <Icon name="smartphone" size={12} />
         </span>
-        <RefreshButton
-          size={12}
-          onClick={() => void refresh()}
-          title="USB 기기 다시 확인"
-        />
-      </div>
-
-      <div className="mirw__status">
-        <StatusDot
-          md
-          status={running ? 'ok' : status?.error ? 'fail' : 'idle'}
-        />
-        <span className="mirw__status-text" title={statusText}>
-          {statusText}
+        <span className="sbw__label">
+          <StatusDot status={running ? 'ok' : status?.error ? 'fail' : 'idle'} />
+          <span className="sbw__text" title={statusText}>
+            {statusText}
+          </span>
+        </span>
+        <span className="sbw__actions">
+          {!running && !status?.device && (
+            <RefreshButton
+              size={12}
+              onClick={() => void refresh()}
+              title="USB 기기 다시 확인"
+            />
+          )}
+          {running ? (
+            <Button variant="danger" size="sm" onClick={stop} loading={busy}>
+              종료
+            </Button>
+          ) : (
+            canStart && (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => void start('mirror')}
+                  loading={busy}
+                  title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
+                >
+                  미러
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void start('control')}
+                  loading={busy}
+                  title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
+                >
+                  제어
+                </Button>
+              </>
+            )
+          )}
         </span>
       </div>
 
       {(error || status?.error) && (
-        <p className="mirw__error">{error || status?.error}</p>
+        <p className="sbw__error">{error || status?.error}</p>
       )}
       {status && !status.installed && (
         <p className="hint">brew install scrcpy 로 설치하세요.</p>
-      )}
-
-      {running ? (
-        <Button
-          variant="danger"
-          size="sm"
-          className="mirw__btn"
-          onClick={stop}
-          loading={busy}
-        >
-          {running === 'mirror' ? '미러링 종료' : '제어 종료'}
-        </Button>
-      ) : (
-        // 두 모드 나란히 — 미러링(화면 미러) / 제어(화면 없이 키보드·마우스만)
-        <div className="mirw__actions">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void start('mirror')}
-            loading={busy}
-            disabled={!canStart}
-            title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
-          >
-            미러링
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => void start('control')}
-            loading={busy}
-            disabled={!canStart}
-            title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
-          >
-            제어
-          </Button>
-        </div>
       )}
     </div>
   );

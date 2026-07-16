@@ -88,11 +88,11 @@
     }
   }
 
-  // 하단 고정 위젯 슬롯 (VPN·근태) — 셸 구조 요소라 여기서 정의
+  // 하단 고정 위젯 슬롯 (VPN·미러링·근태 — 공용 .sbw 한 줄 레이아웃) — 셸 구조 요소라 여기서 정의
   &__footer {
     margin-top: auto;
     border-top: 1px solid var(--border);
-    padding: 10px 12px 12px;
+    padding: 5px 12px 7px;
     -webkit-app-region: no-drag;
   }
 }

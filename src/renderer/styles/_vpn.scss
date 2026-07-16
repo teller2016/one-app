@@ -1,62 +1,8 @@
-// VPN 위젯 — 사이드바 하단 고정 (근태 위젯 위)
+// VPN 위젯 — 배치는 공용 .sbw(사이드바 위젯, _base.scss) 사용. 여기는 고유 요소만.
 @use './base' as *;
 
 .vpnw {
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-
-  &__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
-  }
-
-  &__title {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    @include type-caption;
-  }
-
-  // 상태 점은 공용 StatusDot(.status-dot--md) 사용
-  &__status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 0;
-    @include type-small;
-  }
-
-  &__status-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  // 설정 폼 — 자식 간격은 gap 으로 일원화 (개별 margin-top 금지)
-  &__form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  &__input {
-    width: 100%;
-  }
-
-  &__btn {
-    width: 100%;
-  }
-
-  // 폼 밖에 단독 배치되는 요소(OTP 입력·연결/해제 버튼)의 상단 간격
-  > .vpnw__input,
-  > .vpnw__btn {
-    margin-top: 8px;
-  }
-
+  // openvpn 미설치 경고 (설정 폼 안)
   &__warn {
     margin: 0;
     @include type-small;
@@ -68,12 +14,5 @@
       font-size: var(--fs-caption);
       color: var(--text);
     }
-  }
-
-  &__error {
-    margin: 8px 0 0;
-    @include type-small;
-    color: var(--danger);
-    word-break: keep-all;
   }
 }

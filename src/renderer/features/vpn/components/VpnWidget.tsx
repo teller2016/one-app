@@ -115,26 +115,47 @@ export function VpnWidget() {
   const ovpnName = formOvpn ? formOvpn.split('/').pop() : '';
 
   return (
-    <div className="vpnw">
-      <div className="vpnw__head">
-        <span className="vpnw__title">
+    <div className="sbw">
+      {/* 한 줄: 아이콘 · 상태 · 우측 액션 (설정 ⚙ + 연결/해제) */}
+      <div className="sbw__row">
+        <span className="sbw__icon">
           <Icon name="lock" size={12} />
-          VPN
         </span>
-        <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
-          <Icon name="settings" size={12} />
-        </button>
-      </div>
-
-      <div className="vpnw__status">
-        <StatusDot md status={dotStatus} />
-        <span className="vpnw__status-text" title={statusText}>
-          {statusText}
+        <span className="sbw__label">
+          <StatusDot status={dotStatus} />
+          <span className="sbw__text" title={`VPN · ${statusText}`}>
+            VPN · {statusText}
+          </span>
+        </span>
+        <span className="sbw__actions">
+          <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
+            <Icon name="settings" size={12} />
+          </button>
+          {!showConfig &&
+            (st === 'connected' ? (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={disconnect}
+                loading={busy}
+              >
+                해제
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={connect}
+                loading={busy || st === 'connecting'}
+              >
+                연결
+              </Button>
+            ))}
         </span>
       </div>
 
       {showConfig && settings && (
-        <div className="vpnw__form">
+        <div className="sbw__sub">
           {!settings.openvpnInstalled && (
             <p className="vpnw__warn">
               openvpn CLI 필요 — 터미널에서 <code>brew install openvpn</code>
@@ -142,14 +163,12 @@ export function VpnWidget() {
           )}
           <Input
             small
-            className="vpnw__input"
             placeholder="VPN 계정 이름"
             value={formUser}
             onChange={(e) => setFormUser(e.target.value)}
           />
           <Input
             small
-            className="vpnw__input"
             type="password"
             placeholder={settings.hasTotpSecret ? 'OTP 시크릿 키 (저장됨)' : 'OTP 시크릿 키'}
             value={formSecret}
@@ -158,53 +177,26 @@ export function VpnWidget() {
           <FileTrigger onClick={pickOvpn} title={formOvpn}>
             {ovpnName || '.ovpn 파일 선택…'}
           </FileTrigger>
-          <Button
-            variant="primary"
-            size="sm"
-            className="vpnw__btn"
-            onClick={saveConfig}
-          >
+          <Button variant="primary" size="sm" onClick={saveConfig}>
             저장
           </Button>
         </div>
       )}
 
       {!showConfig && st !== 'connected' && settings && !settings.hasTotpSecret && (
-        <Input
-          small
-          className="vpnw__input"
-          placeholder="Google OTP 6자리"
-          inputMode="numeric"
-          maxLength={6}
-          value={otp}
-          onChange={(e) => setOtp(e.target.value)}
-        />
+        <div className="sbw__sub">
+          <Input
+            small
+            placeholder="Google OTP 6자리"
+            inputMode="numeric"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+          />
+        </div>
       )}
 
-      {!showConfig &&
-        (st === 'connected' ? (
-          <Button
-            variant="danger"
-            size="sm"
-            className="vpnw__btn"
-            onClick={disconnect}
-            loading={busy}
-          >
-            연결 해제
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            className="vpnw__btn"
-            onClick={connect}
-            loading={busy || st === 'connecting'}
-          >
-            VPN 연결
-          </Button>
-        ))}
-
-      {errorMsg && <p className="vpnw__error">{errorMsg}</p>}
+      {errorMsg && <p className="sbw__error">{errorMsg}</p>}
     </div>
   );
 }
