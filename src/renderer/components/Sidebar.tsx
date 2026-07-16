@@ -5,6 +5,8 @@ export interface SidebarSection {
   label: string;
   /** 섹션 아이콘 — Icon 컴포넌트 엘리먼트 (이모지 금지) */
   icon: ReactNode;
+  /** true 면 메뉴 하단 그룹으로 분리 (환경설정 등) */
+  bottom?: boolean;
 }
 
 /** 왼쪽 사이드바 — 섹션 목록과 선택 상태를 표시한다. */
@@ -42,19 +44,39 @@ export function Sidebar({
         <span>One App</span>
       </div>
       <nav className="sidebar__nav">
-        {sections.map((s) => (
-          <button
-            key={s.id}
-            className={
-              'sidebar__item' +
-              (s.id === activeId ? ' sidebar__item--active' : '')
-            }
-            onClick={() => onSelect(s.id)}
-          >
-            <span className="sidebar__item-icon">{s.icon}</span>
-            <span>{s.label}</span>
-          </button>
-        ))}
+        {sections
+          .filter((s) => !s.bottom)
+          .map((s) => (
+            <button
+              key={s.id}
+              className={
+                'sidebar__item' +
+                (s.id === activeId ? ' sidebar__item--active' : '')
+              }
+              onClick={() => onSelect(s.id)}
+            >
+              <span className="sidebar__item-icon">{s.icon}</span>
+              <span>{s.label}</span>
+            </button>
+          ))}
+      </nav>
+      {/* 하단 분리 그룹 (환경설정 등) — 메인 메뉴와 뚝 떨어져 위젯 바로 위 */}
+      <nav className="sidebar__nav sidebar__nav--bottom">
+        {sections
+          .filter((s) => s.bottom)
+          .map((s) => (
+            <button
+              key={s.id}
+              className={
+                'sidebar__item' +
+                (s.id === activeId ? ' sidebar__item--active' : '')
+              }
+              onClick={() => onSelect(s.id)}
+            >
+              <span className="sidebar__item-icon">{s.icon}</span>
+              <span>{s.label}</span>
+            </button>
+          ))}
       </nav>
       {footer && <div className="sidebar__footer">{footer}</div>}
     </aside>

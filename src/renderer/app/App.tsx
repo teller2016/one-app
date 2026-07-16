@@ -14,16 +14,17 @@ import { VpnWidget } from '../features/vpn';
 import { MirrorWidget } from '../features/mirror';
 
 const SECTIONS: SidebarSection[] = [
+  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
+  { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
+  { id: 'applink', label: '딥링크', icon: <Icon name="link" size={16} /> },
   { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
   { id: 'weekly', label: '주간보고', icon: <Icon name="bar-chart" size={16} /> },
-  { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
-  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
-  { id: 'applink', label: '딥링크', icon: <Icon name="link" size={16} /> },
-  { id: 'settings', label: '환경설정', icon: <Icon name="settings" size={16} /> },
+  // 하단 분리 그룹
+  { id: 'settings', label: '환경설정', icon: <Icon name="settings" size={16} />, bottom: true },
 ];
 
 export function App() {
-  const [activeId, setActiveId] = useState<string>('schedule');
+  const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
 
   // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환

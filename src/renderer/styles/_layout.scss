@@ -40,7 +40,15 @@
     gap: 2px;
     padding: 6px 8px;
     overflow-y: auto;
+    flex: 1; // 하단 그룹·위젯을 아래로 밀어낸다
     -webkit-app-region: no-drag;
+
+    // 하단 분리 그룹 (환경설정) — 메인 메뉴와 뚝 떨어져 위젯 바로 위
+    &--bottom {
+      flex: 0 0 auto;
+      overflow: visible;
+      padding-top: 0;
+    }
   }
 
   &__item {
