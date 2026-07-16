@@ -9,6 +9,7 @@ import { statusKey, jenkinsJobUrl, giteaCommitBase } from '../lib/format';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
+import { useConfirm } from '../../../components/ConfirmDialog';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { ActivityPanel } from './ActivityPanel';
 import { ProjectCard } from './ProjectCard';
@@ -24,6 +25,7 @@ import type { DetailState } from './BuildDetailPanel';
 
 /** 배포 섹션 — 프로젝트별 젠킨스 잡을 버튼 한 번으로 배포한다. */
 export function DeploySection() {
+  const confirmDialog = useConfirm(); // 이름 주의: confirm 은 배포 확인 모달 상태가 사용 중
   const [projects, setProjects] = useState<DeployProjectView[]>([]);
   const [statuses, setStatuses] = useState<Record<string, DeployStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -351,7 +353,13 @@ export function DeploySection() {
     const project = projects.find((p) => p.id === projectId);
     const target = project?.targets.find((t) => t.id === targetId);
     const label = [project?.name, target?.name].filter(Boolean).join(' — ');
-    if (!window.confirm(`${label} 빌드 #${buildNumber} 을(를) 중지할까요?`)) return;
+    const ok = await confirmDialog({
+      title: `빌드 #${buildNumber} 중지`,
+      message: `${label} 빌드를 중지할까요?`,
+      confirmLabel: '중지',
+      danger: true,
+    });
+    if (!ok) return;
 
     const res = await window.oneApp.deploy.stopBuild(
       projectId,
@@ -419,7 +427,13 @@ export function DeploySection() {
   };
 
   const removeProject = async (p: DeployProjectView) => {
-    if (!window.confirm(`'${p.name}' 프로젝트를 삭제할까요?`)) return;
+    const ok = await confirmDialog({
+      title: '프로젝트 삭제',
+      message: `'${p.name}' 프로젝트와 배포 대상 설정이 함께 삭제됩니다.`,
+      confirmLabel: '삭제',
+      danger: true,
+    });
+    if (!ok) return;
     setProjects(await window.oneApp.deploy.deleteProject(p.id));
   };
 

@@ -242,6 +242,7 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 | `RefreshButton` | `<RefreshButton size>` | `.icon-btn` 계열 | 회전 스피너 |
 | `FormRow` | `<FormRow>` | — | 라벨+입력 행 |
 | `Modal` | `<Modal title onClose wide>` | `.modal` | `wide` |
+| `Confirm` | `useConfirm()` + `<ConfirmProvider>` | `.confirm` | promise 기반 — `danger`·confirmLabel/cancelLabel |
 | `Toast` | `useToast()` + `<ToastProvider>` | `.toast` | 하단 중앙 2s |
 | `Icon` | `<Icon name size>` | inline svg | size 12·14·16·18·20 |
 
@@ -280,6 +281,11 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 ### Card 패턴 (`@mixin card-surface`) — **surface-1(흰색) + --border 헤어라인 + --r-lg(18px). 그림자 없음**(하이라이트 인셋은 no-op 토큰으로 무효화). 인터랙티브 카드(roster): hover **surface-2 + border-strong만**(translateY 금지). selected: **accent 보더 + accent-soft 배경**(이중 링 금지)
 ### Collapsible — 바깥 --r-lg, head 화살표 SVG chevron-right(open 시 rotate 90°, --dur-2)
 ### Banner — variant `warning`(기본, alert-triangle)·`danger`(alert-triangle)·`info`(info, accent). soft 배경 + 시맨틱 보더/글자 + 아이콘 16px
+### Confirm (전역 `.confirm` + ConfirmProvider·useConfirm — window.confirm 대체)
+- **promise 기반**: `if (!(await confirm({ title, message?, confirmLabel?, danger? }))) return;` — 호출부가 async 면 그대로 치환된다.
+- 룩: surface-1 + --border + --r-lg + shadow-2, max-width 420px, **중앙(광학 중심 살짝 위)** 배치 — macOS 알럿. 액션은 우측 정렬 [취소(ghost)] [확인(primary / danger)].
+- 키보드: **Escape=취소·Enter=확인**(capture 로 아래 깔린 Modal 의 Escape 닫힘 차단), 확인 버튼 autoFocus. 오버레이 클릭 = 취소. z-index 95(모달 90 위·토스트 100 아래).
+- ⚠️ DeploySection 처럼 `confirm` 이름이 이미 쓰이는 곳에선 `const confirmDialog = useConfirm()` 로 받는다.
 ### Toast (전역 `.toast` + ToastProvider) — surface-2 + --border + --r-md + **shadow-2**, 하단 중앙, 지속 2s, 진입 slide-up --dur-2
 ### EmptyState (`.empty-state`) — surface-1 카드 + 아이콘 + --text-3, 중앙 정렬
 ### Spinner (`.spinner`) — 보더 스피너(accent) / ProgressBar — 트랙 --overlay-track + --r-full, 채움은 시맨틱 색
@@ -346,7 +352,7 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 
 ## 8. 백로그 (이번 범위 밖)
 
-- `window.confirm`(배포·출퇴근·삭제 확인) → 앱 내 커스텀 다이얼로그
+- ~~`window.confirm` → 앱 내 커스텀 다이얼로그~~ → **완료(2026-07 Confirm 컴포넌트)** — §4 Confirm 참조. 트레이의 네이티브 dialog 확인은 main 프로세스라 유지.
 - 네이티브 폼 컨트롤(checkbox·time 피커·number 스피너) 커스텀 렌더링 — macOS 네이티브와 톤이 맞아 위화감 적음
 - ~~서브내브 frosted glass~~ · ~~BrowserWindow vibrancy~~ → **완료(2026-07 셸 강화)** — §4 셸 참조 · ~~다크 테마 재지원~~ → **완료(2026-07 테마 설정)** — §1 다크 모드 참조
 - 배포 폼 화면 전환 → 모달/사이드 패널 검토

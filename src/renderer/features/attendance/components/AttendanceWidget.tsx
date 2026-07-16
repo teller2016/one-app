@@ -3,11 +3,13 @@ import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { useConfirm } from '../../../components/ConfirmDialog';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
 
 /** 사이드바 하단 출퇴근 위젯 — 항상 표시되며 원클릭으로 출근/퇴근을 찍는다. */
 export function AttendanceWidget() {
+  const confirm = useConfirm();
   const [info, setInfo] = useState<AttendanceInfo | null>(null);
   const [busy, setBusy] = useState<Busy>('fetch');
   const [error, setError] = useState('');
@@ -41,7 +43,12 @@ export function AttendanceWidget() {
 
   const stamp = async (action: 'come' | 'leave') => {
     const label = action === 'come' ? '출근' : '퇴근';
-    if (!window.confirm(`지금 ${label} 찍을까요?`)) return;
+    const ok = await confirm({
+      title: `지금 ${label} 찍을까요?`,
+      message: '그룹웨어 근태에 바로 기록됩니다.',
+      confirmLabel: `${label} 찍기`,
+    });
+    if (!ok) return;
     setBusy(action);
     setError('');
     const res = await window.oneApp.attendance.stamp(action);

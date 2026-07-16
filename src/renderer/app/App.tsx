@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Sidebar, SidebarSection } from '../components/Sidebar';
 import { Icon } from '../components/Icon';
 import { ToastProvider } from '../components/Toast';
+import { ConfirmProvider } from '../components/ConfirmDialog';
 import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
@@ -53,7 +54,8 @@ export function App() {
 
   return (
     <ToastProvider>
-      <div className="app">
+      <ConfirmProvider>
+        <div className="app">
         <Sidebar
           sections={SECTIONS}
           activeId={activeId}
@@ -77,7 +79,8 @@ export function App() {
           {/* 메인 영역 */}
           <main className="main">{renderMain()}</main>
         </section>
-      </div>
+        </div>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

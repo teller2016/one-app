@@ -1085,6 +1085,48 @@ body {
   }
 }
 
+// 중앙 정렬 변형 (확인 다이얼로그) — macOS 알럿처럼 광학 중심을 살짝 위로
+.modal-overlay--center {
+  align-items: center;
+  padding-bottom: 120px;
+}
+
+// 확인 다이얼로그 오버레이 — 모달(90) 위, 토스트(100) 아래
+.confirm-overlay {
+  z-index: 95;
+}
+
+// ===== 확인 다이얼로그 (전역 — ConfirmProvider·useConfirm, window.confirm 대체) =====
+.confirm {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  padding: 20px;
+  animation: modal-pop var(--dur-2) var(--ease);
+
+  &__title {
+    margin: 0 0 6px;
+    @include type-title;
+  }
+
+  &__msg {
+    margin: 0;
+    @include type-body;
+    color: var(--text-2);
+    word-break: break-word;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+}
+
 @keyframes modal-fade {
   from {
     opacity: 0;
