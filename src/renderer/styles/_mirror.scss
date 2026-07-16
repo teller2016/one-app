@@ -45,4 +45,14 @@
   &__btn {
     width: 100%;
   }
+
+  // 대기 상태의 모드 버튼 두 개 — 반반
+  &__actions {
+    display: flex;
+    gap: 6px;
+
+    .btn {
+      flex: 1;
+    }
+  }
 }

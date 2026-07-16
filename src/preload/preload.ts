@@ -16,6 +16,7 @@ import type {
   PrCreateInput,
   PrMergeMethod,
   ApplinkInput,
+  MirrorMode,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -97,8 +98,8 @@ contextBridge.exposeInMainWorld('oneApp', {
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회
     getStatus: () => ipcRenderer.invoke('mirror:status'),
-    // 미러링 시작 (scrcpy -d --turn-screen-off)
-    start: () => ipcRenderer.invoke('mirror:start'),
+    // 시작 — mirror(화면 미러링) / control(화면 없이 키보드·마우스 제어)
+    start: (mode: MirrorMode) => ipcRenderer.invoke('mirror:start', mode),
     // 미러링 종료 (SIGTERM)
     stop: () => ipcRenderer.invoke('mirror:stop'),
     // 프로세스 시작/종료(미러 창 닫힘 포함) 알림 — 위젯이 상태 재조회

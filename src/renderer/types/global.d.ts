@@ -8,6 +8,7 @@ import type {
   SaveSettingsInput,
   ThemePref,
   MirrorStatus,
+  MirrorMode,
   MirrorActionResult,
   DeployProjectView,
   SaveDeployProjectInput,
@@ -99,7 +100,7 @@ declare global {
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;
-        start: () => Promise<MirrorActionResult>;
+        start: (mode: MirrorMode) => Promise<MirrorActionResult>;
         stop: () => Promise<MirrorActionResult>;
         onChanged: (cb: () => void) => () => void;
       };

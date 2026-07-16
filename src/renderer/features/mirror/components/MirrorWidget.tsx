@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MirrorStatus } from '../../../../shared/types';
+import type { MirrorMode, MirrorStatus } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
@@ -21,11 +21,11 @@ export function MirrorWidget() {
     return window.oneApp.mirror.onChanged(() => void refresh());
   }, []);
 
-  const start = async () => {
+  const start = async (mode: MirrorMode) => {
     setBusy(true);
     setError('');
-    const res = await window.oneApp.mirror.start();
-    if (!res.ok) setError(res.error ?? '미러링 실행에 실패했습니다.');
+    const res = await window.oneApp.mirror.start(mode);
+    if (!res.ok) setError(res.error ?? 'scrcpy 실행에 실패했습니다.');
     await refresh();
     setBusy(false);
   };
@@ -37,14 +37,17 @@ export function MirrorWidget() {
     setBusy(false);
   };
 
-  const running = status?.running ?? false;
+  const running = status?.running ?? null;
   const statusText = !status
     ? '확인 중...'
     : !status.installed
       ? 'scrcpy 미설치'
       : running
-        ? '미러링 중'
+        ? running === 'mirror'
+          ? '미러링 중'
+          : '제어 중 (화면 없음)'
         : (status.device ?? 'USB 기기 없음');
+  const canStart = !!status?.installed && !!status?.device;
 
   return (
     <div className="mirw">
@@ -84,19 +87,31 @@ export function MirrorWidget() {
           onClick={stop}
           loading={busy}
         >
-          미러링 종료
+          {running === 'mirror' ? '미러링 종료' : '제어 종료'}
         </Button>
       ) : (
-        <Button
-          variant="primary"
-          size="sm"
-          className="mirw__btn"
-          onClick={start}
-          loading={busy}
-          disabled={!status?.installed || !status?.device}
-        >
-          미러링 시작
-        </Button>
+        // 두 모드 나란히 — 미러링(화면 미러) / 제어(화면 없이 키보드·마우스만)
+        <div className="mirw__actions">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => void start('mirror')}
+            loading={busy}
+            disabled={!canStart}
+            title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
+          >
+            미러링
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => void start('control')}
+            loading={busy}
+            disabled={!canStart}
+            title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
+          >
+            제어
+          </Button>
+        </div>
       )}
     </div>
   );

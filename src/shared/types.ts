@@ -296,11 +296,14 @@ export type VpnStatus = {
 };
 
 /** 렌더러에 보내는 VPN 설정 — 시크릿 값은 포함하지 않음 */
-// ── 미러링 (scrcpy — 안드로이드 화면 미러) ──
+// ── 미러링 (scrcpy — 안드로이드 화면 미러·제어) ──
+
+/** mirror = 화면 미러링(+폰 화면 끔) · control = 화면 없이 키보드·마우스로 폰 조작(uhid) */
+export type MirrorMode = 'mirror' | 'control';
 
 export type MirrorStatus = {
   installed: boolean; // scrcpy 바이너리 존재 여부 (Homebrew)
-  running: boolean; // 미러링 프로세스 실행 중
+  running: MirrorMode | null; // 실행 중인 모드 (한 번에 하나만)
   device: string | null; // USB 로 연결된 기기 모델명 (없으면 null)
   error?: string; // 마지막 비정상 종료 사유
 };
