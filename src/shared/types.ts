@@ -296,6 +296,17 @@ export type VpnStatus = {
 };
 
 /** 렌더러에 보내는 VPN 설정 — 시크릿 값은 포함하지 않음 */
+// ── 미러링 (scrcpy — 안드로이드 화면 미러) ──
+
+export type MirrorStatus = {
+  installed: boolean; // scrcpy 바이너리 존재 여부 (Homebrew)
+  running: boolean; // 미러링 프로세스 실행 중
+  device: string | null; // USB 로 연결된 기기 모델명 (없으면 null)
+  error?: string; // 마지막 비정상 종료 사유
+};
+
+export type MirrorActionResult = { ok: boolean; error?: string };
+
 export type VpnSettingsView = {
   username: string;
   hasTotpSecret: boolean;

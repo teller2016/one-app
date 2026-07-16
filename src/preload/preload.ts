@@ -94,6 +94,20 @@ contextBridge.exposeInMainWorld('oneApp', {
       return () => ipcRenderer.removeListener('deploy:status', listener);
     },
   },
+  mirror: {
+    // scrcpy 설치·실행 여부 + USB 기기 조회
+    getStatus: () => ipcRenderer.invoke('mirror:status'),
+    // 미러링 시작 (scrcpy -d --turn-screen-off)
+    start: () => ipcRenderer.invoke('mirror:start'),
+    // 미러링 종료 (SIGTERM)
+    stop: () => ipcRenderer.invoke('mirror:stop'),
+    // 프로세스 시작/종료(미러 창 닫힘 포함) 알림 — 위젯이 상태 재조회
+    onChanged: (cb: () => void) => {
+      const listener = () => cb();
+      ipcRenderer.on('mirror:changed', listener);
+      return () => ipcRenderer.removeListener('mirror:changed', listener);
+    },
+  },
   vpn: {
     // VPN 설정 조회 (시크릿 값은 오지 않고 설정 여부만)
     getSettings: () => ipcRenderer.invoke('vpn:settings:get'),

@@ -7,6 +7,8 @@ import type {
   AppSettingsView,
   SaveSettingsInput,
   ThemePref,
+  MirrorStatus,
+  MirrorActionResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -94,6 +96,12 @@ declare global {
           targetId: string,
         ) => Promise<DeployPreviewResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
+      };
+      mirror: {
+        getStatus: () => Promise<MirrorStatus>;
+        start: () => Promise<MirrorActionResult>;
+        stop: () => Promise<MirrorActionResult>;
+        onChanged: (cb: () => void) => () => void;
       };
       vpn: {
         getSettings: () => Promise<VpnSettingsView>;

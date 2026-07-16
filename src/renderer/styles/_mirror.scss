@@ -1,0 +1,48 @@
+// 미러링 위젯 — 사이드바 하단 (VPN 아래·근태 위), 골격은 VPN 위젯과 동일
+@use './base' as *;
+
+.mirw {
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  &__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    @include type-caption;
+  }
+
+  // 상태 점은 공용 StatusDot(.status-dot--md) 사용
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0 8px;
+    @include type-small;
+  }
+
+  &__status-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__error {
+    margin: 0 0 8px;
+    @include type-small;
+    color: var(--danger);
+    word-break: break-word;
+  }
+
+  &__btn {
+    width: 100%;
+  }
+}

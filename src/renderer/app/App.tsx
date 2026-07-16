@@ -11,6 +11,7 @@ import { ApplinkSection } from '../features/applink';
 import { WeeklySection } from '../features/weekly';
 import { AttendanceWidget } from '../features/attendance';
 import { VpnWidget } from '../features/vpn';
+import { MirrorWidget } from '../features/mirror';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
@@ -63,6 +64,7 @@ export function App() {
           footer={
             <>
               <VpnWidget />
+              <MirrorWidget />
               <AttendanceWidget />
             </>
           }
