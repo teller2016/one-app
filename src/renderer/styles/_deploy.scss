@@ -268,6 +268,102 @@
   }
 }
 
+// 젠킨스 서버 현황 (ActivityPanel) — 카드 [현황] 팝업 본문. 실행 중 + 대기
+.deploy__activity {
+  &-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  &-counts {
+    @include type-caption;
+    color: var(--text-3);
+    margin-right: auto; // 새로고침 버튼을 오른쪽 끝으로 밀기
+  }
+
+  &-error {
+    color: var(--warning);
+  }
+
+  &-group {
+    margin-top: 14px;
+  }
+
+  &-label {
+    margin: 0 0 8px;
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  &-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+
+    .status-dot {
+      margin-top: 6px; // 첫 줄 텍스트 중앙에 맞춤
+      flex: none;
+    }
+  }
+
+  &-main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &-name {
+    @include type-body;
+    color: var(--text);
+    text-align: left;
+    word-break: break-all;
+
+    &--link {
+      background: none;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      color: var(--accent);
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  &-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    min-width: 0;
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  &-why {
+    color: var(--text-2);
+    word-break: break-word;
+    text-transform: none; // 사유는 문장이라 대문자 변환 해제
+    letter-spacing: normal;
+    font-weight: 500;
+  }
+}
+
 // 배포 확인 모달 — 미리보기·타이핑 확인
 .deploy__preview-note {
   display: flex;

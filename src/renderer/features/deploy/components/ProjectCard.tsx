@@ -14,6 +14,7 @@ type Props = {
   onDeploy: (targetId: string) => void;
   onStop: (targetId: string, buildNumber: number) => void;
   onOpenDetail: (targetId: string) => void;
+  onOpenActivity: () => void;
   onRefresh: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -27,6 +28,7 @@ export function ProjectCard({
   onDeploy,
   onStop,
   onOpenDetail,
+  onOpenActivity,
   onRefresh,
   onEdit,
   onDelete,
@@ -52,6 +54,15 @@ export function ProjectCard({
           </TextLink>
         </div>
         <div className="deploy__card-actions">
+          <Button
+            size="sm"
+            onClick={onOpenActivity}
+            disabled={!p.hasSecret}
+            title="이 젠킨스 서버의 실행 중·대기 빌드 보기"
+          >
+            <Icon name="clock" size={13} />
+            현황
+          </Button>
           <RefreshButton
             bordered
             size={14}

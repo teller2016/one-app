@@ -21,7 +21,11 @@ import {
   fetchBuildHistory,
   fetchConsoleTail,
   stopBuild,
+  fetchQueue,
+  fetchRunningBuilds,
+  jobKeyFromPath,
   JenkinsAuth,
+  QueueEntry,
 } from './jenkins';
 import type {
   SaveDeployProjectInput,
@@ -33,6 +37,9 @@ import type {
   DeployLogResult,
   DeployStopResult,
   DeployPreviewResult,
+  DeployActivityResult,
+  DeployRunningBuild,
+  DeployQueueItem,
 } from '../../../shared/types';
 
 /** projectId·targetId 로 젠킨스 인증·잡 경로를 찾는다 (없으면 사용자용 오류 메시지) */
@@ -82,13 +89,69 @@ export function registerDeployIpc() {
       username: cred.username,
       secret: cred.secret,
     };
+    // 대기열을 한 번 조회해 잡 키로 인덱싱 (실패해도 상태 조회는 계속)
+    const queue = await fetchQueue(auth).catch((): QueueEntry[] => []);
+    const queueByJob = new Map<string, QueueEntry>();
+    for (const q of queue) if (!queueByJob.has(q.jobKey)) queueByJob.set(q.jobKey, q);
+
     const entries = await Promise.all(
-      cred.targets.map(
-        async (t) => [t.id, await fetchLastStatus(auth, t.jobPath)] as const,
-      ),
+      cred.targets.map(async (t) => {
+        const last = await fetchLastStatus(auth, t.jobPath);
+        // 이 잡이 대기열에 있으면 = 다른 빌드에 밀려 대기 중 → queued 로 덮어쓰기
+        const q = queueByJob.get(jobKeyFromPath(t.jobPath));
+        if (q) {
+          const status: DeployStatus = {
+            state: 'queued',
+            buildNumber: last.buildNumber,
+            queueWhy: q.why,
+            queuedSince: q.since,
+          };
+          return [t.id, status] as const;
+        }
+        return [t.id, last] as const;
+      }),
     );
     return Object.fromEntries(entries) as Record<string, DeployStatus>;
   });
+
+  // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) — 카드별 현황 팝업용
+  ipcMain.handle(
+    'deploy:activity:fetch',
+    async (_e, projectId: string): Promise<DeployActivityResult> => {
+      const cred = getProjectCredentials(projectId);
+      if (!cred) return { ok: false, error: '젠킨스 계정 정보가 없습니다.' };
+      const auth: JenkinsAuth = {
+        baseUrl: cred.jenkinsUrl,
+        username: cred.username,
+        secret: cred.secret,
+      };
+      const [r, q] = await Promise.allSettled([
+        fetchRunningBuilds(auth),
+        fetchQueue(auth),
+      ]);
+      // 둘 다 실패하면 오류 반환
+      if (r.status === 'rejected' && q.status === 'rejected')
+        return { ok: false, error: (r.reason as Error).message };
+
+      const running: DeployRunningBuild[] =
+        r.status === 'fulfilled' ? r.value : [];
+      const queued: DeployQueueItem[] =
+        q.status === 'fulfilled'
+          ? q.value.map((x) => ({
+              id: x.id,
+              name: x.name,
+              why: x.why,
+              since: x.since,
+              stuck: x.stuck,
+            }))
+          : [];
+
+      // 실행은 시작 오래된 순, 대기는 대기 오래된 순
+      running.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+      queued.sort((a, b) => (a.since ?? 0) - (b.since ?? 0));
+      return { ok: true, activity: { running, queued } };
+    },
+  );
 
   // 빌드 상세(커밋 내역·시작자·revision) 조회. buildNumber 없으면 최근 빌드
   ipcMain.handle(

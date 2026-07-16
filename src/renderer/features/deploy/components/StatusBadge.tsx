@@ -50,7 +50,22 @@ export function StatusBadge({ status }: { status?: DeployStatus }) {
   const num = status.buildNumber ? ` #${status.buildNumber}` : '';
   switch (status.state) {
     case 'queued':
-      return <Badge variant="busy">대기중</Badge>;
+      // 다른 빌드에 밀려 대기 중 — 사유는 툴팁, 대기 경과는 배지 옆에 표시
+      return (
+        <span className="deploy__status">
+          <Badge variant="busy" title={status.queueWhy ?? undefined}>
+            대기중
+          </Badge>
+          {status.queuedSince != null && (
+            <span
+              className="badge-time"
+              title={`대기 시작: ${formatTime(status.queuedSince)}`}
+            >
+              {formatRelative(status.queuedSince)}부터
+            </span>
+          )}
+        </span>
+      );
     case 'building':
       return <Badge variant="busy">빌드중{num}</Badge>;
     case 'success':

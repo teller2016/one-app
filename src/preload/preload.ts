@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('oneApp', {
     // 배포 대상별 최근 빌드 상태 조회 (targetId → status)
     fetchStatuses: (projectId: string) =>
       ipcRenderer.invoke('deploy:status:fetch', projectId),
+    // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) 조회
+    fetchActivity: (projectId: string) =>
+      ipcRenderer.invoke('deploy:activity:fetch', projectId),
     // 배포 실행 — 이후 진행 상태는 onStatus 로 전달됨
     trigger: (projectId: string, targetId: string) =>
       ipcRenderer.invoke('deploy:trigger', projectId, targetId),

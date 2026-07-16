@@ -16,6 +16,7 @@ import type {
   DeployLogResult,
   DeployStopResult,
   DeployPreviewResult,
+  DeployActivityResult,
   PrListResult,
   PrsConfig,
   PrBranchesResult,
@@ -62,6 +63,7 @@ declare global {
         fetchStatuses: (
           projectId: string,
         ) => Promise<Record<string, DeployStatus>>;
+        fetchActivity: (projectId: string) => Promise<DeployActivityResult>;
         trigger: (
           projectId: string,
           targetId: string,

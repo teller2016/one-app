@@ -6,6 +6,7 @@ import type {
   DeployBuildDetail,
   DeployBuildSummary,
   DeployCommit,
+  DeployRunningBuild,
 } from '../../../shared/types';
 
 export type JenkinsAuth = {
@@ -464,4 +465,130 @@ export async function stopBuild(
     throw new Error('권한 없음(403) — 계정에 중지 권한이 있는지 확인하세요.');
   if (res.status === 404) throw new Error('빌드를 찾을 수 없습니다.');
   throw new Error(`중지 요청 실패 (HTTP ${res.status})`);
+}
+
+// ── 젠킨스 전체 현황(대기열 + 실행 중) 조회 ──
+// 큐/실행자 정보는 잡 단위가 아니라 젠킨스 서버 단위 엔드포인트에서 온다.
+
+/** 저장된 잡 경로("폴더/잡")를 매칭용 키로 정규화 */
+export const jobKeyFromPath = (jobPath: string) =>
+  jobPath.split('/').filter(Boolean).join('/');
+
+/** 젠킨스가 준 잡/빌드 URL 에서 잡 키("폴더/잡")를 뽑는다 (호스트 무시, /job/ 세그먼트만) */
+function jobKeyFromUrl(url: string): string {
+  const segs = url.split('/');
+  const names: string[] = [];
+  for (let i = 0; i < segs.length - 1; i++) {
+    if (segs[i] === 'job') names.push(decodeURIComponent(segs[i + 1]));
+  }
+  return names.join('/');
+}
+
+/** 젠킨스가 준 URL 을 우리가 아는 baseUrl 기준으로 재조립 (내부 호스트명 대비) */
+function rebaseUrl(a: JenkinsAuth, url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    return `${a.baseUrl}${new URL(url).pathname}`;
+  } catch {
+    return `${a.baseUrl}/${url.replace(/^\/+/, '')}`; // 상대 경로
+  }
+}
+
+/** 큐 항목 (대상 매칭용 jobKey 포함) */
+export type QueueEntry = {
+  id: number;
+  name: string;
+  why?: string;
+  since?: number;
+  stuck?: boolean;
+  jobKey: string;
+};
+
+/** 젠킨스 대기열 조회 — 다른 빌드에 밀려 대기 중인 항목 파악 */
+export async function fetchQueue(a: JenkinsAuth): Promise<QueueEntry[]> {
+  const tree = 'items[id,why,stuck,inQueueSince,task[name,url]]';
+  const res = await fetch(
+    `${a.baseUrl}/queue/api/json?tree=${encodeURIComponent(tree)}`,
+    { headers: { Authorization: authHeader(a) } },
+  );
+  if (res.status === 401)
+    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+  if (!res.ok) throw new Error(`대기열 조회 실패 (HTTP ${res.status})`);
+  const data = (await res.json()) as {
+    items?: {
+      id: number;
+      why?: string | null;
+      stuck?: boolean;
+      inQueueSince?: number;
+      task?: { name?: string; url?: string };
+    }[];
+  };
+  return (data.items ?? []).map((it) => ({
+    id: it.id,
+    name: it.task?.name ?? '(이름 없음)',
+    why: it.why ?? undefined,
+    since: it.inQueueSince,
+    stuck: it.stuck,
+    jobKey: it.task?.url ? jobKeyFromUrl(it.task.url) : '',
+  }));
+}
+
+/** 지금 실행 중인 빌드 조회 — 노드별 실행자에서 currentExecutable 수집 */
+export async function fetchRunningBuilds(
+  a: JenkinsAuth,
+): Promise<DeployRunningBuild[]> {
+  const exec =
+    'currentExecutable[number,url,fullDisplayName,timestamp,estimatedDuration]';
+  const tree = `computer[displayName,executors[${exec}],oneOffExecutors[${exec}]]`;
+  const res = await fetch(
+    `${a.baseUrl}/computer/api/json?tree=${encodeURIComponent(tree)}`,
+    { headers: { Authorization: authHeader(a) } },
+  );
+  if (res.status === 401)
+    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+  if (!res.ok) throw new Error(`실행 현황 조회 실패 (HTTP ${res.status})`);
+
+  type RawExec = {
+    number?: number;
+    url?: string;
+    fullDisplayName?: string;
+    timestamp?: number;
+    estimatedDuration?: number;
+  } | null;
+  const data = (await res.json()) as {
+    computer?: {
+      displayName?: string;
+      executors?: { currentExecutable?: RawExec }[];
+      oneOffExecutors?: { currentExecutable?: RawExec }[];
+    }[];
+  };
+
+  // 파이프라인 잡은 flyweight(oneOffExecutor)와 노드 실행자에 동시에 잡히므로
+  // 빌드 URL(jobKey+번호) 기준으로 중복 제거한다.
+  const seen = new Set<string>();
+  const out: DeployRunningBuild[] = [];
+  for (const c of data.computer ?? []) {
+    const slots = [...(c.executors ?? []), ...(c.oneOffExecutors ?? [])];
+    for (const slot of slots) {
+      const ce = slot.currentExecutable;
+      if (!ce) continue;
+      const dedupKey = ce.url
+        ? jobKeyFromUrl(ce.url) + '#' + (ce.number ?? '')
+        : (ce.fullDisplayName ?? '') + '#' + (ce.number ?? '');
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      out.push({
+        name: ce.fullDisplayName ?? '(이름 없음)',
+        number: ce.number,
+        url: rebaseUrl(a, ce.url),
+        startedAt: ce.timestamp,
+        estimatedMs:
+          ce.estimatedDuration && ce.estimatedDuration > 0
+            ? ce.estimatedDuration
+            : undefined,
+        node: c.displayName,
+      });
+    }
+  }
+  return out;
 }

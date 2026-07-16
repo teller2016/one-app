@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
+  DeployActivity,
   DeployProjectView,
   DeployStatus,
   SaveDeployProjectInput,
@@ -9,6 +10,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { SectionHeader } from '../../../components/SectionHeader';
+import { ActivityPanel } from './ActivityPanel';
 import { ProjectCard } from './ProjectCard';
 import { BuildDetailPanel } from './BuildDetailPanel';
 import { DeployConfirmModal, PreviewState } from './DeployConfirmModal';
@@ -30,6 +32,14 @@ export function DeploySection() {
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
+  // 젠킨스 서버 현황 팝업 — 열린 프로젝트 id + 그 서버의 현황(실행 중 + 대기)
+  const [activityFor, setActivityFor] = useState<string | null>(null);
+  const [activity, setActivity] = useState<DeployActivity | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string>();
+  // 앱에서 방금 트리거해 watchBuild 가 상태를 몰고 가는 대상 키 집합.
+  // 이 대상의 낙관적 '대기중'만 주기 조회가 덮지 않도록 보호한다.
+  const optimistic = useRef<Set<string>>(new Set());
   // 배포 확인 모달 (미리보기 + PROD 타이핑 확인)
   const [confirm, setConfirm] = useState<{
     projectId: string;
@@ -49,6 +59,41 @@ export function DeploySection() {
     const id = setInterval(() => setClock((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // 젠킨스 서버 현황 조회 (실행 중 + 대기) — 해당 프로젝트의 서버 기준
+  const refreshActivity = async (projectId: string) => {
+    setActivityLoading(true);
+    try {
+      const res = await window.oneApp.deploy.fetchActivity(projectId);
+      if (res.ok) {
+        setActivity(res.activity ?? null);
+        setActivityError(undefined);
+      } else {
+        setActivity(null);
+        setActivityError(res.error ?? '현황 조회 실패');
+      }
+    } catch (err) {
+      setActivity(null);
+      setActivityError((err as Error).message);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  // 카드의 [현황] 버튼 → 팝업 열고 즉시 조회
+  const openActivity = (projectId: string) => {
+    setActivityFor(projectId);
+    setActivity(null);
+    setActivityError(undefined);
+    void refreshActivity(projectId);
+  };
+
+  // 현황 팝업이 열려 있는 동안 5초마다 자동 갱신 (실행/대기 목록은 자주 바뀜)
+  useEffect(() => {
+    if (!activityFor) return;
+    const id = setInterval(() => void refreshActivity(activityFor), 5_000);
+    return () => clearInterval(id);
+  }, [activityFor]);
 
   // 빌드중이면 5초 틱으로 진행률(경과 시간)을 갱신
   const anyBuilding = Object.values(statuses).some(
@@ -71,9 +116,12 @@ export function DeploySection() {
             const next = { ...prev };
             for (const [targetId, status] of Object.entries(map)) {
               const key = statusKey(p.id, targetId);
-              // 배포 직후 '대기중'만 보호 — 그 외(빌드중 포함)는 조회 결과로 갱신
-              // (빌드중을 보호하면 젠킨스에서 직접 돌린 빌드가 끝나도 배지가 안 바뀜)
-              if (next[key]?.state !== 'queued') next[key] = status;
+              // 앱에서 방금 트리거한 대상의 낙관적 '대기중'만 보호
+              // (watchBuild 가 갱신하므로 주기 조회가 직전 빌드 완료로 덮지 않게).
+              // 서버 감지 대기중(다른 빌드에 밀림)은 조회 결과로 계속 갱신해야
+              // 빌드 시작 시 '대기중 → 빌드중'으로 자연스럽게 넘어간다.
+              if (!(optimistic.current.has(key) && next[key]?.state === 'queued'))
+                next[key] = status;
             }
             return next;
           });
@@ -90,10 +138,15 @@ export function DeploySection() {
     // 배포 진행 상태 이벤트 구독
     const off = window.oneApp?.deploy.onStatus(
       ({ projectId, targetId, status }) => {
-        setStatuses((prev) => ({
-          ...prev,
-          [statusKey(projectId, targetId)]: status,
-        }));
+        const key = statusKey(projectId, targetId);
+        // 완료(성공/실패/오류)면 watchBuild 종료 — 보호 해제해 이후 조회가 반영되게
+        if (
+          status.state === 'success' ||
+          status.state === 'failure' ||
+          status.state === 'error'
+        )
+          optimistic.current.delete(key);
+        setStatuses((prev) => ({ ...prev, [key]: status }));
       },
     );
     return () => off?.();
@@ -125,9 +178,11 @@ export function DeploySection() {
   const doDeploy = async (projectId: string, targetId: string) => {
     setConfirm(null);
     const key = statusKey(projectId, targetId);
+    optimistic.current.add(key); // watchBuild 가 몰고 갈 대상 — 주기 조회 보호
     setStatuses((prev) => ({ ...prev, [key]: { state: 'queued' } }));
     const res = await window.oneApp.deploy.trigger(projectId, targetId);
     if (!res.ok) {
+      optimistic.current.delete(key);
       setStatuses((prev) => ({
         ...prev,
         [key]: { state: 'error', error: res.error ?? '실행 실패' },
@@ -423,6 +478,7 @@ export function DeploySection() {
               void stopBuild(p.id, targetId, buildNumber)
             }
             onOpenDetail={(targetId) => openDetail(p.id, targetId)}
+            onOpenActivity={() => openActivity(p.id)}
             onRefresh={() => refreshProject(p)}
             onEdit={() => setForm(toForm(p))}
             onDelete={() => removeProject(p)}
@@ -481,6 +537,26 @@ export function DeploySection() {
               onConfirm={() => void doDeploy(confirm.projectId, confirm.targetId)}
               onClose={() => setConfirm(null)}
             />
+          );
+        })()}
+
+      {/* 젠킨스 서버 현황 모달 — 카드의 [현황] 버튼으로 연다 */}
+      {activityFor &&
+        (() => {
+          const project = projects.find((p) => p.id === activityFor);
+          return (
+            <Modal
+              title={`${project?.name ?? '젠킨스'} 현황`}
+              onClose={() => setActivityFor(null)}
+            >
+              <ActivityPanel
+                activity={activity}
+                loading={activityLoading}
+                error={activityError}
+                onRefresh={() => void refreshActivity(activityFor)}
+                onOpen={(url) => void window.oneApp.openExternal(url)}
+              />
+            </Modal>
           );
         })()}
     </div>

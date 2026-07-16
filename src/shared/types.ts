@@ -88,6 +88,8 @@ export type DeployStatus = {
   finishedAt?: number; // epoch ms
   startedAt?: number; // 빌드 시작 시각 (building 일 때 — 진행률 계산용)
   estimatedMs?: number; // 예상 소요 시간 (building 일 때, 젠킨스 estimatedDuration)
+  queueWhy?: string; // queued 일 때 — 젠킨스 대기 사유 (예: "Build #45 is already in progress")
+  queuedSince?: number; // queued 일 때 — 대기 시작 시각 (epoch ms)
 };
 
 /** 메인 → 렌더러로 보내는 배포 상태 이벤트 */
@@ -95,6 +97,37 @@ export type DeployStatusEvent = {
   projectId: string;
   targetId: string;
   status: DeployStatus;
+};
+
+/** 젠킨스에서 지금 실행 중인 빌드 한 개 (실행자 점유) */
+export type DeployRunningBuild = {
+  name: string; // fullDisplayName (예: "projectA-store #45")
+  number?: number;
+  url?: string; // baseUrl 기준으로 재조립한 빌드 URL
+  startedAt?: number; // epoch ms
+  estimatedMs?: number; // 예상 소요 (젠킨스 estimatedDuration)
+  node?: string; // 실행 노드(computer) 이름
+};
+
+/** 젠킨스 큐(대기)에 있는 항목 한 개 */
+export type DeployQueueItem = {
+  id: number;
+  name: string; // task.name (잡 이름)
+  why?: string; // 대기 사유
+  since?: number; // inQueueSince (epoch ms)
+  stuck?: boolean;
+};
+
+/** 젠킨스 전체 현황 — 실행 중 + 대기 */
+export type DeployActivity = {
+  running: DeployRunningBuild[];
+  queued: DeployQueueItem[];
+};
+
+export type DeployActivityResult = {
+  ok: boolean;
+  activity?: DeployActivity;
+  error?: string;
 };
 
 export type DeployTriggerResult = { ok: boolean; error?: string };
