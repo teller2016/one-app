@@ -229,8 +229,8 @@
   margin: 0 0 12px;
   padding: 6px 12px;
   list-style: none;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
+  border: 1px solid;
+  @include panel-dark; // 변경 파일 목록 — 다크 코드 패널 (내부 토큰 자동 치환)
   border-radius: var(--r-md);
   max-height: 160px;
   overflow-y: auto;

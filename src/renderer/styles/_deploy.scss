@@ -141,7 +141,7 @@
       }
 
       &:hover {
-        filter: brightness(1.15);
+        filter: brightness(0.96); // 라이트 테마 hover 는 어둡게 (밝히기 필터 금지 — DESIGN.md 6장)
       }
 
       &.is-selected {
@@ -360,7 +360,7 @@
     word-break: break-word;
     text-transform: none; // 사유는 문장이라 대문자 변환 해제
     letter-spacing: normal;
-    font-weight: 500;
+    font-weight: 400; // 애플 래더 — 500 금지
   }
 }
 
@@ -399,8 +399,8 @@
     margin: 0;
     padding: 4px 14px;
     list-style: none;
-    background: var(--bg-sunken);
-    border: 1px solid var(--border);
+    border: 1px solid;
+    @include panel-dark; // 커밋 미리보기 — 다크 코드 패널 (내부 토큰 자동 치환)
     border-radius: var(--r-md);
     max-height: 260px;
     overflow-y: auto;

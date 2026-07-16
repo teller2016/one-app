@@ -5,8 +5,14 @@ import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
 import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
+import { Segment } from '../../../components/Segment';
 import { useToast } from '../../../components/Toast';
-import type { ReminderConfig, DayReminderConfig } from '../../../../shared/types';
+import { applyThemePref, getThemePref } from '../../../lib/theme';
+import type {
+  ReminderConfig,
+  DayReminderConfig,
+  ThemePref,
+} from '../../../../shared/types';
 
 const DAY_LABELS: Record<number, string> = {
   1: '월',
@@ -31,6 +37,7 @@ export function SettingsSection() {
   const [hasPassword, setHasPassword] = useState(false);
   const [notifyDeploy, setNotifyDeploy] = useState(true);
   const [autostart, setAutostart] = useState(false);
+  const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
   const [jiraUrl, setJiraUrl] = useState('');
   const [giteaUrl, setGiteaUrl] = useState('');
   const [giteaToken, setGiteaToken] = useState('');
@@ -50,6 +57,9 @@ export function SettingsSection() {
       setJiraUrl(s.jiraUrl);
       setGiteaUrl(s.giteaUrl);
       setHasGiteaToken(s.hasGiteaToken);
+      // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
+      setTheme(s.theme);
+      applyThemePref(s.theme);
       setLoading(false);
     });
     window.oneApp?.getAutostart().then((r) => setAutostart(r.enabled));
@@ -73,6 +83,15 @@ export function SettingsSection() {
         d.day === day ? { ...d, [type]: { ...d[type], ...patch } } : d,
       ),
     );
+  };
+
+  // 테마는 [저장] 없이 즉시 적용·즉시 저장 (실패해도 화면 적용은 유지 — 다음 변경 때 재시도)
+  const changeTheme = (next: ThemePref) => {
+    setTheme(next);
+    applyThemePref(next);
+    window.oneApp?.settings.setTheme(next).catch(() => {
+      toast('테마 저장에 실패했습니다', 'fail');
+    });
   };
 
   const save = async () => {
@@ -189,6 +208,18 @@ export function SettingsSection() {
         icon={<Icon name="settings" size={14} />}
         storageKey="settings:group:general"
       >
+        <div className="form-row">
+          <span className="form-row__label">테마</span>
+          <Segment
+            options={[
+              { value: 'system', label: '시스템' },
+              { value: 'light', label: '라이트' },
+              { value: 'dark', label: '다크' },
+            ]}
+            value={theme}
+            onChange={changeTheme}
+          />
+        </div>
         <label className="settings__check">
           <input
             type="checkbox"

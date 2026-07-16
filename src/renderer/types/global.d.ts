@@ -6,6 +6,7 @@ import type {
   ScheduleDoneInfo,
   AppSettingsView,
   SaveSettingsInput,
+  ThemePref,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -53,6 +54,7 @@ declare global {
       settings: {
         get: () => Promise<AppSettingsView>;
         set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
+        setTheme: (theme: ThemePref) => Promise<AppSettingsView>;
       };
       deploy: {
         getProjects: () => Promise<DeployProjectView[]>;

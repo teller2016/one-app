@@ -6,6 +6,10 @@
 import './styles/index.scss';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { initTheme } from './lib/theme';
+
+// 첫 페인트 전에 테마 적용 (localStorage 미러 — 플래시 방지)
+initTheme();
 
 const container = document.getElementById('root');
 if (container) {

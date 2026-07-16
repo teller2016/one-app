@@ -1,8 +1,9 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { registerScheduleIpc } from './features/schedule/ipc';
 import { registerSettingsIpc } from './features/settings/ipc';
+import { getThemePref } from './features/settings/store';
 import { registerDeployIpc } from './features/deploy/ipc';
 import { registerAttendanceIpc } from './features/attendance/ipc';
 import { registerVpnIpc } from './features/vpn/ipc';
@@ -48,6 +49,11 @@ ipcMain.handle('app:autostart:set', (_e, enabled: boolean) => {
   return { enabled: app.getLoginItemSettings().openAtLogin };
 });
 
+// 저장된 테마 설정 기준 다크 여부 — system 이면 macOS 화면 모드를 따른다
+const isDarkTheme = () =>
+  getThemePref() === 'dark' ||
+  (getThemePref() === 'system' && nativeTheme.shouldUseDarkColors);
+
 const createWindow = () => {
   // 메인 창 생성
   const mainWindow = new BrowserWindow({
@@ -58,8 +64,8 @@ const createWindow = () => {
     title: 'One App',
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: 'hiddenInset',
-    // 렌더러 로드 전 창 배경 — _base.scss 의 --bg 와 반드시 동기화 (불일치 시 실행 초기 플래시)
-    backgroundColor: '#0e0f13',
+    // 렌더러 로드 전 창 배경 — _base.scss 의 --bg(라이트)/다크 오버라이드와 반드시 동기화 (불일치 시 실행 초기 플래시)
+    backgroundColor: isDarkTheme() ? '#1c1c1e' : '#f5f5f7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

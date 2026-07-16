@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   ScheduleRunPayload,
   SaveSettingsInput,
+  ThemePref,
   SaveDeployProjectInput,
   DeployStatusEvent,
   SaveVpnSettingsInput,
@@ -45,6 +46,9 @@ contextBridge.exposeInMainWorld('oneApp', {
     get: () => ipcRenderer.invoke('settings:get'),
     // 설정 저장 (비밀번호는 암호화되어 저장)
     set: (input: SaveSettingsInput) => ipcRenderer.invoke('settings:set', input),
+    // 테마만 즉시 저장 (다음 실행의 창 배경색 결정에 main 이 읽음)
+    setTheme: (theme: ThemePref) =>
+      ipcRenderer.invoke('settings:theme:set', theme),
   },
   deploy: {
     // 프로젝트 목록 조회 (토큰/비밀번호 값은 오지 않음)

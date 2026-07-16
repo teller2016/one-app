@@ -23,6 +23,9 @@ export type ScheduleOutputChunk = { stream: string; data: string };
 export type ScheduleDoneInfo = { code: number | null };
 
 // ── 환경설정 ──
+/** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
+export type ThemePref = 'system' | 'light' | 'dark';
+
 export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
@@ -30,6 +33,7 @@ export type AppSettingsView = {
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
+  theme: ThemePref; // 테마 (기본 system)
 };
 
 export type SaveSettingsInput = {

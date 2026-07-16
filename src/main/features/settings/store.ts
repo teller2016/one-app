@@ -2,7 +2,11 @@
 import { app, safeStorage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { AppSettingsView, SaveSettingsInput } from '../../../shared/types';
+import type {
+  AppSettingsView,
+  SaveSettingsInput,
+  ThemePref,
+} from '../../../shared/types';
 
 interface StoredSettings {
   bizboxId: string;
@@ -11,6 +15,7 @@ interface StoredSettings {
   jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
   giteaUrl?: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기)
   giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
+  theme?: ThemePref; // 테마 (기본 system) — 창 배경색 결정에 main 도 읽음
 }
 
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
@@ -37,7 +42,19 @@ export function getSettingsForRenderer(): AppSettingsView {
     jiraUrl: s.jiraUrl ?? '',
     giteaUrl: s.giteaUrl ?? '',
     hasGiteaToken: !!s.giteaTokenEnc,
+    theme: s.theme ?? 'system',
   };
+}
+
+/** 테마 설정만 저장 (환경설정 세그먼트 — 즉시 적용·즉시 저장) */
+export function saveTheme(theme: ThemePref): AppSettingsView {
+  writeStored({ ...readStored(), theme });
+  return getSettingsForRenderer();
+}
+
+/** 저장된 테마 설정 (main 이 창 생성 시 배경색 결정에 사용) */
+export function getThemePref(): ThemePref {
+  return readStored().theme ?? 'system';
 }
 
 export function saveSettings(input: SaveSettingsInput): AppSettingsView {

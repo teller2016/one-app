@@ -5,6 +5,7 @@ import type { ChartOptions, Plugin } from 'chart.js';
 Chart.register(...registerables);
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { useThemeMode } from '../../../lib/theme';
 import { ProjectChips } from './ProjectChips';
 import {
   calcTotalMM,
@@ -105,6 +106,9 @@ export function EmployeeDetail({
   const tone = total.T !== WEEKLY_STANDARD_HOURS ? 'warn' : 'good';
   const mm = calcTotalMM(data.summaryData, excluded);
 
+  // 테마 전환 시 리렌더 + 아래 effect 재실행 → 차트가 새 토큰 색으로 다시 그려진다
+  const themeMode = useThemeMode();
+
   // ptag 인라인 색용 — 렌더 시점에 토큰을 읽는다 (비용 무시 가능)
   const theme = readChartTheme();
 
@@ -158,7 +162,7 @@ export function EmployeeDetail({
       );
     }
     return () => charts.forEach((c) => c.destroy());
-  }, [name, data, total.T, total.OT]);
+  }, [name, data, total.T, total.OT, themeMode]);
 
   return (
     <div className="weekly-detail">
@@ -196,12 +200,15 @@ export function EmployeeDetail({
         <div className="weekly-panel__title">상세 일정</div>
         {Object.entries(data.scheduleData).map(([proj, pd]) => {
           if (!pd.T.length && !pd.OT.length) return null;
-          const color = theme.getColor(projectList.indexOf(proj));
+          // 글자는 진한 O쌍(라이트 배경 대비 4.5:1+), 배경 틴트는 T쌍 — DESIGN.md 1장 ptag 규칙
+          const idx = projectList.indexOf(proj);
+          const colorText = theme.getColor(idx, 1);
+          const colorTint = theme.getColor(idx, 0);
           return (
             <div key={proj} className="weekly-srow">
               <span
                 className="weekly-ptag"
-                style={{ color, background: `${color}1f` }}
+                style={{ color: colorText, background: `${colorTint}26` }}
               >
                 {proj}
               </span>
