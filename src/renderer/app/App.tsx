@@ -63,8 +63,8 @@ export function App() {
           onSelect={setActiveId}
           footer={
             <>
-              <VpnWidget />
               <MirrorWidget />
+              <VpnWidget />
               <AttendanceWidget />
             </>
           }
