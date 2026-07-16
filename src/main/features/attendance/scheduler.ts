@@ -2,11 +2,27 @@
 // 설정된 요일·시각이 되면 근태 상태를 조회(스마트 스킵)한 뒤 알림(알럿)을 띄운다.
 // 반복 알림이 켜져 있으면 설정 시각 이후 안 찍은 동안 N분 간격으로 재알림한다.
 // 창을 닫아도(맥) 앱 프로세스가 살아 있는 한 동작한다.
-import { runAttendance } from './attend';
+import { runAttendance, getKnownAttendanceToday } from './attend';
 import { getReminderConfig } from './reminders';
 import { getCredentials } from '../settings/store';
 import { notify, getNotifyWindow } from '../notify/notify';
 import type { AttendanceInfo } from '../../../shared/types';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 근태 상태 조회 — 순간 실패(VPN 블립·동시 실행 충돌)를 흡수하도록 재시도한다 */
+async function fetchStatusWithRetry(
+  cred: NonNullable<ReturnType<typeof getCredentials>>,
+): Promise<AttendanceInfo | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await runAttendance('status', cred);
+    } catch {
+      if (attempt < 2) await sleep(5000);
+    }
+  }
+  return null;
+}
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -28,34 +44,50 @@ const localDateKey = (d: Date) =>
   `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 async function handleReminder(type: 'come' | 'leave', key: string) {
-  // 스마트 스킵 — 이미 찍었으면 알림하지 않는다. 상태 확인이 실패하면(계정 없음·VPN 등)
-  // 놓치는 것보다 낫도록 알림을 띄운다 (단, 실패 알림은 하루 1회 — 반복 소음 방지).
+  // 스마트 스킵 — 이미 찍었으면 알림하지 않는다.
+  // 조회는 재시도하고, 그래도 실패하면 오늘 다른 경로(위젯 등)로 확인된 근태로 판단한다.
+  // 그 근거조차 없을 때만(계정 없음·VPN 지속 불가) 놓치지 않도록 알림한다(하루 1회).
   const cred = getCredentials();
-  let info: Awaited<ReturnType<typeof runAttendance>> | null = null;
+  let comeTime: string | null = null;
+  let leaveTime: string | null = null;
   let checkFailed = false;
+
   if (cred) {
-    try {
-      info = await runAttendance('status', cred);
-    } catch {
-      checkFailed = true;
+    const info = await fetchStatusWithRetry(cred);
+    if (info) {
+      comeTime = info.comeTime;
+      leaveTime = info.leaveTime;
+    } else {
+      // 조회 실패 → 오늘 확인된 근태의 '찍음' 신호만 신뢰한다.
+      // (출퇴근은 한 번 찍으면 하루 유지되므로 양성은 신뢰 가능. 반대로 '아직 안 찍음'은
+      //  캐시가 찍기 전 값일 수 있어 신뢰 못 함 → 확인 불가로 처리해 폴백 알림 1회.)
+      const known = getKnownAttendanceToday();
+      const stamped = type === 'come' ? known?.comeTime : known?.leaveTime;
+      if (stamped) {
+        if (type === 'come') comeTime = known?.comeTime ?? null;
+        else leaveTime = known?.leaveTime ?? null;
+        console.log('[reminder] 조회 실패 — 오늘 확인된 근태로 스킵:', stamped);
+      } else {
+        checkFailed = true;
+      }
     }
   } else {
     checkFailed = true;
   }
 
   if (type === 'come') {
-    if (info?.comeTime) {
-      console.log('[reminder] 출근 알림 건너뜀 (이미 출근:', info.comeTime, ')');
+    if (comeTime) {
+      console.log('[reminder] 출근 알림 건너뜀 (이미 출근:', comeTime, ')');
       doneToday.add(key);
       return; // 이미 출근함
     }
   } else {
-    if (info?.leaveTime) {
-      console.log('[reminder] 퇴근 알림 건너뜀 (이미 퇴근:', info.leaveTime, ')');
+    if (leaveTime) {
+      console.log('[reminder] 퇴근 알림 건너뜀 (이미 퇴근:', leaveTime, ')');
       doneToday.add(key);
       return; // 이미 퇴근함
     }
-    if (!checkFailed && !info?.comeTime) {
+    if (!checkFailed && !comeTime) {
       console.log('[reminder] 퇴근 알림 건너뜀 (출근 기록 없음)');
       doneToday.add(key);
       return; // 출근 기록이 없으면(휴무 등) 퇴근 알림 생략

@@ -13,6 +13,26 @@ let running = false;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const localDateKey = (d: Date) =>
+  `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+
+// 오늘 확인된 근태 — 위젯·리마인더·트레이 등 어떤 경로든 조회에 성공하면 갱신된다.
+// 리마인더가 조회에 실패했을 때(VPN 블립·동시 실행 충돌) 이 값으로 이미 찍었는지 판단해
+// 오알림을 막는다.
+let knownToday: { date: string; comeTime: string | null; leaveTime: string | null } | null =
+  null;
+
+/** 오늘 확인된 근태 (없거나 날짜가 지났으면 null) */
+export function getKnownAttendanceToday(): {
+  comeTime: string | null;
+  leaveTime: string | null;
+} | null {
+  if (!knownToday) return null;
+  return knownToday.date === localDateKey(new Date())
+    ? { comeTime: knownToday.comeTime, leaveTime: knownToday.leaveTime }
+    : null;
+}
+
 /** 페이지 이동 중 컨텍스트 파괴 오류인지 (그룹웨어가 리다이렉트를 여러 번 함) */
 const isContextDestroyed = (err: unknown) =>
   /Execution context was destroyed|Cannot find context|Target closed|detached/i.test(
@@ -156,7 +176,14 @@ export async function runAttendance(
       await gotoMain(page);
     }
 
-    return await readInfo(page);
+    const info = await readInfo(page);
+    // 조회 성공 → 오늘 확인된 근태로 기록 (리마인더 폴백 판단에 사용)
+    knownToday = {
+      date: localDateKey(new Date()),
+      comeTime: info.comeTime,
+      leaveTime: info.leaveTime,
+    };
+    return info;
   } finally {
     running = false;
     try {
