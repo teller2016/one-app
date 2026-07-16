@@ -14,6 +14,7 @@ import type {
   PrsConfig,
   PrCreateInput,
   PrMergeMethod,
+  ApplinkInput,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('oneApp', {
@@ -161,6 +162,13 @@ contextBridge.exposeInMainWorld('oneApp', {
     // PR 머지 (Gitea 토큰 필요)
     merge: (repo: string, number: number, method: PrMergeMethod) =>
       ipcRenderer.invoke('prs:merge', repo, number, method),
+  },
+  applink: {
+    // API 키 저장 여부 / 저장 (키는 메인에서 암호화 보관)
+    getKeyStatus: () => ipcRenderer.invoke('applink:key:status'),
+    setKey: (key: string) => ipcRenderer.invoke('applink:key:set', key),
+    // 딥링크 생성
+    create: (input: ApplinkInput) => ipcRenderer.invoke('applink:create', input),
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
   getAutostart: () => ipcRenderer.invoke('app:autostart:get'),

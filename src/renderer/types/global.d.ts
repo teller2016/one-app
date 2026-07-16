@@ -25,6 +25,9 @@ import type {
   PrMergeInfoResult,
   PrMergeMethod,
   PrMergeResult,
+  ApplinkInput,
+  ApplinkResult,
+  ApplinkKeyStatus,
   AttendanceResult,
   AttendanceInfo,
   VpnSettingsView,
@@ -128,6 +131,11 @@ declare global {
           number: number,
           method: PrMergeMethod,
         ) => Promise<PrMergeResult>;
+      };
+      applink: {
+        getKeyStatus: () => Promise<ApplinkKeyStatus>;
+        setKey: (key: string) => Promise<ApplinkKeyStatus>;
+        create: (input: ApplinkInput) => Promise<ApplinkResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

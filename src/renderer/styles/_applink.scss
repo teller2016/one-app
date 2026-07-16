@@ -1,0 +1,61 @@
+// 딥링크(applink) 섹션 — 룩은 공용 클래스, 여기는 배치
+@use './base' as *;
+
+.applink {
+  &__key {
+    margin-bottom: 12px;
+  }
+
+  &__key-status {
+    margin: 0 0 14px;
+  }
+
+  &__og-desc {
+    margin: 0 0 12px;
+  }
+
+  &__list {
+    @include card-surface;
+    padding: 4px 14px;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+
+    + .applink__item {
+      border-top: 1px solid var(--border);
+    }
+
+    &-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    // 생성된 딥링크 — 잘 보이게 (모노)
+    &-url {
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    // 대상 URL — 보조 (한 줄 말줄임)
+    &-target {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      @include type-caption;
+      color: var(--text-3);
+    }
+  }
+}
+
+// 어드민 링크 — 헤더 아래
+.applink__admin {
+  margin: -6px 0 16px;
+}

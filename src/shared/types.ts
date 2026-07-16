@@ -303,6 +303,24 @@ export type WeeklyFetchResult = {
 /** 수집 진행 단계 (메인 → 렌더러 이벤트) */
 export type WeeklyProgress = { step: string };
 
+// ── 딥링크 (applink.kr 디퍼드 딥링크 생성) ──
+export type ApplinkInput = {
+  canonicalUrl: string; // 딥링크 연결 대상 URL (필수, https)
+  ogTitle?: string; // 공유 제목
+  ogDescription?: string; // 공유 설명
+  ogImageUrl?: string; // 공유 이미지 URL (https)
+  desktopUrl?: string; // PC 웹브라우저 연결 대상 (옵션)
+};
+
+export type ApplinkResult = {
+  ok: boolean;
+  url?: string; // 생성된 단축 딥링크
+  shortCode?: string;
+  error?: string;
+};
+
+export type ApplinkKeyStatus = { hasKey: boolean };
+
 // ── 출퇴근 (근태) ──
 export type AttendanceInfo = {
   comeTime: string | null; // "09:37" — 아직 안 찍었으면 null
