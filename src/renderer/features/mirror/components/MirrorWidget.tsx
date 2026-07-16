@@ -12,6 +12,7 @@ export function MirrorWidget() {
   const [error, setError] = useState('');
 
   const refresh = async () => {
+    setError(''); // 새로고침하면 지난 실패 사유는 지운다
     setStatus(await window.oneApp.mirror.getStatus());
   };
 
@@ -63,42 +64,46 @@ export function MirrorWidget() {
           </span>
         </span>
         <span className="sbw__actions">
-          {!running && !status?.device && (
+          {!running && (
             <RefreshButton
               size={12}
               onClick={() => void refresh()}
               title="USB 기기 다시 확인"
             />
           )}
-          {running ? (
-            <Button variant="danger" size="sm" onClick={stop} loading={busy}>
-              종료
-            </Button>
-          ) : (
-            canStart && (
-              <>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => void start('mirror')}
-                  loading={busy}
-                  title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
-                >
-                  미러
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => void start('control')}
-                  loading={busy}
-                  title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
-                >
-                  제어
-                </Button>
-              </>
-            )
-          )}
         </span>
       </div>
+
+      {/* 액션 줄 — 기기 있으면 모드 선택, 실행 중이면 종료. 기기 없으면 줄 자체가 없음 */}
+      {running ? (
+        <div className="sbw__buttons">
+          <Button variant="danger" size="sm" onClick={stop} loading={busy}>
+            {running === 'mirror' ? '미러링 종료' : '제어 종료'}
+          </Button>
+        </div>
+      ) : (
+        canStart && (
+          <div className="sbw__buttons">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void start('mirror')}
+              loading={busy}
+              title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
+            >
+              미러링
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void start('control')}
+              loading={busy}
+              title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
+            >
+              제어
+            </Button>
+          </div>
+        )
+      )}
 
       {(error || status?.error) && (
         <p className="sbw__error">{error || status?.error}</p>

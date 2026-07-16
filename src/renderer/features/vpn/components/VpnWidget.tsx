@@ -123,36 +123,42 @@ export function VpnWidget() {
         </span>
         <span className="sbw__label">
           <StatusDot status={dotStatus} />
-          <span className="sbw__text" title={`VPN · ${statusText}`}>
-            VPN · {statusText}
+          {/* 자물쇠 아이콘이 VPN 정체성 — 접두사 없이 상태만 (말줄임 방지) */}
+          <span className="sbw__text" title={`VPN — ${statusText}`}>
+            {statusText}
           </span>
         </span>
         <span className="sbw__actions">
           <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
             <Icon name="settings" size={12} />
           </button>
-          {!showConfig &&
-            (st === 'connected' ? (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={disconnect}
-                loading={busy}
-              >
-                해제
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={connect}
-                loading={busy || st === 'connecting'}
-              >
-                연결
-              </Button>
-            ))}
         </span>
       </div>
+
+      {/* 액션 줄 — 연결/해제 (설정 폼이 열려 있으면 폼의 저장 버튼이 대신함) */}
+      {!showConfig && (
+        <div className="sbw__buttons">
+          {st === 'connected' ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={disconnect}
+              loading={busy}
+            >
+              연결 해제
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={connect}
+              loading={busy || st === 'connecting'}
+            >
+              VPN 연결
+            </Button>
+          )}
+        </div>
+      )}
 
       {showConfig && settings && (
         <div className="sbw__sub">

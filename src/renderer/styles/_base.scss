@@ -819,7 +819,7 @@ body {
 // ===== 사이드바 위젯 공통 (VPN·미러링·근태 — 한 줄 압축 레이아웃) =====
 // 기본은 [아이콘][점+상태 텍스트][우측 액션] 한 줄. 에러·입력·설정 폼은 __sub/__error 로 아래 확장.
 .sbw {
-  padding: 3px 0;
+  padding: 6px 0;
 
   + .sbw {
     border-top: 1px solid var(--border);
@@ -828,8 +828,19 @@ body {
   &__row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-height: 32px;
+  }
+
+  // 액션 버튼 줄 (2줄째 — 액션 없으면 위젯은 상태 1줄로 끝)
+  &__buttons {
+    display: flex;
+    gap: 6px;
+    padding: 2px 0 4px;
+
+    .btn {
+      flex: 1;
+    }
   }
 
   &__icon {
@@ -843,8 +854,8 @@ body {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
-    @include type-small;
+    gap: 7px;
+    @include type-body;
     color: var(--text-2);
   }
 

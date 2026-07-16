@@ -109,19 +109,23 @@ export function AttendanceWidget() {
             disabled={busy !== null}
             title="출퇴근 시각 새로고침"
           />
-          {nextAction && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => stamp(nextAction)}
-              disabled={busy !== null}
-              loading={busy === 'come' || busy === 'leave'}
-            >
-              {nextAction === 'come' ? '출근' : '퇴근'}
-            </Button>
-          )}
         </span>
       </div>
+
+      {/* 액션 줄 — 다음 행동이 있을 때만 (완료면 위젯은 1줄) */}
+      {nextAction && (
+        <div className="sbw__buttons">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => stamp(nextAction)}
+            disabled={busy !== null}
+            loading={busy === 'come' || busy === 'leave'}
+          >
+            {nextAction === 'come' ? '출근하기' : '퇴근하기'}
+          </Button>
+        </div>
+      )}
 
       {error && <p className="sbw__error">{error}</p>}
     </div>
