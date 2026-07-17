@@ -12,10 +12,12 @@
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(git branch*)",
-      "Bash(git add*)",
-      "Bash(git commit*)"
+      "Bash(git add*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [
+      "Bash(git commit*)",
+      "Bash(git push*)"
+    ]
   }
 }
