@@ -23,6 +23,12 @@
     margin: 0 -16px -12px; // Collapsible body 패딩을 상쇄해 행이 카드 폭을 꽉 채움
   }
 
+  // 해결됨 그룹 헤더의 체크 — 완료 시맨틱 초록
+  &__done-check {
+    display: inline-flex;
+    color: var(--ok);
+  }
+
   &__group-head {
     display: flex;
     align-items: center;
@@ -74,9 +80,21 @@
   }
 
   // 그룹 카드 — 행들을 담는 흰 카드 (macOS 설정 그룹 리스트)
+  // ※ overflow:hidden 금지 — 상태 전환 드롭다운이 잘린다. 라운드는 첫/끝 행에서 처리.
   &__card {
     @include card-surface;
-    overflow: hidden; // 행 hover 배경이 라운드를 넘지 않게
+
+    .jira__row:first-child {
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
+
+    .jira__row:last-child {
+      border-radius: 0 0 var(--r-lg) var(--r-lg);
+    }
+
+    .jira__row:only-child {
+      border-radius: var(--r-lg);
+    }
   }
 
   // 한 줄 행 — 전체가 클릭 영역, hover 로 열기 힌트
@@ -119,6 +137,87 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  // 상태 뱃지 + 전환 메뉴 (뱃지 클릭 = 상태 변경 — Jira 상태 칩과 동일 문법)
+  &__status {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  &__status-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    @include focus-ring(2px);
+  }
+
+  &__status-chev {
+    display: inline-flex;
+    color: var(--text-3);
+  }
+
+  &__status-spin {
+    width: 11px;
+    height: 11px;
+    border-width: 1.5px;
+  }
+
+  // 전환 드롭다운 — 뱃지 아래 오른쪽 정렬 팝오버
+  &__menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 20;
+    min-width: 150px;
+    padding: 4px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-2);
+  }
+
+  &__menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    @include type-body;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover:not(:disabled) {
+      background: var(--overlay-hover);
+    }
+
+    // 현재 상태 — 체크 표시 + 클릭 불가
+    &--current {
+      color: var(--text-3);
+      cursor: default;
+    }
+  }
+
+  &__menu-hint {
+    padding: 8px 10px;
+    @include type-small;
+    color: var(--text-3);
+
+    &--error {
+      color: var(--danger);
+    }
   }
 
   // 열기 힌트 화살표 — hover 에서만 드러남

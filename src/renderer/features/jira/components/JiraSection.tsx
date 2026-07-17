@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { JiraIssue } from '../../../../shared/types';
+import type { JiraIssue, JiraTransition } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Collapsible } from '../../../components/Collapsible';
@@ -8,6 +8,7 @@ import type { IconName } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Segment } from '../../../components/Segment';
+import { useToast } from '../../../components/Toast';
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
@@ -37,13 +38,39 @@ const typeInfo = (name: string): { rank: number; icon: IconName; tone: string } 
   return { rank: 2, icon: 'check', tone: 'task' };
 };
 
-/** 이슈 한 줄 — 행 전체가 클릭 영역 (브라우저에서 열기) */
-function IssueRow({ issue }: { issue: JiraIssue }) {
+/** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
+type MenuState = 'loading' | JiraTransition[] | { error: string };
+
+/** 이슈 한 줄 — 행 클릭은 브라우저 열기, 상태 뱃지 클릭은 전환 메뉴 */
+function IssueRow({
+  issue,
+  menu,
+  transitioning,
+  onToggleMenu,
+  onTransition,
+}: {
+  issue: JiraIssue;
+  menu: MenuState | null; // null = 메뉴 닫힘
+  transitioning: boolean;
+  onToggleMenu: (key: string) => void;
+  onTransition: (key: string, t: JiraTransition) => void;
+}) {
+  const open = (): void => {
+    void window.oneApp.openExternal(issue.url);
+  };
   return (
-    <button
-      type="button"
+    // 안에 상태 변경 버튼이 있어 button 중첩을 피하려고 div + role="button" 사용
+    <div
       className="jira__row"
-      onClick={() => void window.oneApp.openExternal(issue.url)}
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          open();
+        }
+      }}
       title={[
         `${issue.key} — 브라우저에서 열기`,
         issue.priority && `우선순위 ${issue.priority}`,
@@ -53,11 +80,65 @@ function IssueRow({ issue }: { issue: JiraIssue }) {
     >
       <span className="jira__key">{issue.key}</span>
       <span className="jira__title">{issue.summary}</span>
-      <Badge variant={badgeVariant(issue)}>{issue.status}</Badge>
+
+      {/* 상태 뱃지 = 전환 메뉴 트리거 (Jira 의 상태 칩 클릭과 동일한 문법) */}
+      <span className="jira__status">
+        <button
+          type="button"
+          className="jira__status-btn"
+          title="상태 변경"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMenu(issue.key);
+          }}
+        >
+          <Badge variant={badgeVariant(issue)}>{issue.status}</Badge>
+          <span className="jira__status-chev">
+            {transitioning ? (
+              <span className="spinner jira__status-spin" />
+            ) : (
+              <Icon name="chevron-down" size={11} />
+            )}
+          </span>
+        </button>
+
+        {menu !== null && (
+          <div className="jira__menu" onClick={(e) => e.stopPropagation()}>
+            {menu === 'loading' ? (
+              <div className="jira__menu-hint">전환 목록 불러오는 중…</div>
+            ) : Array.isArray(menu) ? (
+              menu.length === 0 ? (
+                <div className="jira__menu-hint">가능한 전환이 없습니다</div>
+              ) : (
+                menu.map((t) => (
+                  <button
+                    type="button"
+                    key={t.id}
+                    className={
+                      'jira__menu-item' +
+                      (t.name === issue.status ? ' jira__menu-item--current' : '')
+                    }
+                    disabled={t.name === issue.status}
+                    onClick={() => onTransition(issue.key, t)}
+                  >
+                    {t.name}
+                    {t.name === issue.status && <Icon name="check" size={12} />}
+                  </button>
+                ))
+              )
+            ) : (
+              <div className="jira__menu-hint jira__menu-hint--error">
+                {menu.error}
+              </div>
+            )}
+          </div>
+        )}
+      </span>
+
       <span className="jira__open" aria-hidden="true">
         <Icon name="arrow-up-right" size={12} />
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -70,6 +151,11 @@ export function JiraSection() {
   const [project, setProject] = useState<string>(
     () => localStorage.getItem(PROJECT_KEY) ?? 'all',
   );
+  // 전환 메뉴 상태 — 한 번에 하나만 열림
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [menuState, setMenuState] = useState<MenuState>('loading');
+  const [transitioningKey, setTransitioningKey] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +176,48 @@ export function JiraSection() {
     const timer = setInterval(() => void load(), 120_000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // 메뉴 토글 — 열 때마다 그 이슈의 가능한 전환을 새로 조회
+  const toggleMenu = async (key: string) => {
+    if (menuKey === key) {
+      setMenuKey(null);
+      return;
+    }
+    setMenuKey(key);
+    setMenuState('loading');
+    const res = await window.oneApp.jira.getTransitions(key);
+    if (res.ok && res.transitions) setMenuState(res.transitions);
+    else setMenuState({ error: res.error ?? '전환 목록을 불러오지 못했습니다' });
+  };
+
+  // 메뉴 밖 클릭·Escape 로 닫기
+  useEffect(() => {
+    if (!menuKey) return;
+    const close = () => setMenuKey(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuKey]);
+
+  // 전환 실행 — 성공 시 목록 갱신 (그룹 이동 반영)
+  const handleTransition = async (key: string, t: JiraTransition) => {
+    setMenuKey(null);
+    setTransitioningKey(key);
+    const res = await window.oneApp.jira.transition(key, t.id);
+    if (res.ok) {
+      toast(`${key} → ${t.name}`);
+      await load();
+    } else {
+      toast(res.error ?? '전환에 실패했습니다', 'fail');
+    }
+    setTransitioningKey(null);
+  };
 
   // 프로젝트 목록 (이슈 많은 순) — 탭은 프로젝트가 2개 이상일 때만 노출
   const projects = useMemo(() => {
@@ -190,7 +318,14 @@ export function JiraSection() {
               </div>
               <div className="jira__card">
                 {items.map((it) => (
-                  <IssueRow issue={it} key={it.key} />
+                  <IssueRow
+                    issue={it}
+                    key={it.key}
+                    menu={menuKey === it.key ? menuState : null}
+                    transitioning={transitioningKey === it.key}
+                    onToggleMenu={(k) => void toggleMenu(k)}
+                    onTransition={(k, t) => void handleTransition(k, t)}
+                  />
                 ))}
               </div>
             </div>
@@ -199,12 +334,23 @@ export function JiraSection() {
           {done.length > 0 && (
             <Collapsible
               title={`해결됨 ${done.length}`}
-              icon={<Icon name="check" size={14} />}
+              icon={
+                <span className="jira__done-check">
+                  <Icon name="check" size={14} />
+                </span>
+              }
               storageKey="jira:group:done"
             >
               <div className="jira__done">
                 {done.map((it) => (
-                  <IssueRow issue={it} key={it.key} />
+                  <IssueRow
+                    issue={it}
+                    key={it.key}
+                    menu={menuKey === it.key ? menuState : null}
+                    transitioning={transitioningKey === it.key}
+                    onToggleMenu={(k) => void toggleMenu(k)}
+                    onTransition={(k, t) => void handleTransition(k, t)}
+                  />
                 ))}
               </div>
             </Collapsible>

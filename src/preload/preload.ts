@@ -98,6 +98,11 @@ contextBridge.exposeInMainWorld('oneApp', {
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)
     list: () => ipcRenderer.invoke('jira:list'),
+    // 이 이슈에서 지금 가능한 상태 전환 목록 (이슈별·프로젝트별로 다름)
+    getTransitions: (key: string) => ipcRenderer.invoke('jira:transitions', key),
+    // 상태 전환 실행
+    transition: (key: string, id: string) =>
+      ipcRenderer.invoke('jira:transition', key, id),
   },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회

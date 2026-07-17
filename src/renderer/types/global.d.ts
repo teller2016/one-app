@@ -11,6 +11,9 @@ import type {
   MirrorMode,
   MirrorActionResult,
   JiraListResult,
+  JiraActionResult,
+  JiraTransition,
+  JiraTransitionsResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -101,6 +104,8 @@ declare global {
       };
       jira: {
         list: () => Promise<JiraListResult>;
+        getTransitions: (key: string) => Promise<JiraTransitionsResult>;
+        transition: (key: string, id: string) => Promise<JiraActionResult>;
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;

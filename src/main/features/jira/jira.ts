@@ -1,5 +1,11 @@
-// Jira Cloud 내 이슈 조회 — 환경설정의 주소·이메일·API 토큰(Basic Auth)으로 REST v3 호출
-import type { JiraIssue, JiraListResult } from '../../../shared/types';
+// Jira Cloud 내 이슈 조회·상태 전환 — 환경설정의 주소·이메일·API 토큰(Basic Auth)으로 REST v3 호출
+import type {
+  JiraActionResult,
+  JiraIssue,
+  JiraListResult,
+  JiraTransition,
+  JiraTransitionsResult,
+} from '../../../shared/types';
 import { getJiraApiConfig } from '../settings/store';
 
 /** Jira REST 응답의 이슈 형태 (필요 필드만) */
@@ -97,5 +103,71 @@ export async function fetchMyIssues(): Promise<JiraListResult> {
     };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** 이슈별 전환 API 요청 준비 (설정 없으면 null) */
+function transitionRequest(key: string) {
+  const cfg = getJiraApiConfig();
+  if (!cfg) return null;
+  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
+  return {
+    url: `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}/transitions`,
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+  };
+}
+
+/** 이 이슈에서 지금 실행 가능한 상태 전환 목록 (프로젝트·워크플로우별로 다름) */
+export async function getTransitions(key: string): Promise<JiraTransitionsResult> {
+  const req = transitionRequest(key);
+  if (!req) return { ok: false, error: 'Jira 연동이 설정되지 않았습니다.' };
+  try {
+    const res = await fetch(req.url, { headers: req.headers });
+    if (!res.ok) {
+      return { ok: false, error: `전환 목록 조회 실패 (HTTP ${res.status})` };
+    }
+    const data = (await res.json()) as {
+      transitions?: { id: string; name?: string; to?: { name?: string } }[];
+    };
+    const transitions: JiraTransition[] = (data.transitions ?? []).map((t) => ({
+      id: t.id,
+      // 사용자에게 의미 있는 건 목적지 상태 이름 (없으면 전환 이름)
+      name: t.to?.name ?? t.name ?? t.id,
+    }));
+    return { ok: true, transitions };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Jira 에 연결할 수 없습니다 — ${(err as Error).message}`,
+    };
+  }
+}
+
+/** 상태 전환 실행 */
+export async function transitionIssue(
+  key: string,
+  transitionId: string,
+): Promise<JiraActionResult> {
+  const req = transitionRequest(key);
+  if (!req) return { ok: false, error: 'Jira 연동이 설정되지 않았습니다.' };
+  try {
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify({ transition: { id: transitionId } }),
+    });
+    if (!res.ok) {
+      return { ok: false, error: `전환 실패 (HTTP ${res.status})` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Jira 에 연결할 수 없습니다 — ${(err as Error).message}`,
+    };
   }
 }

@@ -71,6 +71,17 @@ export type JiraListResult = {
   error?: string;
 };
 
+export type JiraActionResult = { ok: boolean; error?: string };
+
+/** 이슈에서 지금 실행 가능한 상태 전환 하나 (name = 목적지 상태 이름) */
+export type JiraTransition = { id: string; name: string };
+
+export type JiraTransitionsResult = {
+  ok: boolean;
+  transitions?: JiraTransition[];
+  error?: string;
+};
+
 // ── 배포 (젠킨스) ──
 
 /** 프로젝트 안의 배포 대상 하나 (예: 스토어, 어드민) */
