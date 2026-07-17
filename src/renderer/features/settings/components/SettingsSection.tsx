@@ -6,6 +6,7 @@ import { Input } from '../../../components/Input';
 import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
+import { TextLink } from '../../../components/TextLink';
 import { useToast } from '../../../components/Toast';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
 import type {
@@ -39,6 +40,9 @@ export function SettingsSection() {
   const [autostart, setAutostart] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
   const [jiraUrl, setJiraUrl] = useState('');
+  const [jiraEmail, setJiraEmail] = useState('');
+  const [jiraToken, setJiraToken] = useState('');
+  const [hasJiraToken, setHasJiraToken] = useState(false);
   const [giteaUrl, setGiteaUrl] = useState('');
   const [giteaToken, setGiteaToken] = useState('');
   const [hasGiteaToken, setHasGiteaToken] = useState(false);
@@ -55,6 +59,8 @@ export function SettingsSection() {
       setHasPassword(s.hasPassword);
       setNotifyDeploy(s.notifyDeploy);
       setJiraUrl(s.jiraUrl);
+      setJiraEmail(s.jiraEmail);
+      setHasJiraToken(s.hasJiraToken);
       setGiteaUrl(s.giteaUrl);
       setHasGiteaToken(s.hasGiteaToken);
       // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
@@ -102,6 +108,8 @@ export function SettingsSection() {
         password,
         notifyDeploy,
         jiraUrl,
+        jiraEmail,
+        jiraToken,
         giteaUrl,
         giteaToken,
       });
@@ -118,6 +126,9 @@ export function SettingsSection() {
       setHasPassword(res.hasPassword);
       setNotifyDeploy(res.notifyDeploy);
       setJiraUrl(res.jiraUrl);
+      setJiraEmail(res.jiraEmail);
+      setHasJiraToken(res.hasJiraToken);
+      setJiraToken('');
       setGiteaUrl(res.giteaUrl);
       setHasGiteaToken(res.hasGiteaToken);
       setGiteaToken('');
@@ -253,6 +264,41 @@ export function SettingsSection() {
             disabled={loading}
           />
         </FormRow>
+        <FormRow label="Jira 이메일">
+          <Input
+            type="text"
+            value={jiraEmail}
+            onChange={(e) => setJiraEmail(e.target.value)}
+            placeholder="Jira 로그인 이메일 (내 이슈 조회용)"
+            disabled={loading}
+          />
+        </FormRow>
+        <FormRow label="Jira 토큰">
+          <Input
+            type="password"
+            value={jiraToken}
+            onChange={(e) => setJiraToken(e.target.value)}
+            placeholder={
+              hasJiraToken ? 'API 토큰 (저장됨 — 바꿀 때만 입력)' : 'API 토큰'
+            }
+            disabled={loading}
+          />
+        </FormRow>
+        <p className="hint settings__group-desc">
+          Jira 이메일·토큰은 [Jira] 탭의 내 이슈 조회에 사용됩니다. 토큰은{' '}
+          <TextLink
+            small
+            external
+            onClick={() =>
+              void window.oneApp.openExternal(
+                'https://id.atlassian.com/manage-profile/security/api-tokens',
+              )
+            }
+          >
+            Atlassian API tokens
+          </TextLink>
+          에서 발급하세요.
+        </p>
         <FormRow label="Gitea 주소">
           <Input
             type="text"

@@ -95,6 +95,10 @@ contextBridge.exposeInMainWorld('oneApp', {
       return () => ipcRenderer.removeListener('deploy:status', listener);
     },
   },
+  jira: {
+    // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)
+    list: () => ipcRenderer.invoke('jira:list'),
+  },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회
     getStatus: () => ipcRenderer.invoke('mirror:status'),

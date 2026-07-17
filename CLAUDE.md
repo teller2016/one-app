@@ -64,6 +64,9 @@ src/
 │       │   ├── ipc.ts
 │       │   ├── gitea.ts         #    전역 PR 검색·브랜치·생성·머지·승인 수
 │       │   └── store.ts         #    조직 필터·빠른 PR 저장소 (prs.json 평문)
+│       ├── jira/                #  Jira 내 이슈 (REST v3)
+│       │   ├── ipc.ts
+│       │   └── jira.ts          #    내게 할당된 미해결 이슈 조회 (Basic Auth)
 │       └── tray/                #  메뉴바 트레이
 │           └── tray.ts          #    열기·출퇴근 찍기·종료 메뉴
 ├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
@@ -88,7 +91,8 @@ src/
 │   │   ├── vpn/                 #  VPN 위젯 (사이드바 하단 고정)
 │   │   ├── mirror/              #  폰 미러링 위젯 (사이드바 하단 고정)
 │   │   ├── weekly/              #  주간보고 — 좌우 2단(팀 목록 RosterRow + 상세 Detail). components(Section·RosterRow·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
-│   │   └── prs/                 #  PR 대시보드 — 열린 PR 목록(승인 수·상대시간)
+│   │   ├── prs/                 #  PR 대시보드 — 열린 PR 목록(승인 수·상대시간)
+│   │   └── jira/                #  Jira 내 이슈 — 목록만, 클릭 시 브라우저로
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
 │   │   ├── _base.scss           #    디자인 토큰·믹스인·공통 클래스 (DESIGN.md 가 기준)
@@ -98,7 +102,8 @@ src/
 │   │   ├── _deploy.scss         #    배포
 │   │   ├── _vpn.scss            #    VPN 위젯 고유 요소 (배치는 _base.scss 의 공용 .sbw)
 │   │   ├── _weekly.scss         #    주간보고
-│   │   └── _prs.scss            #    PR 대시보드
+│   │   ├── _prs.scss            #    PR 대시보드
+│   │   └── _jira.scss           #    Jira 내 이슈
 │   └── types/global.d.ts        #  window.oneApp 타입
 └── shared/types.ts              # 🔗 프로세스 간 공용 타입
 ```
@@ -131,6 +136,7 @@ src/
 - **출퇴근 리마인더** (`main/features/attendance/scheduler.ts` + `reminders.ts`): 환경설정에서 **요일별(월~금)로 출근·퇴근 알림 시각**을 각각 지정(체크박스+시각). 메인 스케줄러가 매 30초 현재 시각을 확인해, 설정 시각(±2분, 슬립 대비)이 되면 근태 상태를 조회(`runAttendance('status')`)하고 **이미 찍었으면 건너뛰고 안 찍었을 때만** 알림(스마트 스킵). 알럿의 **[지금 출근/퇴근 찍기]** 버튼으로 그 자리에서 바로 찍을 수 있고(성공/실패 결과 알럿 표시, 성공 시 그날 리마인더 중지 + `attendance:changed` 이벤트로 사이드바 위젯 즉시 갱신), 상태 확인 실패(계정 없음·VPN 등)면 놓치지 않도록 알림을 띄운다(실패 알림은 하루 1회). 평일만, 기본 하루 한 번(중복 방지). **반복 알림**(`repeat: {enabled, minutes}`, 1~120분)을 켜면 설정 시각 이후 안 찍은 동안 N분 간격으로 재알림 — 앱을 늦게 켜도 발화하고, 찍은 게 확인되면 그날은 멈추며, 알럿을 안 닫고 있는 동안은 반복하지 않는다(닫은 시점부터 다시 카운트). 설정은 `userData/reminders.json`(평문). 스케줄러는 저장값을 매 tick 읽으므로 저장 후 재시작 불필요.
 - **배포** (`renderer/features/deploy` + `main/features/deploy`): 프로젝트별 젠킨스 잡을 REST API로 트리거하고 상태(대기→빌드중→성공/실패)를 폴링해 표시. [배포]를 누르면 **확인 모달**이 뜨는데, 환경설정에 Gitea 주소가 있으면 **이번 배포에 포함될 커밋 미리보기**(마지막 빌드 revision vs 저장소 HEAD를 Gitea compare API로 비교, `gitea.ts`)를 보여주고, 프로젝트가 **운영(PROD)으로 표시**돼 있으면(폼 체크박스, 카드에 PROD 뱃지) **대상 이름을 타이핑해야 배포 버튼이 활성화**된다(오배포 방지). 커밋 내역의 **커밋 해시는 Gitea 커밋 페이지로, 메시지 속 이슈 키(BBJ-1234)는 Jira로 링크화**(환경설정의 Gitea/Jira 주소 사용, 미설정이면 평문 — 젠킨스가 기록한 저장소 주소는 내부망이라 호스트는 설정된 Gitea 주소로 치환). 대상별 [커밋 내역]을 누르면 **공용 Modal**로 열리며, 안에 **최근 10개 빌드 이력 스트립**(성공/실패 색, 클릭 시 그 빌드의 커밋 내역으로 전환)과 **콘솔 로그 tail**(마지막 64KB, progressiveText 2단계 조회 — 크기 probe 후 끝부분만)이 있고, **빌드중이면 진행바(estimatedDuration 대비 경과)와 [중지] 버튼**(`/stop`, crumb 재시도)이 뜬다. 상태는 배포 탭을 보는 동안 1분마다 자동 새로고침(젠킨스에서 직접 돌린 빌드도 반영), 빌드중엔 5초 틱으로 진행률 갱신. 프로젝트 하나에 배포 대상 여러 개(스토어·어드민 등) 등록 가능. 젠킨스 URL·계정은 배포 탭에서 프로젝트별로 등록하고, API 토큰(또는 비밀번호)은 `safeStorage`로 암호화해 `userData/deploy.json`에 저장. 인증은 Basic Auth + API 토큰 권장(비밀번호 인증은 CSRF crumb 자동 처리).
 - **PR** (`renderer/features/prs` + `main/features/prs`): push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **빠른 PR**: 즐겨찾기 저장소(`userData/prs.json` 의 `repos`)별로 최근 push 브랜치를 자동 표시(branches API, 커밋시간 정렬) → [PR 만들기] 모달에서 develop 대비 커밋 확인 + 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿) 자동 생성 → 생성 성공 시 **머지 모달로 자동 연결**. **머지**: 목록 행 [머지] → `mergeable`(컨플릭트) 사전 확인 + 방식(merge/squash/rebase) 선택 → `/pulls/{n}/merge`. 생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지, **조직(owner)별 그룹핑** + 조직 칩 제외 필터(`store.ts`, `userData/prs.json`), 2분 자동 새로고침.
+- **Jira** (`renderer/features/jira` + `main/features/jira`): 내게 할당된 미해결 이슈 목록(JQL `assignee = currentUser() AND resolution = Unresolved`, 최신 갱신순 50개). **의도적으로 단순** — 목록·상태 뱃지만 보여주고 내용 확인은 클릭 → 브라우저(Jira)로. 인증은 환경설정 → 연동의 Jira 주소+**이메일+API 토큰**(Basic Auth, 토큰은 safeStorage 암호화) — 셋 다 있어야 동작, 미설정이면 안내 배너. REST `search/jql`(신형) 우선, 404 시 구형 `search` 폴백. 2분 자동 새로고침.
 - **트레이·자동 시작** (`main/features/tray`): 메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀. **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
 
 ## 트러블슈팅

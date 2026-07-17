@@ -1,0 +1,63 @@
+// Jira 내 이슈 — 목록 배치 (룩은 공용 클래스)
+@use './base' as *;
+
+.jira {
+  &__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 2px;
+
+    + .jira__row {
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &__key {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  &__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &__sub {
+    @include type-small;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

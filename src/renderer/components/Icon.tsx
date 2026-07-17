@@ -29,6 +29,7 @@ export type IconName =
   | 'arrow-up-right'
   | 'git-pull-request'
   | 'link'
+  | 'clipboard-list'
   | 'smartphone'
   | 'x'
   | 'check'
@@ -160,6 +161,16 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </>
+  ),
+  'clipboard-list': (
+    <>
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M12 11h4" />
+      <path d="M12 16h4" />
+      <path d="M8 11h.01" />
+      <path d="M8 16h.01" />
     </>
   ),
   smartphone: (

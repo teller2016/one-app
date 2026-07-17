@@ -31,6 +31,8 @@ export type AppSettingsView = {
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
+  jiraEmail: string; // Jira 계정 이메일 (내 이슈 API 인증용, 빈 값이면 비활성)
+  hasJiraToken: boolean; // Jira API 토큰 저장 여부 (내 이슈 조회용)
   giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
   theme: ThemePref; // 테마 (기본 system)
@@ -41,8 +43,30 @@ export type SaveSettingsInput = {
   password?: string; // 빈 값이면 기존 비밀번호 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
+  jiraEmail?: string; // 미지정이면 기존 유지
+  jiraToken?: string; // 빈 값이면 기존 유지
   giteaUrl?: string; // 미지정이면 기존 유지
   giteaToken?: string; // 빈 값이면 기존 유지
+};
+
+// ── Jira (내 이슈) ──
+
+export type JiraIssue = {
+  key: string; // BBJ-1234
+  summary: string;
+  status: string; // 상태 이름 (해야 할 일·진행 중 …)
+  statusCategory: 'new' | 'indeterminate' | 'done'; // 뱃지 색 구분용
+  issueType: string; // 작업·버그 등
+  priority: string | null;
+  updatedAt: string; // ISO
+  url: string; // 브라우저로 열 이슈 링크
+};
+
+export type JiraListResult = {
+  ok: boolean;
+  configured: boolean; // 주소·이메일·토큰이 모두 설정됐는지
+  issues?: JiraIssue[];
+  error?: string;
 };
 
 // ── 배포 (젠킨스) ──

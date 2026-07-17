@@ -13,6 +13,8 @@ interface StoredSettings {
   bizboxPasswordEnc?: string; // safeStorage 로 암호화된 비밀번호(base64)
   notifyDeploy?: boolean; // 배포 완료/실패 알림 (기본 on)
   jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
+  jiraEmail?: string; // Jira 계정 이메일 (내 이슈 API 인증)
+  jiraTokenEnc?: string; // safeStorage 로 암호화된 Jira API 토큰
   giteaUrl?: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기)
   giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
   theme?: ThemePref; // 테마 (기본 system) — 창 배경색 결정에 main 도 읽음
@@ -40,6 +42,8 @@ export function getSettingsForRenderer(): AppSettingsView {
     hasPassword: !!s.bizboxPasswordEnc,
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
     jiraUrl: s.jiraUrl ?? '',
+    jiraEmail: s.jiraEmail ?? '',
+    hasJiraToken: !!s.jiraTokenEnc,
     giteaUrl: s.giteaUrl ?? '',
     hasGiteaToken: !!s.giteaTokenEnc,
     theme: s.theme ?? 'system',
@@ -76,6 +80,15 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   if (typeof input.jiraUrl === 'string') {
     next.jiraUrl = input.jiraUrl.trim().replace(/\/+$/, '');
   }
+  if (typeof input.jiraEmail === 'string') {
+    next.jiraEmail = input.jiraEmail.trim();
+  }
+  // Jira API 토큰은 입력이 있을 때만 갱신 (빈 값이면 기존 유지)
+  if (input.jiraToken && input.jiraToken.length > 0) {
+    next.jiraTokenEnc = safeStorage.isEncryptionAvailable()
+      ? safeStorage.encryptString(input.jiraToken).toString('base64')
+      : Buffer.from(input.jiraToken, 'utf8').toString('base64');
+  }
   if (typeof input.giteaUrl === 'string') {
     next.giteaUrl = input.giteaUrl.trim().replace(/\/+$/, '');
   }
@@ -105,6 +118,25 @@ export function getGiteaConfig(): { url: string; token: string | null } | null {
     }
   }
   return { url: s.giteaUrl.replace(/\/+$/, ''), token };
+}
+
+/** Jira 내 이슈 API 설정 — 주소·이메일·토큰이 모두 있어야 사용 가능 (아니면 null) */
+export function getJiraApiConfig(): {
+  url: string;
+  email: string;
+  token: string;
+} | null {
+  const s = readStored();
+  if (!s.jiraUrl || !s.jiraEmail || !s.jiraTokenEnc) return null;
+  try {
+    const buf = Buffer.from(s.jiraTokenEnc, 'base64');
+    const token = safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(buf)
+      : buf.toString('utf8');
+    return { url: s.jiraUrl.replace(/\/+$/, ''), email: s.jiraEmail, token };
+  } catch {
+    return null;
+  }
 }
 
 /** 배포 완료 알림이 켜져 있는지 (기본 on) */

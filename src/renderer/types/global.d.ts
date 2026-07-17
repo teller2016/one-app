@@ -10,6 +10,7 @@ import type {
   MirrorStatus,
   MirrorMode,
   MirrorActionResult,
+  JiraListResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -97,6 +98,9 @@ declare global {
           targetId: string,
         ) => Promise<DeployPreviewResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
+      };
+      jira: {
+        list: () => Promise<JiraListResult>;
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;

@@ -7,6 +7,7 @@ import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
 import { PrSection } from '../features/prs';
+import { JiraSection } from '../features/jira';
 import { ApplinkSection } from '../features/applink';
 import { WeeklySection } from '../features/weekly';
 import { AttendanceWidget } from '../features/attendance';
@@ -15,6 +16,7 @@ import { MirrorWidget } from '../features/mirror';
 
 const SECTIONS: SidebarSection[] = [
   { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
+  { id: 'jira', label: 'Jira', icon: <Icon name="clipboard-list" size={16} /> },
   { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
   { id: 'applink', label: '딥링크', icon: <Icon name="link" size={16} /> },
   { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
@@ -45,6 +47,8 @@ export function App() {
         return <DeploySection />;
       case 'prs':
         return <PrSection />;
+      case 'jira':
+        return <JiraSection />;
       case 'applink':
         return <ApplinkSection />;
       case 'settings':

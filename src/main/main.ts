@@ -13,6 +13,7 @@ import { startReminderScheduler } from './features/attendance/scheduler';
 import { registerPrsIpc } from './features/prs/ipc';
 import { registerApplinkIpc } from './features/applink/ipc';
 import { registerMirrorIpc } from './features/mirror/ipc';
+import { registerJiraIpc } from './features/jira/ipc';
 import { createTray } from './features/tray/tray';
 
 // Windows 설치/제거 시 바로가기 처리
@@ -31,6 +32,7 @@ registerNotifyIpc();
 registerPrsIpc();
 registerApplinkIpc();
 registerMirrorIpc();
+registerJiraIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle('app:openExternal', async (_e, url: string) => {
