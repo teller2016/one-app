@@ -41,45 +41,61 @@ const typeInfo = (name: string): { rank: number; icon: IconName; tone: string } 
 /** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
 type MenuState = 'loading' | JiraTransition[] | { error: string };
 
-/** 이슈 한 줄 — 행 클릭은 브라우저 열기, 상태 뱃지 클릭은 전환 메뉴 */
+/** 이슈 한 줄 — 티켓번호·티켓명 클릭 = 브라우저 열기, 키 우측 아이콘 = URL 복사, 뱃지 = 전환 메뉴 */
 function IssueRow({
   issue,
   menu,
   transitioning,
   onToggleMenu,
   onTransition,
+  onCopyLink,
 }: {
   issue: JiraIssue;
   menu: MenuState | null; // null = 메뉴 닫힘
   transitioning: boolean;
   onToggleMenu: (key: string) => void;
   onTransition: (key: string, t: JiraTransition) => void;
+  onCopyLink: (issue: JiraIssue) => void;
 }) {
   const open = (): void => {
     void window.oneApp.openExternal(issue.url);
   };
+  const linkTitle = [
+    `${issue.key} — 브라우저에서 열기`,
+    issue.priority && `우선순위 ${issue.priority}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    // 안에 상태 변경 버튼이 있어 button 중첩을 피하려고 div + role="button" 사용
-    <div
-      className="jira__row"
-      role="button"
-      tabIndex={0}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          open();
-        }
-      }}
-      title={[
-        `${issue.key} — 브라우저에서 열기`,
-        issue.priority && `우선순위 ${issue.priority}`,
-      ]
-        .filter(Boolean)
-        .join(' · ')}
-    >
-      <span className="jira__key">{issue.key}</span>
-      <span className="jira__title">{issue.summary}</span>
+    <div className="jira__row">
+      {/* 키 + 복사 아이콘 묶음 — 행 gap 보다 좁게 붙인다 */}
+      <span className="jira__keywrap">
+        <button
+          type="button"
+          className="jira__key"
+          onClick={open}
+          title={linkTitle}
+        >
+          {issue.key}
+        </button>
+        <button
+          type="button"
+          className="icon-btn jira__copy"
+          onClick={() => onCopyLink(issue)}
+          title="이슈 링크 복사"
+          aria-label={`${issue.key} 링크 복사`}
+        >
+          <Icon name="copy" size={12} />
+        </button>
+      </span>
+      <button
+        type="button"
+        className="jira__title"
+        onClick={open}
+        title={linkTitle}
+      >
+        {issue.summary}
+      </button>
 
       {/* 상태 뱃지 = 전환 메뉴 트리거 (Jira 의 상태 칩 클릭과 동일한 문법) */}
       <span className="jira__status">
@@ -133,10 +149,6 @@ function IssueRow({
             )}
           </div>
         )}
-      </span>
-
-      <span className="jira__open" aria-hidden="true">
-        <Icon name="arrow-up-right" size={12} />
       </span>
     </div>
   );
@@ -204,6 +216,16 @@ export function JiraSection() {
       window.removeEventListener('keydown', onKey);
     };
   }, [menuKey]);
+
+  // 이슈 링크 클립보드 복사
+  const copyLink = async (issue: JiraIssue) => {
+    try {
+      await navigator.clipboard.writeText(issue.url);
+      toast(`${issue.key} 링크를 복사했습니다`);
+    } catch {
+      toast('복사에 실패했습니다', 'fail');
+    }
+  };
 
   // 전환 실행 — 성공 시 목록 갱신 (그룹 이동 반영)
   const handleTransition = async (key: string, t: JiraTransition) => {
@@ -325,6 +347,7 @@ export function JiraSection() {
                     transitioning={transitioningKey === it.key}
                     onToggleMenu={(k) => void toggleMenu(k)}
                     onTransition={(k, t) => void handleTransition(k, t)}
+                    onCopyLink={(it2) => void copyLink(it2)}
                   />
                 ))}
               </div>
@@ -350,6 +373,7 @@ export function JiraSection() {
                     transitioning={transitioningKey === it.key}
                     onToggleMenu={(k) => void toggleMenu(k)}
                     onTransition={(k, t) => void handleTransition(k, t)}
+                    onCopyLink={(it2) => void copyLink(it2)}
                   />
                 ))}
               </div>

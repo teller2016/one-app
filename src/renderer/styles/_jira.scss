@@ -97,46 +97,75 @@
     }
   }
 
-  // 한 줄 행 — 전체가 클릭 영역, hover 로 열기 힌트
+  // 한 줄 행 — 행 자체는 클릭 영역이 아님 (열기=키·제목, 복사=아이콘, 전환=뱃지)
   &__row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
-    padding: 11px 14px;
-    border: none;
-    background: transparent;
+    padding: 9px 14px;
     color: var(--text);
-    font-family: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background var(--dur-1) var(--ease);
-    @include focus-ring(-2px);
 
     + .jira__row {
       border-top: 1px solid var(--border);
     }
-
-    &:hover {
-      background: var(--overlay-hover);
-    }
   }
 
+  // 키 + 복사 아이콘 묶음 — 행 gap(8px)보다 좁게
+  &__keywrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    flex-shrink: 0;
+  }
+
+  // 티켓번호 — 클릭하면 브라우저에서 열기
   &__key {
     flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
     font-family: var(--font-mono);
     @include type-small;
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
   }
 
+  // 링크 복사 아이콘 (키 바로 우측) — 공용 .icon-btn 크기 사용
+  &__copy {
+    flex-shrink: 0;
+  }
+
+  // 티켓명 — 클릭하면 브라우저에서 열기
   &__title {
     flex: 1;
     min-width: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: inherit;
     @include type-body;
+    color: var(--text);
+    text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
   }
 
   // 상태 뱃지 + 전환 메뉴 (뱃지 클릭 = 상태 변경 — Jira 상태 칩과 동일 문법)
@@ -220,16 +249,4 @@
     }
   }
 
-  // 열기 힌트 화살표 — hover 에서만 드러남
-  &__open {
-    display: inline-flex;
-    flex-shrink: 0;
-    color: var(--text-3);
-    opacity: 0;
-    transition: opacity var(--dur-1) var(--ease);
-  }
-
-  &__row:hover &__open {
-    opacity: 1;
-  }
 }
