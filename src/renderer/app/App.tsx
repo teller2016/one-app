@@ -7,7 +7,7 @@ import { ScheduleSection } from '../features/schedule';
 import { SettingsSection } from '../features/settings';
 import { DeploySection } from '../features/deploy';
 import { PrSection } from '../features/prs';
-import { JiraSection } from '../features/jira';
+import { JiraSection, isDone } from '../features/jira';
 import { ApplinkSection } from '../features/applink';
 import { WeeklySection } from '../features/weekly';
 import { AttendanceWidget } from '../features/attendance';
@@ -27,6 +27,24 @@ const SECTIONS: SidebarSection[] = [
 
 export function App() {
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
+  const [jiraCount, setJiraCount] = useState(0);
+
+  // 사이드바 Jira 뱃지 — 미해결 이슈 수를 2분마다 갱신 (미설정·오류 시 조용히 0)
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const res = await window.oneApp?.jira.list();
+        setJiraCount(
+          res?.ok && res.issues ? res.issues.filter((i) => !isDone(i)).length : 0,
+        );
+      } catch {
+        setJiraCount(0);
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 120_000);
+    return () => clearInterval(timer);
+  }, []);
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
 
   // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환
@@ -63,7 +81,9 @@ export function App() {
       <ConfirmProvider>
         <div className="app">
         <Sidebar
-          sections={SECTIONS}
+          sections={SECTIONS.map((s) =>
+            s.id === 'jira' ? { ...s, badge: jiraCount } : s,
+          )}
           activeId={activeId}
           onSelect={setActiveId}
           footer={

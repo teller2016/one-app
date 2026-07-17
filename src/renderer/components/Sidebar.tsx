@@ -7,6 +7,8 @@ export interface SidebarSection {
   icon: ReactNode;
   /** true 면 메뉴 하단 그룹으로 분리 (환경설정 등) */
   bottom?: boolean;
+  /** 항목 우측 카운트 뱃지 (0 이거나 없으면 숨김 — Jira 미해결 수 등) */
+  badge?: number;
 }
 
 /** 왼쪽 사이드바 — 섹션 목록과 선택 상태를 표시한다. */
@@ -57,6 +59,9 @@ export function Sidebar({
             >
               <span className="sidebar__item-icon">{s.icon}</span>
               <span>{s.label}</span>
+              {s.badge != null && s.badge > 0 && (
+                <span className="sidebar__item-badge">{s.badge}</span>
+              )}
             </button>
           ))}
       </nav>
@@ -75,6 +80,9 @@ export function Sidebar({
             >
               <span className="sidebar__item-icon">{s.icon}</span>
               <span>{s.label}</span>
+              {s.badge != null && s.badge > 0 && (
+                <span className="sidebar__item-badge">{s.badge}</span>
+              )}
             </button>
           ))}
       </nav>

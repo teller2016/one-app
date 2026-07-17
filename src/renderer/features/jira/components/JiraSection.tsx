@@ -10,14 +10,9 @@ import { SectionHeader } from '../../../components/SectionHeader';
 import { Segment } from '../../../components/Segment';
 import { useToast } from '../../../components/Toast';
 
-const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
+import { isDone } from '../lib/issue';
 
-/**
- * 해결 상태 판별 — 카테고리가 done 이거나, 이름이 해결/완료 계열이면 해결로 본다.
- * (이 팀 워크플로우는 '해결됨' 상태가 카테고리상 '진행 중'이라 이름 휴리스틱 병행)
- */
-const isDone = (it: JiraIssue) =>
-  it.statusCategory === 'done' || /해결|완료|resolved|done|closed/i.test(it.status);
+const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
 /** 상태 → 뱃지 색 (해야 할 일=회색, 진행 중=노랑, 해결=초록) */
 const badgeVariant = (it: JiraIssue) =>

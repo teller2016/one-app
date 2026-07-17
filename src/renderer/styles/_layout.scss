@@ -94,6 +94,15 @@
       color: var(--text-3);
       transition: color var(--dur-1) var(--ease);
     }
+
+    // 우측 카운트 뱃지 (Jira 미해결 수 등) — macOS Mail 스타일 회색 숫자
+    &-badge {
+      margin-left: auto;
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      color: var(--text-3);
+      font-variant-numeric: tabular-nums;
+    }
   }
 
   // 하단 고정 위젯 슬롯 (VPN·미러링·근태 — 공용 .sbw 한 줄 레이아웃) — 셸 구조 요소라 여기서 정의
