@@ -1,4 +1,4 @@
-// Jira 내 이슈 — 목록 배치 (룩은 공용 클래스)
+// Jira 내 이슈 — 타입별 그룹 카드 + 한 줄 행 (전체 클릭)
 @use './base' as *;
 
 .jira {
@@ -9,55 +9,138 @@
     gap: 12px;
   }
 
-  &__list {
-    display: flex;
-    flex-direction: column;
+  &__group {
+    margin-bottom: 20px;
   }
 
+  &__group-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 8px;
+    padding-left: 2px;
+  }
+
+  &__group-name {
+    @include type-caption;
+    text-transform: none; // 타입 이름은 Jira 표기 그대로 (sub-bug 등)
+  }
+
+  &__group-count {
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  // 타입 아이콘 — Jira 스타일 컬러 사각 배지
+  &__type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    color: #ffffff;
+    flex-shrink: 0;
+
+    &--task {
+      background: var(--accent);
+    }
+
+    &--bug {
+      background: var(--danger);
+    }
+
+    &--sub {
+      background: var(--chart-5t); // 틸 — 하위 작업
+    }
+
+    &--story {
+      background: var(--ok);
+    }
+
+    &--epic {
+      background: var(--chart-4t); // 퍼플
+    }
+  }
+
+  // 그룹 카드 — 행들을 담는 흰 카드 (macOS 설정 그룹 리스트)
+  &__card {
+    @include card-surface;
+    overflow: hidden; // 행 hover 배경이 라운드를 넘지 않게
+  }
+
+  // 한 줄 행 — 전체가 클릭 영역, hover 로 열기 힌트
   &__row {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 2px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
 
     + .jira__row {
       border-top: 1px solid var(--border);
     }
-  }
 
-  &__main {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
+    &:hover {
+      background: var(--overlay-hover);
+    }
   }
 
   &__key {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    @include type-caption;
+    @include type-small;
     color: var(--text-3);
+    font-variant-numeric: tabular-nums;
   }
 
   &__title {
+    flex: 1;
     min-width: 0;
+    @include type-body;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  &__meta {
-    display: flex;
+  // 하위 작업의 부모 이슈 키
+  &__parent {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    min-width: 0;
+    gap: 3px;
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    @include type-caption;
+    text-transform: none;
+    color: var(--text-3);
   }
 
-  &__sub {
+  &__time {
+    flex-shrink: 0;
     @include type-small;
     color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 52px;
+    text-align: right;
+  }
+
+  // 열기 힌트 화살표 — hover 에서만 드러남
+  &__open {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity var(--dur-1) var(--ease);
+  }
+
+  &__row:hover &__open {
+    opacity: 1;
   }
 }

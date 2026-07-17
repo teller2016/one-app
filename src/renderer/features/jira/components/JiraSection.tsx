@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JiraIssue } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Icon } from '../../../components/Icon';
+import type { IconName } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { SectionHeader } from '../../../components/SectionHeader';
-import { TextLink } from '../../../components/TextLink';
 
 /** ISO 시각 → '3시간 전' 상대 표기 */
 const rel = (iso: string) => {
@@ -23,7 +23,22 @@ const rel = (iso: string) => {
 const badgeVariant = (cat: JiraIssue['statusCategory']) =>
   cat === 'done' ? ('ok' as const) : cat === 'indeterminate' ? ('busy' as const) : ('idle' as const);
 
-/** Jira 내 이슈 — 목록만 보여주고, 내용은 클릭해서 브라우저(Jira)로 확인한다. */
+/**
+ * 타입 이름 → 표시 정보 (커스텀 타입 대응을 위해 키워드로 판별).
+ * 그룹 정렬 순서: 에픽 → 스토리 → 작업 → 버그 → 하위 작업·sub-bug → 기타
+ */
+const typeInfo = (name: string): { rank: number; icon: IconName; tone: string } => {
+  const n = name.toLowerCase();
+  const isSub = n.includes('하위') || n.includes('sub');
+  if (n.includes('버그') || n.includes('bug'))
+    return { rank: isSub ? 4 : 3, icon: 'bug', tone: 'bug' };
+  if (n.includes('에픽') || n.includes('epic')) return { rank: 0, icon: 'check', tone: 'epic' };
+  if (n.includes('스토리') || n.includes('story')) return { rank: 1, icon: 'check', tone: 'story' };
+  if (isSub) return { rank: 4, icon: 'corner-down-right', tone: 'sub' };
+  return { rank: 2, icon: 'check', tone: 'task' };
+};
+
+/** Jira 내 이슈 — 타입별 그룹 카드. 행 클릭 → 브라우저(Jira)에서 열기. */
 export function JiraSection() {
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [configured, setConfigured] = useState(true);
@@ -49,6 +64,19 @@ export function JiraSection() {
     const timer = setInterval(() => void load(), 120_000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // 타입별 그룹핑 — 그룹은 rank 순, 그룹 안은 API 정렬(최신 갱신순) 유지
+  const groups = useMemo(() => {
+    const map = new Map<string, JiraIssue[]>();
+    for (const it of issues) {
+      const list = map.get(it.issueType) ?? [];
+      list.push(it);
+      map.set(it.issueType, list);
+    }
+    return [...map.entries()]
+      .map(([type, items]) => ({ type, items, ...typeInfo(type) }))
+      .sort((a, b) => a.rank - b.rank || a.type.localeCompare(b.type));
+  }, [issues]);
 
   return (
     <div className="section">
@@ -84,32 +112,52 @@ export function JiraSection() {
           <p>미해결 이슈가 없습니다. 깔끔하네요!</p>
         </div>
       ) : (
-        <div className="jira__list">
-          {issues.map((it) => (
-            <div className="jira__row" key={it.key}>
-              <div className="jira__main">
-                <span className="jira__key">{it.key}</span>
-                <TextLink
-                  className="jira__title"
+        groups.map(({ type, items, icon, tone }) => (
+          <div className="jira__group" key={type}>
+            <div className="jira__group-head">
+              <span className={`jira__type jira__type--${tone}`}>
+                <Icon name={icon} size={12} />
+              </span>
+              <span className="jira__group-name">{type}</span>
+              <span className="jira__group-count">{items.length}</span>
+            </div>
+            <div className="jira__card">
+              {items.map((it) => (
+                <button
+                  type="button"
+                  className="jira__row"
+                  key={it.key}
                   onClick={() => void window.oneApp.openExternal(it.url)}
-                  title={`${it.key} — 브라우저에서 열기`}
-                >
-                  {it.summary}
-                </TextLink>
-              </div>
-              <div className="jira__meta">
-                <Badge variant={badgeVariant(it.statusCategory)}>
-                  {it.status}
-                </Badge>
-                <span className="jira__sub">
-                  {[it.issueType, it.priority, rel(it.updatedAt)]
+                  title={[
+                    `${it.key} — 브라우저에서 열기`,
+                    it.priority && `우선순위 ${it.priority}`,
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
-                </span>
-              </div>
+                >
+                  <span className="jira__key">{it.key}</span>
+                  <span className="jira__title">{it.summary}</span>
+                  {it.parentKey && (
+                    <span
+                      className="jira__parent"
+                      title={`부모 이슈 ${it.parentKey}`}
+                    >
+                      <Icon name="corner-down-right" size={11} />
+                      {it.parentKey}
+                    </span>
+                  )}
+                  <Badge variant={badgeVariant(it.statusCategory)}>
+                    {it.status}
+                  </Badge>
+                  <span className="jira__time">{rel(it.updatedAt)}</span>
+                  <span className="jira__open" aria-hidden="true">
+                    <Icon name="arrow-up-right" size={12} />
+                  </span>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))
       )}
     </div>
   );

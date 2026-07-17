@@ -56,7 +56,8 @@ export type JiraIssue = {
   summary: string;
   status: string; // 상태 이름 (해야 할 일·진행 중 …)
   statusCategory: 'new' | 'indeterminate' | 'done'; // 뱃지 색 구분용
-  issueType: string; // 작업·버그 등
+  issueType: string; // 작업·버그·하위 작업·sub-bug 등 (그룹핑 기준)
+  parentKey: string | null; // 하위 작업이면 부모 이슈 키
   priority: string | null;
   updatedAt: string; // ISO
   url: string; // 브라우저로 열 이슈 링크

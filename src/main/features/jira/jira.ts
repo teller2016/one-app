@@ -12,6 +12,7 @@ interface RawIssue {
       statusCategory?: { key?: string };
     };
     issuetype?: { name?: string };
+    parent?: { key?: string };
     priority?: { name?: string };
     updated?: string;
   };
@@ -19,7 +20,7 @@ interface RawIssue {
 
 const JQL =
   'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC';
-const FIELDS = 'summary,status,issuetype,priority,updated';
+const FIELDS = 'summary,status,issuetype,parent,priority,updated';
 
 /** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) */
 export async function fetchMyIssues(): Promise<JiraListResult> {
@@ -75,6 +76,7 @@ export async function fetchMyIssues(): Promise<JiraListResult> {
         statusCategory:
           catKey === 'done' ? 'done' : catKey === 'indeterminate' ? 'indeterminate' : 'new',
         issueType: it.fields.issuetype?.name ?? '',
+        parentKey: it.fields.parent?.key ?? null,
         priority: it.fields.priority?.name ?? null,
         updatedAt: it.fields.updated ?? '',
         url: `${cfg.url}/browse/${it.key}`,
