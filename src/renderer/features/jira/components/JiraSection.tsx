@@ -11,18 +11,6 @@ import { Segment } from '../../../components/Segment';
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
-/** ISO 시각 → '3시간 전' 상대 표기 */
-const rel = (iso: string) => {
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return '';
-  const m = Math.floor((Date.now() - ts) / 60000);
-  if (m < 1) return '방금';
-  if (m < 60) return `${m}분 전`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}시간 전`;
-  return `${Math.floor(h / 24)}일 전`;
-};
-
 /**
  * 해결 상태 판별 — 카테고리가 done 이거나, 이름이 해결/완료 계열이면 해결로 본다.
  * (이 팀 워크플로우는 '해결됨' 상태가 카테고리상 '진행 중'이라 이름 휴리스틱 병행)
@@ -65,14 +53,7 @@ function IssueRow({ issue }: { issue: JiraIssue }) {
     >
       <span className="jira__key">{issue.key}</span>
       <span className="jira__title">{issue.summary}</span>
-      {issue.parentKey && (
-        <span className="jira__parent" title={`부모 이슈 ${issue.parentKey}`}>
-          <Icon name="corner-down-right" size={11} />
-          {issue.parentKey}
-        </span>
-      )}
       <Badge variant={badgeVariant(issue)}>{issue.status}</Badge>
-      <span className="jira__time">{rel(issue.updatedAt)}</span>
       <span className="jira__open" aria-hidden="true">
         <Icon name="arrow-up-right" size={12} />
       </span>
@@ -217,7 +198,7 @@ export function JiraSection() {
 
           {done.length > 0 && (
             <Collapsible
-              title={`해결됨 ${done.length} — 처리(resolution)만 안 닫힌 이슈`}
+              title={`해결됨 ${done.length}`}
               icon={<Icon name="check" size={14} />}
               storageKey="jira:group:done"
             >

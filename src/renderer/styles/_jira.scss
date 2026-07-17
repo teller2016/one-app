@@ -121,26 +121,6 @@
     white-space: nowrap;
   }
 
-  // 하위 작업의 부모 이슈 키
-  &__parent {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    flex-shrink: 0;
-    font-family: var(--font-mono);
-    @include type-caption;
-    text-transform: none;
-    color: var(--text-3);
-  }
-
-  &__time {
-    flex-shrink: 0;
-    @include type-small;
-    color: var(--text-3);
-    min-width: 52px;
-    text-align: right;
-  }
-
   // 열기 힌트 화살표 — hover 에서만 드러남
   &__open {
     display: inline-flex;
