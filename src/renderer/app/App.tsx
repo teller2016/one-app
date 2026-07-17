@@ -15,8 +15,8 @@ import { VpnWidget } from '../features/vpn';
 import { MirrorWidget } from '../features/mirror';
 
 const SECTIONS: SidebarSection[] = [
-  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
   { id: 'jira', label: 'Jira', icon: <Icon name="clipboard-list" size={16} /> },
+  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
   { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
   { id: 'applink', label: '딥링크', icon: <Icon name="link" size={16} /> },
   { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
