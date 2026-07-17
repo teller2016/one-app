@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JiraIssue } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
+import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import type { IconName } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { SectionHeader } from '../../../components/SectionHeader';
+import { Segment } from '../../../components/Segment';
+
+const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
 /** ISO 시각 → '3시간 전' 상대 표기 */
 const rel = (iso: string) => {
@@ -19,9 +23,16 @@ const rel = (iso: string) => {
   return `${Math.floor(h / 24)}일 전`;
 };
 
-/** 상태 카테고리 → 뱃지 색 (해야 할 일=회색, 진행 중=노랑, 완료=초록) */
-const badgeVariant = (cat: JiraIssue['statusCategory']) =>
-  cat === 'done' ? ('ok' as const) : cat === 'indeterminate' ? ('busy' as const) : ('idle' as const);
+/**
+ * 해결 상태 판별 — 카테고리가 done 이거나, 이름이 해결/완료 계열이면 해결로 본다.
+ * (이 팀 워크플로우는 '해결됨' 상태가 카테고리상 '진행 중'이라 이름 휴리스틱 병행)
+ */
+const isDone = (it: JiraIssue) =>
+  it.statusCategory === 'done' || /해결|완료|resolved|done|closed/i.test(it.status);
+
+/** 상태 → 뱃지 색 (해야 할 일=회색, 진행 중=노랑, 해결=초록) */
+const badgeVariant = (it: JiraIssue) =>
+  isDone(it) ? ('ok' as const) : it.statusCategory === 'indeterminate' ? ('busy' as const) : ('idle' as const);
 
 /**
  * 타입 이름 → 표시 정보 (커스텀 타입 대응을 위해 키워드로 판별).
@@ -38,12 +49,46 @@ const typeInfo = (name: string): { rank: number; icon: IconName; tone: string } 
   return { rank: 2, icon: 'check', tone: 'task' };
 };
 
-/** Jira 내 이슈 — 타입별 그룹 카드. 행 클릭 → 브라우저(Jira)에서 열기. */
+/** 이슈 한 줄 — 행 전체가 클릭 영역 (브라우저에서 열기) */
+function IssueRow({ issue }: { issue: JiraIssue }) {
+  return (
+    <button
+      type="button"
+      className="jira__row"
+      onClick={() => void window.oneApp.openExternal(issue.url)}
+      title={[
+        `${issue.key} — 브라우저에서 열기`,
+        issue.priority && `우선순위 ${issue.priority}`,
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    >
+      <span className="jira__key">{issue.key}</span>
+      <span className="jira__title">{issue.summary}</span>
+      {issue.parentKey && (
+        <span className="jira__parent" title={`부모 이슈 ${issue.parentKey}`}>
+          <Icon name="corner-down-right" size={11} />
+          {issue.parentKey}
+        </span>
+      )}
+      <Badge variant={badgeVariant(issue)}>{issue.status}</Badge>
+      <span className="jira__time">{rel(issue.updatedAt)}</span>
+      <span className="jira__open" aria-hidden="true">
+        <Icon name="arrow-up-right" size={12} />
+      </span>
+    </button>
+  );
+}
+
+/** Jira 내 이슈 — 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹. */
 export function JiraSection() {
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [project, setProject] = useState<string>(
+    () => localStorage.getItem(PROJECT_KEY) ?? 'all',
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,10 +110,37 @@ export function JiraSection() {
     return () => clearInterval(timer);
   }, [load]);
 
+  // 프로젝트 목록 (이슈 많은 순) — 탭은 프로젝트가 2개 이상일 때만 노출
+  const projects = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const it of issues) {
+      count.set(it.projectKey, (count.get(it.projectKey) ?? 0) + 1);
+    }
+    return [...count.entries()].sort((a, b) => b[1] - a[1]);
+  }, [issues]);
+
+  // 저장된 선택이 목록에서 사라졌으면 전체로 복귀
+  const effectiveProject =
+    project !== 'all' && !projects.some(([k]) => k === project) ? 'all' : project;
+
+  const changeProject = (next: string) => {
+    setProject(next);
+    localStorage.setItem(PROJECT_KEY, next);
+  };
+
+  const visible =
+    effectiveProject === 'all'
+      ? issues
+      : issues.filter((it) => it.projectKey === effectiveProject);
+
+  // 해결됨은 타입 그룹에서 빼서 하단 접힘 그룹으로
+  const open = visible.filter((it) => !isDone(it));
+  const done = visible.filter(isDone);
+
   // 타입별 그룹핑 — 그룹은 rank 순, 그룹 안은 API 정렬(최신 갱신순) 유지
   const groups = useMemo(() => {
     const map = new Map<string, JiraIssue[]>();
-    for (const it of issues) {
+    for (const it of open) {
       const list = map.get(it.issueType) ?? [];
       list.push(it);
       map.set(it.issueType, list);
@@ -76,7 +148,7 @@ export function JiraSection() {
     return [...map.entries()]
       .map(([type, items]) => ({ type, items, ...typeInfo(type) }))
       .sort((a, b) => a.rank - b.rank || a.type.localeCompare(b.type));
-  }, [issues]);
+  }, [open]);
 
   return (
     <div className="section">
@@ -102,9 +174,22 @@ export function JiraSection() {
       )}
       {configured && error && <Banner variant="danger">{error}</Banner>}
 
+      {projects.length > 1 && (
+        <div className="jira__tabs">
+          <Segment
+            options={[
+              { value: 'all', label: `전체 ${issues.length}` },
+              ...projects.map(([k, c]) => ({ value: k, label: `${k} ${c}` })),
+            ]}
+            value={effectiveProject}
+            onChange={changeProject}
+          />
+        </div>
+      )}
+
       {loading && issues.length === 0 ? (
         <p className="hint">불러오는 중...</p>
-      ) : issues.length === 0 && configured && !error ? (
+      ) : visible.length === 0 && configured && !error ? (
         <div className="empty-state">
           <span className="empty-state__icon">
             <Icon name="check" size={20} />
@@ -112,52 +197,38 @@ export function JiraSection() {
           <p>미해결 이슈가 없습니다. 깔끔하네요!</p>
         </div>
       ) : (
-        groups.map(({ type, items, icon, tone }) => (
-          <div className="jira__group" key={type}>
-            <div className="jira__group-head">
-              <span className={`jira__type jira__type--${tone}`}>
-                <Icon name={icon} size={12} />
-              </span>
-              <span className="jira__group-name">{type}</span>
-              <span className="jira__group-count">{items.length}</span>
+        <>
+          {groups.map(({ type, items, icon, tone }) => (
+            <div className="jira__group" key={type}>
+              <div className="jira__group-head">
+                <span className={`jira__type jira__type--${tone}`}>
+                  <Icon name={icon} size={12} />
+                </span>
+                <span className="jira__group-name">{type}</span>
+                <span className="jira__group-count">{items.length}</span>
+              </div>
+              <div className="jira__card">
+                {items.map((it) => (
+                  <IssueRow issue={it} key={it.key} />
+                ))}
+              </div>
             </div>
-            <div className="jira__card">
-              {items.map((it) => (
-                <button
-                  type="button"
-                  className="jira__row"
-                  key={it.key}
-                  onClick={() => void window.oneApp.openExternal(it.url)}
-                  title={[
-                    `${it.key} — 브라우저에서 열기`,
-                    it.priority && `우선순위 ${it.priority}`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                >
-                  <span className="jira__key">{it.key}</span>
-                  <span className="jira__title">{it.summary}</span>
-                  {it.parentKey && (
-                    <span
-                      className="jira__parent"
-                      title={`부모 이슈 ${it.parentKey}`}
-                    >
-                      <Icon name="corner-down-right" size={11} />
-                      {it.parentKey}
-                    </span>
-                  )}
-                  <Badge variant={badgeVariant(it.statusCategory)}>
-                    {it.status}
-                  </Badge>
-                  <span className="jira__time">{rel(it.updatedAt)}</span>
-                  <span className="jira__open" aria-hidden="true">
-                    <Icon name="arrow-up-right" size={12} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))
+          ))}
+
+          {done.length > 0 && (
+            <Collapsible
+              title={`해결됨 ${done.length} — 처리(resolution)만 안 닫힌 이슈`}
+              icon={<Icon name="check" size={14} />}
+              storageKey="jira:group:done"
+            >
+              <div className="jira__done">
+                {done.map((it) => (
+                  <IssueRow issue={it} key={it.key} />
+                ))}
+              </div>
+            </Collapsible>
+          )}
+        </>
       )}
     </div>
   );

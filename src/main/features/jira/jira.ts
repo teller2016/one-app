@@ -12,6 +12,7 @@ interface RawIssue {
       statusCategory?: { key?: string };
     };
     issuetype?: { name?: string };
+    project?: { key?: string };
     parent?: { key?: string };
     priority?: { name?: string };
     updated?: string;
@@ -20,7 +21,7 @@ interface RawIssue {
 
 const JQL =
   'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC';
-const FIELDS = 'summary,status,issuetype,parent,priority,updated';
+const FIELDS = 'summary,status,issuetype,project,parent,priority,updated';
 
 /** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) */
 export async function fetchMyIssues(): Promise<JiraListResult> {
@@ -71,6 +72,8 @@ export async function fetchMyIssues(): Promise<JiraListResult> {
       const catKey = it.fields.status?.statusCategory?.key;
       return {
         key: it.key,
+        // project 필드가 없으면 이슈 키 접두(BBJ-123 → BBJ)로 폴백
+        projectKey: it.fields.project?.key ?? it.key.split('-')[0],
         summary: it.fields.summary ?? '(제목 없음)',
         status: it.fields.status?.name ?? '—',
         statusCategory:

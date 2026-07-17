@@ -53,6 +53,7 @@ export type SaveSettingsInput = {
 
 export type JiraIssue = {
   key: string; // BBJ-1234
+  projectKey: string; // BBJ (프로젝트 탭 필터 기준)
   summary: string;
   status: string; // 상태 이름 (해야 할 일·진행 중 …)
   statusCategory: 'new' | 'indeterminate' | 'done'; // 뱃지 색 구분용

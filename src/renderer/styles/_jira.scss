@@ -9,8 +9,18 @@
     gap: 12px;
   }
 
+  // 프로젝트 탭 (2개 이상일 때만 렌더)
+  &__tabs {
+    margin-bottom: 20px;
+  }
+
   &__group {
     margin-bottom: 20px;
+  }
+
+  // 해결됨 접힘 그룹 안 목록 — Collapsible 이 카드 룩이라 행만 나열
+  &__done {
+    margin: 0 -16px -12px; // Collapsible body 패딩을 상쇄해 행이 카드 폭을 꽉 채움
   }
 
   &__group-head {
