@@ -8,6 +8,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { TextLink } from '../../../components/TextLink';
 import { Button } from '../../../components/Button';
 import { useToast } from '../../../components/Toast';
+import { useConfirm } from '../../../components/ConfirmDialog';
 import { QuickPr } from './QuickPr';
 import { CreatePrModal } from './CreatePrModal';
 import { MergeModal } from './MergeModal';
@@ -44,6 +45,23 @@ export function PrSection() {
   } | null>(null);
   const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
   const toast = useToast();
+  const confirmDialog = useConfirm();
+
+  // 머지 직후 — PR 제목에서 Jira 이슈 키를 추출해 해결됨 전환을 제안한다
+  // (빠른 PR 이 브랜치명의 이슈 키를 제목에 넣으므로 문자열 패턴 매칭으로 충분)
+  const offerJiraResolve = async (prTitle: string) => {
+    const key = prTitle.match(/[A-Z][A-Z0-9]*-\d+/)?.[0];
+    if (!key) return; // 이슈 키 없는 PR 이면 조용히 넘어감
+    const ok = await confirmDialog({
+      title: `${key} 해결됨으로 전환할까요?`,
+      message: 'PR 이 머지되었습니다. 배포 전까지 해결됨 상태로 둘 수 있어요.',
+      confirmLabel: '해결됨으로',
+    });
+    if (!ok) return;
+    const res = await window.oneApp.jira.resolve(key);
+    if (res.ok) toast(`${key} → 해결됨`);
+    else toast(res.error ?? '전환에 실패했습니다', 'fail');
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -272,6 +290,7 @@ export function PrSection() {
             setMergeTarget(null);
             toast(`#${mergeTarget.number} 머지 완료`);
             void load();
+            void offerJiraResolve(mergeTarget.title);
           }}
         />
       )}

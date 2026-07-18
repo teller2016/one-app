@@ -106,6 +106,7 @@ declare global {
         list: () => Promise<JiraListResult>;
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
+        resolve: (key: string) => Promise<JiraActionResult>;
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;

@@ -103,6 +103,8 @@ contextBridge.exposeInMainWorld('oneApp', {
     // 상태 전환 실행
     transition: (key: string, id: string) =>
       ipcRenderer.invoke('jira:transition', key, id),
+    // 해결/완료 계열 전환 자동 선택 실행 (PR 머지 직후용)
+    resolve: (key: string) => ipcRenderer.invoke('jira:resolve', key),
   },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회
