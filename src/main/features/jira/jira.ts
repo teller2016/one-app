@@ -25,8 +25,12 @@ interface RawIssue {
   };
 }
 
+// resolution 만 보면 워크플로우 빈틈에 빠진다:
+//  - 다시열림: 닫힐 때 채워진 resolution 이 재오픈 시 안 지워져 'Unresolved' 검색에서 누락
+//  - 해결됨: resolution 을 안 채우는 전환이라 Unresolved 로 잡힘 (하단 접힘 그룹에서 처리)
+// → 상태 카테고리(완료 아님) 조건을 OR 로 병행해 둘 다 커버한다.
 const JQL =
-  'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC';
+  'assignee = currentUser() AND (resolution = Unresolved OR statusCategory != Done) ORDER BY updated DESC';
 const FIELDS = 'summary,status,issuetype,project,parent,priority,updated';
 
 /** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) */
