@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 /**
  * 공용 SVG 아이콘 — 이모지·텍스트 글리프 대신 사용한다 (DESIGN.md 원칙 5).
@@ -13,33 +13,34 @@ import type { ReactNode } from 'react';
  *   16(기본 — 사이드바·배너) · 18(섹션 제목) · 20(빈 상태)
  */
 export type IconName =
-  | 'calendar'
-  | 'bar-chart'
-  | 'rocket'
-  | 'settings'
-  | 'lock'
-  | 'building'
-  | 'key'
-  | 'bell'
-  | 'clock'
-  | 'refresh'
-  | 'chevron-right'
-  | 'chevron-down'
-  | 'chevron-left'
-  | 'arrow-up-right'
-  | 'git-pull-request'
-  | 'link'
-  | 'clipboard-list'
-  | 'bug'
-  | 'corner-down-right'
-  | 'smartphone'
-  | 'x'
-  | 'check'
-  | 'plus'
-  | 'copy'
-  | 'circle'
-  | 'alert-triangle'
-  | 'info';
+  | "calendar"
+  | "bar-chart"
+  | "rocket"
+  | "settings"
+  | "lock"
+  | "building"
+  | "key"
+  | "bell"
+  | "clock"
+  | "refresh"
+  | "chevron-right"
+  | "chevron-down"
+  | "chevron-left"
+  | "arrow-up-right"
+  | "git-pull-request"
+  | "link"
+  | "clipboard-list"
+  | "bug"
+  | "corner-down-right"
+  | "smartphone"
+  | "x"
+  | "check"
+  | "plus"
+  | "copy"
+  | "circle"
+  | "alert-triangle"
+  | "info"
+  | "moon";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -50,7 +51,7 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M3 10h18" />
     </>
   ),
-  'bar-chart': (
+  "bar-chart": (
     <>
       <path d="M3 3v18h18" />
       <path d="M18 17V9" />
@@ -116,10 +117,10 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8 16H3v5" />
     </>
   ),
-  'chevron-right': <path d="m9 18 6-6-6-6" />,
-  'chevron-down': <path d="m6 9 6 6 6-6" />,
-  'chevron-left': <path d="m15 18-6-6 6-6" />,
-  'arrow-up-right': (
+  "chevron-right": <path d="m9 18 6-6-6-6" />,
+  "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-left": <path d="m15 18-6-6 6-6" />,
+  "arrow-up-right": (
     <>
       <path d="M7 7h10v10" />
       <path d="M7 17 17 7" />
@@ -145,7 +146,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   circle: <circle cx="12" cy="12" r="10" />,
-  'alert-triangle': (
+  "alert-triangle": (
     <>
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
       <path d="M12 9v4" />
@@ -159,13 +160,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 8h.01" />
     </>
   ),
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
   link: (
     <>
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </>
   ),
-  'clipboard-list': (
+  "clipboard-list": (
     <>
       <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -190,7 +192,7 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
     </>
   ),
-  'corner-down-right': (
+  "corner-down-right": (
     <>
       <polyline points="15 10 20 15 15 20" />
       <path d="M4 4v7a4 4 0 0 0 4 4h12" />
@@ -202,7 +204,7 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 18h.01" />
     </>
   ),
-  'git-pull-request': (
+  "git-pull-request": (
     <>
       <circle cx="18" cy="18" r="3" />
       <circle cx="6" cy="6" r="3" />

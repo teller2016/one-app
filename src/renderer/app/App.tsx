@@ -1,28 +1,47 @@
-import { useEffect, useState } from 'react';
-import { Sidebar, SidebarSection } from '../components/Sidebar';
-import { Icon } from '../components/Icon';
-import { ToastProvider } from '../components/Toast';
-import { ConfirmProvider } from '../components/ConfirmDialog';
-import { ScheduleSection } from '../features/schedule';
-import { SettingsSection } from '../features/settings';
-import { DeploySection } from '../features/deploy';
-import { PrSection } from '../features/prs';
-import { JiraSection, isDone } from '../features/jira';
-import { ApplinkSection } from '../features/applink';
-import { WeeklySection } from '../features/weekly';
-import { AttendanceWidget } from '../features/attendance';
-import { VpnWidget } from '../features/vpn';
-import { MirrorWidget } from '../features/mirror';
+import { ConfirmProvider } from "../components/ConfirmDialog";
+import { Icon } from "../components/Icon";
+import { Sidebar, SidebarSection } from "../components/Sidebar";
+import { ToastProvider } from "../components/Toast";
+import { ApplinkSection } from "../features/applink";
+import { AttendanceWidget } from "../features/attendance";
+import { DeploySection } from "../features/deploy";
+import { JiraSection, isDone } from "../features/jira";
+import { MirrorWidget } from "../features/mirror";
+import { NightwatchSection } from "../features/nightwatch";
+import { PrSection } from "../features/prs";
+import { ScheduleSection } from "../features/schedule";
+import { SettingsSection } from "../features/settings";
+import { VpnWidget } from "../features/vpn";
+import { WeeklySection } from "../features/weekly";
+import { useEffect, useState } from "react";
 
 const SECTIONS: SidebarSection[] = [
-  { id: 'jira', label: 'Jira', icon: <Icon name="clipboard-list" size={16} /> },
-  { id: 'prs', label: 'PR', icon: <Icon name="git-pull-request" size={16} /> },
-  { id: 'deploy', label: '배포', icon: <Icon name="rocket" size={16} /> },
-  { id: 'applink', label: '딥링크', icon: <Icon name="link" size={16} /> },
-  { id: 'schedule', label: '일정 등록', icon: <Icon name="calendar" size={16} /> },
-  { id: 'weekly', label: '주간보고', icon: <Icon name="bar-chart" size={16} /> },
+  { id: "jira", label: "Jira", icon: <Icon name="clipboard-list" size={16} /> },
+  {
+    id: "nightwatch",
+    label: "Nightwatch",
+    icon: <Icon name="moon" size={16} />,
+  },
+  { id: "prs", label: "PR", icon: <Icon name="git-pull-request" size={16} /> },
+  { id: "deploy", label: "배포", icon: <Icon name="rocket" size={16} /> },
+  { id: "applink", label: "딥링크", icon: <Icon name="link" size={16} /> },
+  {
+    id: "schedule",
+    label: "일정 등록",
+    icon: <Icon name="calendar" size={16} />,
+  },
+  {
+    id: "weekly",
+    label: "주간보고",
+    icon: <Icon name="bar-chart" size={16} />,
+  },
   // 하단 분리 그룹
-  { id: 'settings', label: '환경설정', icon: <Icon name="settings" size={16} />, bottom: true },
+  {
+    id: "settings",
+    label: "환경설정",
+    icon: <Icon name="settings" size={16} />,
+    bottom: true,
+  },
 ];
 
 export function App() {
@@ -35,7 +54,9 @@ export function App() {
       try {
         const res = await window.oneApp?.jira.list();
         setJiraCount(
-          res?.ok && res.issues ? res.issues.filter((i) => !isDone(i)).length : 0,
+          res?.ok && res.issues
+            ? res.issues.filter((i) => !isDone(i)).length
+            : 0
         );
       } catch {
         setJiraCount(0);
@@ -57,19 +78,21 @@ export function App() {
 
   const renderMain = () => {
     switch (active.id) {
-      case 'schedule':
+      case "schedule":
         return <ScheduleSection />;
-      case 'weekly':
+      case "weekly":
         return <WeeklySection />;
-      case 'deploy':
+      case "deploy":
         return <DeploySection />;
-      case 'prs':
+      case "prs":
         return <PrSection />;
-      case 'jira':
+      case "jira":
         return <JiraSection />;
-      case 'applink':
+      case "nightwatch":
+        return <NightwatchSection />;
+      case "applink":
         return <ApplinkSection />;
-      case 'settings':
+      case "settings":
         return <SettingsSection />;
       default:
         return null;
@@ -80,32 +103,32 @@ export function App() {
     <ToastProvider>
       <ConfirmProvider>
         <div className="app">
-        <Sidebar
-          sections={SECTIONS.map((s) =>
-            s.id === 'jira' ? { ...s, badge: jiraCount } : s,
-          )}
-          activeId={activeId}
-          onSelect={setActiveId}
-          footer={
-            <>
-              <MirrorWidget />
-              <VpnWidget />
-              <AttendanceWidget />
-            </>
-          }
-        />
+          <Sidebar
+            sections={SECTIONS.map((s) =>
+              s.id === "jira" ? { ...s, badge: jiraCount } : s
+            )}
+            activeId={activeId}
+            onSelect={setActiveId}
+            footer={
+              <>
+                <MirrorWidget />
+                <VpnWidget />
+                <AttendanceWidget />
+              </>
+            }
+          />
 
-        {/* 오른쪽 콘텐츠 영역 */}
-        <section className="content">
-          {/* 탑바 — 현재 섹션 표시 + 창 드래그 영역 */}
-          <header className="topbar">
-            <span className="topbar__icon">{active.icon}</span>
-            <span className="topbar__title">{active.label}</span>
-          </header>
+          {/* 오른쪽 콘텐츠 영역 */}
+          <section className="content">
+            {/* 탑바 — 현재 섹션 표시 + 창 드래그 영역 */}
+            <header className="topbar">
+              <span className="topbar__icon">{active.icon}</span>
+              <span className="topbar__title">{active.label}</span>
+            </header>
 
-          {/* 메인 영역 */}
-          <main className="main">{renderMain()}</main>
-        </section>
+            {/* 메인 영역 */}
+            <main className="main">{renderMain()}</main>
+          </section>
         </div>
       </ConfirmProvider>
     </ToastProvider>

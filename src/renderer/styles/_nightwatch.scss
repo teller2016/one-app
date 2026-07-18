@@ -1,0 +1,145 @@
+// Nightwatch — 야간 무인 버그 분석 관리 (상태 카드 + 티켓 목록 + 리포트 모달)
+@use './base' as *;
+
+.nightwatch {
+  &__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  // 상태 + 제어 카드 — 한 줄 요약과 액션 버튼
+  &__card {
+    @include card-surface;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  &__state {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  &__meta {
+    @include type-small;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  // 연결 점검 출력 — 공용 .panel-sunken--log 안 pre 여백만 정리
+  &__test {
+    margin-bottom: 16px;
+
+    pre {
+      margin: 0;
+      font-family: var(--font-mono);
+      @include type-small;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  }
+
+  // 티켓 목록 카드 — 행들을 담는 카드 (jira 그룹 카드와 동일한 문법)
+  &__list {
+    @include card-surface;
+    margin-bottom: 16px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 16px;
+    color: var(--text);
+
+    & + & {
+      border-top: 1px solid var(--border);
+    }
+
+    &:first-child {
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
+
+    &:last-child {
+      border-radius: 0 0 var(--r-lg) var(--r-lg);
+    }
+
+    &:only-child {
+      border-radius: var(--r-lg);
+    }
+  }
+
+  // 티켓번호 — 클릭하면 Jira 를 브라우저에서 열기
+  &__key {
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  }
+
+  &__conf {
+    flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  // 설정 폼 시간창 "~" 구분자
+  &__tilde {
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  &__summary {
+    flex: 1;
+    min-width: 0;
+    @include type-body;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // cycle 로그·리포트 본문 — 모노스페이스 프리포맷
+  &__log,
+  &__report {
+    margin: 0;
+    font-family: var(--font-mono);
+    @include type-small;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  &__report {
+    max-height: 60vh;
+    overflow: auto;
+  }
+}

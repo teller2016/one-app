@@ -47,6 +47,10 @@ import type {
   WeeklyFetchResult,
   WeeklyProgress,
   ReminderConfig,
+  NightwatchStatus,
+  NightwatchConfig,
+  NightwatchCommandResult,
+  NightwatchTextResult,
 } from '../../shared/types';
 
 declare global {
@@ -159,6 +163,18 @@ declare global {
         getKeyStatus: () => Promise<ApplinkKeyStatus>;
         setKey: (key: string) => Promise<ApplinkKeyStatus>;
         create: (input: ApplinkInput) => Promise<ApplinkResult>;
+      };
+      nightwatch: {
+        getStatus: () => Promise<NightwatchStatus>;
+        setEnabled: (enabled: boolean) => Promise<NightwatchStatus>;
+        saveConfig: (
+          config: Partial<NightwatchConfig>,
+        ) => Promise<NightwatchStatus>;
+        test: () => Promise<NightwatchCommandResult>;
+        initWorkspace: () => Promise<NightwatchCommandResult>;
+        cycleNow: () => Promise<NightwatchCommandResult>;
+        getReport: (key: string) => Promise<NightwatchTextResult>;
+        getLog: () => Promise<NightwatchTextResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

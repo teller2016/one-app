@@ -1,7 +1,7 @@
 // 프로세스(main / preload / renderer) 간 공용 타입
 
 export type ScheduleDateOption = {
-  type: 'today' | 'yesterday' | 'date';
+  type: "today" | "yesterday" | "date";
   date?: string;
 };
 
@@ -24,7 +24,7 @@ export type ScheduleDoneInfo = { code: number | null };
 
 // ── 환경설정 ──
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
-export type ThemePref = 'system' | 'light' | 'dark';
+export type ThemePref = "system" | "light" | "dark";
 
 export type AppSettingsView = {
   bizboxId: string;
@@ -56,7 +56,7 @@ export type JiraIssue = {
   projectKey: string; // BBJ (프로젝트 탭 필터 기준)
   summary: string;
   status: string; // 상태 이름 (해야 할 일·진행 중 …)
-  statusCategory: 'new' | 'indeterminate' | 'done'; // 뱃지 색 구분용
+  statusCategory: "new" | "indeterminate" | "done"; // 뱃지 색 구분용
   issueType: string; // 작업·버그·하위 작업·sub-bug 등 (그룹핑 기준)
   parentKey: string | null; // 하위 작업이면 부모 이슈 키
   priority: string | null;
@@ -113,12 +113,12 @@ export type SaveDeployProjectInput = {
 };
 
 export type DeployState =
-  | 'idle' // 빌드 이력 없음
-  | 'queued' // 젠킨스 큐 대기
-  | 'building'
-  | 'success'
-  | 'failure' // FAILURE/ABORTED/UNSTABLE 등
-  | 'error'; // 요청/통신 오류
+  | "idle" // 빌드 이력 없음
+  | "queued" // 젠킨스 큐 대기
+  | "building"
+  | "success"
+  | "failure" // FAILURE/ABORTED/UNSTABLE 등
+  | "error"; // 요청/통신 오류
 
 export type DeployStatus = {
   state: DeployState;
@@ -305,7 +305,7 @@ export type PrMergeInfoResult = {
   error?: string;
 };
 
-export type PrMergeMethod = 'merge' | 'squash' | 'rebase';
+export type PrMergeMethod = "merge" | "squash" | "rebase";
 
 export type PrMergeResult = { ok: boolean; error?: string };
 
@@ -322,7 +322,7 @@ export type DeployPreviewResult = {
 };
 
 // ── VPN (OpenVPN) ──
-export type VpnState = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type VpnState = "disconnected" | "connecting" | "connected" | "error";
 
 export type VpnStatus = {
   state: VpnState;
@@ -336,7 +336,7 @@ export type VpnStatus = {
 // ── 미러링 (scrcpy — 안드로이드 화면 미러·제어) ──
 
 /** mirror = 화면 미러링(+폰 화면 끔) · control = 화면 없이 키보드·마우스로 폰 조작(uhid) */
-export type MirrorMode = 'mirror' | 'control';
+export type MirrorMode = "mirror" | "control";
 
 export type MirrorStatus = {
   installed: boolean; // scrcpy 바이너리 존재 여부 (Homebrew)
@@ -444,4 +444,53 @@ export type ReminderRepeat = {
 export type ReminderConfig = {
   days: DayReminderConfig[];
   repeat: ReminderRepeat;
+};
+
+// ── Nightwatch (야간 무인 버그 분석 — one-app 내장 엔진) ──
+export type NightwatchTicket = {
+  key: string;
+  status: string; // in_progress | analyzed | failed | violation_edited …
+  classification?: string | null; // fixable | analysis-only | skip
+  confidence?: number | null;
+  summary?: string | null;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMin?: number | null;
+  report?: boolean; // 분석 리포트 파일 존재 여부
+  error?: string | null;
+};
+
+// 폼 친화적으로 평평하게 유지 — 저장은 userData/nightwatch/config.json
+export type NightwatchConfig = {
+  enabled: boolean; // 감시 on/off (스케줄러 게이트)
+  scopePath: string; // 분석 대상 저장소 절대 경로
+  jql: string; // 티켓 선별 정책 전체
+  windowStart: string; // "21:00"
+  windowEnd: string; // "07:00"
+  weekendAllDay: boolean;
+  idleMinutes: number; // 자리 비움 판정 (분)
+  maxTicketsPerNight: number;
+  claudeConfigDir: string; // 야간 실행 Claude 계정 (~/.claude | ~/.claude-team)
+  timeoutMinutes: number; // 티켓당 미션 타임아웃
+};
+
+export type NightwatchStatus = {
+  jiraConfigured: boolean; // 환경설정 → 연동의 Jira 주소·이메일·토큰 완비 여부
+  workspaceReady: boolean; // 전용 워크스페이스(worktree + node_modules) 준비 여부
+  claudeFound: boolean; // claude 바이너리 탐지 여부
+  cycleRunning: boolean; // 지금 미션 실행 중 여부
+  currentTicket?: string; // 실행 중인 티켓 키
+  lastCycleAt?: string; // 마지막 사이클 시각 (ISO)
+  inWindow: boolean; // 지금이 감시 시간창 안인지
+  startedTonight: number; // 이번 밤 창에서 시작한 티켓 수
+  jiraBaseUrl?: string; // 티켓 키 클릭 시 브라우저 링크용
+  config: NightwatchConfig;
+  tickets: NightwatchTicket[];
+};
+
+export type NightwatchCommandResult = { ok: boolean; output: string };
+export type NightwatchTextResult = {
+  ok: boolean;
+  content?: string;
+  error?: string;
 };
