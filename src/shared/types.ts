@@ -535,6 +535,14 @@ export type MailInboxResult = {
   error?: string;
 };
 
+/** 안읽은 수만 조회 (위젯 폴링용 경량 — 목록 없이 getMailBoxCount 만) */
+export type MailUnreadCountResult = {
+  ok: boolean;
+  configured: boolean;
+  unreadCount: number;
+  error?: string;
+};
+
 /** 메일 본문 (readMail 메타 + readMailCont HTML) */
 export type MailBody = {
   muid: number;

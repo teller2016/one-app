@@ -14,6 +14,7 @@ import type {
   MailBodyResult,
   MailInboxResult,
   MailItem,
+  MailUnreadCountResult,
 } from '../../../shared/types';
 
 /** 응답 텍스트가 로그인 페이지(세션 만료)인지 — 그러면 재로그인 유도 */
@@ -80,6 +81,48 @@ function parseDate(raw?: string): number {
   return Number.isNaN(ms) ? Date.parse(raw) || 0 : ms;
 }
 
+/** 폴더별 개수 조회 — allunseen(뱃지)과 INBOX mboxSeq 를 함께 반환 */
+async function fetchBoxCount(
+  s: MailSession,
+): Promise<{ unreadCount: number; mboxSeq: number }> {
+  const countRes = await mailPost(
+    s.cookie,
+    MAIL_CONFIG.endpoints.boxCount,
+    `id=${encodeURIComponent(s.id)}&domain=${encodeURIComponent(s.domain)}&isExternal=false&isApproval=false`,
+  );
+  const count = await parseJson<BoxCountResp>(countRes);
+  const inbox = (count.mailboxList ?? []).find(
+    (m) => m.name === MAIL_CONFIG.inboxName,
+  );
+  return {
+    unreadCount: Number(count.allunseen ?? 0),
+    mboxSeq: Number(inbox?.mboxSeq ?? MAIL_CONFIG.inboxSeqFallback),
+  };
+}
+
+/**
+ * 안읽은 메일 수만 조회 (위젯 폴링용 경량) — 목록 없이 getMailBoxCount 한 번.
+ * 세션이 캐시돼 있으면 단일 POST 라 자주 호출해도 부담이 적다.
+ */
+export async function getUnreadCount(): Promise<MailUnreadCountResult> {
+  if (!getCredentials()) {
+    return { ok: false, configured: false, unreadCount: 0 };
+  }
+  try {
+    return await withSession(async (s) => {
+      const { unreadCount } = await fetchBoxCount(s);
+      return { ok: true, configured: true, unreadCount };
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      configured: true,
+      unreadCount: 0,
+      error: `안읽은 메일 수 조회 실패 — ${(err as Error).message}`,
+    };
+  }
+}
+
 /**
  * 받은편지함 조회 — 안읽은 총 수(뱃지) + 최근 메일 목록.
  * 계정 미설정이면 configured:false 로 조용히 반환한다(배너 안내용).
@@ -97,17 +140,7 @@ export async function getInbox(limit = 30): Promise<MailInboxResult> {
   try {
     return await withSession(async (s) => {
       // 1) 폴더별 개수 — allunseen(뱃지) + INBOX mboxSeq
-      const countRes = await mailPost(
-        s.cookie,
-        MAIL_CONFIG.endpoints.boxCount,
-        `id=${encodeURIComponent(s.id)}&domain=${encodeURIComponent(s.domain)}&isExternal=false&isApproval=false`,
-      );
-      const count = await parseJson<BoxCountResp>(countRes);
-      const inbox = (count.mailboxList ?? []).find(
-        (m) => m.name === MAIL_CONFIG.inboxName,
-      );
-      const mboxSeq = Number(inbox?.mboxSeq ?? MAIL_CONFIG.inboxSeqFallback);
-      const unreadCount = Number(count.allunseen ?? 0);
+      const { unreadCount, mboxSeq } = await fetchBoxCount(s);
 
       // 2) 받은편지함 최근 목록
       const listRes = await mailPost(

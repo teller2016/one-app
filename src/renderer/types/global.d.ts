@@ -54,6 +54,7 @@ import type {
   NightwatchTextResult,
   MailInboxResult,
   MailBodyResult,
+  MailUnreadCountResult,
 } from '../../shared/types';
 
 declare global {
@@ -110,6 +111,7 @@ declare global {
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
       };
       mail: {
+        getUnreadCount: () => Promise<MailUnreadCountResult>;
         getInbox: (limit?: number) => Promise<MailInboxResult>;
         getBody: (muid: number, unread: boolean) => Promise<MailBodyResult>;
         openWeb: () => Promise<{ ok: boolean }>;

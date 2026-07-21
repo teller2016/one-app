@@ -3,22 +3,29 @@ import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { MailModal } from './MailModal';
 
+// 폴링 간격 — 비즈박스는 실시간 푸시가 없어 폴링이 유일. 창이 활성일 땐 촘촘히,
+// 백그라운드(가려짐·포커스 아웃)면 느슨하게 돌려 낭비를 줄인다.
+const POLL_ACTIVE_MS = 30_000;
+const POLL_IDLE_MS = 180_000;
+
 /**
  * 사이드바 최상단 메일 진입점 — 안읽은 메일 수를 보여준다.
  *  · 아이콘 타일 클릭 → 브라우저로 비즈박스 메일함 열기
  *  · 제목/상태 클릭 → 앱 내 리더 모달 열기
- * 2분마다 자동 새로고침(Jira·PR 과 동일 주기). 계정 미설정이면 안내만 표시.
+ * 안읽은 수는 경량 count 폴링으로 갱신 — 활성 시 30초, 비활성 시 3분, 창 복귀 시 즉시.
+ * 백그라운드 폴링은 스피너 없이 조용히 갱신한다.
  */
 export function MailWidget() {
   const [unread, setUnread] = useState<number | null>(null);
   const [configured, setConfigured] = useState(true);
-  const [busy, setBusy] = useState(true);
+  const [spinning, setSpinning] = useState(false); // 스피너 — 수동/초기 로드에서만
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setBusy(true);
-    const res = await window.oneApp.mail.getInbox(1);
+  // showSpinner=false 면 백그라운드 무음 갱신 (30초 폴링마다 스피너가 깜빡이지 않게)
+  const load = useCallback(async (showSpinner: boolean): Promise<void> => {
+    if (showSpinner) setSpinning(true);
+    const res = await window.oneApp.mail.getUnreadCount();
     setConfigured(res.configured);
     if (res.ok) {
       setUnread(res.unreadCount);
@@ -26,14 +33,51 @@ export function MailWidget() {
     } else if (res.configured) {
       setError(res.error ?? '조회 실패');
     }
-    setBusy(false);
+    if (showSpinner) setSpinning(false);
   }, []);
 
+  const refresh = useCallback((): void => {
+    void load(true);
+  }, [load]);
+
+  // 포커스/가시성 인지 적응형 폴링
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => void refresh(), 120_000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const active = () =>
+      document.visibilityState === 'visible' && document.hasFocus();
+
+    const schedule = (): void => {
+      if (stopped) return;
+      timer = setTimeout(() => void tick(), active() ? POLL_ACTIVE_MS : POLL_IDLE_MS);
+    };
+    const tick = async (): Promise<void> => {
+      await load(false); // 폴링은 무음
+      schedule();
+    };
+
+    void (async () => {
+      await load(true); // 최초 1회는 스피너 표시
+      schedule();
+    })();
+
+    // 창으로 돌아오면 즉시 한 번 갱신하고 촘촘한 주기로 리셋
+    const onWake = () => {
+      if (stopped || !active()) return;
+      clearTimeout(timer);
+      void load(false);
+      schedule();
+    };
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+    };
+  }, [load]);
 
   const handleRead = () => {
     setUnread((n) => (n && n > 0 ? n - 1 : 0));
@@ -42,7 +86,7 @@ export function MailWidget() {
   const hasUnread = configured && unread != null && unread > 0;
   const status = !configured
     ? '계정 설정 필요'
-    : busy && unread === null
+    : spinning && unread === null
       ? '확인 중…'
       : hasUnread
         ? `새 메일 ${unread}통`
@@ -86,8 +130,8 @@ export function MailWidget() {
         {/* 우측 — 새로고침 (안읽음 수는 상태 텍스트 + 타일 점으로 표시) */}
         <RefreshButton
           size={13}
-          spinning={busy}
-          onClick={() => void refresh()}
+          spinning={spinning}
+          onClick={refresh}
           disabled={!configured}
           title="안읽은 메일 새로고침"
         />

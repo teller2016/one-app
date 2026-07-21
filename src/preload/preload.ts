@@ -101,6 +101,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     },
   },
   mail: {
+    // 안읽은 메일 수만 (위젯 폴링용 경량 — 목록 없이 개수만)
+    getUnreadCount: () => ipcRenderer.invoke("mail:unread-count"),
     // 받은편지함 — 안읽은 수 + 최근 메일 목록 (미설정이면 configured:false)
     getInbox: (limit?: number) => ipcRenderer.invoke("mail:inbox", limit),
     // 본문 조회 — unread=true 면 열 때 그룹웨어에서도 읽음 처리
