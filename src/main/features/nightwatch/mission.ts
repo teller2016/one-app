@@ -14,7 +14,7 @@ const LOG_TEXT_LEN = 200; // 미션 로그 한 줄에 담는 본문 길이
 // 읽기 전용 자율 분석 계약 — {{KEY}}/{{TICKET_JSON}}/{{ATTACHMENTS_DIR}}/{{REPORT_PATH}}/{{RESULT_JSON_PATH}}/{{REPO}} 치환
 const OBSERVE_MISSION = `# Nightwatch Mission — Observe Mode ({{KEY}})
 
-You are running unattended at night as the FEMC orchestrator. No user is present. This is an OBSERVE mission: analyze and report only.
+You are running headless as the FEMC orchestrator. No user is watching this session. This is an OBSERVE mission: analyze and report only.
 
 ## Inputs
 
@@ -40,7 +40,7 @@ You are running unattended at night as the FEMC orchestrator. No user is present
    - \`## 수정 제안\` — concrete minimal fix per finding, with a sketch diff when confident. If the root cause is outside this repo (backend data/API, native app, policy), say so and describe what to hand off to whom instead.
    - \`## 검증 계획\` — how the morning reviewer should verify (commands, routes, scenarios).
    - \`## Assumptions/Decisions\` — every autonomous decision made.
-4. Write \`{{PROMPT_PATH}}\` — a self-contained Korean work order that the user will paste as-is into a fresh Claude Code session opened at the real {{REPO}} repo the next morning. It must stand alone without this report:
+4. Write \`{{PROMPT_PATH}}\` — a self-contained Korean work order that the user will paste as-is into a fresh Claude Code session opened at the real {{REPO}} repo. It must stand alone without this report:
    - Title line: \`# {{KEY}} <티켓 제목> 수정\`.
    - \`## 증상\` one sentence; \`## 원인\` with exact \`path:line\` citations; \`## 수정할 것\` — the minimal concrete change (diff sketch); \`## 검증\` — commands/routes/scenarios to confirm.
    - If the root cause is not fixable in this repo, write the work order as a hand-off note instead (what to relay, to whom, with evidence).
@@ -104,6 +104,7 @@ type StreamEvent = {
   model?: string;
   is_error?: boolean;
   result?: unknown;
+  total_cost_usd?: number;
   message?: { content?: StreamContentPart[] };
 };
 
@@ -124,13 +125,7 @@ function summarizeToolInput(input: unknown): string {
     : "";
 }
 
-function formatStreamLine(raw: string): string | null {
-  let evt: StreamEvent;
-  try {
-    evt = JSON.parse(raw) as StreamEvent;
-  } catch {
-    return raw.slice(0, LOG_TEXT_LEN); // JSON 아니면 원문 앞부분 (CLI 경고 등)
-  }
+function formatStreamEvent(evt: StreamEvent): string | null {
   switch (evt.type) {
     case "system":
       return evt.subtype === "init"
@@ -147,10 +142,15 @@ function formatStreamLine(raw: string): string | null {
       }
       return lines.length ? lines.join("\n") : null;
     }
-    case "result":
+    case "result": {
+      const cost =
+        typeof evt.total_cost_usd === "number"
+          ? ` ($${evt.total_cost_usd.toFixed(2)})`
+          : "";
       return evt.is_error
-        ? `결과: 오류 (${evt.subtype ?? "unknown"})`
-        : `결과: 완료 — ${String(evt.result ?? "").slice(0, LOG_TEXT_LEN)}`;
+        ? `결과: 오류 (${evt.subtype ?? "unknown"})${cost}`
+        : `결과: 완료 — ${String(evt.result ?? "").slice(0, LOG_TEXT_LEN)}${cost}`;
+    }
     default:
       return null; // tool_result 등은 소음이라 생략
   }
@@ -174,7 +174,7 @@ export function appendMissionLog(logPath: string, message: string) {
 
 export type MissionRun = {
   child: ChildProcess;
-  done: Promise<{ ok: boolean; error: string | null }>;
+  done: Promise<{ ok: boolean; error: string | null; costUsd: number | null }>;
 };
 
 /** 헤드리스 미션 실행 — 타임아웃이 유일한 예산 통제. 진행 상황은 missionLogPath 에 실시간 기록 */
@@ -210,6 +210,13 @@ export function runMission(params: {
       "--output-format",
       "stream-json",
       "--verbose",
+      // 읽기 전용 계약 보강 — 실제 작업본에서 돌기 때문에 편집 도구를 도구 수준에서 차단.
+      // Write 는 리포트·프롬프트 저장에 필요해 열어둔다 (경로 스코프 규칙은 skip-permissions
+      // 하에서 동작하지 않음을 실측 확인 — 저장소 수정은 사후 스냅샷 검증으로 감지)
+      "--disallowedTools",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
     ],
     {
       cwd: params.repoPath,
@@ -220,13 +227,13 @@ export function runMission(params: {
         ...process.env,
         CLAUDE_CONFIG_DIR: params.claudeConfigDir,
         FEMC_HOME: femcHome,
-        FEMC_NIGHTWATCH: "1",
       },
     }
   );
 
   // stdout 은 줄 단위 JSON 스트림 — 부분 청크를 버퍼링해 완성된 줄만 파싱
   let stdoutBuffer = "";
+  let costUsd: number | null = null;
   child.stdout?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => {
     stdoutBuffer += chunk;
@@ -234,7 +241,18 @@ export function runMission(params: {
     stdoutBuffer = lines.pop() ?? "";
     for (const line of lines) {
       if (!line.trim()) continue;
-      const formatted = formatStreamLine(line);
+      let evt: StreamEvent | null = null;
+      try {
+        evt = JSON.parse(line) as StreamEvent;
+      } catch {
+        evt = null;
+      }
+      if (evt?.type === "result" && typeof evt.total_cost_usd === "number") {
+        costUsd = evt.total_cost_usd; // 원장에 실제 비용 기록용
+      }
+      const formatted = evt
+        ? formatStreamEvent(evt)
+        : line.slice(0, LOG_TEXT_LEN); // JSON 아니면 원문 앞부분 (CLI 경고 등)
       if (formatted) appendLog(formatted);
     }
   });
@@ -246,28 +264,39 @@ export function runMission(params: {
     appendLog(`[stderr] ${chunk.trim().slice(0, LOG_TEXT_LEN)}`);
   });
 
-  const done = new Promise<{ ok: boolean; error: string | null }>(
-    (resolve) => {
-      child.on("error", (err) => {
-        appendLog(`실행 실패: ${err.message}`);
-        resolve({ ok: false, error: err.message.slice(0, ERROR_SNIPPET_LEN) });
+  const done = new Promise<{
+    ok: boolean;
+    error: string | null;
+    costUsd: number | null;
+  }>((resolve) => {
+    child.on("error", (err) => {
+      appendLog(`실행 실패: ${err.message}`);
+      resolve({
+        ok: false,
+        error: err.message.slice(0, ERROR_SNIPPET_LEN),
+        costUsd,
       });
-      child.on("close", (code) => {
-        if (code === 0) {
-          appendLog("미션 종료 (정상)");
-          return resolve({ ok: true, error: null });
-        }
-        if (child.killed) {
-          appendLog("미션 종료 (타임아웃 또는 중지)");
-          return resolve({ ok: false, error: "미션 타임아웃 또는 중지됨" });
-        }
-        appendLog(`미션 종료 (exit ${code})`);
-        resolve({
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        appendLog("미션 종료 (정상)");
+        return resolve({ ok: true, error: null, costUsd });
+      }
+      if (child.killed) {
+        appendLog("미션 종료 (타임아웃 또는 중지)");
+        return resolve({
           ok: false,
-          error: `exit ${code}: ${stderrTail.trim().slice(0, ERROR_SNIPPET_LEN)}`,
+          error: "미션 타임아웃 또는 중지됨",
+          costUsd,
         });
+      }
+      appendLog(`미션 종료 (exit ${code})`);
+      resolve({
+        ok: false,
+        error: `exit ${code}: ${stderrTail.trim().slice(0, ERROR_SNIPPET_LEN)}`,
+        costUsd,
       });
-    }
-  );
+    });
+  });
   return { child, done };
 }

@@ -1,4 +1,5 @@
 // Nightwatch 엔진 — Jira 후보 조회 → 티켓 데이터 준비 → 실제 저장소(현재 체크아웃)에서 헤드리스 미션 → 사후 검증 → 원장 기록.
+// 자동 실행 없음: UI 의 [분석] 수동 호출이 유일한 진입점이고, 실행 중 추가된 요청은 대기열로 순차 처리한다.
 // worktree 없이 사용자의 작업 트리를 그대로 읽는다 — 그래서 저장소에 대한 어떤 git 조작(원복 포함)도 하지 않고,
 // 미션이 저장소를 건드린 흔적이 보이면 증거 patch 만 남기고 경고한다.
 import type {
@@ -46,6 +47,8 @@ let missionBusy = false;
 let runningTicket: string | null = null;
 let runningChild: ChildProcess | null = null;
 let lastRunAt: string | undefined;
+// 실행 중 추가된 분석 요청 — 현재 미션이 끝나는 대로 순서대로 실행
+let queue: { key: string; repoId: string }[] = [];
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
@@ -157,6 +160,7 @@ export function deleteTicket(key: string): NightwatchCommandResult {
   delete state.tickets[key];
   saveNwState(state);
   removeTicketArtifacts(key);
+  appendCycleLog(`삭제: ${key} (수동)`);
   return { ok: true, output: `${key} 분석 기록을 삭제했습니다` };
 }
 
@@ -197,6 +201,7 @@ export function getNightwatchStatus(): NightwatchStatus {
     claudeFound: !!detectClaudeBin(),
     running: missionBusy,
     currentTicket: runningTicket ?? undefined,
+    queue: queue.map((q) => q.key),
     lastRunAt,
     jiraBaseUrl: getJiraApiConfig()?.url,
     config: getNightwatchConfig(),
@@ -243,7 +248,7 @@ export async function listCandidates(): Promise<NightwatchCandidatesResult> {
 }
 
 // ── 분석 실행 ───────────────────────────────────────────────────────────
-/** 티켓 1건 분석 — UI [분석]에서 저장소를 골라 호출. 동시 실행은 1건으로 제한 */
+/** 티켓 1건 분석 — UI [분석]에서 저장소를 골라 호출. 실행 중이면 대기열에 쌓여 순차 실행 */
 export async function analyzeTicket(
   key: string,
   repoId: string
@@ -251,33 +256,47 @@ export async function analyzeTicket(
   if (!TICKET_KEY_RE.test(key)) {
     return { ok: false, output: "잘못된 티켓 키입니다" };
   }
-  if (missionBusy) {
-    return { ok: false, output: `이미 분석이 실행 중입니다 (${runningTicket})` };
+  if (!getJiraApiConfig()) {
+    return {
+      ok: false,
+      output: "Jira 연동이 설정되지 않았습니다 (환경설정 → 연동)",
+    };
   }
+  const repo = getNightwatchConfig().repos.find((r) => r.id === repoId);
+  if (!repo) {
+    return { ok: false, output: "저장소를 선택해 주세요" };
+  }
+  if (!fs.existsSync(path.join(repo.path, ".git"))) {
+    return { ok: false, output: `저장소가 없습니다: ${repo.path}` };
+  }
+  if (runningTicket === key || queue.some((q) => q.key === key)) {
+    return { ok: false, output: `${key} 는 이미 실행·대기 중입니다` };
+  }
+  if (missionBusy) {
+    queue.push({ key, repoId });
+    appendCycleLog(`대기열 추가: ${key} (${repo.name}, ${queue.length}건 대기)`);
+    return {
+      ok: true,
+      output: `${key} 를 대기열에 추가했습니다 (${queue.length}건 대기)`,
+    };
+  }
+  return runAnalysis(key, repo);
+}
+
+async function runAnalysis(
+  key: string,
+  repo: NightwatchRepo
+): Promise<NightwatchCommandResult> {
   missionBusy = true;
   try {
     ensureNwDirs();
-    const cfg = getNightwatchConfig();
-    if (!getJiraApiConfig()) {
-      return {
-        ok: false,
-        output: "Jira 연동이 설정되지 않았습니다 (환경설정 → 연동)",
-      };
-    }
-    const repo = cfg.repos.find((r) => r.id === repoId);
-    if (!repo) {
-      return { ok: false, output: "저장소를 선택해 주세요" };
-    }
-    if (!fs.existsSync(path.join(repo.path, ".git"))) {
-      return { ok: false, output: `저장소가 없습니다: ${repo.path}` };
-    }
     const issue = (await jiraFetch(
       `/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS}`
     )) as unknown as JiraIssueRaw;
     // 같은 프로젝트·말머리의 다음 분석 때 이 저장소가 기본 선택되도록 기억
     const state = loadNwState();
     state.repoDefaults[repoDefaultKey(key, issue.fields.summary)] = repo.id;
-    return await processTicket(cfg, state, issue, repo);
+    return await processTicket(getNightwatchConfig(), state, issue, repo);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     appendCycleLog(`분석 오류: ${message}`);
@@ -285,21 +304,73 @@ export async function analyzeTicket(
   } finally {
     missionBusy = false;
     lastRunAt = new Date().toISOString();
+    drainQueue();
   }
 }
 
-/** 실행 중 미션 중지 — SIGTERM. 결과는 미션 종료 시 원장에 기록된다 */
+// 대기열 순차 실행 — 한 건이 실패해도 다음 항목으로 넘어간다
+function drainQueue() {
+  const next = queue.shift();
+  if (!next) return;
+  const repo = getNightwatchConfig().repos.find((r) => r.id === next.repoId);
+  if (!repo || !fs.existsSync(path.join(repo.path, ".git"))) {
+    appendCycleLog(`대기열 건너뜀: ${next.key} (저장소 없음)`);
+    drainQueue();
+    return;
+  }
+  appendCycleLog(`대기열 실행: ${next.key} (${repo.name})`);
+  void runAnalysis(next.key, repo);
+}
+
+/** 실행 중 미션 중지 — SIGTERM + 대기열 비움. 결과는 미션 종료 시 원장에 기록된다 */
 export function stopMission(): NightwatchCommandResult {
   if (!runningChild) {
     return { ok: false, output: "실행 중인 분석이 없습니다" };
   }
-  appendCycleLog(`사용자 중지 — 실행 중 미션(${runningTicket}) SIGTERM`);
+  const dropped = queue.length;
+  queue = [];
+  appendCycleLog(
+    `사용자 중지 — 실행 중 미션(${runningTicket}) SIGTERM${
+      dropped ? `, 대기열 ${dropped}건 취소` : ""
+    }`
+  );
   try {
     runningChild.kill("SIGTERM");
   } catch {
     // 이미 종료된 프로세스면 무시
   }
-  return { ok: true, output: "중지 신호를 보냈습니다" };
+  return {
+    ok: true,
+    output: `중지 신호를 보냈습니다${dropped ? ` (대기열 ${dropped}건 취소)` : ""}`,
+  };
+}
+
+/** 앱 시작 시 좀비 정리 — 이전 세션에서 in_progress 로 남은 항목은 중단된 것 */
+export function sweepInterruptedTickets() {
+  const state = loadNwState();
+  let changed = false;
+  for (const [key, t] of Object.entries(state.tickets)) {
+    if (t.status !== "in_progress") continue;
+    t.status = "failed";
+    t.error = "앱 종료로 분석이 중단되었습니다";
+    t.finishedAt = t.finishedAt ?? new Date().toISOString();
+    appendCycleLog(`좀비 정리: ${key} (앱 종료로 중단)`);
+    changed = true;
+  }
+  if (changed) saveNwState(state);
+}
+
+/** 앱 종료 시 정리 — 실행 중 claude 프로세스가 고아로 남지 않도록 SIGTERM */
+export function cleanupOnQuit() {
+  queue = [];
+  if (runningChild) {
+    appendCycleLog(`앱 종료 — 실행 중 미션(${runningTicket}) SIGTERM`);
+    try {
+      runningChild.kill("SIGTERM");
+    } catch {
+      // 이미 종료된 프로세스면 무시
+    }
+  }
 }
 
 type JiraIssueRaw = {
@@ -422,6 +493,7 @@ async function processTicket(
     Object.assign(entry, {
       finishedAt,
       durationMin,
+      costUsd: outcome.costUsd,
       summary: result?.summary ?? null,
       error: outcome.ok ? null : outcome.error,
       status: violation
@@ -431,7 +503,11 @@ async function processTicket(
         : "failed",
     });
     saveNwState(state);
-    appendCycleLog(`ticket ${key}: ${entry.status} (${durationMin}분)`);
+    appendCycleLog(
+      `ticket ${key}: ${entry.status} (${durationMin}분${
+        outcome.costUsd != null ? `, $${outcome.costUsd.toFixed(2)}` : ""
+      })`
+    );
     return { ok: true, output: `${key}: ${entry.status} (${durationMin}분)` };
   } catch (e) {
     runningChild = null;

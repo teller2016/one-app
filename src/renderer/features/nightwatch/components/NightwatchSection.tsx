@@ -38,11 +38,11 @@ const ticketBadge = (
 };
 
 /**
- * Nightwatch — Jira 버그 티켓 자동 분석 (수동 실행).
+ * Nightwatch — Jira 버그 티켓 헤드리스 분석 (수동 실행 전용).
  * Jira 섹션과 같은 '내 미해결 이슈' 중 버그만 후보로 보여주고, [분석]에서
  * 저장소를 골라 시작하면 그 저장소의 현재 체크아웃에서 헤드리스 Claude
- * 미션이 돌아 리포트(+fixable 이면 작업 프롬프트)를 만든다.
- * Jira 자격증명은 환경설정 → 연동 공용.
+ * 미션이 돌아 리포트 + 작업 프롬프트를 만든다. 실행 중 추가한 티켓은
+ * 대기열로 순차 실행. Jira 자격증명은 환경설정 → 연동 공용.
  */
 export function NightwatchSection() {
   const [status, setStatus] = useState<NightwatchStatus | null>(null);
@@ -121,14 +121,18 @@ export function NightwatchSection() {
   }, [status?.jiraConfigured, loadCandidates]);
 
   const analyze = async (key: string, repoId: string) => {
-    setAnalyzing(key);
-    setMissionLog("");
+    // 이미 미션이 돌고 있으면 대기열 추가라 promise 가 즉시 돌아온다
+    const queued = !!runningKey;
+    if (!queued) {
+      setAnalyzing(key);
+      setMissionLog("");
+    }
     try {
-      // 미션이 끝날 때까지(수 분~타임아웃) promise 가 유지된다
+      // 직접 실행이면 미션이 끝날 때까지(수 분~타임아웃) promise 가 유지된다
       const res = await window.oneApp.nightwatch.analyze(key, repoId);
       toast(res.output, res.ok ? undefined : "fail");
     } finally {
-      setAnalyzing(null);
+      if (!queued) setAnalyzing(null);
       await Promise.all([load(), loadCandidates()]);
     }
   };
@@ -253,7 +257,16 @@ export function NightwatchSection() {
 
   // 이 창에서 시작한 분석(analyzing) 또는 다른 경로로 도는 미션(status.running)
   const runningKey = analyzing ?? (status?.running ? status.currentTicket : null);
+  const queuedKeys = status?.queue ?? [];
   const isTeamAccount = !!form?.claudeConfigDir.endsWith(".claude-team");
+
+  // 실행·대기 중엔 상태를 5초 간격으로 — 대기열이 다음 티켓으로 넘어가는 걸 빠르게 반영
+  const missionActive = !!status?.running || queuedKeys.length > 0;
+  useEffect(() => {
+    if (!missionActive) return;
+    const timer = setInterval(() => void load(), 5000);
+    return () => clearInterval(timer);
+  }, [missionActive, load]);
 
   // 실행 중 미션 진행 로그 라이브 tail (3초 폴링)
   useEffect(() => {
@@ -314,10 +327,20 @@ export function NightwatchSection() {
               {runningKey && (
                 <>
                   <Badge variant="busy">{runningKey} 분석 중</Badge>
+                  {queuedKeys.length > 0 && (
+                    <span className="nightwatch__dim">
+                      대기 {queuedKeys.length}건
+                    </span>
+                  )}
                   <Button
                     variant="danger"
                     size="sm"
                     onClick={() => void stopAnalyze()}
+                    title={
+                      queuedKeys.length
+                        ? "실행 중 미션을 중지하고 대기열도 비웁니다"
+                        : "실행 중 미션을 중지합니다"
+                    }
                   >
                     중지
                   </Button>
@@ -379,11 +402,17 @@ export function NightwatchSection() {
                         variant="ghost"
                         size="sm"
                         loading={analyzing === c.key}
-                        disabled={!!runningKey}
+                        disabled={
+                          c.key === runningKey || queuedKeys.includes(c.key)
+                        }
                         onClick={() => openPick(c)}
-                        title="저장소를 골라 이 티켓 분석을 시작합니다"
+                        title={
+                          runningKey
+                            ? "저장소를 골라 대기열에 추가합니다 (현재 미션이 끝나면 순서대로 실행)"
+                            : "저장소를 골라 이 티켓 분석을 시작합니다"
+                        }
                       >
-                        분석
+                        {queuedKeys.includes(c.key) ? "대기 중" : "분석"}
                       </Button>
                     </div>
                   </div>
@@ -416,6 +445,14 @@ export function NightwatchSection() {
                       <Badge variant={badge.variant}>{badge.label}</Badge>
                       {t.repo && (
                         <span className="nightwatch__dim">{t.repo}</span>
+                      )}
+                      {typeof t.durationMin === "number" && (
+                        <span className="nightwatch__dim">
+                          {t.durationMin}분
+                          {typeof t.costUsd === "number"
+                            ? ` · $${t.costUsd.toFixed(2)}`
+                            : ""}
+                        </span>
                       )}
                     </div>
                     {/* 본문은 티켓 명칭 — 분석 요약·에러는 툴팁(전문은 리포트)으로 */}

@@ -446,7 +446,7 @@ export type ReminderConfig = {
   repeat: ReminderRepeat;
 };
 
-// ── Nightwatch (야간 무인 버그 분석 — one-app 내장 엔진) ──
+// ── Nightwatch (Jira 버그 티켓 헤드리스 분석 — 수동 실행) ──
 export type NightwatchTicket = {
   key: string;
   status: string; // in_progress | analyzed | failed | violation_edited …
@@ -455,6 +455,7 @@ export type NightwatchTicket = {
   startedAt?: string;
   finishedAt?: string;
   durationMin?: number | null;
+  costUsd?: number | null; // 미션 실제 비용 (stream result 이벤트)
   repo?: string | null; // 분석한 저장소 이름
   report?: boolean; // 분석 리포트 파일 존재 여부
   prompt?: boolean; // 작업 프롬프트 파일 존재 여부 (fixable 일 때 생성)
@@ -496,6 +497,7 @@ export type NightwatchStatus = {
   claudeFound: boolean; // claude 바이너리 탐지 여부
   running: boolean; // 지금 분석 실행 중 여부
   currentTicket?: string; // 실행 중인 티켓 키
+  queue: string[]; // 대기열 티켓 키 (실행 중일 때 추가된 순서)
   lastRunAt?: string; // 마지막 분석 시각 (ISO)
   jiraBaseUrl?: string; // 티켓 키 클릭 시 브라우저 링크용
   config: NightwatchConfig;

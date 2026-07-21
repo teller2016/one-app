@@ -1,7 +1,8 @@
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 import type { NightwatchConfig } from "../../../shared/types";
 import {
   analyzeTicket,
+  cleanupOnQuit,
   deleteTicket,
   getNightwatchStatus,
   listCandidates,
@@ -10,11 +11,16 @@ import {
   readNightwatchPrompt,
   readNightwatchReport,
   stopMission,
+  sweepInterruptedTickets,
 } from "./engine";
 import { saveNightwatchConfig } from "./store";
 
-/** Nightwatch(야간 무인 버그 분석) 관련 IPC 핸들러 등록 */
+/** Nightwatch(Jira 버그 티켓 헤드리스 분석) 관련 IPC 핸들러 등록 */
 export function registerNightwatchIpc() {
+  // 이전 세션에서 중단된 in_progress 항목 정리 + 종료 시 실행 중 미션 회수
+  sweepInterruptedTickets();
+  app.on("will-quit", () => cleanupOnQuit());
+
   ipcMain.handle("nightwatch:status", () => getNightwatchStatus());
   ipcMain.handle(
     "nightwatch:config:save",
