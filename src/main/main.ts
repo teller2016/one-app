@@ -3,6 +3,7 @@ import { registerAttendanceIpc } from "./features/attendance/ipc";
 import { startReminderScheduler } from "./features/attendance/scheduler";
 import { registerDeployIpc } from "./features/deploy/ipc";
 import { registerJiraIpc } from "./features/jira/ipc";
+import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
 import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
@@ -34,6 +35,7 @@ registerPrsIpc();
 registerApplinkIpc();
 registerMirrorIpc();
 registerJiraIpc();
+registerMailIpc();
 registerNightwatchIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)

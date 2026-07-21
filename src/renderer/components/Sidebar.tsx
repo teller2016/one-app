@@ -18,11 +18,13 @@ export function Sidebar({
   sections,
   activeId,
   onSelect,
+  header,
   footer,
 }: {
   sections: SidebarSection[];
   activeId: string;
   onSelect: (id: string) => void;
+  header?: ReactNode; // 최상단 고정 영역 (메일 위젯 등) — 브랜드와 메뉴 사이에 분리 표시
   footer?: ReactNode; // 하단 고정 영역 (근태 위젯 등)
 }) {
   return (
@@ -47,6 +49,7 @@ export function Sidebar({
         </span>
         <span>One App</span>
       </div>
+      {header && <div className="sidebar__header">{header}</div>}
       <nav className="sidebar__nav">
         {sections
           .filter((s) => !s.bottom)

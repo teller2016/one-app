@@ -52,6 +52,8 @@ import type {
   NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchTextResult,
+  MailInboxResult,
+  MailBodyResult,
 } from '../../shared/types';
 
 declare global {
@@ -106,6 +108,11 @@ declare global {
           targetId: string,
         ) => Promise<DeployPreviewResult>;
         onStatus: (cb: (evt: DeployStatusEvent) => void) => () => void;
+      };
+      mail: {
+        getInbox: (limit?: number) => Promise<MailInboxResult>;
+        getBody: (muid: number, unread: boolean) => Promise<MailBodyResult>;
+        openWeb: () => Promise<{ ok: boolean }>;
       };
       jira: {
         list: () => Promise<JiraListResult>;

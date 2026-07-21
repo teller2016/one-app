@@ -512,3 +512,42 @@ export type NightwatchTextResult = {
   content?: string;
   error?: string;
 };
+
+// ── 메일 (비즈박스 그룹웨어) ──
+
+/** 받은편지함 메일 한 건 (목록용 요약) */
+export type MailItem = {
+  muid: number; // 메일 고유 id (본문 조회 키)
+  subject: string;
+  from: string; // 발신자 (표시명 또는 주소)
+  date: number; // 수신 시각 (epoch ms — 파싱 실패 시 0)
+  seen: boolean; // 읽음 여부 (false = 안읽음)
+  hasAttach: boolean; // 첨부 존재 여부
+  size: number; // 바이트
+};
+
+/** 받은편지함 조회 결과 — 안읽은 수(뱃지) + 최근 메일 목록 */
+export type MailInboxResult = {
+  ok: boolean;
+  configured: boolean; // 비즈박스 계정(환경설정) 설정 여부
+  unreadCount: number; // 안읽은 메일 총 수 (getMailBoxCount allunseen)
+  items?: MailItem[];
+  error?: string;
+};
+
+/** 메일 본문 (readMail 메타 + readMailCont HTML) */
+export type MailBody = {
+  muid: number;
+  subject: string;
+  from: string;
+  to: string;
+  date: string; // 원문 일시 문자열 (decodeMime.date)
+  html: string; // sanitize 된 본문 HTML (sandbox iframe 렌더용)
+  webUrl: string; // 그룹웨어 메일 열기 링크
+};
+
+export type MailBodyResult = {
+  ok: boolean;
+  body?: MailBody;
+  error?: string;
+};

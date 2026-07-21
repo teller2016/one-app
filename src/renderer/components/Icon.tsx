@@ -40,7 +40,9 @@ export type IconName =
   | "circle"
   | "alert-triangle"
   | "info"
-  | "moon";
+  | "moon"
+  | "mail"
+  | "paperclip";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -211,6 +213,15 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M13 6h3a2 2 0 0 1 2 2v7" />
       <path d="M6 9v12" />
     </>
+  ),
+  mail: (
+    <>
+      <rect width="20" height="16" x="2" y="4" rx="2" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </>
+  ),
+  paperclip: (
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
   ),
 };
 

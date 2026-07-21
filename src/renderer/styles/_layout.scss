@@ -113,6 +113,13 @@
     }
   }
 
+  // 최상단 고정 위젯 슬롯 (메일) — 메뉴와 뚝 떨어진 별도 영역으로 분리 표시
+  &__header {
+    border-bottom: 1px solid var(--border);
+    padding: 2px 14px 6px;
+    -webkit-app-region: no-drag;
+  }
+
   // 하단 고정 위젯 슬롯 (VPN·미러링·근태 — 공용 .sbw 한 줄 레이아웃) — 셸 구조 요소라 여기서 정의
   &__footer {
     margin-top: auto;

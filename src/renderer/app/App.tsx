@@ -6,6 +6,7 @@ import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
 import { JiraSection, isDone } from "../features/jira";
+import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
 import { NightwatchSection } from "../features/nightwatch";
 import { PrSection } from "../features/prs";
@@ -142,6 +143,7 @@ export function App() {
             )}
             activeId={activeId}
             onSelect={setActiveId}
+            header={<MailWidget />}
             footer={
               <>
                 <MirrorWidget />

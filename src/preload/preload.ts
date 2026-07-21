@@ -100,6 +100,15 @@ contextBridge.exposeInMainWorld("oneApp", {
       return () => ipcRenderer.removeListener("deploy:status", listener);
     },
   },
+  mail: {
+    // 받은편지함 — 안읽은 수 + 최근 메일 목록 (미설정이면 configured:false)
+    getInbox: (limit?: number) => ipcRenderer.invoke("mail:inbox", limit),
+    // 본문 조회 — unread=true 면 열 때 그룹웨어에서도 읽음 처리
+    getBody: (muid: number, unread: boolean) =>
+      ipcRenderer.invoke("mail:body", muid, unread),
+    // 브라우저로 비즈박스 메일함 바로 열기
+    openWeb: () => ipcRenderer.invoke("mail:open-web"),
+  },
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)
     list: () => ipcRenderer.invoke("jira:list"),

@@ -1,0 +1,331 @@
+// 메일 — 사이드바 위젯(.sbw 재사용) + 리더 모달(왼쪽 목록 · 오른쪽 본문)
+@use './base' as *;
+
+// ===== 사이드바 최상단 메일 진입점 =====
+.mail-nav {
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+  }
+
+  // 아이콘 타일 — 액센트 소프트 라운드 사각 (앱 아이콘 느낌). 클릭 = 브라우저로 메일함
+  &__tile {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    color: var(--accent);
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      transform var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:not(:disabled):hover {
+      background: var(--accent-btn);
+      color: var(--on-accent);
+    }
+
+    &:not(:disabled):active {
+      transform: scale(0.94);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+  }
+
+  // 안읽음 점 — 타일 우상단 (테두리로 배경과 분리)
+  &__dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent-btn);
+    border: 2px solid var(--bg);
+  }
+
+  // 제목 + 상태 2줄 — 클릭 = 앱 내 리더 모달
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 2px;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+  }
+
+  &__title {
+    @include type-body;
+    color: var(--text);
+    line-height: 1.25;
+  }
+
+  &__status {
+    @include type-small;
+    color: var(--text-3);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &--accent {
+      color: var(--accent);
+    }
+  }
+
+  &__main:not(:disabled):hover &__title {
+    color: var(--accent);
+  }
+
+  &__error {
+    margin: 4px 0 2px;
+    @include type-small;
+    color: var(--danger);
+    word-break: break-word;
+  }
+}
+
+// ===== 리더 모달 =====
+.mail-modal__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// 메일 리더는 읽는 화면이라 크게 — Modal 기본 wide(880px)보다 넓고 세로도 시원하게.
+// (Modal 컴포넌트에 size prop 이 없어, 이 모달을 담은 .modal--wide 만 선택자로 확장)
+.modal--wide:has(.mail-modal) {
+  max-width: 1600px;
+  width: 96vw;
+}
+
+.mail-modal {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  // 오버레이 상하 여백(48*2) + 헤더·본문 패딩을 뺀 만큼 세로를 꽉 채운다
+  height: calc(100vh - 200px);
+  min-height: 440px;
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0; // 그리드 항목이 내용만큼 커지지 않고 줄어들 수 있게 (내부 스크롤)
+    border-right: 1px solid var(--border);
+    padding-right: 16px;
+  }
+
+  &__list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  &__list-title {
+    @include type-caption;
+  }
+
+  &__view {
+    min-width: 0;
+    min-height: 0; // 위와 동일 — iframe 이 뷰 높이를 넘겨 넘치지 않게
+    display: flex;
+    flex-direction: column;
+  }
+
+  // idle/loading 안내 — 오른쪽 영역 가운데 정렬
+  &__placeholder {
+    margin: auto;
+    text-align: center;
+  }
+}
+
+// ===== 왼쪽 목록 =====
+.mail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+
+  &__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover {
+      background: var(--overlay-hover);
+    }
+
+    &--active {
+      background: var(--overlay-hover);
+    }
+  }
+
+  // 안읽음 표시 점 — 읽음이면 투명
+  &__dot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  &__item--unread &__dot {
+    background: var(--accent-btn);
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__from {
+    @include type-small;
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__time {
+    flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__subject {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    @include type-body;
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 안읽음은 제목·발신자를 진하게
+  &__item--unread &__from,
+  &__item--unread &__subject {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  &__clip {
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+}
+
+// ===== 오른쪽 본문 =====
+.mail-view {
+  display: flex;
+  flex-direction: column;
+  // 그리드 항목(flex column)인 __view 를 flex 로 꽉 채운다.
+  // (height:100% 는 부모 높이가 그리드 stretch 라 percentage 가 auto 로 풀려 내용만큼 커진다)
+  flex: 1;
+  min-height: 0;
+
+  &__head {
+    flex-shrink: 0;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__subject {
+    margin: 0 0 6px;
+    @include type-title;
+    word-break: break-word;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  &__from {
+    @include type-body;
+    color: var(--text-2);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__date {
+    flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  // 본문 iframe — sandbox 흰 배경 문서. 남는 영역을 채우고 내부 스크롤
+  &__frame {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: #fff;
+  }
+}
