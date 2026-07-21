@@ -49,6 +49,7 @@ import type {
   ReminderConfig,
   NightwatchStatus,
   NightwatchConfig,
+  NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchTextResult,
 } from '../../shared/types';
@@ -166,14 +167,16 @@ declare global {
       };
       nightwatch: {
         getStatus: () => Promise<NightwatchStatus>;
-        setEnabled: (enabled: boolean) => Promise<NightwatchStatus>;
         saveConfig: (
           config: Partial<NightwatchConfig>,
         ) => Promise<NightwatchStatus>;
-        test: () => Promise<NightwatchCommandResult>;
-        initWorkspace: () => Promise<NightwatchCommandResult>;
-        cycleNow: () => Promise<NightwatchCommandResult>;
+        listCandidates: () => Promise<NightwatchCandidatesResult>;
+        analyze: (key: string, repoId: string) => Promise<NightwatchCommandResult>;
+        stop: () => Promise<NightwatchCommandResult>;
+        deleteTicket: (key: string) => Promise<NightwatchCommandResult>;
         getReport: (key: string) => Promise<NightwatchTextResult>;
+        getPrompt: (key: string) => Promise<NightwatchTextResult>;
+        getMissionLog: (key: string) => Promise<NightwatchTextResult>;
         getLog: () => Promise<NightwatchTextResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;

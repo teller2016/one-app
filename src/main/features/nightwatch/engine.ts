@@ -1,14 +1,24 @@
-// Nightwatch 엔진 — 게이트 → Jira 폴링 → 워크스페이스 위생 → 헤드리스 미션 → 사후 검증 → 원장 기록.
-// launchd 없이 one-app 이 트레이 상주하는 동안 스케줄러(scheduler.ts)가 이 엔진을 주기 호출한다.
+// Nightwatch 엔진 — Jira 후보 조회 → 티켓 데이터 준비 → 실제 저장소(현재 체크아웃)에서 헤드리스 미션 → 사후 검증 → 원장 기록.
+// worktree 없이 사용자의 작업 트리를 그대로 읽는다 — 그래서 저장소에 대한 어떤 git 조작(원복 포함)도 하지 않고,
+// 미션이 저장소를 건드린 흔적이 보이면 증거 patch 만 남기고 경고한다.
 import type {
+  JiraIssue,
+  NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchConfig,
+  NightwatchRepo,
   NightwatchStatus,
   NightwatchTextResult,
   NightwatchTicket,
 } from "../../../shared/types";
+import { fetchMyIssues } from "../jira/jira";
 import { getJiraApiConfig } from "../settings/store";
-import { buildObserveMission, detectClaudeBin, runMission } from "./mission";
+import {
+  appendMissionLog,
+  buildObserveMission,
+  detectClaudeBin,
+  runMission,
+} from "./mission";
 import {
   appendCycleLog,
   ensureNwDirs,
@@ -16,9 +26,9 @@ import {
   loadNwState,
   nwPaths,
   readCycleLogTail,
-  saveNightwatchConfig,
   saveNwState,
 } from "./store";
+import type { NwState } from "./store";
 import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -26,15 +36,16 @@ import path from "node:path";
 
 const GIT = "/usr/bin/git";
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
-const FETCH_TIMEOUT_MS = 60_000;
-const NPM_INSTALL_TIMEOUT_MS = 15 * 60_000;
+const TICKET_KEY_RE = /^[A-Z][A-Z0-9]*-\d+$/;
+const ISSUE_FIELDS =
+  "summary,description,priority,labels,created,comment,attachment";
+const RETENTION_DAYS = 30; // 처리한 티켓 자동 정리 기한
 
 // 실행 상태 — 앱 프로세스 내 단일 엔진이라 모듈 변수로 충분
-let cycleBusy = false;
+let missionBusy = false;
 let runningTicket: string | null = null;
 let runningChild: ChildProcess | null = null;
-let lastCycleAt: string | undefined;
-let lastGateReason = ""; // 같은 게이트 사유가 tick 마다 로그를 채우지 않도록 변화 시만 기록
+let lastRunAt: string | undefined;
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
@@ -60,60 +71,6 @@ const run = (
 
 const git = (cwd: string, args: string[], timeoutMs?: number) =>
   run(GIT, ["-C", cwd, ...args], { timeoutMs });
-
-// volta 등 사용자 셸 전용 PATH 가 필요한 명령은 zsh 로그인 셸을 경유한다
-const zsh = (script: string, opts: { cwd?: string; timeoutMs?: number } = {}) =>
-  run("/bin/zsh", ["-lc", script], opts);
-
-// ── 게이트 헬퍼 ─────────────────────────────────────────────────────────
-const toMinutes = (time: string) => {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-};
-
-function inWindow(cfg: NightwatchConfig, now: Date): boolean {
-  const day = now.getDay();
-  if (cfg.weekendAllDay && (day === 0 || day === 6)) return true;
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const start = toMinutes(cfg.windowStart);
-  const end = toMinutes(cfg.windowEnd);
-  return start > end
-    ? minutes >= start || minutes < end
-    : minutes >= start && minutes < end;
-}
-
-// 밤당 상한 계산 기준점 — 주말 종일 창은 자정, 야간 창은 직전 windowStart 시각
-function windowOpenedAt(cfg: NightwatchConfig, now: Date): Date {
-  const day = now.getDay();
-  if (cfg.weekendAllDay && (day === 0 || day === 6)) {
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  }
-  const [h, m] = cfg.windowStart.split(":").map(Number);
-  const opened = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    h,
-    m
-  );
-  if (opened > now) opened.setDate(opened.getDate() - 1);
-  return opened;
-}
-
-async function idleSeconds(): Promise<number> {
-  const result = await run("/bin/sh", [
-    "-c",
-    "/usr/sbin/ioreg -c IOHIDSystem | /usr/bin/awk '/HIDIdleTime/ {print int($NF/1000000000); exit}'",
-  ]);
-  return result.code === 0 ? Number(result.stdout) || 0 : 0;
-}
-
-function startedTonight(cfg: NightwatchConfig, now: Date): number {
-  const opened = windowOpenedAt(cfg, now);
-  return Object.values(loadNwState().tickets).filter(
-    (t) => t.startedAt && new Date(t.startedAt) >= opened
-  ).length;
-}
 
 // ── Jira REST ───────────────────────────────────────────────────────────
 async function jiraFetch(apiPath: string): Promise<Record<string, unknown>> {
@@ -171,210 +128,178 @@ function adfToText(node: AdfNode): string {
   return text;
 }
 
+// ── 원장 정리 ───────────────────────────────────────────────────────────
+/** 티켓 산출물 일괄 삭제 — 리포트·프롬프트·위반 patch·미션 로그·작업 데이터(첨부 포함) */
+function removeTicketArtifacts(key: string) {
+  const p = nwPaths();
+  const targets = [
+    path.join(p.reports, `${key}.md`),
+    path.join(p.reports, `${key}.prompt.md`),
+    path.join(p.reports, `${key}.partial.patch`),
+    path.join(p.logs, `${key}.mission.log`),
+    path.join(p.logs, `${key}.session.json`), // 초기 버전 산출물 호환
+    path.join(p.work, key),
+  ];
+  for (const target of targets) {
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+}
+
+/** 처리한 티켓 1건 삭제 — 원장 기록 + 산출물 파일 */
+export function deleteTicket(key: string): NightwatchCommandResult {
+  if (!TICKET_KEY_RE.test(key)) {
+    return { ok: false, output: "잘못된 티켓 키입니다" };
+  }
+  if (runningTicket === key) {
+    return { ok: false, output: "실행 중인 티켓은 삭제할 수 없습니다" };
+  }
+  const state = loadNwState();
+  delete state.tickets[key];
+  saveNwState(state);
+  removeTicketArtifacts(key);
+  return { ok: true, output: `${key} 분석 기록을 삭제했습니다` };
+}
+
+/** 기한 지난 항목 자동 정리 — 상태 조회 때마다 확인 (원장이 작아 부담 없음) */
+function pruneOldTickets(state: NwState): boolean {
+  const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  let changed = false;
+  for (const [key, t] of Object.entries(state.tickets)) {
+    if (key === runningTicket) continue;
+    const when = new Date(t.finishedAt ?? t.startedAt ?? "").getTime();
+    if (Number.isFinite(when) && when < cutoff) {
+      delete state.tickets[key];
+      removeTicketArtifacts(key);
+      appendCycleLog(`정리: ${key} (${RETENTION_DAYS}일 경과 자동 삭제)`);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // ── 상태 조립 ───────────────────────────────────────────────────────────
 export function getNightwatchStatus(): NightwatchStatus {
-  const cfg = getNightwatchConfig();
   const p = nwPaths();
   const state = loadNwState();
-  const now = new Date();
+  if (pruneOldTickets(state)) saveNwState(state);
   const tickets: NightwatchTicket[] = Object.entries(state.tickets)
     .map(([key, t]) => ({
       key,
       ...t,
       report: fs.existsSync(path.join(p.reports, `${key}.md`)),
+      prompt: fs.existsSync(path.join(p.reports, `${key}.prompt.md`)),
     }))
     .sort((a, b) =>
       String(b.startedAt ?? "").localeCompare(String(a.startedAt ?? ""))
     );
   return {
     jiraConfigured: !!getJiraApiConfig(),
-    workspaceReady: fs.existsSync(path.join(p.workspace, ".git")),
     claudeFound: !!detectClaudeBin(),
-    cycleRunning: cycleBusy,
+    running: missionBusy,
     currentTicket: runningTicket ?? undefined,
-    lastCycleAt,
-    inWindow: inWindow(cfg, now),
-    startedTonight: startedTonight(cfg, now),
+    lastRunAt,
     jiraBaseUrl: getJiraApiConfig()?.url,
-    config: cfg,
+    config: getNightwatchConfig(),
     tickets,
   };
 }
 
-/** 감시 on/off — 끌 때는 실행 중 미션도 함께 중지한다 */
-export function setNightwatchEnabled(enabled: boolean): NightwatchStatus {
-  saveNightwatchConfig({ enabled });
-  if (!enabled && runningChild) {
-    appendCycleLog(`사용자 중지 — 실행 중 미션(${runningTicket}) SIGTERM`);
-    try {
-      runningChild.kill("SIGTERM");
-    } catch {
-      // 이미 종료된 프로세스면 무시
-    }
+// 해결 판별 — renderer jira 의 isDone 과 동일 기준. 이 팀 워크플로우는 '해결됨'이
+// 카테고리상 done 이 아니라(진행 중) 이름 휴리스틱을 병행해야 후보에서 빠진다.
+const isIssueDone = (issue: JiraIssue) =>
+  issue.statusCategory === "done" ||
+  /해결|완료|resolved|done|closed/i.test(issue.status);
+
+// "[FO][이벤트]" 같은 제목 말머리의 첫 태그 — 저장소 기본 선택 학습 키에 쓴다
+const summaryPrefix = (summary: string) =>
+  /^\[([A-Za-z가-힣]+)\]/.exec(summary.trim())?.[1]?.toUpperCase() ?? "-";
+
+const repoDefaultKey = (ticketKey: string, summary: string) =>
+  `${ticketKey.split("-")[0]}:${summaryPrefix(summary)}`;
+
+/** 분석 후보 목록 — Jira 섹션과 같은 '내 미해결 이슈' 조회를 재사용해 미해결 버그만 남긴다 */
+export async function listCandidates(): Promise<NightwatchCandidatesResult> {
+  const list = await fetchMyIssues();
+  if (!list.ok || !list.issues) {
+    return { ok: false, error: list.error ?? "이슈 조회에 실패했습니다" };
   }
-  return getNightwatchStatus();
+  const state = loadNwState();
+  return {
+    ok: true,
+    candidates: list.issues
+      .filter(
+        (issue) => /bug|버그/i.test(issue.issueType) && !isIssueDone(issue)
+      )
+      .map((issue) => ({
+        key: issue.key,
+        summary: issue.summary,
+        status: issue.status,
+        priority: issue.priority,
+        processedStatus: state.tickets[issue.key]?.status ?? null,
+        suggestedRepoId:
+          state.repoDefaults[repoDefaultKey(issue.key, issue.summary)] ?? null,
+      })),
+  };
 }
 
-/** Jira 인증 + JQL 후보 미리보기 — 설정 점검용 */
-export async function testConnection(): Promise<NightwatchCommandResult> {
-  try {
-    const me = (await jiraFetch("/rest/api/3/myself")) as {
-      displayName?: string;
-      emailAddress?: string;
-    };
-    const cfg = getNightwatchConfig();
-    const search = (await jiraFetch(
-      `/rest/api/3/search/jql?jql=${encodeURIComponent(
-        cfg.jql
-      )}&maxResults=20&fields=summary,priority`
-    )) as {
-      issues?: {
-        key: string;
-        fields: { summary: string; priority?: { name?: string } };
-      }[];
-    };
-    const state = loadNwState();
-    const lines = (search.issues ?? []).map((issue) => {
-      const seen = state.tickets[issue.key]
-        ? `  [처리됨: ${state.tickets[issue.key].status}]`
-        : "";
-      return `${issue.key}  ${issue.fields.priority?.name ?? "-"}  ${
-        issue.fields.summary
-      }${seen}`;
-    });
-    return {
-      ok: true,
-      output: [
-        `인증 OK: ${me.displayName ?? me.emailAddress ?? "unknown"}`,
-        `JQL 후보 ${lines.length}건:`,
-        ...lines,
-      ].join("\n"),
-    };
-  } catch (e) {
-    return { ok: false, output: e instanceof Error ? e.message : String(e) };
+// ── 분석 실행 ───────────────────────────────────────────────────────────
+/** 티켓 1건 분석 — UI [분석]에서 저장소를 골라 호출. 동시 실행은 1건으로 제한 */
+export async function analyzeTicket(
+  key: string,
+  repoId: string
+): Promise<NightwatchCommandResult> {
+  if (!TICKET_KEY_RE.test(key)) {
+    return { ok: false, output: "잘못된 티켓 키입니다" };
   }
-}
-
-/** 전용 워크스페이스 준비 — worktree + .env 복사 + npm install. 각 단계 멱등 */
-export async function initWorkspace(): Promise<NightwatchCommandResult> {
+  if (missionBusy) {
+    return { ok: false, output: `이미 분석이 실행 중입니다 (${runningTicket})` };
+  }
+  missionBusy = true;
   try {
     ensureNwDirs();
     const cfg = getNightwatchConfig();
-    const ws = nwPaths().workspace;
-    if (!fs.existsSync(path.join(cfg.scopePath, ".git"))) {
+    if (!getJiraApiConfig()) {
       return {
         ok: false,
-        output: `분석 대상 저장소가 없습니다: ${cfg.scopePath}`,
+        output: "Jira 연동이 설정되지 않았습니다 (환경설정 → 연동)",
       };
     }
-    if (!fs.existsSync(path.join(ws, ".git"))) {
-      // 사내 원격은 VPN 여부에 따라 끊길 수 있어 fetch 실패는 경고로 강등
-      const fetched = await git(
-        cfg.scopePath,
-        ["fetch", "origin"],
-        FETCH_TIMEOUT_MS
-      );
-      if (fetched.code !== 0) {
-        appendCycleLog(
-          "워크스페이스 생성: fetch 실패, 로컬 origin/develop 기준"
-        );
-      }
-      const added = await git(cfg.scopePath, [
-        "worktree",
-        "add",
-        ws,
-        "--detach",
-        "origin/develop",
-      ]);
-      if (added.code !== 0) {
-        return { ok: false, output: `worktree 생성 실패: ${added.stderr}` };
-      }
+    const repo = cfg.repos.find((r) => r.id === repoId);
+    if (!repo) {
+      return { ok: false, output: "저장소를 선택해 주세요" };
     }
-    for (const file of fs.readdirSync(cfg.scopePath)) {
-      // .env 가 디렉터리인 프로젝트도 있어 cpSync recursive 로 통일
-      if (file.startsWith(".env")) {
-        fs.cpSync(path.join(cfg.scopePath, file), path.join(ws, file), {
-          recursive: true,
-          force: true,
-        });
-      }
+    if (!fs.existsSync(path.join(repo.path, ".git"))) {
+      return { ok: false, output: `저장소가 없습니다: ${repo.path}` };
     }
-    if (!fs.existsSync(path.join(ws, "node_modules"))) {
-      const installed = await zsh("npm install --no-audit --no-fund", {
-        cwd: ws,
-        timeoutMs: NPM_INSTALL_TIMEOUT_MS,
-      });
-      if (installed.code !== 0) {
-        return { ok: false, output: `npm install 실패: ${installed.stderr}` };
-      }
-    }
-    appendCycleLog(`워크스페이스 준비 완료: ${ws}`);
-    return { ok: true, output: "워크스페이스 준비 완료" };
-  } catch (e) {
-    return { ok: false, output: e instanceof Error ? e.message : String(e) };
-  }
-}
-
-// ── 사이클 ──────────────────────────────────────────────────────────────
-function gateSkip(reason: string): NightwatchCommandResult {
-  if (reason !== lastGateReason) {
-    appendCycleLog(`gate: ${reason}`);
-    lastGateReason = reason;
-  }
-  return { ok: true, output: `실행 안 함 — ${reason}` };
-}
-
-/** 사이클 1회 — force 는 수동 실행(감시 off·시간창·유휴·상한 게이트 무시) */
-export async function runCycleOnce(
-  force = false
-): Promise<NightwatchCommandResult> {
-  if (cycleBusy) return { ok: false, output: "이미 사이클이 실행 중입니다" };
-  cycleBusy = true;
-  try {
-    ensureNwDirs();
-    const cfg = getNightwatchConfig();
-    if (!getJiraApiConfig())
-      return gateSkip("Jira 연동 미설정 (환경설정 → 연동)");
-    if (!fs.existsSync(path.join(nwPaths().workspace, ".git"))) {
-      return gateSkip("워크스페이스 미준비");
-    }
-    const now = new Date();
-    if (!force) {
-      if (!cfg.enabled) return gateSkip("감시 꺼짐");
-      if (!inWindow(cfg, now)) return gateSkip("시간창 밖");
-      const idle = await idleSeconds();
-      if (idle < cfg.idleMinutes * 60) {
-        return gateSkip(`사용자 활동 중 (idle ${idle}s < ${cfg.idleMinutes}m)`);
-      }
-      const started = startedTonight(cfg, now);
-      if (started >= cfg.maxTicketsPerNight) {
-        return gateSkip(
-          `밤당 상한 도달 (${started}/${cfg.maxTicketsPerNight})`
-        );
-      }
-    }
-    lastGateReason = "";
-
-    const search = (await jiraFetch(
-      `/rest/api/3/search/jql?jql=${encodeURIComponent(
-        cfg.jql
-      )}&maxResults=20&fields=summary,description,priority,labels,created,comment,attachment`
-    )) as { issues?: JiraIssueRaw[] };
-    const issues = search.issues ?? [];
+    const issue = (await jiraFetch(
+      `/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS}`
+    )) as unknown as JiraIssueRaw;
+    // 같은 프로젝트·말머리의 다음 분석 때 이 저장소가 기본 선택되도록 기억
     const state = loadNwState();
-    appendCycleLog(`poll: 후보 ${issues.length}건`);
-    const issue = issues.find((candidate) => !state.tickets[candidate.key]);
-    if (!issue) return { ok: true, output: "신규 티켓 없음" };
-
-    return await processTicket(cfg, state, issue);
+    state.repoDefaults[repoDefaultKey(key, issue.fields.summary)] = repo.id;
+    return await processTicket(cfg, state, issue, repo);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    appendCycleLog(`사이클 오류: ${message}`);
+    appendCycleLog(`분석 오류: ${message}`);
     return { ok: false, output: message };
   } finally {
-    cycleBusy = false;
-    lastCycleAt = new Date().toISOString();
+    missionBusy = false;
+    lastRunAt = new Date().toISOString();
   }
+}
+
+/** 실행 중 미션 중지 — SIGTERM. 결과는 미션 종료 시 원장에 기록된다 */
+export function stopMission(): NightwatchCommandResult {
+  if (!runningChild) {
+    return { ok: false, output: "실행 중인 분석이 없습니다" };
+  }
+  appendCycleLog(`사용자 중지 — 실행 중 미션(${runningTicket}) SIGTERM`);
+  try {
+    runningChild.kill("SIGTERM");
+  } catch {
+    // 이미 종료된 프로세스면 무시
+  }
+  return { ok: true, output: "중지 신호를 보냈습니다" };
 }
 
 type JiraIssueRaw = {
@@ -398,8 +323,9 @@ type JiraIssueRaw = {
 
 async function processTicket(
   cfg: NightwatchConfig,
-  state: ReturnType<typeof loadNwState>,
-  issue: JiraIssueRaw
+  state: NwState,
+  issue: JiraIssueRaw,
+  repo: NightwatchRepo
 ): Promise<NightwatchCommandResult> {
   const p = nwPaths();
   const key = issue.key;
@@ -407,9 +333,18 @@ async function processTicket(
   const attachmentsDir = path.join(ticketDir, "attachments");
   fs.mkdirSync(attachmentsDir, { recursive: true });
   const startedAt = new Date().toISOString();
-  state.tickets[key] = { status: "in_progress", startedAt };
+  state.tickets[key] = {
+    status: "in_progress",
+    startedAt,
+    repo: repo.name,
+    title: issue.fields.summary,
+  };
   saveNwState(state);
-  appendCycleLog(`ticket ${key}: 시작 (${issue.fields.summary})`);
+  appendCycleLog(`ticket ${key}: 시작 (${repo.name} — ${issue.fields.summary})`);
+  // 미션 전 단계도 UI 라이브 패널에 보이도록 미션 로그를 여기서 초기화한다
+  const missionLogPath = path.join(p.logs, `${key}.mission.log`);
+  fs.writeFileSync(missionLogPath, "");
+  appendMissionLog(missionLogPath, "티켓 데이터·첨부 수집 중...");
 
   try {
     const ticket = {
@@ -438,35 +373,40 @@ async function processTicket(
     const ticketJsonPath = path.join(ticketDir, "ticket.json");
     fs.writeFileSync(ticketJsonPath, `${JSON.stringify(ticket, null, 2)}\n`);
 
-    await prepareWorkspace(key);
+    // 분석 컨텍스트 기록 + 미션 전 스냅샷 (읽기 전용 검증 기준점)
+    const branch = await git(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const before = await snapshotRepo(repo.path);
+    appendMissionLog(
+      missionLogPath,
+      `저장소: ${repo.name} (${branch.stdout || "?"}${
+        before.status ? ", 작업 중 변경분 있음" : ""
+      }) — 현재 체크아웃 그대로 분석`
+    );
 
     const mission = buildObserveMission({
       key,
       ticketJson: ticketJsonPath,
       attachmentsDir,
       reportPath: path.join(p.reports, `${key}.md`),
+      promptPath: path.join(p.reports, `${key}.prompt.md`),
       resultJsonPath: path.join(ticketDir, "result.json"),
-      repoName: path.basename(cfg.scopePath),
+      repoName: repo.name,
     });
     runningTicket = key;
     const missionRun = runMission({
       mission,
-      workspace: p.workspace,
+      repoPath: repo.path,
       claudeConfigDir: cfg.claudeConfigDir,
       timeoutMinutes: cfg.timeoutMinutes,
-      sessionLogPath: path.join(p.logs, `${key}.session.json`),
+      missionLogPath,
     });
     runningChild = missionRun.child;
     const outcome = await missionRun.done;
     runningChild = null;
     runningTicket = null;
 
-    const violation = await enforceReadOnly(key);
-    let result: {
-      classification?: string;
-      confidence?: number;
-      summary?: string;
-    } | null = null;
+    const violation = await detectRepoTampering(key, repo.path, before);
+    let result: { summary?: string } | null = null;
     try {
       result = JSON.parse(
         fs.readFileSync(path.join(ticketDir, "result.json"), "utf8")
@@ -482,8 +422,6 @@ async function processTicket(
     Object.assign(entry, {
       finishedAt,
       durationMin,
-      classification: result?.classification ?? null,
-      confidence: result?.confidence ?? null,
       summary: result?.summary ?? null,
       error: outcome.ok ? null : outcome.error,
       status: violation
@@ -493,9 +431,7 @@ async function processTicket(
         : "failed",
     });
     saveNwState(state);
-    appendCycleLog(
-      `ticket ${key}: ${entry.status} (${durationMin}분, class=${entry.classification}, conf=${entry.confidence})`
-    );
+    appendCycleLog(`ticket ${key}: ${entry.status} (${durationMin}분)`);
     return { ok: true, output: `${key}: ${entry.status} (${durationMin}분)` };
   } catch (e) {
     runningChild = null;
@@ -510,46 +446,40 @@ async function processTicket(
   }
 }
 
-// 분석 대상 코드를 항상 최신 origin/develop 에 맞춘다 (fetch 실패는 로컬 ref 로 강등)
-async function prepareWorkspace(key: string): Promise<void> {
-  const ws = nwPaths().workspace;
-  const dirty = await git(ws, ["status", "--porcelain"]);
-  if (dirty.stdout) {
-    const salvage = await git(ws, ["diff"]);
-    fs.writeFileSync(
-      path.join(nwPaths().logs, `salvage-${key}-${Date.now()}.patch`),
-      `${salvage.stdout}\n`
-    );
-    await git(ws, ["restore", "."]);
-    await git(ws, ["clean", "-fd"]);
-  }
-  const fetched = await git(ws, ["fetch", "origin"], FETCH_TIMEOUT_MS);
-  if (fetched.code !== 0) {
-    appendCycleLog(`[경고] git fetch 실패, 로컬 origin/develop 기준으로 분석`);
-  }
-  const switched = await git(ws, ["switch", "--detach", "origin/develop"]);
-  if (switched.code !== 0)
-    throw new Error(`git switch 실패: ${switched.stderr}`);
+// ── 읽기 전용 검증 (실제 저장소라 절대 원복하지 않는다) ─────────────────
+type RepoSnapshot = { status: string; diff: string };
+
+async function snapshotRepo(repoPath: string): Promise<RepoSnapshot> {
+  const status = await git(repoPath, ["status", "--porcelain"]);
+  const diff = await git(repoPath, ["diff"]);
+  return { status: status.stdout, diff: diff.stdout };
 }
 
-// 관찰 모드 읽기 전용 계약 검증 — 위반 시 증거 patch 보존 후 원복
-async function enforceReadOnly(key: string): Promise<boolean> {
-  const ws = nwPaths().workspace;
-  const dirty = await git(ws, ["status", "--porcelain"]);
-  if (!dirty.stdout) return false;
-  const patch = await git(ws, ["diff"]);
+/**
+ * 미션 전후 스냅샷 비교로 저장소를 건드렸는지 검사.
+ * 사용자의 작업본과 섞일 수 있어 자동 원복은 하지 않고, 증거 patch 를 남기고 경고만 한다.
+ */
+async function detectRepoTampering(
+  key: string,
+  repoPath: string,
+  before: RepoSnapshot
+): Promise<boolean> {
+  const after = await snapshotRepo(repoPath);
+  if (after.status === before.status && after.diff === before.diff)
+    return false;
   fs.writeFileSync(
     path.join(nwPaths().reports, `${key}.partial.patch`),
-    `${patch.stdout}\n${dirty.stdout}\n`
+    `# 미션 전 status:\n${before.status}\n\n# 미션 후 status:\n${after.status}\n\n# 미션 후 diff:\n${after.diff}\n`
   );
-  await git(ws, ["restore", "."]);
-  await git(ws, ["clean", "-fd"]);
+  appendCycleLog(
+    `[경고] ${key}: 미션이 저장소(${repoPath})를 수정한 흔적 — git status 로 확인하세요 (자동 원복 안 함)`
+  );
   return true;
 }
 
-// ── 리포트·로그 조회 ────────────────────────────────────────────────────
+// ── 리포트·프롬프트·로그 조회 ───────────────────────────────────────────
 export function readNightwatchReport(key: string): NightwatchTextResult {
-  if (!/^[A-Z][A-Z0-9]*-\d+$/.test(key)) {
+  if (!TICKET_KEY_RE.test(key)) {
     return { ok: false, error: "잘못된 티켓 키입니다." };
   }
   try {
@@ -560,6 +490,37 @@ export function readNightwatchReport(key: string): NightwatchTextResult {
     return { ok: true, content };
   } catch {
     return { ok: false, error: "리포트 파일이 없습니다." };
+  }
+}
+
+/** 작업 프롬프트(md) — 아침에 Claude Code 세션에 붙여넣을 작업 지시문 (fixable 일 때 생성) */
+export function readNightwatchPrompt(key: string): NightwatchTextResult {
+  if (!TICKET_KEY_RE.test(key)) {
+    return { ok: false, error: "잘못된 티켓 키입니다." };
+  }
+  try {
+    const content = fs.readFileSync(
+      path.join(nwPaths().reports, `${key}.prompt.md`),
+      "utf8"
+    );
+    return { ok: true, content };
+  } catch {
+    return { ok: false, error: "작업 프롬프트 파일이 없습니다." };
+  }
+}
+
+/** 미션 진행 로그 tail — 실행 중 UI 라이브 표시 + 사후 확인 공용 */
+export function readMissionLog(key: string): NightwatchTextResult {
+  if (!TICKET_KEY_RE.test(key)) {
+    return { ok: false, error: "잘못된 티켓 키입니다." };
+  }
+  try {
+    const raw = fs
+      .readFileSync(path.join(nwPaths().logs, `${key}.mission.log`), "utf8")
+      .trimEnd();
+    return { ok: true, content: raw.split("\n").slice(-200).join("\n") };
+  } catch {
+    return { ok: false, error: "미션 로그가 없습니다." };
   }
 }
 

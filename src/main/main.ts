@@ -5,7 +5,6 @@ import { registerDeployIpc } from "./features/deploy/ipc";
 import { registerJiraIpc } from "./features/jira/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
-import { startNightwatchScheduler } from "./features/nightwatch/scheduler";
 import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
 import { registerPrsIpc } from "./features/prs/ipc";
 import { registerScheduleIpc } from "./features/schedule/ipc";
@@ -108,8 +107,6 @@ app.on("ready", () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
-  // Nightwatch 야간 감시 스케줄러 — 게이트 판단은 엔진이 하므로 항상 시작해 둔다
-  startNightwatchScheduler();
   // 메뉴바 트레이 — 창이 닫혀 있어도 열기·출퇴근 찍기 가능
   createTray(() => {
     const win = BrowserWindow.getAllWindows()[0];

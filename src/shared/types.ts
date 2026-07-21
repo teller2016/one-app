@@ -450,39 +450,53 @@ export type ReminderConfig = {
 export type NightwatchTicket = {
   key: string;
   status: string; // in_progress | analyzed | failed | violation_edited …
-  classification?: string | null; // fixable | analysis-only | skip
-  confidence?: number | null;
-  summary?: string | null;
+  title?: string | null; // 티켓 명칭 (Jira summary)
+  summary?: string | null; // 분석 결과 한 줄 요약 (result.json)
   startedAt?: string;
   finishedAt?: string;
   durationMin?: number | null;
+  repo?: string | null; // 분석한 저장소 이름
   report?: boolean; // 분석 리포트 파일 존재 여부
+  prompt?: boolean; // 작업 프롬프트 파일 존재 여부 (fixable 일 때 생성)
   error?: string | null;
+};
+
+/** 분석 대상 저장소 — 실제 작업 트리 경로 (worktree 없이 현재 체크아웃 그대로 분석) */
+export type NightwatchRepo = {
+  id: string;
+  name: string; // UI 표시명 (babybonjuk store 등)
+  path: string; // 저장소 절대 경로
 };
 
 // 폼 친화적으로 평평하게 유지 — 저장은 userData/nightwatch/config.json
 export type NightwatchConfig = {
-  enabled: boolean; // 감시 on/off (스케줄러 게이트)
-  scopePath: string; // 분석 대상 저장소 절대 경로
-  jql: string; // 티켓 선별 정책 전체
-  windowStart: string; // "21:00"
-  windowEnd: string; // "07:00"
-  weekendAllDay: boolean;
-  idleMinutes: number; // 자리 비움 판정 (분)
-  maxTicketsPerNight: number;
-  claudeConfigDir: string; // 야간 실행 Claude 계정 (~/.claude | ~/.claude-team)
+  repos: NightwatchRepo[]; // 분석 대상 저장소 목록
+  claudeConfigDir: string; // 분석 세션 Claude 계정 (~/.claude | ~/.claude-team)
   timeoutMinutes: number; // 티켓당 미션 타임아웃
+};
+
+// 분석 후보 티켓 — Jira 섹션과 같은 '내 미해결 이슈' 중 버그만. UI 에서 골라 수동 실행
+export type NightwatchCandidate = {
+  key: string;
+  summary: string;
+  status: string; // 해야 할 일 · 진행 중 …
+  priority: string | null;
+  processedStatus: string | null; // 원장에 이미 있으면 그 상태 (재분석 가능)
+  suggestedRepoId: string | null; // 같은 프로젝트·말머리로 마지막에 고른 저장소 (학습형 기본값)
+};
+
+export type NightwatchCandidatesResult = {
+  ok: boolean;
+  candidates?: NightwatchCandidate[];
+  error?: string;
 };
 
 export type NightwatchStatus = {
   jiraConfigured: boolean; // 환경설정 → 연동의 Jira 주소·이메일·토큰 완비 여부
-  workspaceReady: boolean; // 전용 워크스페이스(worktree + node_modules) 준비 여부
   claudeFound: boolean; // claude 바이너리 탐지 여부
-  cycleRunning: boolean; // 지금 미션 실행 중 여부
+  running: boolean; // 지금 분석 실행 중 여부
   currentTicket?: string; // 실행 중인 티켓 키
-  lastCycleAt?: string; // 마지막 사이클 시각 (ISO)
-  inWindow: boolean; // 지금이 감시 시간창 안인지
-  startedTonight: number; // 이번 밤 창에서 시작한 티켓 수
+  lastRunAt?: string; // 마지막 분석 시각 (ISO)
   jiraBaseUrl?: string; // 티켓 키 클릭 시 브라우저 링크용
   config: NightwatchConfig;
   tickets: NightwatchTicket[];

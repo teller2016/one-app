@@ -215,21 +215,26 @@ contextBridge.exposeInMainWorld("oneApp", {
   nightwatch: {
     // 설정·워크스페이스·실행 상태·티켓 원장 종합 조회
     getStatus: () => ipcRenderer.invoke("nightwatch:status"),
-    // 감시 on/off — 끌 때는 실행 중 미션도 함께 중지
-    setEnabled: (enabled: boolean) =>
-      ipcRenderer.invoke("nightwatch:enable", enabled),
     // 설정 저장 (부분 갱신)
     saveConfig: (config: Partial<NightwatchConfig>) =>
       ipcRenderer.invoke("nightwatch:config:save", config),
-    // Jira 인증 + JQL 후보 미리보기
-    test: () => ipcRenderer.invoke("nightwatch:test"),
-    // 전용 워크스페이스 준비 (worktree + npm install — 수 분 소요)
-    initWorkspace: () => ipcRenderer.invoke("nightwatch:workspace:init"),
-    // 게이트 무시하고 지금 1회 실행
-    cycleNow: () => ipcRenderer.invoke("nightwatch:cycle:now"),
+    // 내 미해결 버그 후보 목록 (저장소 기본 선택 추천 포함)
+    listCandidates: () => ipcRenderer.invoke("nightwatch:candidates"),
+    // 티켓 1건을 선택한 저장소에서 분석 — 완료까지 promise 가 유지된다 (수 분~타임아웃)
+    analyze: (key: string, repoId: string) =>
+      ipcRenderer.invoke("nightwatch:analyze", key, repoId),
+    // 실행 중 분석 중지 (SIGTERM)
+    stop: () => ipcRenderer.invoke("nightwatch:stop"),
+    // 처리한 티켓 삭제 — 원장 기록 + 리포트·프롬프트·로그·첨부 파일
+    deleteTicket: (key: string) => ipcRenderer.invoke("nightwatch:delete", key),
     // 티켓 분석 리포트(md) 읽기
     getReport: (key: string) => ipcRenderer.invoke("nightwatch:report", key),
-    // cycle 로그 tail
+    // 작업 프롬프트(md) 읽기 — 아침에 Claude Code 에 붙여넣을 작업 지시문
+    getPrompt: (key: string) => ipcRenderer.invoke("nightwatch:prompt", key),
+    // 미션 진행 로그 tail (실행 중 라이브 표시 + 사후 확인)
+    getMissionLog: (key: string) =>
+      ipcRenderer.invoke("nightwatch:mission-log", key),
+    // 실행 로그 tail
     getLog: () => ipcRenderer.invoke("nightwatch:log"),
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)

@@ -1,4 +1,4 @@
-// Nightwatch — 야간 무인 버그 분석 관리 (상태 카드 + 티켓 목록 + 리포트 모달)
+// Nightwatch — 야간 무인 버그 분석 (후보 목록 + 처리 원장 + 리포트 모달)
 @use './base' as *;
 
 .nightwatch {
@@ -9,25 +9,62 @@
     gap: 12px;
   }
 
-  // 상태 + 제어 카드 — 한 줄 요약과 액션 버튼
-  &__card {
-    @include card-surface;
+  // 목록 상단 헤더 — 라벨 + (실행 중 뱃지·중지·새로고침)
+  &__list-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin: 16px 0 8px;
   }
 
-  &__state {
+  &__list-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-width: 0;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
-  &__meta {
+  // 저장소 선택 모달 — 세로 옵션 리스트 (선택 시 액센트 보더)
+  &__repos {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  &__repo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur-1) var(--ease),
+      background var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &--on {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+  }
+
+  &__repo-name {
+    @include type-body;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  &__repo-path {
     @include type-small;
     color: var(--text-3);
     overflow: hidden;
@@ -35,15 +72,28 @@
     white-space: nowrap;
   }
 
-  &__actions {
+  // 설정 — 저장소 목록 편집기 (이름·경로·삭제 행)
+  &__repo-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+
+  &__repo-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
+    width: 100%;
+
+    > :nth-child(2) {
+      flex: 1;
+    }
   }
 
-  // 연결 점검 출력 — 공용 .panel-sunken--log 안 pre 여백만 정리
-  &__test {
+  // 실행 중 미션 진행 로그 — 라이브 tail 패널 (자동 스크롤)
+  &__mission {
     margin-bottom: 16px;
 
     pre {
@@ -52,6 +102,8 @@
       @include type-small;
       white-space: pre-wrap;
       word-break: break-all;
+      max-height: 220px;
+      overflow: auto;
     }
   }
 
@@ -61,12 +113,13 @@
     margin-bottom: 16px;
   }
 
+  // 티켓 행 — 2단 구조: 왼쪽(메타 줄 + 요약 줄) + 오른쪽(액션 버튼)
   &__row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     width: 100%;
-    padding: 8px 16px;
+    padding: 10px 16px;
     color: var(--text);
 
     & + & {
@@ -84,6 +137,39 @@
     &:only-child {
       border-radius: var(--r-lg);
     }
+  }
+
+  &__row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__row-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  // 요약 — 전문을 두 줄까지 감싸 보여주고 넘치면 말줄임
+  &__row-title {
+    @include type-body;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    word-break: break-all;
+  }
+
+  &__row-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   // 티켓번호 — 클릭하면 Jira 를 브라우저에서 열기
@@ -106,29 +192,14 @@
     }
   }
 
-  &__conf {
+  // 우선순위·확신도 같은 보조 텍스트
+  &__dim {
     flex-shrink: 0;
     @include type-small;
     color: var(--text-3);
   }
 
-  // 설정 폼 시간창 "~" 구분자
-  &__tilde {
-    @include type-small;
-    color: var(--text-3);
-  }
-
-  &__summary {
-    flex: 1;
-    min-width: 0;
-    @include type-body;
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  // cycle 로그·리포트 본문 — 모노스페이스 프리포맷
+  // 실행 로그·리포트 본문 — 모노스페이스 프리포맷
   &__log,
   &__report {
     margin: 0;
