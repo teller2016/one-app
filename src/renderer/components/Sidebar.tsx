@@ -9,6 +9,8 @@ export interface SidebarSection {
   bottom?: boolean;
   /** 항목 우측 카운트 뱃지 (0 이거나 없으면 숨김 — Jira 미해결 수 등) */
   badge?: number;
+  /** true 면 뱃지를 액센트 필로 강조 (확인 안 한 새 티켓 등) */
+  badgeAccent?: boolean;
 }
 
 /** 왼쪽 사이드바 — 섹션 목록과 선택 상태를 표시한다. */
@@ -60,7 +62,14 @@ export function Sidebar({
               <span className="sidebar__item-icon">{s.icon}</span>
               <span>{s.label}</span>
               {s.badge != null && s.badge > 0 && (
-                <span className="sidebar__item-badge">{s.badge}</span>
+                <span
+                  className={
+                    'sidebar__item-badge' +
+                    (s.badgeAccent ? ' sidebar__item-badge--accent' : '')
+                  }
+                >
+                  {s.badge}
+                </span>
               )}
             </button>
           ))}
@@ -81,7 +90,14 @@ export function Sidebar({
               <span className="sidebar__item-icon">{s.icon}</span>
               <span>{s.label}</span>
               {s.badge != null && s.badge > 0 && (
-                <span className="sidebar__item-badge">{s.badge}</span>
+                <span
+                  className={
+                    'sidebar__item-badge' +
+                    (s.badgeAccent ? ' sidebar__item-badge--accent' : '')
+                  }
+                >
+                  {s.badge}
+                </span>
               )}
             </button>
           ))}

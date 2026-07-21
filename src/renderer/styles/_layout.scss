@@ -102,6 +102,14 @@
       font-weight: 600;
       color: var(--text-3);
       font-variant-numeric: tabular-nums;
+
+      // 확인 안 한 새 티켓 강조 — 액센트 필 (탭을 열어 확인하면 회색 숫자로 복귀)
+      &--accent {
+        padding: 1px 7px;
+        border-radius: var(--r-full);
+        background: var(--accent-btn);
+        color: var(--on-accent);
+      }
     }
   }
 
