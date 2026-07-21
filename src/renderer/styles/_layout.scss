@@ -14,6 +14,12 @@
   // 비브런시 — 창 재질(vibrancy: 'sidebar')이 그대로 비치도록 투명 (Finder 류)
   background: transparent;
   border-right: 1px solid var(--border);
+
+  // 라이트 모드에선 비브런시 재질이 회색빛으로 어둡게 비쳐, 밝은 반투명 베일로 띄운다.
+  // (다크 모드는 재질 그대로가 자연스러워 투명 유지)
+  :root[data-theme='light'] & {
+    background: rgba(255, 255, 255, 0.6);
+  }
   display: flex;
   flex-direction: column;
   // macOS 신호등 버튼 영역 확보 + 창 드래그
