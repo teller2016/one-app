@@ -218,8 +218,11 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 설정 저장 (부분 갱신)
     saveConfig: (config: Partial<NightwatchConfig>) =>
       ipcRenderer.invoke("nightwatch:config:save", config),
-    // 내 미해결 버그 후보 목록 (저장소 기본 선택 추천 포함)
+    // 내 미해결 이슈 후보 목록 (숨김 제외, 저장소 기본 선택 추천 포함)
     listCandidates: () => ipcRenderer.invoke("nightwatch:candidates"),
+    // 분석 불필요 티켓 숨김 / 전체 해제
+    hideCandidate: (key: string) => ipcRenderer.invoke("nightwatch:hide", key),
+    clearHidden: () => ipcRenderer.invoke("nightwatch:hidden:clear"),
     // 티켓 1건을 선택한 저장소에서 분석 — 완료까지 promise 가 유지된다 (수 분~타임아웃)
     analyze: (key: string, repoId: string) =>
       ipcRenderer.invoke("nightwatch:analyze", key, repoId),

@@ -3,8 +3,10 @@ import type { NightwatchConfig } from "../../../shared/types";
 import {
   analyzeTicket,
   cleanupOnQuit,
+  clearHiddenCandidates,
   deleteTicket,
   getNightwatchStatus,
+  hideCandidate,
   listCandidates,
   readMissionLog,
   readNightwatchLog,
@@ -30,6 +32,10 @@ export function registerNightwatchIpc() {
     }
   );
   ipcMain.handle("nightwatch:candidates", () => listCandidates());
+  ipcMain.handle("nightwatch:hide", (_e, key: string) =>
+    hideCandidate(String(key))
+  );
+  ipcMain.handle("nightwatch:hidden:clear", () => clearHiddenCandidates());
   ipcMain.handle("nightwatch:analyze", (_e, key: string, repoId: string) =>
     analyzeTicket(String(key), String(repoId))
   );

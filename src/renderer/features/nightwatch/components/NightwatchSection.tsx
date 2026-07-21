@@ -53,6 +53,7 @@ export function NightwatchSection() {
   );
   const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState("");
+  const [hiddenCount, setHiddenCount] = useState(0);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [missionLog, setMissionLog] = useState("");
   const [log, setLog] = useState("");
@@ -98,6 +99,7 @@ export function NightwatchSection() {
     const res = await window.oneApp.nightwatch.listCandidates();
     if (res.ok) {
       setCandidates(res.candidates ?? []);
+      setHiddenCount(res.hiddenCount ?? 0);
       setCandidatesError("");
     } else {
       setCandidatesError(res.error ?? "후보 조회에 실패했습니다");
@@ -155,6 +157,19 @@ export function NightwatchSection() {
   const stopAnalyze = async () => {
     const res = await window.oneApp.nightwatch.stop();
     toast(res.output, res.ok ? undefined : "fail");
+  };
+
+  // 분석이 필요 없는 티켓을 후보에서 제외 — 해결되면 숨김 목록에서 자동 정리
+  const hideTicket = async (key: string) => {
+    const res = await window.oneApp.nightwatch.hideCandidate(key);
+    toast(res.output, res.ok ? undefined : "fail");
+    await loadCandidates();
+  };
+
+  const unhideAll = async () => {
+    const res = await window.oneApp.nightwatch.clearHidden();
+    toast(res.output, res.ok ? undefined : "fail");
+    await loadCandidates();
   };
 
   const saveForm = async () => {
@@ -322,8 +337,18 @@ export function NightwatchSection() {
       {status && status.jiraConfigured && (
         <>
           <div className="nightwatch__list-head">
-            <span className="form-label">작업 가능한 버그 티켓</span>
+            <span className="form-label">작업 가능한 티켓</span>
             <div className="nightwatch__list-actions">
+              {hiddenCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void unhideAll()}
+                  title="숨김 처리한 티켓을 모두 다시 표시합니다"
+                >
+                  숨김 {hiddenCount}건 해제
+                </Button>
+              )}
               {runningKey && (
                 <>
                   <Badge variant="busy">{runningKey} 분석 중</Badge>
@@ -365,7 +390,10 @@ export function NightwatchSection() {
           {candidates &&
             (candidates.length === 0 ? (
               <div className="empty-state">
-                <p>내게 할당된 미해결 버그 티켓이 없습니다.</p>
+                <p>
+                  내게 할당된 미해결 티켓이 없습니다
+                  {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
+                </p>
               </div>
             ) : (
               <div className="nightwatch__list">
@@ -381,6 +409,7 @@ export function NightwatchSection() {
                         >
                           {c.key}
                         </button>
+                        <span className="nightwatch__dim">{c.issueType}</span>
                         <span className="nightwatch__dim">{c.status}</span>
                         {c.priority && (
                           <span className="nightwatch__dim">{c.priority}</span>
@@ -398,6 +427,17 @@ export function NightwatchSection() {
                       </div>
                     </div>
                     <div className="nightwatch__row-actions">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={
+                          c.key === runningKey || queuedKeys.includes(c.key)
+                        }
+                        onClick={() => void hideTicket(c.key)}
+                        title="분석이 필요 없는 티켓을 후보에서 제외합니다"
+                      >
+                        숨김
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

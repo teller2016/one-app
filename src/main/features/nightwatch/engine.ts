@@ -222,22 +222,30 @@ const summaryPrefix = (summary: string) =>
 const repoDefaultKey = (ticketKey: string, summary: string) =>
   `${ticketKey.split("-")[0]}:${summaryPrefix(summary)}`;
 
-/** 분석 후보 목록 — Jira 섹션과 같은 '내 미해결 이슈' 조회를 재사용해 미해결 버그만 남긴다 */
+/** 분석 후보 목록 — Jira 섹션과 같은 '내 미해결 이슈' 전체에서 해결·숨김 티켓만 뺀다 */
 export async function listCandidates(): Promise<NightwatchCandidatesResult> {
   const list = await fetchMyIssues();
   if (!list.ok || !list.issues) {
     return { ok: false, error: list.error ?? "이슈 조회에 실패했습니다" };
   }
   const state = loadNwState();
+  const open = list.issues.filter((issue) => !isIssueDone(issue));
+  // 숨김 목록 위생 — 해결·할당 해제로 내 목록에서 사라진 키는 더 기억할 필요 없다
+  const openKeys = new Set(open.map((issue) => issue.key));
+  const hidden = state.hiddenTickets.filter((key) => openKeys.has(key));
+  if (hidden.length !== state.hiddenTickets.length) {
+    state.hiddenTickets = hidden;
+    saveNwState(state);
+  }
   return {
     ok: true,
-    candidates: list.issues
-      .filter(
-        (issue) => /bug|버그/i.test(issue.issueType) && !isIssueDone(issue)
-      )
+    hiddenCount: hidden.length,
+    candidates: open
+      .filter((issue) => !hidden.includes(issue.key))
       .map((issue) => ({
         key: issue.key,
         summary: issue.summary,
+        issueType: issue.issueType,
         status: issue.status,
         priority: issue.priority,
         processedStatus: state.tickets[issue.key]?.status ?? null,
@@ -245,6 +253,28 @@ export async function listCandidates(): Promise<NightwatchCandidatesResult> {
           state.repoDefaults[repoDefaultKey(issue.key, issue.summary)] ?? null,
       })),
   };
+}
+
+/** 후보 숨김 — 분석이 필요 없는 티켓을 목록에서 제외 (해결되면 자동 정리) */
+export function hideCandidate(key: string): NightwatchCommandResult {
+  if (!TICKET_KEY_RE.test(key)) {
+    return { ok: false, output: "잘못된 티켓 키입니다" };
+  }
+  const state = loadNwState();
+  if (!state.hiddenTickets.includes(key)) {
+    state.hiddenTickets.push(key);
+    saveNwState(state);
+  }
+  return { ok: true, output: `${key} 를 후보에서 숨겼습니다` };
+}
+
+/** 숨김 전체 해제 */
+export function clearHiddenCandidates(): NightwatchCommandResult {
+  const state = loadNwState();
+  const count = state.hiddenTickets.length;
+  state.hiddenTickets = [];
+  saveNwState(state);
+  return { ok: true, output: `숨김 ${count}건을 해제했습니다` };
 }
 
 // ── 분석 실행 ───────────────────────────────────────────────────────────

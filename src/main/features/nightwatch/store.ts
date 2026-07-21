@@ -168,6 +168,8 @@ export type NwState = {
   tickets: Record<string, NwStateTicket>;
   // "<프로젝트키>:<말머리>" → 마지막 선택 저장소 id (분석 시 기본 선택용)
   repoDefaults: Record<string, string>;
+  // 후보에서 숨김 처리한 티켓 키 (분석 불필요 — 해결되면 자동 정리)
+  hiddenTickets: string[];
 };
 
 export function loadNwState(): NwState {
@@ -175,6 +177,7 @@ export function loadNwState(): NwState {
   return {
     tickets: raw?.tickets ?? {},
     repoDefaults: raw?.repoDefaults ?? {},
+    hiddenTickets: raw?.hiddenTickets ?? [],
   };
 }
 

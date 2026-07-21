@@ -476,10 +476,11 @@ export type NightwatchConfig = {
   timeoutMinutes: number; // 티켓당 미션 타임아웃
 };
 
-// 분석 후보 티켓 — Jira 섹션과 같은 '내 미해결 이슈' 중 버그만. UI 에서 골라 수동 실행
+// 분석 후보 티켓 — Jira 섹션과 같은 '내 미해결 이슈' 전체 (숨김 처리한 티켓 제외)
 export type NightwatchCandidate = {
   key: string;
   summary: string;
+  issueType: string; // 버그 · 작업 · 하위 작업 …
   status: string; // 해야 할 일 · 진행 중 …
   priority: string | null;
   processedStatus: string | null; // 원장에 이미 있으면 그 상태 (재분석 가능)
@@ -489,6 +490,7 @@ export type NightwatchCandidate = {
 export type NightwatchCandidatesResult = {
   ok: boolean;
   candidates?: NightwatchCandidate[];
+  hiddenCount?: number; // 숨김 처리로 목록에서 빠진 티켓 수
   error?: string;
 };
 
