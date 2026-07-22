@@ -33,6 +33,22 @@ const typeInfo = (name: string): { rank: number; icon: IconName; tone: string } 
   return { rank: 2, icon: 'check', tone: 'task' };
 };
 
+/**
+ * 우선순위 이름 → 표시 정보 (Jira 스타일 화살표 — 한국어·영문 기본 이름 키워드 판별).
+ * '가장 높음/낮음'이 '높음/낮음'에도 걸리므로 highest/lowest 를 먼저 확인한다.
+ */
+const prioInfo = (name: string): { level: string; icon: IconName } | null => {
+  const n = name.toLowerCase();
+  if (/가장\s*높|highest|urgent|blocker/.test(n))
+    return { level: 'highest', icon: 'chevrons-up' };
+  if (/높|high|major/.test(n)) return { level: 'high', icon: 'chevron-up' };
+  if (/보통|medium|normal/.test(n)) return { level: 'medium', icon: 'equal' };
+  if (/가장\s*낮|lowest|trivial/.test(n))
+    return { level: 'lowest', icon: 'chevrons-down' };
+  if (/낮|low|minor/.test(n)) return { level: 'low', icon: 'chevron-down' };
+  return null;
+};
+
 /** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
 type MenuState = 'loading' | JiraTransition[] | { error: string };
 
@@ -61,6 +77,7 @@ function IssueRow({
   ]
     .filter(Boolean)
     .join(' · ');
+  const prio = issue.priority ? prioInfo(issue.priority) : null;
   return (
     <div className="jira__row">
       {/* 키 + 복사 아이콘 묶음 — 행 gap 보다 좁게 붙인다 */}
@@ -83,6 +100,14 @@ function IssueRow({
           <Icon name="copy" size={12} />
         </button>
       </span>
+      {prio && (
+        <span
+          className={`jira__prio jira__prio--${prio.level}`}
+          title={`우선순위 ${issue.priority}`}
+        >
+          <Icon name={prio.icon} size={12} />
+        </span>
+      )}
       <button
         type="button"
         className="jira__title"

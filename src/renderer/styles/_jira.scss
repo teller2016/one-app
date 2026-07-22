@@ -144,6 +144,27 @@
     flex-shrink: 0;
   }
 
+  // 우선순위 화살표 (Jira 스타일 — 높음=빨강 ↑, 보통=노랑 =, 낮음=파랑 ↓)
+  &__prio {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+
+    &--highest,
+    &--high {
+      color: var(--danger);
+    }
+
+    &--medium {
+      color: var(--warning);
+    }
+
+    &--low,
+    &--lowest {
+      color: var(--accent);
+    }
+  }
+
   // 티켓명 — 클릭하면 브라우저에서 열기
   &__title {
     flex: 1;

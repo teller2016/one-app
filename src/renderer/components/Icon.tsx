@@ -26,6 +26,10 @@ export type IconName =
   | "chevron-right"
   | "chevron-down"
   | "chevron-left"
+  | "chevron-up"
+  | "chevrons-up"
+  | "chevrons-down"
+  | "equal"
   | "arrow-up-right"
   | "git-pull-request"
   | "link"
@@ -122,6 +126,25 @@ const PATHS: Record<IconName, ReactNode> = {
   "chevron-right": <path d="m9 18 6-6-6-6" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
   "chevron-left": <path d="m15 18-6-6 6-6" />,
+  "chevron-up": <path d="m18 15-6-6-6 6" />,
+  "chevrons-up": (
+    <>
+      <path d="m17 11-5-5-5 5" />
+      <path d="m17 18-5-5-5 5" />
+    </>
+  ),
+  "chevrons-down": (
+    <>
+      <path d="m7 6 5 5 5-5" />
+      <path d="m7 13 5 5 5-5" />
+    </>
+  ),
+  equal: (
+    <>
+      <line x1="5" x2="19" y1="9" y2="9" />
+      <line x1="5" x2="19" y1="15" y2="15" />
+    </>
+  ),
   "arrow-up-right": (
     <>
       <path d="M7 7h10v10" />
