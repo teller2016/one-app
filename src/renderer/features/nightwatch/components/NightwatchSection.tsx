@@ -3,6 +3,7 @@ import type {
   NightwatchConfig,
   NightwatchRepo,
   NightwatchStatus,
+  NightwatchTicket,
 } from "../../../../shared/types";
 import { Badge } from "../../../components/Badge";
 import { Banner } from "../../../components/Banner";
@@ -147,6 +148,14 @@ export function NightwatchSection() {
     setPick({ key: c.key, repoId: def });
   };
 
+  // [재분석] 클릭 → 이전에 분석한 저장소를 기본 선택해 같은 모달을 연다
+  const openReanalyze = (t: NightwatchTicket) => {
+    const repos = status?.config.repos ?? [];
+    const def =
+      repos.find((r) => r.name === t.repo)?.id ?? repos[0]?.id ?? "";
+    setPick({ key: t.key, repoId: def });
+  };
+
   const confirmPick = () => {
     if (!pick?.repoId) return;
     const { key, repoId } = pick;
@@ -222,18 +231,6 @@ export function NightwatchSection() {
     const res = await window.oneApp.nightwatch.deleteTicket(key);
     toast(res.output, res.ok ? undefined : "fail");
     await load();
-  };
-
-  const openMissionLog = async (key: string) => {
-    setModal({ title: `${key} 미션 로그`, content: "불러오는 중..." });
-    const res = await window.oneApp.nightwatch.getMissionLog(key);
-    setModal({
-      title: `${key} 미션 로그`,
-      content:
-        res.ok && res.content
-          ? res.content
-          : res.error ?? "미션 로그를 불러오지 못했습니다",
-    });
   };
 
   const patch = (p: Partial<NightwatchConfig>) =>
@@ -391,7 +388,9 @@ export function NightwatchSection() {
             (candidates.length === 0 ? (
               <div className="empty-state">
                 <p>
-                  내게 할당된 미해결 티켓이 없습니다
+                  {status && status.tickets.length > 0
+                    ? "새로 분석할 티켓이 없습니다 — 처리한 티켓은 아래에서 [재분석]할 수 있어요"
+                    : "내게 할당된 미해결 티켓이 없습니다"}
                   {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
                 </p>
               </div>
@@ -504,6 +503,22 @@ export function NightwatchSection() {
                     </div>
                   </div>
                   <div className="nightwatch__row-actions">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={analyzing === t.key}
+                      disabled={
+                        t.key === runningKey || queuedKeys.includes(t.key)
+                      }
+                      onClick={() => openReanalyze(t)}
+                      title={
+                        runningKey
+                          ? "저장소를 골라 대기열에 추가합니다 (현재 미션이 끝나면 순서대로 실행)"
+                          : "이 티켓을 같은 저장소에서 다시 분석합니다"
+                      }
+                    >
+                      {queuedKeys.includes(t.key) ? "대기 중" : "재분석"}
+                    </Button>
                     {t.prompt && (
                       <Button
                         variant="primary"
@@ -514,13 +529,6 @@ export function NightwatchSection() {
                         프롬프트 복사
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void openMissionLog(t.key)}
-                    >
-                      로그
-                    </Button>
                     {t.report && (
                       <Button
                         variant="ghost"

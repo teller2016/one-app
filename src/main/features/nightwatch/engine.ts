@@ -242,12 +242,15 @@ export async function listCandidates(): Promise<NightwatchCandidatesResult> {
     hiddenCount: hidden.length,
     candidates: open
       .filter((issue) => !hidden.includes(issue.key))
+      // 이미 분석한 티켓은 '처리한 티켓' 섹션에서 [재분석]으로 다루므로 후보에서 제외 (중복 표시 방지)
+      .filter((issue) => !state.tickets[issue.key])
       .map((issue) => ({
         key: issue.key,
         summary: issue.summary,
         issueType: issue.issueType,
         status: issue.status,
         priority: issue.priority,
+        // 위 필터로 처리한 티켓은 이미 빠졌으므로 항상 null (필드는 타입 호환 위해 유지)
         processedStatus: state.tickets[issue.key]?.status ?? null,
         suggestedRepoId:
           state.repoDefaults[repoDefaultKey(issue.key, issue.summary)] ?? null,
