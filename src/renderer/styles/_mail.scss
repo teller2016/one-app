@@ -178,6 +178,7 @@
   min-height: 0;
 
   &__item {
+    position: relative; // 안읽음 점(absolute)의 기준
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -201,12 +202,13 @@
     }
   }
 
-  // 안읽음 표시 점 — 읽음이면 투명
+  // 안읽음 표시 점 — 행 패딩 위에 겹쳐 띄워 텍스트 들여쓰기를 만들지 않는다 (읽음이면 투명)
   &__dot {
-    flex-shrink: 0;
+    position: absolute;
+    left: 2px;
+    top: 15px; // 발신자 첫 줄 높이에 맞춤 (padding 9px + 기존 margin-top 6px)
     width: 7px;
     height: 7px;
-    margin-top: 6px;
     border-radius: 50%;
     background: transparent;
   }
