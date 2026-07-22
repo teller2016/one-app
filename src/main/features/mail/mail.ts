@@ -74,6 +74,19 @@ function listParams(s: MailSession, mboxSeq: number, pageSize: number): string {
   ].join('&');
 }
 
+/** 그룹웨어가 HTML 이스케이프해 내려주는 텍스트 필드 복원 — "&lt;a@b&gt;" → "<a@b>" */
+function decodeEntities(raw: string): string {
+  return raw
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&'); // 이중 이스케이프(&amp;lt;)가 원문으로 남도록 마지막에
+}
+
 /** "2026-07-21 10:21:16" → epoch ms (실패 시 0) */
 function parseDate(raw?: string): number {
   if (!raw) return 0;
@@ -151,8 +164,8 @@ export async function getInbox(limit = 30): Promise<MailInboxResult> {
       const list = await parseJson<MailListResp>(listRes);
       const items: MailItem[] = (list.Records ?? []).map((r) => ({
         muid: r.muid,
-        subject: r.subject?.trim() || '(제목 없음)',
-        from: r.mail_from?.trim() || '',
+        subject: decodeEntities(r.subject?.trim() || '(제목 없음)'),
+        from: decodeEntities(r.mail_from?.trim() || ''),
         date: parseDate(r.rfc822date),
         // bizbox seen: 1 = 읽음, 0 = 안읽음
         seen: Number(r.seen) === 1,
@@ -218,9 +231,9 @@ export async function getBody(
 
       const body: MailBody = {
         muid,
-        subject: dm.subject?.trim() || '(제목 없음)',
-        from: dm.from?.trim() || '',
-        to: dm.to?.trim() || '',
+        subject: decodeEntities(dm.subject?.trim() || '(제목 없음)'),
+        from: decodeEntities(dm.from?.trim() || ''),
+        to: decodeEntities(dm.to?.trim() || ''),
         date: dm.date?.trim() || '',
         html: sanitizeHtml(rawHtml),
         webUrl: MAIL_CONFIG.webUrl,
