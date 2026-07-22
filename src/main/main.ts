@@ -84,6 +84,13 @@ const createWindow = () => {
   // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록
   setNotifyWindow(mainWindow);
 
+  // 렌더러(메일 본문 iframe 등)의 새 창 요청은 앱 안에 창을 만들지 않고 기본 브라우저로 연다
+  // — 앱 내 새 창은 세션이 없어 빈 화면만 뜨므로 항상 deny
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
   // 앱 화면(index.html) 로드
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);

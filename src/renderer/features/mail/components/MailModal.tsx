@@ -15,8 +15,16 @@ type BodyState =
   | { kind: 'error'; message: string };
 
 /** 메일 HTML 을 sandbox iframe 으로 안전하게 감싼다 (스크립트 차단 + 흰 배경 고정) */
-function bodyDoc(html: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>
+function bodyDoc(html: string, webUrl: string): string {
+  // 상대경로 링크가 그룹웨어 호스트로 풀리도록 base href 지정 — 링크는 항상 새 창(target=_blank)으로
+  // 나가고, main 의 setWindowOpenHandler 가 이를 받아 기본 브라우저로 연다
+  let baseHref = '';
+  try {
+    baseHref = new URL(webUrl).origin + '/';
+  } catch {
+    /* webUrl 이 비정상이면 base 없이 렌더 */
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><base ${baseHref ? `href="${baseHref}" ` : ''}target="_blank"><style>
     html,body{margin:0;padding:14px;background:#fff;color:#1a1a1a;
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;line-height:1.6;word-break:break-word;}
     img{max-width:100%;height:auto;} a{color:#2563eb;} table{max-width:100%;}
@@ -191,11 +199,13 @@ export function MailModal({
                   </Button>
                 </div>
               </div>
+              {/* 스크립트는 계속 차단하고 링크 클릭(팝업)만 허용 — 실제 창 생성은
+                  main 의 setWindowOpenHandler 가 가로채 기본 브라우저로 연다 */}
               <iframe
                 className="mail-view__frame"
                 title="메일 본문"
-                sandbox=""
-                srcDoc={bodyDoc(body.body.html)}
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                srcDoc={bodyDoc(body.body.html, body.body.webUrl)}
               />
             </div>
           )}
