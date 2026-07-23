@@ -2,6 +2,8 @@
 // 젠킨스가 기록한 저장소 URL(내부망 주소일 수 있음)에서 owner/repo 만 추출하고,
 // 실제 호출은 환경설정의 Gitea 주소로 한다. 토큰은 선택(비공개 저장소용).
 import type { DeployCommit } from '../../../shared/types';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from '../../lib/http';
 
 /** 저장소 URL 에서 owner/repo 추출 — 예: http://host:3000/owner/repo.git */
 export function parseOwnerRepo(

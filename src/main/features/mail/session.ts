@@ -4,6 +4,9 @@
 import puppeteer, { type Dialog, type Page } from 'puppeteer';
 import { MAIL_CONFIG } from './config';
 import { getCredentials } from '../settings/store';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from '../../lib/http';
+import { sleep } from '../../lib/util';
 
 export type MailSession = {
   cookie: string; // "JSESSIONID=…; JSESSIONID=…"
@@ -12,8 +15,6 @@ export type MailSession = {
   domain: string;
   establishedAt: number;
 };
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let cached: MailSession | null = null;
 // 로그인은 무거우니 동시 요청이 겹치면 하나의 establish 를 공유한다

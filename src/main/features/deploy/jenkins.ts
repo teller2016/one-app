@@ -8,6 +8,9 @@ import type {
   DeployCommit,
   DeployRunningBuild,
 } from '../../../shared/types';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from '../../lib/http';
+import { sleep } from '../../lib/util';
 
 export type JenkinsAuth = {
   baseUrl: string; // 예: https://jenkins.example.com (끝 슬래시 없음)
@@ -25,8 +28,6 @@ const jobUrl = (a: JenkinsAuth, jobPath: string) =>
     .filter(Boolean)
     .map(encodeURIComponent)
     .join('/job/')}`;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** CSRF crumb 발급 (비밀번호 인증 대비). crumb 은 세션에 묶이므로 쿠키도 함께 반환 */
 async function fetchCrumbHeaders(

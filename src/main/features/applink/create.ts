@@ -1,5 +1,7 @@
 // applink.kr 딥링크 생성 — 보안상 클라이언트 JS 호출은 막혀 있어 메인(서버측)에서 호출한다.
 import type { ApplinkInput } from '../../../shared/types';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from '../../lib/http';
 
 const ENDPOINT = 'https://applink.kr/deeplink/deeplink_create.asp';
 

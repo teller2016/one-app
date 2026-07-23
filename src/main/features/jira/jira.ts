@@ -7,6 +7,9 @@ import type {
   JiraTransitionsResult,
 } from '../../../shared/types';
 import { getJiraApiConfig } from '../settings/store';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+// (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
+import { fetchWithTimeout as fetch } from '../../lib/http';
 
 /** Jira REST 응답의 이슈 형태 (필요 필드만) */
 interface RawIssue {

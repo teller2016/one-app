@@ -371,15 +371,17 @@ export function registerDeployIpc() {
         }
       };
 
+      // 트리거 왕복(await) 전에 등록해야 그 사이 중복 클릭이 가드에 걸린다
+      inFlight.add(key);
       try {
         const { queueUrl } = await triggerBuild(auth, target.jobPath);
-        inFlight.add(key);
         // 완료까지 기다리지 않고 즉시 반환 — 진행/완료는 이벤트로 전달
         watchBuild(auth, target.jobPath, queueUrl, push).finally(() =>
           inFlight.delete(key),
         );
         return { ok: true };
       } catch (err) {
+        inFlight.delete(key);
         return { ok: false, error: (err as Error).message };
       }
     },

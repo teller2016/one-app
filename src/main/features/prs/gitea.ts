@@ -8,6 +8,8 @@ import type {
   PrCreateInput,
   PrMergeMethod,
 } from '../../../shared/types';
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from '../../lib/http';
 
 type GiteaIssue = {
   number?: number;

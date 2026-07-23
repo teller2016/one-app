@@ -24,6 +24,7 @@ const findBin = (candidates: string[]): string | null =>
 
 let child: ChildProcess | null = null;
 let runningMode: MirrorMode | null = null;
+let starting = false; // 기기 확인(await) 중 재진입 방지 — 없으면 scrcpy 가 이중 실행돼 하나가 유실됨
 let lastError = '';
 
 // 상태 변화 구독 (ipc 가 렌더러로 push)
@@ -66,43 +67,48 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
   if (!scrcpy) {
     return { ok: false, error: 'scrcpy 미설치 — brew install scrcpy' };
   }
-  if (child) return { ok: true }; // 이미 실행 중 (한 번에 한 모드만)
+  if (child || starting) return { ok: true }; // 이미 실행/시작 중 (한 번에 한 모드만)
 
-  // 시작 직전 기기 재확인 (위젯 상태가 오래됐을 수 있음)
-  if (!(await getUsbDevice())) {
-    return { ok: false, error: 'USB 로 연결된 기기가 없습니다.' };
-  }
-
-  lastError = '';
-  const stderrTail: string[] = []; // 비정상 종료 원인 표시용 — 마지막 몇 줄만 유지
-  const proc = spawn(scrcpy, MODE_ARGS[mode], {
-    // adb 등 부속 바이너리를 찾도록 Homebrew 경로 보강 (Mirror USB.app 과 동일)
-    env: { ...process.env, PATH: `/opt/homebrew/bin:${process.env.PATH ?? ''}` },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  proc.stderr?.on('data', (d: Buffer) => {
-    stderrTail.push(...d.toString().split('\n').filter(Boolean));
-    if (stderrTail.length > 5) stderrTail.splice(0, stderrTail.length - 5);
-  });
-  proc.on('exit', (code) => {
-    // 사용자가 미러 창을 닫으면 code 0 — 조용히 상태만 갱신
-    if (code !== 0 && code !== null) {
-      lastError = stderrTail.at(-1) ?? `scrcpy 종료 (code ${code})`;
+  starting = true;
+  try {
+    // 시작 직전 기기 재확인 (위젯 상태가 오래됐을 수 있음)
+    if (!(await getUsbDevice())) {
+      return { ok: false, error: 'USB 로 연결된 기기가 없습니다.' };
     }
-    child = null;
-    runningMode = null;
+
+    lastError = '';
+    const stderrTail: string[] = []; // 비정상 종료 원인 표시용 — 마지막 몇 줄만 유지
+    const proc = spawn(scrcpy, MODE_ARGS[mode], {
+      // adb 등 부속 바이너리를 찾도록 Homebrew 경로 보강 (Mirror USB.app 과 동일)
+      env: { ...process.env, PATH: `/opt/homebrew/bin:${process.env.PATH ?? ''}` },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    proc.stderr?.on('data', (d: Buffer) => {
+      stderrTail.push(...d.toString().split('\n').filter(Boolean));
+      if (stderrTail.length > 5) stderrTail.splice(0, stderrTail.length - 5);
+    });
+    proc.on('exit', (code) => {
+      // 사용자가 미러 창을 닫으면 code 0 — 조용히 상태만 갱신
+      if (code !== 0 && code !== null) {
+        lastError = stderrTail.at(-1) ?? `scrcpy 종료 (code ${code})`;
+      }
+      child = null;
+      runningMode = null;
+      emit();
+    });
+    proc.on('error', (err) => {
+      lastError = err.message;
+      child = null;
+      runningMode = null;
+      emit();
+    });
+    child = proc;
+    runningMode = mode;
     emit();
-  });
-  proc.on('error', (err) => {
-    lastError = err.message;
-    child = null;
-    runningMode = null;
-    emit();
-  });
-  child = proc;
-  runningMode = mode;
-  emit();
-  return { ok: true };
+    return { ok: true };
+  } finally {
+    starting = false;
+  }
 }
 
 export function stopMirror(): MirrorActionResult {
