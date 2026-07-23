@@ -117,6 +117,27 @@ function IssueRow({
         {issue.summary}
       </button>
 
+      {/* 상위 항목 칩 — 부모 이슈 제목 (클릭 = 브라우저에서 부모 열기) */}
+      {issue.parentKey && (
+        <button
+          type="button"
+          className="jira__parent"
+          onClick={() =>
+            void window.oneApp.openExternal(
+              issue.url.replace(/[^/]+$/, issue.parentKey ?? ''),
+            )
+          }
+          title={`상위 항목 ${issue.parentKey}${
+            issue.parentSummary ? ` — ${issue.parentSummary}` : ''
+          } · 브라우저에서 열기`}
+        >
+          <Icon name="corner-down-right" size={11} className="jira__parent-icon" />
+          <span className="jira__parent-text">
+            {issue.parentSummary ?? issue.parentKey}
+          </span>
+        </button>
+      )}
+
       {/* 상태 뱃지 = 전환 메뉴 트리거 (Jira 의 상태 칩 클릭과 동일한 문법) */}
       <span className="jira__status">
         <button
@@ -302,7 +323,7 @@ export function JiraSection() {
   }, [open]);
 
   return (
-    <div className="section">
+    <div className="section jira">
       <div className="jira__head">
         <SectionHeader
           title="Jira"

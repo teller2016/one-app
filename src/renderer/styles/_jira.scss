@@ -2,6 +2,8 @@
 @use './base' as *;
 
 .jira {
+  max-width: var(--w-wide); // 한 줄 행(제목+상위 항목 칩)이 여유 있게 — 기본 .section 폭 확장
+
   &__head {
     display: flex;
     align-items: flex-start;
@@ -187,6 +189,42 @@
       color: var(--accent);
       text-decoration: underline;
     }
+  }
+
+  // 상위 항목 칩 — 부모 이슈 제목 (클릭 = 브라우저에서 부모 열기)
+  &__parent {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 220px;
+    padding: 2px 9px;
+    border: none;
+    border-radius: var(--r-full);
+    background: var(--overlay-track);
+    color: var(--text-2);
+    font-family: inherit;
+    @include type-small;
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+  }
+
+  &__parent-icon {
+    flex-shrink: 0; // 색은 칩 텍스트를 따라간다 (hover 시 액센트로 함께 전환)
+  }
+
+  &__parent-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   // 상태 뱃지 + 전환 메뉴 (뱃지 클릭 = 상태 변경 — Jira 상태 칩과 동일 문법)

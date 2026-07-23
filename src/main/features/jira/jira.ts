@@ -19,7 +19,7 @@ interface RawIssue {
     };
     issuetype?: { name?: string };
     project?: { key?: string };
-    parent?: { key?: string };
+    parent?: { key?: string; fields?: { summary?: string } };
     priority?: { name?: string };
     updated?: string;
   };
@@ -90,6 +90,7 @@ export async function fetchMyIssues(): Promise<JiraListResult> {
           catKey === 'done' ? 'done' : catKey === 'indeterminate' ? 'indeterminate' : 'new',
         issueType: it.fields.issuetype?.name ?? '',
         parentKey: it.fields.parent?.key ?? null,
+        parentSummary: it.fields.parent?.fields?.summary ?? null,
         priority: it.fields.priority?.name ?? null,
         updatedAt: it.fields.updated ?? '',
         url: `${cfg.url}/browse/${it.key}`,
