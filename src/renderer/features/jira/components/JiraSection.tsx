@@ -105,7 +105,7 @@ function IssueRow({
           className={`jira__prio jira__prio--${prio.level}`}
           title={`우선순위 ${issue.priority}`}
         >
-          <Icon name={prio.icon} size={12} />
+          <Icon name={prio.icon} size={14} />
         </span>
       )}
       <button
