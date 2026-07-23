@@ -13,6 +13,7 @@ import { useConfirm } from "../../../components/ConfirmDialog";
 import { FormRow } from "../../../components/FormRow";
 import { Icon } from "../../../components/Icon";
 import { Input } from "../../../components/Input";
+import { Markdown } from "../../../components/Markdown";
 import { Modal } from "../../../components/Modal";
 import { RefreshButton } from "../../../components/RefreshButton";
 import { SectionHeader } from "../../../components/SectionHeader";
@@ -648,7 +649,9 @@ export function NightwatchSection() {
 
       {modal && (
         <Modal title={modal.title} onClose={() => setModal(null)} wide>
-          <pre className="nightwatch__report">{modal.content}</pre>
+          <div className="nightwatch__report">
+            <Markdown>{modal.content}</Markdown>
+          </div>
         </Modal>
       )}
 

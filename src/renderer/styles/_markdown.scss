@@ -1,0 +1,147 @@
+// 마크다운 뷰어 (공용 Markdown 컴포넌트) — 리포트류 문서 본문
+@use './base' as *;
+
+.md {
+  @include type-body;
+  color: var(--text);
+
+  > :first-child {
+    margin-top: 0;
+  }
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  // ── 제목 래더 — h1 만 타이포 드라마, 나머지는 산스 래더로 한 단계씩
+  h1 {
+    @include type-h2;
+    margin: 28px 0 12px;
+  }
+
+  h2 {
+    @include type-title;
+    margin: 24px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border); // 섹션 구분 헤어라인
+  }
+
+  h3 {
+    @include type-emph;
+    margin: 18px 0 6px;
+  }
+
+  h4,
+  h5,
+  h6 {
+    @include type-body;
+    font-weight: 600;
+    margin: 14px 0 4px;
+  }
+
+  p {
+    margin: 0 0 10px;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 10px;
+    padding-left: 22px;
+  }
+
+  li {
+    margin: 0 0 4px;
+
+    > ul,
+    > ol {
+      margin: 4px 0 0;
+    }
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  // 인라인 코드 — 은은한 칩 (리포트는 코드 언급이 많아 액센트색 대신 배경으로 구분)
+  code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    background: var(--overlay-track);
+    border-radius: var(--r-sm);
+    padding: 1px 5px;
+  }
+
+  // 코드블록 — 다크 패널 (배포 로그와 같은 톤)
+  pre {
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border: 1px solid;
+    @include panel-dark;
+    border-radius: var(--r-md);
+    overflow-x: auto;
+
+    code {
+      font-size: inherit;
+      background: none;
+      border-radius: 0;
+      padding: 0;
+      @include type-small;
+      font-family: var(--font-mono);
+    }
+  }
+
+  blockquote {
+    margin: 0 0 12px;
+    padding: 2px 0 2px 12px;
+    border-left: 3px solid var(--border-strong);
+    color: var(--text-2);
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  // 표 — 넓으면 표만 가로 스크롤 (모달 본문이 옆으로 밀리지 않게)
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 0 0 12px;
+    @include type-small;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    color: var(--text-2);
+    text-align: left;
+    background: var(--overlay-faint);
+    white-space: nowrap;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  img {
+    max-width: 100%;
+  }
+}
