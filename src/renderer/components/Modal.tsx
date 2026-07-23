@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
 /**
@@ -26,7 +27,9 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // body 끝으로 포털 — 사이드바·탑바(-webkit-app-region: drag)보다 문서 순서상
+  // 뒤에 있어야 오버레이의 no-drag 가 창 드래그 영역을 걷어내 dim 클릭이 전달된다
+  return createPortal(
     <div
       className="modal-overlay"
       // mousedown 기준 — 본문에서 드래그(텍스트 선택)하다 오버레이에서 놓아도 닫히지 않게
@@ -52,6 +55,7 @@ export function Modal({
         </div>
         <div className="modal__body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

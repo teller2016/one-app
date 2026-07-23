@@ -1131,6 +1131,9 @@ body {
   justify-content: center;
   padding: 48px 24px;
   background: rgba(0, 0, 0, 0.4); // 뉴트럴 스크림
+  // 밑에 깔린 사이드바·탑바의 창 드래그 영역(app-region: drag)이 dim 클릭을
+  // 흡수하지 않게 걷어낸다 — 드래그 영역은 z-order 무관, 문서 순서로 계산됨
+  -webkit-app-region: no-drag;
   animation: modal-fade var(--dur-1) var(--ease);
 }
 
