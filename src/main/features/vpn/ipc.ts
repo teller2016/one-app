@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
+import { broadcast } from '../../lib/broadcast';
 import type {
   SaveVpnSettingsInput,
   VpnActionResult,
@@ -66,11 +67,7 @@ export function registerVpnIpc() {
   });
 
   // 상태 변화를 모든 창에 push
-  onVpnStatus((status) => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      w.webContents.send('vpn:status', status);
-    }
-  });
+  onVpnStatus((status) => broadcast('vpn:status', status));
 
   // 앱 재시작 시 살아있는 VPN 데몬에 재접속해 상태 복원
   void app.whenReady().then(() => {

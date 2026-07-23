@@ -4,6 +4,7 @@
 import puppeteer, { type Browser, type Dialog, type Page } from 'puppeteer';
 import { WEEKLY_CONFIG } from './config';
 import type { WeeklyPeriod, WeeklyRawRow } from '../../../shared/types';
+import { sleep } from '../../lib/util';
 
 type Credentials = { id: string; password: string };
 type ProgressFn = (step: string) => void;
@@ -12,8 +13,6 @@ export type WeeklyCollectData = { rows: WeeklyRawRow[]; period: WeeklyPeriod };
 
 // 동시 실행 방지 (headless 브라우저 중복 기동 막기)
 let running = false;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** 텍스트가 정확히 일치하는 요소를 찾는 puppeteer XPath 셀렉터 */
 const xpathByText = (text: string) => `::-p-xpath(//*[text()='${text}'])`;

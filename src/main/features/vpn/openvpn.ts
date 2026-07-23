@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { VpnStatus } from '../../../shared/types';
+import { sleep } from '../../lib/util';
 import {
   findOpenvpnBinary,
   logPath,
@@ -52,8 +53,6 @@ const STATE_LABELS: Record<string, string> = {
   TCP_CONNECT: '서버 접속 중',
   RESOLVE: '주소 확인 중',
 };
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function getVpnStatus(): VpnStatus {
   return status;

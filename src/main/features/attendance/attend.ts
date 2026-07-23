@@ -3,6 +3,7 @@
 import puppeteer, { type Dialog, type Page } from 'puppeteer';
 import { ATTENDANCE_CONFIG } from './config';
 import type { AttendanceInfo } from '../../../shared/types';
+import { sleep, localDateKey } from '../../lib/util';
 
 export type AttendanceAction = 'status' | 'come' | 'leave';
 
@@ -10,11 +11,6 @@ type Credentials = { id: string; password: string };
 
 // 동시 실행 방지 (headless 브라우저 중복 기동 막기)
 let running = false;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-const localDateKey = (d: Date) =>
-  `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 // 오늘 확인된 근태 — 위젯·리마인더·트레이 등 어떤 경로든 조회에 성공하면 갱신된다.
 // 리마인더가 조회에 실패했을 때(VPN 블립·동시 실행 충돌) 이 값으로 이미 찍었는지 판단해

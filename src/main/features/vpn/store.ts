@@ -1,10 +1,13 @@
 // VPN 설정 저장 — TOTP 시크릿은 safeStorage(OS 키체인)로 암호화해 저장
-import { app, safeStorage } from 'electron';
-import path from 'node:path';
-import fs from 'node:fs';
 import type { SaveVpnSettingsInput, VpnSettingsView } from '../../../shared/types';
 import { findOpenvpnBinary } from './config';
 import { decodeBase32 } from './totp';
+import {
+  readUserJson,
+  writeUserJson,
+  encryptSecret,
+  decryptSecret,
+} from '../../lib/store';
 
 interface StoredVpn {
   username: string;
@@ -12,19 +15,10 @@ interface StoredVpn {
   ovpnPath: string;
 }
 
-const vpnSettingsPath = () => path.join(app.getPath('userData'), 'vpn.json');
+const readStored = (): StoredVpn =>
+  readUserJson<StoredVpn>('vpn.json', { username: '', ovpnPath: '' });
 
-function readStored(): StoredVpn {
-  try {
-    return JSON.parse(fs.readFileSync(vpnSettingsPath(), 'utf8')) as StoredVpn;
-  } catch {
-    return { username: '', ovpnPath: '' };
-  }
-}
-
-function writeStored(s: StoredVpn) {
-  fs.writeFileSync(vpnSettingsPath(), JSON.stringify(s, null, 2), 'utf8');
-}
+const writeStored = (s: StoredVpn) => writeUserJson('vpn.json', s);
 
 /** 렌더러에 보낼 안전한 형태 — 시크릿 값은 보내지 않고 "설정됨" 여부만 */
 export function getVpnSettingsForRenderer(): VpnSettingsView {
@@ -47,9 +41,7 @@ export function saveVpnSettings(input: SaveVpnSettingsInput): VpnSettingsView {
   if (input.totpSecret && input.totpSecret.trim().length > 0) {
     const secret = input.totpSecret.trim();
     decodeBase32(secret); // 잘못된 키 저장 방지 — 실패 시 throw
-    next.totpSecretEnc = safeStorage.isEncryptionAvailable()
-      ? safeStorage.encryptString(secret).toString('base64')
-      : Buffer.from(secret, 'utf8').toString('base64');
+    next.totpSecretEnc = encryptSecret(secret);
   }
   writeStored(next);
   return getVpnSettingsForRenderer();
@@ -63,16 +55,6 @@ export function getVpnCredentials(): {
 } | null {
   const s = readStored();
   if (!s.username) return null;
-  let totpSecret: string | null = null;
-  if (s.totpSecretEnc) {
-    try {
-      const buf = Buffer.from(s.totpSecretEnc, 'base64');
-      totpSecret = safeStorage.isEncryptionAvailable()
-        ? safeStorage.decryptString(buf)
-        : buf.toString('utf8');
-    } catch {
-      totpSecret = null;
-    }
-  }
+  const totpSecret = s.totpSecretEnc ? decryptSecret(s.totpSecretEnc) : null;
   return { username: s.username, totpSecret, ovpnPath: s.ovpnPath ?? '' };
 }

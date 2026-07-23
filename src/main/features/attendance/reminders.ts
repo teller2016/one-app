@@ -1,15 +1,11 @@
 // 출퇴근 리마인더 설정 저장 — 비밀 정보가 없어 평문 JSON(userData/reminders.json)에 저장.
-import { app } from 'electron';
-import path from 'node:path';
-import fs from 'node:fs';
 import type {
   ReminderConfig,
   ReminderSlot,
   ReminderRepeat,
   DayReminderConfig,
 } from '../../../shared/types';
-
-const filePath = () => path.join(app.getPath('userData'), 'reminders.json');
+import { readUserJson, writeUserJson } from '../../lib/store';
 
 // 기본값 — 월~금 출근 09:00 / 퇴근 18:00 (사용자가 요일별로 조정)
 const defaults = (): ReminderConfig => ({
@@ -36,15 +32,11 @@ const normalizeRepeat = (r: Partial<ReminderRepeat> | undefined): ReminderRepeat
 });
 
 export function getReminderConfig(): ReminderConfig {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath(), 'utf8')) as ReminderConfig;
-    if (Array.isArray(parsed.days)) {
-      return { days: parsed.days, repeat: normalizeRepeat(parsed.repeat) };
-    }
-  } catch {
-    // 파일 없음/손상 → 기본값
+  const parsed = readUserJson<Partial<ReminderConfig>>('reminders.json', {});
+  if (Array.isArray(parsed.days)) {
+    return { days: parsed.days, repeat: normalizeRepeat(parsed.repeat) };
   }
-  return defaults();
+  return defaults(); // 파일 없음/손상 → 기본값
 }
 
 export function saveReminderConfig(config: ReminderConfig): ReminderConfig {
@@ -60,6 +52,6 @@ export function saveReminderConfig(config: ReminderConfig): ReminderConfig {
       ),
     repeat: normalizeRepeat(config?.repeat),
   };
-  fs.writeFileSync(filePath(), JSON.stringify(clean, null, 2), 'utf8');
+  writeUserJson('reminders.json', clean);
   return clean;
 }

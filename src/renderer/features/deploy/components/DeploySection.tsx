@@ -11,6 +11,8 @@ import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { SectionHeader } from '../../../components/SectionHeader';
+import { EmptyState } from '../../../components/EmptyState';
+import { useTick } from '../../../lib/usePolling';
 import { ActivityPanel } from './ActivityPanel';
 import { ProjectCard } from './ProjectCard';
 import { BuildDetailPanel } from './BuildDetailPanel';
@@ -33,7 +35,6 @@ export function DeploySection() {
   const [formError, setFormError] = useState('');
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
-  const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
   // 젠킨스 서버 현황 팝업 — 열린 프로젝트 id + 그 서버의 현황(실행 중 + 대기)
   const [activityFor, setActivityFor] = useState<string | null>(null);
   const [activity, setActivity] = useState<DeployActivity | null>(null);
@@ -57,10 +58,7 @@ export function DeploySection() {
       .then((s) => setLinkCfg({ jiraUrl: s.jiraUrl, giteaUrl: s.giteaUrl }));
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => setClock((t) => t + 1), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  useTick(60_000); // "n분 전" 갱신용 1분 틱
 
   // 젠킨스 서버 현황 조회 (실행 중 + 대기) — 해당 프로젝트의 서버 기준
   const refreshActivity = async (projectId: string) => {
@@ -101,11 +99,7 @@ export function DeploySection() {
   const anyBuilding = Object.values(statuses).some(
     (s) => s?.state === 'building',
   );
-  useEffect(() => {
-    if (!anyBuilding) return;
-    const id = setInterval(() => setClock((t) => t + 1), 5_000);
-    return () => clearInterval(id);
-  }, [anyBuilding]);
+  useTick(5_000, anyBuilding);
 
   // 프로젝트 목록의 최근 빌드 상태 조회
   const refreshStatuses = async (list: DeployProjectView[]) => {
@@ -471,15 +465,11 @@ export function DeploySection() {
       {loading ? (
         <p className="hint">불러오는 중...</p>
       ) : projects.length === 0 ? (
-        <div className="empty-state">
-          <span className="empty-state__icon">
-            <Icon name="rocket" size={20} />
-          </span>
-          <p>등록된 프로젝트가 없습니다.</p>
-          <p className="hint">
-            [프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요.
-          </p>
-        </div>
+        <EmptyState
+          icon="rocket"
+          message="등록된 프로젝트가 없습니다."
+          hint="[프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요."
+        />
       ) : (
         projects.map((p) => (
           <ProjectCard

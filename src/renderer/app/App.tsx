@@ -15,26 +15,53 @@ import { SettingsSection } from "../features/settings";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
-const SECTIONS: SidebarSection[] = [
-  { id: "jira", label: "Jira", icon: <Icon name="clipboard-list" size={16} /> },
+// 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다
+type AppSection = SidebarSection & { render: () => ReactNode };
+
+const SECTIONS: AppSection[] = [
+  {
+    id: "jira",
+    label: "Jira",
+    icon: <Icon name="clipboard-list" size={16} />,
+    render: () => <JiraSection />,
+  },
   {
     id: "nightwatch",
     label: "Nightwatch",
     icon: <Icon name="moon" size={16} />,
+    render: () => <NightwatchSection />,
   },
-  { id: "prs", label: "PR", icon: <Icon name="git-pull-request" size={16} /> },
-  { id: "deploy", label: "배포", icon: <Icon name="rocket" size={16} /> },
-  { id: "applink", label: "딥링크", icon: <Icon name="link" size={16} /> },
+  {
+    id: "prs",
+    label: "PR",
+    icon: <Icon name="git-pull-request" size={16} />,
+    render: () => <PrSection />,
+  },
+  {
+    id: "deploy",
+    label: "배포",
+    icon: <Icon name="rocket" size={16} />,
+    render: () => <DeploySection />,
+  },
+  {
+    id: "applink",
+    label: "딥링크",
+    icon: <Icon name="link" size={16} />,
+    render: () => <ApplinkSection />,
+  },
   {
     id: "schedule",
     label: "일정 등록",
     icon: <Icon name="calendar" size={16} />,
+    render: () => <ScheduleSection />,
   },
   {
     id: "weekly",
     label: "주간보고",
     icon: <Icon name="bar-chart" size={16} />,
+    render: () => <WeeklySection />,
   },
   // 하단 분리 그룹
   {
@@ -42,6 +69,7 @@ const SECTIONS: SidebarSection[] = [
     label: "환경설정",
     icon: <Icon name="settings" size={16} />,
     bottom: true,
+    render: () => <SettingsSection />,
   },
 ];
 
@@ -103,29 +131,6 @@ export function App() {
     });
   }, []);
 
-  const renderMain = () => {
-    switch (active.id) {
-      case "schedule":
-        return <ScheduleSection />;
-      case "weekly":
-        return <WeeklySection />;
-      case "deploy":
-        return <DeploySection />;
-      case "prs":
-        return <PrSection />;
-      case "jira":
-        return <JiraSection />;
-      case "nightwatch":
-        return <NightwatchSection />;
-      case "applink":
-        return <ApplinkSection />;
-      case "settings":
-        return <SettingsSection />;
-      default:
-        return null;
-    }
-  };
-
   return (
     <ToastProvider>
       <ConfirmProvider>
@@ -162,7 +167,7 @@ export function App() {
             </header>
 
             {/* 메인 영역 */}
-            <main className="main">{renderMain()}</main>
+            <main className="main">{active.render()}</main>
           </section>
         </div>
       </ConfirmProvider>

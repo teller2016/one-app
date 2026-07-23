@@ -19,6 +19,9 @@ import { RefreshButton } from "../../../components/RefreshButton";
 import { SectionHeader } from "../../../components/SectionHeader";
 import { Segment } from "../../../components/Segment";
 import { useToast } from "../../../components/Toast";
+import { EmptyState } from "../../../components/EmptyState";
+import { usePolling } from "../../../lib/usePolling";
+import { useCopy } from "../../../lib/useCopy";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** 티켓 상태 → 뱃지 변형·한글 라벨 */
@@ -110,11 +113,7 @@ export function NightwatchSection() {
   }, []);
 
   // 최초 로드 + 1분 자동 새로고침 (로컬 파일 읽기라 저렴)
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), 60_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  usePolling(load, 60_000);
 
   // Jira 연동이 확인되면 후보 목록 1회 자동 조회 (이후엔 새로고침 버튼)
   useEffect(() => {
@@ -205,19 +204,17 @@ export function NightwatchSection() {
   };
 
   // 작업 프롬프트 복사 — 아침에 실제 저장소의 Claude Code 세션에 그대로 붙여넣는다
+  const copy = useCopy();
   const copyPrompt = async (key: string) => {
     const res = await window.oneApp.nightwatch.getPrompt(key);
     if (!res.ok || !res.content) {
       toast(res.error ?? "프롬프트를 불러오지 못했습니다", "fail");
       return;
     }
-    try {
-      await navigator.clipboard.writeText(res.content);
-      toast("작업 프롬프트를 복사했습니다 — Claude Code에 붙여넣으세요");
-    } catch {
-      // 창이 포커스를 잃은 상태 등 클립보드 접근 실패
-      toast("클립보드 복사 실패 — 창을 클릭한 뒤 다시 시도해 주세요", "fail");
-    }
+    await copy(res.content, {
+      success: "작업 프롬프트를 복사했습니다 — Claude Code에 붙여넣으세요",
+      fail: "클립보드 복사 실패 — 창을 클릭한 뒤 다시 시도해 주세요",
+    });
   };
 
   // 처리한 티켓 삭제 — 원장 기록 + 산출물 파일 (30일 경과분은 자동 정리)
@@ -387,14 +384,16 @@ export function NightwatchSection() {
           {candidatesError && <Banner variant="danger">{candidatesError}</Banner>}
           {candidates &&
             (candidates.length === 0 ? (
-              <div className="empty-state">
-                <p>
-                  {status && status.tickets.length > 0
-                    ? "새로 분석할 티켓이 없습니다 — 처리한 티켓은 아래에서 [재분석]할 수 있어요"
-                    : "내게 할당된 미해결 티켓이 없습니다"}
-                  {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
-                </p>
-              </div>
+              <EmptyState
+                message={
+                  <>
+                    {status && status.tickets.length > 0
+                      ? "새로 분석할 티켓이 없습니다 — 처리한 티켓은 아래에서 [재분석]할 수 있어요"
+                      : "내게 할당된 미해결 티켓이 없습니다"}
+                    {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
+                  </>
+                }
+              />
             ) : (
               <div className="nightwatch__list">
                 {candidates.map((c) => (

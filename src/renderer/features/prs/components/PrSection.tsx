@@ -9,6 +9,8 @@ import { TextLink } from '../../../components/TextLink';
 import { Button } from '../../../components/Button';
 import { useToast } from '../../../components/Toast';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { EmptyState } from '../../../components/EmptyState';
+import { usePolling, useTick } from '../../../lib/usePolling';
 import { QuickPr } from './QuickPr';
 import { CreatePrModal } from './CreatePrModal';
 import { MergeModal } from './MergeModal';
@@ -43,7 +45,6 @@ export function PrSection() {
     number: number;
     title: string;
   } | null>(null);
-  const [, setClock] = useState(0); // "n분 전" 갱신용 1분 틱
   const toast = useToast();
   const confirmDialog = useConfirm();
 
@@ -78,18 +79,13 @@ export function PrSection() {
     }
   }, []);
 
-  // 진입 시 설정·토큰 여부 로드 + 조회 + 2분 주기 자동 새로고침 + 1분 시계 틱
+  // 진입 시 설정·토큰 여부 로드 (1회)
   useEffect(() => {
     window.oneApp.prs.getConfig().then(setConfig);
     window.oneApp.settings.get().then((s) => setHasToken(s.hasGiteaToken));
-    void load();
-    const poll = setInterval(() => void load(), 120_000);
-    const clock = setInterval(() => setClock((t) => t + 1), 60_000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(clock);
-    };
-  }, [load]);
+  }, []);
+  usePolling(load, 120_000); // 조회 + 2분 주기 자동 새로고침
+  useTick(60_000); // "n분 전" 갱신용 1분 틱
 
   const saveConfig = (next: PrsConfig) => {
     setConfig(next);
@@ -193,19 +189,15 @@ export function PrSection() {
           ) : loading && prs.length === 0 ? (
             <p className="hint">불러오는 중...</p>
           ) : visible.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-state__icon">
-                <Icon name="check" size={20} />
-              </span>
-              <p>
-                {prs.length > 0
+            <EmptyState
+              icon="check"
+              message={
+                prs.length > 0
                   ? '필터에 해당하는 열린 PR 이 없습니다.'
-                  : '열린 PR 이 없습니다.'}
-              </p>
-              <p className="hint">
-                위 [빠른 PR]에서 브랜치를 골라 PR 을 만들 수 있어요.
-              </p>
-            </div>
+                  : '열린 PR 이 없습니다.'
+              }
+              hint="위 [빠른 PR]에서 브랜치를 골라 PR 을 만들 수 있어요."
+            />
           ) : (
             groups.map(({ org, items }) => (
               <div key={org} className="prs__group">

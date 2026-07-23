@@ -9,6 +9,9 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Segment } from '../../../components/Segment';
 import { useToast } from '../../../components/Toast';
+import { EmptyState } from '../../../components/EmptyState';
+import { usePolling } from '../../../lib/usePolling';
+import { useCopy } from '../../../lib/useCopy';
 
 import { isDone } from '../lib/issue';
 
@@ -224,11 +227,7 @@ export function JiraSection() {
   }, []);
 
   // 최초 로드 + 2분 자동 새로고침 (PR 섹션과 동일 주기)
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), 120_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  usePolling(load, 120_000);
 
   // 메뉴 토글 — 열 때마다 그 이슈의 가능한 전환을 새로 조회
   const toggleMenu = async (key: string) => {
@@ -259,14 +258,9 @@ export function JiraSection() {
   }, [menuKey]);
 
   // 이슈 링크 클립보드 복사
-  const copyLink = async (issue: JiraIssue) => {
-    try {
-      await navigator.clipboard.writeText(issue.url);
-      toast(`${issue.key} 링크를 복사했습니다`);
-    } catch {
-      toast('복사에 실패했습니다', 'fail');
-    }
-  };
+  const copy = useCopy();
+  const copyLink = (issue: JiraIssue) =>
+    copy(issue.url, { success: `${issue.key} 링크를 복사했습니다` });
 
   // 전환 실행 — 성공 시 목록 갱신 (그룹 이동 반영)
   const handleTransition = async (key: string, t: JiraTransition) => {
@@ -362,12 +356,7 @@ export function JiraSection() {
       {loading && issues.length === 0 ? (
         <p className="hint">불러오는 중...</p>
       ) : visible.length === 0 && configured && !error ? (
-        <div className="empty-state">
-          <span className="empty-state__icon">
-            <Icon name="check" size={20} />
-          </span>
-          <p>미해결 이슈가 없습니다. 깔끔하네요!</p>
-        </div>
+        <EmptyState icon="check" message="미해결 이슈가 없습니다. 깔끔하네요!" />
       ) : (
         <>
           {groups.map(({ type, items, icon, tone }) => (

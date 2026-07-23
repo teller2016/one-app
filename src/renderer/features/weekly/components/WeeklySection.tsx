@@ -4,7 +4,8 @@ import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
 import { Badge } from '../../../components/Badge';
 import { Icon } from '../../../components/Icon';
-import { useToast } from '../../../components/Toast';
+import { EmptyState } from '../../../components/EmptyState';
+import { useCopy } from '../../../lib/useCopy';
 import { RosterRow } from './RosterRow';
 import { EmployeeDetail } from './EmployeeDetail';
 import {
@@ -53,7 +54,6 @@ export function WeeklySection() {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded);
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
-  const toast = useToast();
 
   // 수집 진행 단계 구독
   useEffect(() => {
@@ -71,12 +71,7 @@ export function WeeklySection() {
       .then((s) => setCredsReady(!!s.bizboxId && s.hasPassword));
   }, []);
 
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => toast('복사되었습니다'),
-      () => toast('복사 실패', 'fail'),
-    );
-  };
+  const copyText = useCopy();
 
   const toggleExclude = (project: string) => {
     setExcluded((prev) => {
@@ -182,7 +177,7 @@ export function WeeklySection() {
         </Button>
       </div>
 
-      {error && <Banner>{error}</Banner>}
+      {error && <Banner variant="danger">{error}</Banner>}
 
       {/* 로딩 */}
       {loading && (
@@ -210,12 +205,7 @@ export function WeeklySection() {
           </div>
 
           {report.nameList.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-state__icon">
-                <Icon name="bar-chart" size={20} />
-              </span>
-              <div>표시할 사원 데이터가 없습니다.</div>
-            </div>
+            <EmptyState icon="bar-chart" message="표시할 사원 데이터가 없습니다." />
           ) : (
             <div className="weekly__panes">
               {/* 왼쪽: 팀 목록 (항상 보임, 스크롤 시 고정) */}
@@ -252,15 +242,11 @@ export function WeeklySection() {
 
       {/* 최초 안내 */}
       {!loading && !report && !error && (
-        <div className="empty-state">
-          <span className="empty-state__icon">
-            <Icon name="info" size={20} />
-          </span>
-          <div>
-            [주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
-            팀원별로 정리합니다. (백그라운드 브라우저 — 수십 초 걸릴 수 있어요)
-          </div>
-        </div>
+        <EmptyState
+          icon="info"
+          message="[주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
+            팀원별로 정리합니다. (백그라운드 브라우저 — 수십 초 걸릴 수 있어요)"
+        />
       )}
     </div>
   );

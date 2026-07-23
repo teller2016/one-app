@@ -8,6 +8,7 @@ import { Icon } from '../../../components/Icon';
 import { Collapsible } from '../../../components/Collapsible';
 import { TextLink } from '../../../components/TextLink';
 import { useToast } from '../../../components/Toast';
+import { useCopy } from '../../../lib/useCopy';
 
 type Made = { url: string; canonicalUrl: string };
 
@@ -44,12 +45,7 @@ export function ApplinkSection() {
     toast('API 키가 저장되었습니다');
   };
 
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => toast('복사되었습니다'),
-      () => toast('복사 실패', 'fail'),
-    );
-  };
+  const copy = useCopy();
 
   const create = async () => {
     if (!/^https?:\/\//i.test(canonicalUrl.trim())) {
