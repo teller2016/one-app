@@ -208,9 +208,12 @@
     word-break: break-word;
   }
 
-  // 분석 리포트 — 마크다운 뷰어(공용 .md) 스크롤 컨테이너
-  &__report {
-    max-height: 60vh;
-    overflow: auto;
-  }
+}
+
+// 분석 리포트 모달 — 문서를 한눈에 보도록 가로·세로 최대 확장
+// (Modal 에 size prop 이 없어 메일 모달과 같은 :has 선택자 방식, 래퍼 .nightwatch__report 가 후크)
+.modal--wide:has(.nightwatch__report) {
+  max-width: 1600px;
+  width: 96vw;
+  height: calc(100vh - 96px); // 오버레이 위아래 여백(48px)까지 꽉 채움 — 상단 치우침 해소
 }

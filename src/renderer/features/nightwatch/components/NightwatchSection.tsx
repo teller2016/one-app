@@ -649,6 +649,7 @@ export function NightwatchSection() {
 
       {modal && (
         <Modal title={modal.title} onClose={() => setModal(null)} wide>
+          {/* 래퍼 클래스는 모달 확장(:has 선택자) 후크 — 스크롤은 modal__body 가 담당 */}
           <div className="nightwatch__report">
             <Markdown>{modal.content}</Markdown>
           </div>
