@@ -25,7 +25,7 @@
 src/
 ├── main/                        # 🖥️ 메인 프로세스 (Node)
 │   ├── main.ts                  #  진입점: 창 생성 + IPC 등록 (이름 고정)
-│   └── features/                #  기능 모듈 — ipc.ts(핸들러) + 로직을 함께 배치
+│   ├── features/                #  기능 모듈 — ipc.ts(핸들러) + 로직을 함께 배치
 │       ├── schedule/            #  일정 매크로 (puppeteer)
 │       │   ├── ipc.ts           #    IPC 핸들러
 │       │   ├── config.ts        #    비즈박스 URL·셀렉터·타이밍
@@ -66,9 +66,28 @@ src/
 │       │   └── store.ts         #    조직 필터·빠른 PR 저장소 (prs.json 평문)
 │       ├── jira/                #  Jira 내 이슈 (REST v3)
 │       │   ├── ipc.ts
-│       │   └── jira.ts          #    내게 할당된 미해결 이슈 조회 (Basic Auth)
+│       │   └── jira.ts          #    내 이슈 조회·상태 전환 (Basic Auth)
+│       ├── mail/                #  비즈박스 메일 (리버스 엔지니어링 HTTP API)
+│       │   ├── ipc.ts
+│       │   ├── config.ts        #    메일 엔드포인트·셀렉터
+│       │   ├── session.ts       #    로그인 1회 → 쿠키 세션 재사용
+│       │   └── mail.ts          #    안읽은 수·목록·본문 조회
+│       ├── nightwatch/          #  Jira 티켓 무인 분석 (claude CLI — 수동 트리거)
+│       │   ├── ipc.ts
+│       │   ├── engine.ts        #    후보 조회·분석 실행/대기열·변조 검증·산출물 관리
+│       │   ├── mission.ts       #    미션 템플릿·claude spawn·stream-json 파싱
+│       │   └── store.ts         #    config/state 원장 (userData/nightwatch, 원자 쓰기)
+│       ├── applink/             #  applink.kr 딥링크 생성
+│       │   ├── ipc.ts
+│       │   ├── create.ts        #    딥링크 생성 API 호출 (메인에서 서버측 호출)
+│       │   └── store.ts         #    API 키 저장 (safeStorage 암호화)
 │       └── tray/                #  메뉴바 트레이
 │           └── tray.ts          #    열기·출퇴근 찍기·종료 메뉴
+│   └── lib/                     #  메인 공통 유틸
+│       ├── http.ts              #    fetchWithTimeout — 기본 15초 타임아웃 fetch 래퍼
+│       ├── store.ts             #    userData JSON 읽기/쓰기 + safeStorage 암복호화
+│       ├── util.ts              #    sleep·localDateKey
+│       └── broadcast.ts         #    모든 창에 webContents.send
 ├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
 ├── renderer/                    # 🎨 React UI
 │   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
@@ -76,8 +95,12 @@ src/
 │   ├── components/              #  공용 UI — Sidebar · Button · Input · Textarea · FormRow ·
 │   │                            #  SectionHeader · Banner · RefreshButton · Collapsible ·
 │   │                            #  Icon(SVG) · Badge · StatusDot · TextLink · FileTrigger ·
-│   │                            #  Segment · Toast(useToast) · Modal
-│   ├── lib/theme.ts             #  테마 전환 — data-theme 적용·localStorage 미러·useThemeMode 훅
+│   │                            #  Segment · Toast(useToast) · Modal · ConfirmDialog(useConfirm) ·
+│   │                            #  EmptyState · Markdown
+│   ├── lib/                     #  공용 훅·유틸
+│   │   ├── theme.ts             #    테마 전환 — data-theme 적용·localStorage 미러·useThemeMode 훅
+│   │   ├── usePolling.ts        #    usePolling(주기 폴링)·useTick(시계 틱 리렌더)
+│   │   └── useCopy.ts           #    클립보드 복사 + 결과 토스트
 │   ├── features/                #  기능별 폴더 — index.ts 가 공개 API
 │   │   ├── schedule/
 │   │   │   ├── components/ScheduleSection.tsx
@@ -90,9 +113,12 @@ src/
 │   │   ├── attendance/          #  출퇴근 위젯 (사이드바 하단 고정)
 │   │   ├── vpn/                 #  VPN 위젯 (사이드바 하단 고정)
 │   │   ├── mirror/              #  폰 미러링 위젯 (사이드바 하단 고정)
+│   │   ├── mail/                #  메일 위젯(사이드바 상단) + 리더 모달 (MailWidget·MailModal)
 │   │   ├── weekly/              #  주간보고 — 좌우 2단(팀 목록 RosterRow + 상세 Detail). components(Section·RosterRow·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
 │   │   ├── prs/                 #  PR 대시보드 — 열린 PR 목록(승인 수·상대시간)
-│   │   └── jira/                #  Jira 내 이슈 — 목록만, 클릭 시 브라우저로
+│   │   ├── jira/                #  Jira 내 이슈 — 목록·상태 전환, 클릭 시 브라우저로
+│   │   ├── nightwatch/          #  Nightwatch — 티켓 분석 대시보드 (후보·리포트·미션 로그)
+│   │   └── applink/             #  applink.kr 딥링크 생성
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
 │   │   ├── _base.scss           #    디자인 토큰·믹스인·공통 클래스 (DESIGN.md 가 기준)
@@ -103,7 +129,11 @@ src/
 │   │   ├── _vpn.scss            #    VPN 위젯 고유 요소 (배치는 _base.scss 의 공용 .sbw)
 │   │   ├── _weekly.scss         #    주간보고
 │   │   ├── _prs.scss            #    PR 대시보드
-│   │   └── _jira.scss           #    Jira 내 이슈
+│   │   ├── _jira.scss           #    Jira 내 이슈
+│   │   ├── _mail.scss           #    메일 위젯·리더 모달
+│   │   ├── _nightwatch.scss     #    Nightwatch
+│   │   ├── _applink.scss        #    딥링크
+│   │   └── _markdown.scss       #    마크다운 렌더(react-markdown) 공통
 │   └── types/global.d.ts        #  window.oneApp 타입
 └── shared/types.ts              # 🔗 프로세스 간 공용 타입
 ```
@@ -118,7 +148,7 @@ src/
 
 ## 새 기능(섹션) 추가 방법
 1. `src/renderer/features/<기능>/components/<기능>Section.tsx` 작성 + `index.ts` 로 export
-2. `src/renderer/app/App.tsx` 의 `SECTIONS`에 항목 추가 + `renderMain()`에 분기 추가
+2. `src/renderer/app/App.tsx` 의 `SECTIONS`에 항목 추가 (`render` 필드에 컴포넌트 — switch 분기 없음)
 3. `src/renderer/styles/_<기능>.scss` 작성 + `index.scss`에 `@use` 추가
 4. (파일·프로세스·네이티브 작업이 필요하면) 아래도 함께:
    - `src/main/features/<기능>/ipc.ts` 에 핸들러 작성 → `main.ts`에서 `register...Ipc()` 호출 (로직 파일도 같은 폴더에)
@@ -136,7 +166,10 @@ src/
 - **출퇴근 리마인더** (`main/features/attendance/scheduler.ts` + `reminders.ts`): 환경설정에서 **요일별(월~금)로 출근·퇴근 알림 시각**을 각각 지정(체크박스+시각). 메인 스케줄러가 매 30초 현재 시각을 확인해, 설정 시각(±2분, 슬립 대비)이 되면 근태 상태를 조회(`runAttendance('status')`)하고 **이미 찍었으면 건너뛰고 안 찍었을 때만** 알림(스마트 스킵). 알럿의 **[지금 출근/퇴근 찍기]** 버튼으로 그 자리에서 바로 찍을 수 있고(성공/실패 결과 알럿 표시, 성공 시 그날 리마인더 중지 + `attendance:changed` 이벤트로 사이드바 위젯 즉시 갱신), 상태 확인 실패(계정 없음·VPN 등)면 놓치지 않도록 알림을 띄운다(실패 알림은 하루 1회). 평일만, 기본 하루 한 번(중복 방지). **반복 알림**(`repeat: {enabled, minutes}`, 1~120분)을 켜면 설정 시각 이후 안 찍은 동안 N분 간격으로 재알림 — 앱을 늦게 켜도 발화하고, 찍은 게 확인되면 그날은 멈추며, 알럿을 안 닫고 있는 동안은 반복하지 않는다(닫은 시점부터 다시 카운트). 설정은 `userData/reminders.json`(평문). 스케줄러는 저장값을 매 tick 읽으므로 저장 후 재시작 불필요.
 - **배포** (`renderer/features/deploy` + `main/features/deploy`): 프로젝트별 젠킨스 잡을 REST API로 트리거하고 상태(대기→빌드중→성공/실패)를 폴링해 표시. [배포]를 누르면 **확인 모달**이 뜨는데, 환경설정에 Gitea 주소가 있으면 **이번 배포에 포함될 커밋 미리보기**(마지막 빌드 revision vs 저장소 HEAD를 Gitea compare API로 비교, `gitea.ts`)를 보여주고, 프로젝트가 **운영(PROD)으로 표시**돼 있으면(폼 체크박스, 카드에 PROD 뱃지) **대상 이름을 타이핑해야 배포 버튼이 활성화**된다(오배포 방지). 커밋 내역의 **커밋 해시는 Gitea 커밋 페이지로, 메시지 속 이슈 키(BBJ-1234)는 Jira로 링크화**(환경설정의 Gitea/Jira 주소 사용, 미설정이면 평문 — 젠킨스가 기록한 저장소 주소는 내부망이라 호스트는 설정된 Gitea 주소로 치환). 대상별 [커밋 내역]을 누르면 **공용 Modal**로 열리며, 안에 **최근 10개 빌드 이력 스트립**(성공/실패 색, 클릭 시 그 빌드의 커밋 내역으로 전환)과 **콘솔 로그 tail**(마지막 64KB, progressiveText 2단계 조회 — 크기 probe 후 끝부분만)이 있고, **빌드중이면 진행바(estimatedDuration 대비 경과)와 [중지] 버튼**(`/stop`, crumb 재시도)이 뜬다. 상태는 배포 탭을 보는 동안 1분마다 자동 새로고침(젠킨스에서 직접 돌린 빌드도 반영), 빌드중엔 5초 틱으로 진행률 갱신. 프로젝트 하나에 배포 대상 여러 개(스토어·어드민 등) 등록 가능. 젠킨스 URL·계정은 배포 탭에서 프로젝트별로 등록하고, API 토큰(또는 비밀번호)은 `safeStorage`로 암호화해 `userData/deploy.json`에 저장. 인증은 Basic Auth + API 토큰 권장(비밀번호 인증은 CSRF crumb 자동 처리).
 - **PR** (`renderer/features/prs` + `main/features/prs`): push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **빠른 PR**: 즐겨찾기 저장소(`userData/prs.json` 의 `repos`)별로 최근 push 브랜치를 자동 표시(branches API, 커밋시간 정렬) → [PR 만들기] 모달에서 develop 대비 커밋 확인 + 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿) 자동 생성 → 생성 성공 시 **머지 모달로 자동 연결**. **머지**: 목록 행 [머지] → `mergeable`(컨플릭트) 사전 확인 + 방식(merge/squash/rebase) 선택 → `/pulls/{n}/merge`. 생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지, **조직(owner)별 그룹핑** + 조직 칩 제외 필터(`store.ts`, `userData/prs.json`), 2분 자동 새로고침.
-- **Jira** (`renderer/features/jira` + `main/features/jira`): 내게 할당된 미해결 이슈 목록(JQL `assignee = currentUser() AND resolution = Unresolved`, 최신 갱신순 50개). **의도적으로 단순** — 목록·상태 뱃지만 보여주고 내용 확인은 클릭 → 브라우저(Jira)로. 인증은 환경설정 → 연동의 Jira 주소+**이메일+API 토큰**(Basic Auth, 토큰은 safeStorage 암호화) — 셋 다 있어야 동작, 미설정이면 안내 배너. REST `search/jql`(신형) 우선, 404 시 구형 `search` 폴백. 2분 자동 새로고침.
+- **Jira** (`renderer/features/jira` + `main/features/jira`): 내게 할당된 미해결 이슈 목록(최신 갱신순 50개, 다시열림 누락 방지 JQL 보정). 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹, 행에 **우선순위 화살표·상위항목 칩**, [⋯] 메뉴로 **상태 전환**(전환 목록 동적 조회)·링크 복사, 내용 확인은 클릭 → 브라우저(Jira)로. **사이드바 뱃지**에 미해결 수 표시 — 확인 안 한 새 티켓은 액센트 강조(App.tsx, localStorage `jira:seenKeys`). 인증은 환경설정 → 연동의 Jira 주소+**이메일+API 토큰**(Basic Auth, 토큰은 safeStorage 암호화) — 셋 다 있어야 동작, 미설정이면 안내 배너. REST `search/jql`(신형) 우선, 404 시 구형 `search` 폴백. 2분 자동 새로고침.
+- **메일** (`renderer/features/mail` + `main/features/mail`): 비즈박스 메일을 **사이드바 최상단 위젯**에서 확인. 세션은 headless puppeteer 로 **1회만 로그인**해 쿠키를 확보하고 `/mail2/` SPA 를 부트스트랩한 뒤, 개수·목록·본문 조회는 **전부 순수 HTTP fetch**(리버스 엔지니어링 엔드포인트 — `getMailBoxCount.do`·`getMailList.do`·`readMail.do`/`readMailCont.do`). 세션은 메모리 캐시 TTL 20분 재사용, 로그인 페이지 응답이면 1회 재로그인, 동시 요청은 establish 공유. **안읽음 폴링은 포커스 적응형**(활성 30초·백그라운드 3분, 창 복귀 시 즉시). 위젯 아이콘 클릭=브라우저로 메일함, 제목 클릭=앱 내 **리더 모달**(좌 목록·우 본문). 본문은 main 의 `sanitizeHtml`(script/iframe/on* 제거) + **sandbox iframe(srcDoc)** 이중 방어로 렌더하고, 링크는 기본 브라우저로만 나간다(열면 그룹웨어에서도 읽음 처리). 계정은 비즈박스 공용, 자체 파일 저장 없음.
+- **Nightwatch** (`renderer/features/nightwatch` + `main/features/nightwatch`): Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 분석**을 돌려 리포트+작업 프롬프트를 만든다(아침에 실제 세션에 붙여넣어 수정 작업). 흐름: 후보 조회(내 미해결 이슈 − 해결·숨김·기분석) → [분석] → 저장소 선택 → Jira REST 로 티켓·댓글·첨부 수집 → 관찰 모드 미션 실행 → 저장소 변조 사후 검증 → 원장 기록. **이름과 달리 야간 자동 스케줄러는 없음 — 수동 트리거가 유일한 진입점**, 실행 중 추가 요청은 대기열로 순차 처리. 안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존). 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 설정 `config.json`(저장소 목록·타임아웃 기본 40분). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
+- **딥링크** (`renderer/features/applink` + `main/features/applink`): applink.kr 디퍼드 딥링크(단축 URL) 생성. 클라이언트 JS 호출이 막혀 있어 **main 에서** `POST /deeplink/deeplink_create.asp` 를 호출(`X-API-KEY` + `$canonical_url`·선택 OG 필드). **API 키는 safeStorage 암호화**로 `userData/applink.json` 에만 저장. UI 는 키 관리 + 대상 URL + 접이식 공유 정보(제목·설명·이미지·PC 링크) + 생성 시 클립보드 자동 복사 + 이번 세션 생성 목록.
 - **트레이·자동 시작** (`main/features/tray`): 메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀. **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
 
 ## 트러블슈팅
@@ -149,7 +182,8 @@ src/
 - 코드 주석·문서·대화는 **한국어**.
 - **UI 스타일 기준은 `DESIGN.md`** — 색·크기·모션은 반드시 `_base.scss` 토큰(`var(--*)`)과 타이포 믹스인(`type-*`)에서 가져온다 (hex·px 매직넘버 금지). 이모지·텍스트 글리프 대신 공용 `Icon` 컴포넌트(Lucide path) 사용.
 - **스타일은 SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts`에서 modern-compiler API 사용). BEM 클래스를 `&__`/`&--` 네스팅으로 작성하고, 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss`에 `@use` 추가. 믹스인이 필요하면 파일 최상단에 `@use './base' as *;`.
-- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger · size: md/sm · loading), 입력 `Input`(small)·`Textarea`(code), 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`(icon), 배너 `Banner`(variant: warning/danger/info), 새로고침 `RefreshButton`, 열고닫기 `Collapsible`(icon·storageKey), 아이콘 `Icon`, 상태 뱃지 `Badge`·`StatusDot`, 링크형 버튼 `TextLink`, 파일 선택 `FileTrigger`, 세그먼트 `Segment`, 토스트 `useToast`, 모달 `Modal`(title·onClose·wide — Escape/오버레이 클릭 닫힘, 부모가 조건부 렌더로 제어), 확인 다이얼로그 `useConfirm`(promise 기반 window.confirm 대체 — `await confirm({title, danger})`). `.btn`/`.input` 등 공통 클래스 직접 사용 금지, 기능 scss 에서 공용 클래스 크기 오버라이드 금지(size variant 사용).
+- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger · size: md/sm · loading), 입력 `Input`(small)·`Textarea`(code), 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`(icon), 배너 `Banner`(variant: warning/danger/info), 새로고침 `RefreshButton`, 열고닫기 `Collapsible`(icon·storageKey), 아이콘 `Icon`, 상태 뱃지 `Badge`·`StatusDot`, 링크형 버튼 `TextLink`, 파일 선택 `FileTrigger`, 세그먼트 `Segment`, 토스트 `useToast`, 모달 `Modal`(title·onClose·wide — Escape/오버레이 클릭 닫힘, 부모가 조건부 렌더로 제어), 확인 다이얼로그 `useConfirm`(promise 기반 window.confirm 대체 — `await confirm({title, danger})`), 빈 상태 `EmptyState`(icon·message·hint), 마크다운 렌더 `Markdown`. `.btn`/`.input` 등 공통 클래스 직접 사용 금지, 기능 scss 에서 공용 클래스 크기 오버라이드 금지(size variant 사용).
+- **공통 유틸 재사용 (중복 정의 금지)** — 렌더러: 주기 폴링·시계 틱은 `lib/usePolling.ts`(usePolling·useTick), 클립보드 복사+토스트는 `lib/useCopy.ts`. 메인: REST 호출은 `main/lib/http.ts` 의 `fetchWithTimeout`(전역 fetch 직접 사용 금지 — 타임아웃이 없어 소켓 hang 시 IPC 가 영영 안 풀림, `import { fetchWithTimeout as fetch }` 패턴), userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(readUserJson·writeUserJson·encryptSecret·decryptSecret), 전 창 이벤트는 `main/lib/broadcast.ts`, `sleep`·`localDateKey` 는 `main/lib/util.ts`.
 - 공통 레이아웃 클래스(`_base.scss`): 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **사이드바 위젯 `.sbw`**(VPN·미러링·근태 공용 — `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
 - **비브런시 셸 주의**: 창은 `vibrancy: 'sidebar'` — html/body/.sidebar 는 **투명 유지**, 불투명 채색은 `.content`(--bg)에서만. **BrowserWindow 에 backgroundColor 지정 금지**(재질이 가려짐). 탑바는 `.content` 위 absolute 프로스트 오버레이(--frost + backdrop-blur)라 높이(44px) 변경 시 `.main` padding-top 동기화.
 - 커밋: 한국어 conventional commit (`feat`/`fix`/`refactor`/`docs`/`chore`). **커밋 메시지에 Claude 서명(Co-Authored-By 등) 넣지 말 것.** → **`/commit` 스킬 사용.**

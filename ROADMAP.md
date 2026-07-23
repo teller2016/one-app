@@ -1,87 +1,49 @@
-# 📋 One App — 사내 도구 통합 허브 (기획서 / 로드맵)
+# 📋 One App — 사내 도구 통합 허브 (로드맵)
 
-> 스크린샷 같은 **워크스페이스형 데스크톱 앱**. 하나의 창 안에서 사이드바로
-> 터미널·VPN·API·웹 대시보드 등 모든 사내 도구를 관리한다.
+> 하나의 창 안에서 사이드바로 사내 도구를 관리하는 **워크스페이스형 데스크톱 앱**.
+> 구조·컨벤션·기능 상세는 `CLAUDE.md`, 디자인 기준은 `DESIGN.md` 참고.
 
 ## 1. 개요
 
 | 항목 | 내용 |
 |------|------|
-| **형태** | 창(window) 기반 워크스페이스 앱 (사이드바 + 탭 + 메인 영역) |
+| **형태** | 창(window) 기반 워크스페이스 앱 (사이드바 + 탑바 + 메인 영역) |
 | **기술 스택** | **Electron + React + TypeScript** |
-| **빌드/패키징** | Electron Forge + Vite (공식 권장) |
+| **빌드/패키징** | Electron Forge + Vite |
 | **런타임** | Node.js v22, Electron 43 |
-| **VPN 방식** | 기존 VPN 클라이언트 실행·제어 (앱 내장 X) |
 
-## 2. 앱 구조
+## 2. 구현 완료 (2026-07 기준)
 
-```
-┌──────┬────────────────────────────────────────┐
-│ 사이드 │  [탭] [탭] [탭] ...                       │
-│ 바    ├────────────────────────────────────────┤
-│(섹션) │        메인 영역                          │
-│      │   (터미널 / 웹 대시보드 / 각종 패널)         │
-└──────┴────────────────────────────────────────┘
-```
+| 기능 | 형태 | 비고 |
+|------|------|------|
+| 앱 셸 (사이드바+탑바+메인) | 셸 | 비브런시, 테마(시스템/라이트/다크) |
+| Jira 내 이슈 | 섹션 | 목록·상태 전환·우선순위·상위항목 칩, 사이드바 뱃지 |
+| Nightwatch | 섹션 | Jira 버그 티켓 무인 분석 (claude CLI 미션, 수동 트리거) |
+| PR | 섹션 | Gitea — 빠른 PR 생성·머지·목록, 머지 시 Jira 해결 제안 |
+| 배포 | 섹션 | 젠킨스 트리거·상태 폴링·커밋 미리보기·PROD 보호 |
+| 딥링크 | 섹션 | applink.kr 생성 |
+| 일정 등록 | 섹션 | 비즈박스 puppeteer 매크로 |
+| 주간보고 | 섹션 | 개인별 주간 수집 → T/OT·MM 차트 |
+| 환경설정 | 섹션 | 계정·연동(Jira/Gitea)·테마·알림·자동 시작 |
+| 메일 | 위젯+모달 | 비즈박스 메일 — 안읽은 수·목록·본문 |
+| 폰 미러링 | 위젯 | scrcpy 미러링/제어 |
+| VPN | 위젯 | openvpn root 데몬 + TOTP 자동 생성 |
+| 출퇴근 | 위젯 | 근태 조회·찍기 + 요일별 리마인더(반복·스마트 스킵) |
+| 알림·트레이 | 인프라 | 알럿 알림 공통 모듈, 메뉴바 트레이 |
 
-## 3. 개발 단계 (Phase)
+## 3. 남은 로드맵 (후보)
 
-- [x] **Phase 0 · 스캐폴딩** — Electron Forge + Vite + React + TS 프로젝트 생성, 실행 확인
-- [~] **Phase 1 · 앱 셸 레이아웃** — 사이드바 + 탭바 + 메인 영역 (현재: 자리표시자 상태)
-- [ ] **Phase 2 · 내장 터미널** — xterm.js + node-pty (스크린샷의 핵심 기능)
-- [ ] **Phase 3 · 도구/액션 패널** — 앱 실행 / `.command`·스크립트 실행 / API 호출 / VPN
-- [ ] **Phase 4 · 웹 대시보드 임베드** — Jira·Docker·NAS 등 webview 탭
-- [ ] **Phase 5 · 설정·영속화·상태관리** — 섹션/액션 편집, 설정 저장
-- [ ] **Phase 6 · 패키징/배포** — `.dmg`, 코드서명/공증 (동료 배포 시)
+- [ ] **홈 대시보드** — 첫 화면에 오늘 요약(출퇴근·내 Jira·열린 PR·안읽은 메일·진행 중 배포). 기존 IPC 재사용이라 비용 대비 효과 최고
+- [ ] **내장 터미널** — xterm.js + node-pty (초기 기획의 핵심 아이템)
+- [ ] **스크립트·액션 런처** — 자주 쓰는 `.command`/스크립트/API 호출 버튼 모음
+- [ ] **웹 대시보드 임베드** — 젠킨스·NAS 등 webview 탭
+- [ ] **휴가·연차 조회** — 그룹웨어 puppeteer 인프라 재사용
+- [ ] **메일 섹션 승격** — 위젯 → 검색·페이징 갖춘 정식 섹션
+- [ ] **패키징/배포** — `.dmg`, 코드서명/공증 (동료 배포 시)
+- [ ] **puppeteer 그룹웨어 공통 모듈** — attendance·weekly·schedule 의 로그인/헬퍼 통합 (리팩터링, E2E 검증 필요)
 
-## 4. 확정된 세부사항
-- **VPN**: 기존 클라이언트 실행/제어만 (앱 내장 X)
-- **일정등록 커맨드**: `.command` 파일 → 자식 프로세스로 실행
-- **개발 순서**: 터미널(Phase 2)을 웹 대시보드보다 우선
+## 4. 알아둘 점 (트러블슈팅)
 
-## 5. 주요 명령어
-```bash
-npm start     # 개발 모드 실행 (핫리로드)
-npm run make  # 배포용 .app/.dmg 패키징
-npm run lint  # 린트
-```
-
-## 6. 미확정 / 추후 확인
-- 회사 VPN 제품명 (Cisco AnyConnect / GlobalProtect / OpenVPN 등)
-- 연동할 웹 대시보드 목록 및 URL (Jira/Jenkins/Docker/NAS 등)
-- 프로젝트별 API 엔드포인트
-
-## 7. 알아둘 점 (트러블슈팅)
-- 설치 중 `ETARGET No matching version`(예: `@types/estree@1.0.9`) 오류는 **npm 캐시 손상**이 원인.
-  → `npm cache clean --force` 후 재설치로 해결됨.
+- 설치 중 `ETARGET No matching version` 오류는 **npm 캐시 손상** → `npm cache clean --force` 후 재설치.
 - `package.json`의 `overrides`로 `@types/estree`를 1.0.8로 고정해 둠.
-
-## 8. 프로젝트 구조
-
-```
-src/
-├── main/                    🖥️ 메인 프로세스 (Node)
-│   ├── main.ts              · 진입점: 창 생성 + IPC 등록
-│   └── ipc/                 · 기능별 IPC 핸들러
-│       └── schedule.ts
-├── preload/
-│   └── preload.ts           · contextBridge (window.oneApp)
-├── renderer/                🎨 렌더러 (React UI)
-│   ├── renderer.tsx         · React 마운트 진입점
-│   ├── App.tsx              · 앱 셸(사이드바/탭/메인)
-│   ├── components/          · 공용 UI (Sidebar 등)
-│   ├── features/            · 기능별 폴더
-│   │   └── schedule/        ·   일정 등록 (ScheduleSection.tsx)
-│   ├── styles/
-│   └── global.d.ts          · window.oneApp 타입
-└── shared/
-    └── types.ts             · 프로세스 공용 타입
-```
-
-> ⚠️ `main.ts`·`preload.ts`·`renderer.tsx` 파일 **이름**이 빌드 산출물 이름이 되므로 바꾸지 말 것.
-
-### 새 기능(섹션) 추가 방법
-1. `src/renderer/features/<기능>/<기능>Section.tsx` 컴포넌트 작성
-2. `src/renderer/App.tsx`의 `SECTIONS`에 항목 추가 + 메인 영역 분기 추가
-3. (네이티브/파일/프로세스 작업이 필요하면) `src/main/ipc/<기능>.ts`에 IPC 핸들러 작성
-   → `main.ts`에서 `register...Ipc()` 호출, `preload.ts`에 API 노출, `shared/types.ts`에 타입 추가
+- 그 외 트러블슈팅·컨벤션은 `CLAUDE.md` 참고.
