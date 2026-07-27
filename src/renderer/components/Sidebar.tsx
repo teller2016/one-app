@@ -31,7 +31,7 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="sidebar__brand">
         <span className="sidebar__brand-mark">
-          {/* 브랜드 로고 마크 — 둥근 사각 + 코어 */}
+          {/* 브랜드 로고 마크 — 2×2 타일 그리드, 왼위 타일만 채움 (앱 아이콘과 통일) */}
           <svg
             width="16"
             height="16"
@@ -43,8 +43,10 @@ export function Sidebar({
             strokeLinejoin="round"
             aria-hidden="true"
           >
-            <rect x="3" y="3" width="18" height="18" rx="5" />
-            <circle cx="12" cy="12" r="4" />
+            <rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
           </svg>
         </span>
         <span>One App</span>
