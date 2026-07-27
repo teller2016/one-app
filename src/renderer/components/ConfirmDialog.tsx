@@ -33,7 +33,8 @@ export function useConfirm() {
 
 /**
  * 전역 확인 다이얼로그 — App 최상단에서 한 번만 감싼다.
- * Escape/오버레이 클릭 = 취소, Enter = 확인. 스타일은 _base.scss 의 .confirm 사용.
+ * Escape = 취소, Enter = 확인. 스타일은 _base.scss 의 .confirm 사용.
+ * 일반 Modal 과 달리 dim(오버레이) 클릭으로는 닫히지 않는다 — 확인/취소는 명시적 선택만.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
@@ -78,16 +79,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <ConfirmContext.Provider value={confirm}>
       {children}
       {pending && (
-        <div
-          className="modal-overlay modal-overlay--center confirm-overlay"
-          onClick={() => close(false)}
-        >
+        <div className="modal-overlay modal-overlay--center confirm-overlay">
           <div
             className="confirm"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <h3 className="confirm__title" id="confirm-title">
               {pending.title}
