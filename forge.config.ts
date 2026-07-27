@@ -60,6 +60,28 @@ const config: ForgeConfig = {
       // eslint-disable-next-line no-console
       console.log(`[forge] 런타임 의존성 ${count}개 패키지에 포함 (puppeteer 등)`);
     },
+    // 자가서명 인증서로 고정 서명 — adhoc 서명은 빌드마다 바뀌어 safeStorage 의
+    // 키체인 접근이 끊기고, 폴백 저장으로 암호화 설정이 날아간다(2026-07 실사고).
+    // packagerConfig.osxSign 은 서명 실패(FinderInfo 등 detritus)를 경고로만 삼켜
+    // adhoc 산출물이 조용히 나오므로, 여기서 속성 정리 후 직접 서명하고 실패 시 빌드를 멈춘다.
+    // 인증서가 없는 Mac 에서는 서명 없이 통과(기존 동작 유지).
+    postPackage: async (_forgeConfig, packageResult) => {
+      if (packageResult.platform !== 'darwin') return;
+      const identity = 'One App Sign';
+      try {
+        if (!execSync('security find-identity -v -p codesigning', { encoding: 'utf8' }).includes(identity)) return;
+      } catch {
+        return;
+      }
+      for (const outputPath of packageResult.outputPaths) {
+        const appPath = path.join(outputPath, 'One App.app');
+        if (!fs.existsSync(appPath)) continue;
+        execSync(`xattr -dr com.apple.FinderInfo "${appPath}" 2>/dev/null; xattr -dr com.apple.ResourceFork "${appPath}" 2>/dev/null; true`, { shell: '/bin/zsh' });
+        execSync(`codesign --force --deep --sign "${identity}" "${appPath}"`, { stdio: 'inherit' });
+        // eslint-disable-next-line no-console
+        console.log(`[forge] "${identity}" 로 서명 완료: ${appPath}`);
+      }
+    },
   },
   makers: [
     new MakerSquirrel({}),
