@@ -127,19 +127,67 @@
 
 .mail-modal {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 1fr; // 기본: 목록만 전체폭 (제목을 길게 읽도록)
   gap: 16px;
   // 오버레이 상하 여백(48*2) + 헤더·본문 패딩을 뺀 만큼 세로를 꽉 채운다
   height: calc(100vh - 200px);
   min-height: 440px;
+
+  // 메일 선택 시 — 좌 목록 + 우 본문 분할
+  &--split {
+    grid-template-columns: 300px 1fr;
+  }
 
   &__list {
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0; // 그리드 항목이 내용만큼 커지지 않고 줄어들 수 있게 (내부 스크롤)
+  }
+
+  &--split &__list {
     border-right: 1px solid var(--border);
     padding-right: 16px;
+  }
+
+  // 전체폭(비분할) 목록 — 한 줄 레이아웃: 발신자(고정폭) · 제목(가변) · 시간(우측)
+  &:not(#{&}--split) {
+    .mail-list__main {
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+    }
+    .mail-list__top {
+      display: contents; // 발신자·시간을 행의 직접 항목으로 풀어 배치
+    }
+    // 발신자|제목 구분 — 발신자는 굵은 라벨 + 열 구분선.
+    // 읽음 행은 전체를 회색 톤으로 낮춰, 안읽음(잉크색+굵게+점)이 확실히 튀게 한다.
+    .mail-list__from {
+      width: 200px;
+      flex-shrink: 0;
+      padding-right: 12px;
+      border-right: 1px solid var(--border);
+      font-weight: 600;
+      color: var(--text-3);
+    }
+    .mail-list__subject {
+      flex: 1;
+      min-width: 0;
+      order: 1;
+      color: var(--text-2);
+    }
+    // 안읽음 강조 — 이 블록의 기본색이 공용 --unread 규칙보다 구체적이라 여기서 다시 덮는다
+    .mail-list__item--unread .mail-list__from,
+    .mail-list__item--unread .mail-list__subject {
+      color: var(--text);
+    }
+    .mail-list__time {
+      order: 2;
+    }
+    .mail-list__dot {
+      top: 50%; // 한 줄 행에선 세로 중앙
+      transform: translateY(-50%);
+    }
   }
 
   &__list-head {
@@ -155,10 +203,19 @@
   }
 
   &__view {
+    position: relative; // [×] 목록으로 버튼의 기준
     min-width: 0;
     min-height: 0; // 위와 동일 — iframe 이 뷰 높이를 넘겨 넘치지 않게
     display: flex;
     flex-direction: column;
+  }
+
+  // 본문 우상단 [×] — 목록 전체폭 보기로 복귀
+  &__view-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
   }
 
   // idle/loading 안내 — 오른쪽 영역 가운데 정렬
@@ -289,6 +346,7 @@
 
   &__subject {
     margin: 0 0 6px;
+    padding-right: 32px; // 우상단 [×] 버튼과 겹치지 않게
     @include type-title;
     word-break: break-word;
   }

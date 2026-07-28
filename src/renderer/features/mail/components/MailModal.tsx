@@ -32,7 +32,8 @@ function bodyDoc(html: string, webUrl: string): string {
 }
 
 /**
- * 메일 리더 모달 — 왼쪽 받은편지함 목록 + 오른쪽 본문(sandbox iframe).
+ * 메일 리더 모달 — 처음엔 받은편지함 목록이 전체폭(제목을 길게), 메일을 선택하면
+ * 좌 목록 + 우 본문(sandbox iframe) 분할로 전환. 본문의 [×]로 다시 목록만 보기로 복귀.
  * 열릴 때 받은편지함을 새로 불러오고, 안읽은 메일을 열면 읽음 처리 후 onRead 로 알린다.
  */
 export function MailModal({
@@ -88,6 +89,14 @@ export function MailModal({
     void window.oneApp.openExternal(url);
   };
 
+  // 본문 닫기 — 목록 전체폭 보기로 복귀
+  const closeView = () => {
+    setSelected(null);
+    setBody({ kind: 'idle' });
+  };
+
+  const split = body.kind !== 'idle';
+
   return (
     <Modal
       title={
@@ -99,8 +108,8 @@ export function MailModal({
       onClose={onClose}
       wide
     >
-      <div className="mail-modal">
-        {/* 왼쪽 — 받은편지함 목록 */}
+      <div className={'mail-modal' + (split ? ' mail-modal--split' : '')}>
+        {/* 왼쪽 — 받은편지함 목록 (선택 전에는 전체폭) */}
         <div className="mail-modal__list">
           <div className="mail-modal__list-head">
             <span className="mail-modal__list-title">받은편지함</span>
@@ -160,16 +169,18 @@ export function MailModal({
           )}
         </div>
 
-        {/* 오른쪽 — 본문 */}
+        {/* 오른쪽 — 본문 (메일 선택 시에만 표시) */}
+        {split && (
         <div className="mail-modal__view">
-          {body.kind === 'idle' ? (
-            <div className="empty-state mail-modal__placeholder">
-              <span className="empty-state__icon">
-                <Icon name="mail" size={20} />
-              </span>
-              <p>메일을 선택하면 본문이 표시됩니다.</p>
-            </div>
-          ) : body.kind === 'loading' ? (
+          <button
+            type="button"
+            className="icon-btn mail-modal__view-close"
+            title="목록으로"
+            onClick={closeView}
+          >
+            <Icon name="x" size={14} />
+          </button>
+          {body.kind === 'loading' ? (
             <div className="mail-modal__placeholder">
               <span className="spinner" />
               <p className="hint">본문 불러오는 중...</p>
@@ -210,6 +221,7 @@ export function MailModal({
             </div>
           )}
         </div>
+        )}
       </div>
     </Modal>
   );
