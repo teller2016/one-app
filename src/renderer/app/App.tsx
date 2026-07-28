@@ -15,7 +15,7 @@ import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 // 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다
@@ -95,6 +95,72 @@ const loadSeenKeys = (): string[] => {
 
 export function App() {
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
+  // 섹션 방문 히스토리 — 뒤로(⌘[ · 스와이프 오른쪽 · 마우스 뒤로)/앞으로(⌘] · 반대 방향)
+  const backStack = useRef<string[]>([]);
+  const fwdStack = useRef<string[]>([]);
+
+  const navigate = useCallback((id: string) => {
+    setActiveId((cur) => {
+      if (cur === id) return cur;
+      backStack.current.push(cur);
+      fwdStack.current = []; // 새 분기로 이동하면 앞으로 히스토리는 무효
+      return id;
+    });
+  }, []);
+
+  const goBack = useCallback(() => {
+    setActiveId((cur) => {
+      const prev = backStack.current.pop();
+      if (!prev) return cur;
+      fwdStack.current.push(cur);
+      return prev;
+    });
+  }, []);
+
+  const goForward = useCallback(() => {
+    setActiveId((cur) => {
+      const next = fwdStack.current.pop();
+      if (!next) return cur;
+      backStack.current.push(cur);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // macOS 표준 뒤로/앞으로 단축키
+      if (!e.metaKey || e.shiftKey || e.altKey) return;
+      if (e.key === "[") {
+        e.preventDefault();
+        goBack();
+      } else if (e.key === "]") {
+        e.preventDefault();
+        goForward();
+      }
+    };
+    const onMouse = (e: MouseEvent) => {
+      // 마우스 뒤로(X1)/앞으로(X2) 버튼 — OS·드라이버가 이벤트를 전달해 줄 때
+      if (e.button === 3) {
+        e.preventDefault();
+        goBack();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        goForward();
+      }
+    };
+    // macOS 스와이프·드라이버 변환 제스처는 메인이 중계해 준다 (main.ts 참고)
+    const offGesture = window.oneApp?.onHistoryNav?.((dir) =>
+      dir === "back" ? goBack() : goForward()
+    );
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mouseup", onMouse);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mouseup", onMouse);
+      offGesture?.();
+    };
+  }, [goBack, goForward]);
+
   const [jiraCount, setJiraCount] = useState(0);
   const [jiraUnread, setJiraUnread] = useState(0);
   const [jiraOpenKeys, setJiraOpenKeys] = useState<string[] | null>(null);
@@ -137,9 +203,9 @@ export function App() {
   useEffect(() => {
     if (!window.oneApp?.onNavigate) return;
     return window.oneApp.onNavigate((section) => {
-      if (SECTIONS.some((s) => s.id === section)) setActiveId(section);
+      if (SECTIONS.some((s) => s.id === section)) navigate(section);
     });
-  }, []);
+  }, [navigate]);
 
   return (
     <ToastProvider>
@@ -157,7 +223,7 @@ export function App() {
                 : s
             )}
             activeId={activeId}
-            onSelect={setActiveId}
+            onSelect={navigate}
             header={<MailWidget />}
             footer={
               <>
@@ -170,16 +236,34 @@ export function App() {
 
           {/* 오른쪽 콘텐츠 영역 */}
           <section className="content">
-            {/* 탑바 — 현재 섹션 표시 + 창 드래그 영역 */}
+            {/* 탑바 — 히스토리 이동 + 현재 섹션 표시 + 창 드래그 영역 */}
             <header className="topbar">
+              <span className="topbar__nav">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={goBack}
+                  disabled={backStack.current.length === 0}
+                  title="뒤로 (⌘[)"
+                >
+                  <Icon name="chevron-left" size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={goForward}
+                  disabled={fwdStack.current.length === 0}
+                  title="앞으로 (⌘])"
+                >
+                  <Icon name="chevron-right" size={16} />
+                </button>
+              </span>
               <span className="topbar__icon">{active.icon}</span>
               <span className="topbar__title">{active.label}</span>
             </header>
 
             {/* 메인 영역 */}
-            <main className="main">
-              {active.render({ navigate: setActiveId })}
-            </main>
+            <main className="main">{active.render({ navigate })}</main>
           </section>
         </div>
       </ConfirmProvider>

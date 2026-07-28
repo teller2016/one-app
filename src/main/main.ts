@@ -91,6 +91,23 @@ const createWindow = () => {
     return { action: "deny" };
   });
 
+  // 탭 히스토리 이동(뒤로/앞으로) — macOS 는 마우스 X1/X2 버튼을 렌더러 mouseup 으로
+  // 전달하지 않는 경우가 많다 (드라이버·SensibleSideButtons 류가 스와이프 제스처로 변환).
+  // 그래서 macOS 스와이프 이벤트와 Windows app-command 를 메인에서 받아 렌더러로 중계한다.
+  mainWindow.on("swipe", (_e, direction) => {
+    // 페이지 쓸어넘기기 방향: 오른쪽 스와이프 = 뒤로, 왼쪽 = 앞으로 (Safari 관례)
+    if (direction === "right")
+      mainWindow.webContents.send("app:history", "back");
+    else if (direction === "left")
+      mainWindow.webContents.send("app:history", "forward");
+  });
+  mainWindow.on("app-command", (_e, cmd) => {
+    if (cmd === "browser-backward")
+      mainWindow.webContents.send("app:history", "back");
+    else if (cmd === "browser-forward")
+      mainWindow.webContents.send("app:history", "forward");
+  });
+
   // 앱 화면(index.html) 로드
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);

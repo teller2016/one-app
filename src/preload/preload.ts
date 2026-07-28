@@ -266,4 +266,10 @@ contextBridge.exposeInMainWorld("oneApp", {
     ipcRenderer.on("app:navigate", listener);
     return () => ipcRenderer.removeListener("app:navigate", listener);
   },
+  // 트랙패드 스와이프·마우스 보조 버튼(메인에서 중계)의 탭 히스토리 이동 신호 구독
+  onHistoryNav: (cb: (dir: "back" | "forward") => void) => {
+    const listener = (_e: unknown, dir: "back" | "forward") => cb(dir);
+    ipcRenderer.on("app:history", listener);
+    return () => ipcRenderer.removeListener("app:history", listener);
+  },
 });

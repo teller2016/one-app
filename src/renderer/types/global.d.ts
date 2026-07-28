@@ -200,6 +200,7 @@ declare global {
       testNotification: () => Promise<{ ok: boolean }>;
       openExternal: (url: string) => Promise<{ ok: boolean }>;
       onNavigate: (cb: (section: string) => void) => () => void;
+      onHistoryNav: (cb: (dir: 'back' | 'forward') => void) => () => void;
     };
   }
 }
