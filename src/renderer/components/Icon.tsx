@@ -32,6 +32,7 @@ export type IconName =
   | "equal"
   | "arrow-up-right"
   | "git-pull-request"
+  | "layout-grid"
   | "link"
   | "clipboard-list"
   | "bug"
@@ -235,6 +236,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <circle cx="6" cy="6" r="3" />
       <path d="M13 6h3a2 2 0 0 1 2 2v7" />
       <path d="M6 9v12" />
+    </>
+  ),
+  "layout-grid": (
+    <>
+      <rect width="7" height="7" x="3" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="14" rx="1" />
+      <rect width="7" height="7" x="3" y="14" rx="1" />
     </>
   ),
   mail: (

@@ -5,6 +5,7 @@ import { ToastProvider } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
+import { HomeSection } from "../features/home";
 import { JiraSection, isDone } from "../features/jira";
 import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
@@ -18,9 +19,18 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 // 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다
-type AppSection = SidebarSection & { render: () => ReactNode };
+// render 는 섹션 이동 함수(navigate)를 받는다 — 홈 대시보드 카드 클릭 이동용
+type AppSection = SidebarSection & {
+  render: (ctx: { navigate: (id: string) => void }) => ReactNode;
+};
 
 const SECTIONS: AppSection[] = [
+  {
+    id: "home",
+    label: "홈",
+    icon: <Icon name="layout-grid" size={16} />,
+    render: ({ navigate }) => <HomeSection onNavigate={navigate} />,
+  },
   {
     id: "jira",
     label: "Jira",
@@ -167,7 +177,9 @@ export function App() {
             </header>
 
             {/* 메인 영역 */}
-            <main className="main">{active.render()}</main>
+            <main className="main">
+              {active.render({ navigate: setActiveId })}
+            </main>
           </section>
         </div>
       </ConfirmProvider>

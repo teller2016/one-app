@@ -4,6 +4,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { publishAttendance } from '../lib/shared';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
 
@@ -17,9 +18,15 @@ export function AttendanceWidget() {
   const refresh = async () => {
     setBusy('fetch');
     setError('');
+    publishAttendance({ loading: true });
     const res = await window.oneApp.attendance.fetch();
-    if (res.ok && res.info) setInfo(res.info);
-    else setError(res.error ?? '조회 실패');
+    if (res.ok && res.info) {
+      setInfo(res.info);
+      publishAttendance({ info: res.info, error: '', loading: false });
+    } else {
+      setError(res.error ?? '조회 실패');
+      publishAttendance({ error: res.error ?? '조회 실패', loading: false });
+    }
     setBusy(null);
   };
 
@@ -29,6 +36,7 @@ export function AttendanceWidget() {
     const offChanged = window.oneApp.attendance.onChanged((next) => {
       setInfo(next);
       setError('');
+      publishAttendance({ info: next, error: '', loading: false });
     });
     // 알럿에서 찍는 동안엔 위젯도 앱에서 누른 것처럼 '처리중' 비활성 상태로 동기화
     const offStamping = window.oneApp.attendance.onStamping((action) => {
@@ -52,8 +60,12 @@ export function AttendanceWidget() {
     setBusy(action);
     setError('');
     const res = await window.oneApp.attendance.stamp(action);
-    if (res.ok && res.info) setInfo(res.info);
-    else setError(res.error ?? `${label} 처리 실패`);
+    if (res.ok && res.info) {
+      setInfo(res.info);
+      publishAttendance({ info: res.info, error: '', loading: false });
+    } else {
+      setError(res.error ?? `${label} 처리 실패`);
+    }
     setBusy(null);
   };
 
