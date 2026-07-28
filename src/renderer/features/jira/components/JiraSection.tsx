@@ -385,29 +385,31 @@ export function JiraSection() {
           ))}
 
           {done.length > 0 && (
-            <Collapsible
-              title={`해결됨 ${done.length}`}
-              icon={
-                <span className="jira__done-check">
-                  <Icon name="check" size={14} />
-                </span>
-              }
-              storageKey="jira:group:done"
-            >
-              <div className="jira__done">
-                {done.map((it) => (
-                  <IssueRow
-                    issue={it}
-                    key={it.key}
-                    menu={menuKey === it.key ? menuState : null}
-                    transitioning={transitioningKey === it.key}
-                    onToggleMenu={(k) => void toggleMenu(k)}
-                    onTransition={(k, t) => void handleTransition(k, t)}
-                    onCopyLink={(it2) => void copyLink(it2)}
-                  />
-                ))}
-              </div>
-            </Collapsible>
+            <div className="jira__done-zone">
+              <Collapsible
+                title={`해결됨 ${done.length}`}
+                icon={
+                  <span className="jira__done-check">
+                    <Icon name="check" size={14} />
+                  </span>
+                }
+                storageKey="jira:group:done"
+              >
+                <div className="jira__done">
+                  {done.map((it) => (
+                    <IssueRow
+                      issue={it}
+                      key={it.key}
+                      menu={menuKey === it.key ? menuState : null}
+                      transitioning={transitioningKey === it.key}
+                      onToggleMenu={(k) => void toggleMenu(k)}
+                      onTransition={(k, t) => void handleTransition(k, t)}
+                      onCopyLink={(it2) => void copyLink(it2)}
+                    />
+                  ))}
+                </div>
+              </Collapsible>
+            </div>
           )}
         </>
       )}

@@ -20,6 +20,13 @@
     margin-bottom: 20px;
   }
 
+  // 해결됨 영역 — 미해결 그룹들과 별도 구역으로 분리 (여백 + 헤어라인)
+  &__done-zone {
+    margin-top: 36px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
   // 해결됨 접힘 그룹 안 목록 — Collapsible 이 카드 룩이라 행만 나열
   &__done {
     margin: 0 -16px -12px; // Collapsible body 패딩을 상쇄해 행이 카드 폭을 꽉 채움
