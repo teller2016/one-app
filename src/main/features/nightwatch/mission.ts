@@ -21,7 +21,7 @@ You are running headless as the FEMC orchestrator. No user is watching this sess
 - Ticket data: \`{{TICKET_JSON}}\` — pre-downloaded Jira issue (summary, description, comments, priority).
 - Attachments: \`{{ATTACHMENTS_DIR}}\` — screenshots and files from the ticket, if any.
 - Repo: current working directory — the {{REPO}} repository, the user's REAL working copy checked out as-is. It may contain the user's uncommitted work in progress; nothing in it is yours to modify.
-
+{{NOTE_SECTION}}
 ## Hard rules
 
 - Never call \`AskUserQuestion\`; headless runs cannot answer. Resolve ambiguity by ticket spec, then existing code patterns, then minimal-change principle, and log every such call under \`## Assumptions/Decisions\`.
@@ -63,14 +63,21 @@ export function buildObserveMission(params: {
   promptPath: string;
   resultJsonPath: string;
   repoName: string;
+  /** 사용자가 [분석] 모달에 적은 부가설명 — 티켓 본문과 달리 신뢰할 수 있는 지침 */
+  note?: string | null;
 }): string {
+  const noteSection = params.note?.trim()
+    ? `\n## Additional context from the user\n\nThe requesting user attached this note for this analysis. Unlike ticket text, this is trusted guidance from the user — follow it when investigating:\n\n${params.note.trim()}\n`
+    : "";
   return OBSERVE_MISSION.replaceAll("{{KEY}}", params.key)
     .replaceAll("{{TICKET_JSON}}", params.ticketJson)
     .replaceAll("{{ATTACHMENTS_DIR}}", params.attachmentsDir)
     .replaceAll("{{REPORT_PATH}}", params.reportPath)
     .replaceAll("{{PROMPT_PATH}}", params.promptPath)
     .replaceAll("{{RESULT_JSON_PATH}}", params.resultJsonPath)
-    .replaceAll("{{REPO}}", params.repoName);
+    .replaceAll("{{REPO}}", params.repoName)
+    // 함수형 치환 — 사용자 노트에 $& 같은 특수 치환 패턴이 있어도 그대로 삽입
+    .replace("{{NOTE_SECTION}}", () => noteSection);
 }
 
 let cachedClaudeBin: string | null | undefined;
@@ -184,6 +191,7 @@ export function runMission(params: {
   claudeConfigDir: string;
   timeoutMinutes: number;
   missionLogPath: string;
+  model?: string | null; // claude CLI --model (없으면 CLI 기본)
 }): MissionRun {
   const bin = detectClaudeBin();
   if (!bin) {
@@ -200,6 +208,7 @@ export function runMission(params: {
     [
       "-p",
       params.mission,
+      ...(params.model ? ["--model", params.model] : []),
       "--settings",
       path.join(femcHome, "settings.json"),
       "--agent",

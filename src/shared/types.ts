@@ -458,9 +458,16 @@ export type NightwatchTicket = {
   durationMin?: number | null;
   costUsd?: number | null; // 미션 실제 비용 (stream result 이벤트)
   repo?: string | null; // 분석한 저장소 이름
+  model?: string | null; // 미션에 지정한 모델 (없으면 CLI 기본)
   report?: boolean; // 분석 리포트 파일 존재 여부
   prompt?: boolean; // 작업 프롬프트 파일 존재 여부 (fixable 일 때 생성)
   error?: string | null;
+};
+
+/** 분석 실행 옵션 — [분석] 모달에서 선택. 비우면 기존 동작(CLI 기본 모델·노트 없음) */
+export type NightwatchAnalyzeOpts = {
+  model?: string | null; // claude CLI --model 별칭 (opus | sonnet | haiku)
+  note?: string | null; // 미션 프롬프트에 첨부할 사용자 부가설명
 };
 
 /** 분석 대상 저장소 — 실제 작업 트리 경로 (worktree 없이 현재 체크아웃 그대로 분석) */

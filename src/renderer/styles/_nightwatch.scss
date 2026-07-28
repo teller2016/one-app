@@ -26,50 +26,31 @@
   }
 
   // 저장소 선택 모달 — 세로 옵션 리스트 (선택 시 액센트 보더)
-  &__repos {
+  // 분석 설정 모달 — 저장소 셀렉트 (공용 input 룩과 톤 맞춤, prs 브랜치 셀렉트와 동일 패턴)
+  &__repo-select {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text);
+    border-radius: var(--r-md);
+    @include type-small;
+
+    &:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+  }
+
+  &__repo-hint {
+    margin-top: 6px;
+  }
+
+  // 분석 설정 모달 — 저장소·모델·부가설명 입력 묶음
+  &__pick-opts {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-
-  &__repo {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    min-width: 0;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-    transition: border-color var(--dur-1) var(--ease),
-      background var(--dur-1) var(--ease);
-    @include focus-ring(2px);
-
-    &:hover {
-      background: var(--surface-2);
-    }
-
-    &--on {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-  }
-
-  &__repo-name {
-    @include type-body;
-    color: var(--text);
-    flex-shrink: 0;
-  }
-
-  &__repo-path {
-    @include type-small;
-    color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    gap: 12px;
   }
 
   // 설정 — 저장소 목록 편집기 (이름·경로·삭제 행)

@@ -1,5 +1,8 @@
 import { app, ipcMain } from "electron";
-import type { NightwatchConfig } from "../../../shared/types";
+import type {
+  NightwatchAnalyzeOpts,
+  NightwatchConfig,
+} from "../../../shared/types";
 import {
   analyzeTicket,
   cleanupOnQuit,
@@ -36,8 +39,10 @@ export function registerNightwatchIpc() {
     hideCandidate(String(key))
   );
   ipcMain.handle("nightwatch:hidden:clear", () => clearHiddenCandidates());
-  ipcMain.handle("nightwatch:analyze", (_e, key: string, repoId: string) =>
-    analyzeTicket(String(key), String(repoId))
+  ipcMain.handle(
+    "nightwatch:analyze",
+    (_e, key: string, repoId: string, opts?: NightwatchAnalyzeOpts) =>
+      analyzeTicket(String(key), String(repoId), opts)
   );
   ipcMain.handle("nightwatch:stop", () => stopMission());
   ipcMain.handle("nightwatch:delete", (_e, key: string) =>

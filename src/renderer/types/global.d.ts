@@ -48,6 +48,7 @@ import type {
   WeeklyProgress,
   ReminderConfig,
   NightwatchStatus,
+  NightwatchAnalyzeOpts,
   NightwatchConfig,
   NightwatchCandidatesResult,
   NightwatchCommandResult,
@@ -182,7 +183,11 @@ declare global {
         listCandidates: () => Promise<NightwatchCandidatesResult>;
         hideCandidate: (key: string) => Promise<NightwatchCommandResult>;
         clearHidden: () => Promise<NightwatchCommandResult>;
-        analyze: (key: string, repoId: string) => Promise<NightwatchCommandResult>;
+        analyze: (
+          key: string,
+          repoId: string,
+          opts?: NightwatchAnalyzeOpts,
+        ) => Promise<NightwatchCommandResult>;
         stop: () => Promise<NightwatchCommandResult>;
         deleteTicket: (key: string) => Promise<NightwatchCommandResult>;
         getReport: (key: string) => Promise<NightwatchTextResult>;

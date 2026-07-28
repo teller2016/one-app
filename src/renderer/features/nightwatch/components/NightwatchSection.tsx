@@ -18,6 +18,7 @@ import { Modal } from "../../../components/Modal";
 import { RefreshButton } from "../../../components/RefreshButton";
 import { SectionHeader } from "../../../components/SectionHeader";
 import { Segment } from "../../../components/Segment";
+import { Textarea } from "../../../components/Textarea";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/EmptyState";
 import { usePolling } from "../../../lib/usePolling";
@@ -65,7 +66,12 @@ export function NightwatchSection() {
   const [modal, setModal] = useState<{ title: string; content: string } | null>(
     null
   );
-  const [pick, setPick] = useState<{ key: string; repoId: string } | null>(
+  const [pick, setPick] = useState<{
+    key: string;
+    repoId: string;
+    model: string; // '' = CLI 기본
+    note: string;
+  } | null>(
     null
   );
   const [error, setError] = useState("");
@@ -123,7 +129,11 @@ export function NightwatchSection() {
     }
   }, [status?.jiraConfigured, loadCandidates]);
 
-  const analyze = async (key: string, repoId: string) => {
+  const analyze = async (
+    key: string,
+    repoId: string,
+    opts?: { model?: string; note?: string },
+  ) => {
     // 이미 미션이 돌고 있으면 대기열 추가라 promise 가 즉시 돌아온다
     const queued = !!runningKey;
     if (!queued) {
@@ -132,7 +142,7 @@ export function NightwatchSection() {
     }
     try {
       // 직접 실행이면 미션이 끝날 때까지(수 분~타임아웃) promise 가 유지된다
-      const res = await window.oneApp.nightwatch.analyze(key, repoId);
+      const res = await window.oneApp.nightwatch.analyze(key, repoId, opts);
       toast(res.output, res.ok ? undefined : "fail");
     } finally {
       if (!queued) setAnalyzing(null);
@@ -140,12 +150,12 @@ export function NightwatchSection() {
     }
   };
 
-  // [분석] 클릭 → 저장소 선택 모달 (학습된 기본값 미리 선택)
+  // [분석] 클릭 → 저장소·모델·부가설명 선택 모달 (학습된 기본값 미리 선택)
   const openPick = (c: NightwatchCandidate) => {
     const repos = status?.config.repos ?? [];
     const def =
       repos.find((r) => r.id === c.suggestedRepoId)?.id ?? repos[0]?.id ?? "";
-    setPick({ key: c.key, repoId: def });
+    setPick({ key: c.key, repoId: def, model: "", note: "" });
   };
 
   // [재분석] 클릭 → 이전에 분석한 저장소를 기본 선택해 같은 모달을 연다
@@ -153,14 +163,17 @@ export function NightwatchSection() {
     const repos = status?.config.repos ?? [];
     const def =
       repos.find((r) => r.name === t.repo)?.id ?? repos[0]?.id ?? "";
-    setPick({ key: t.key, repoId: def });
+    setPick({ key: t.key, repoId: def, model: "", note: "" });
   };
 
   const confirmPick = () => {
     if (!pick?.repoId) return;
-    const { key, repoId } = pick;
+    const { key, repoId, model, note } = pick;
     setPick(null);
-    void analyze(key, repoId);
+    void analyze(key, repoId, {
+      model: model || undefined,
+      note: note.trim() || undefined,
+    });
   };
 
   const stopAnalyze = async () => {
@@ -657,28 +670,51 @@ export function NightwatchSection() {
 
       {pick && status && (
         <Modal
-          title={`${pick.key} — 분석할 저장소 선택`}
+          title={`${pick.key} — 분석 설정`}
           onClose={() => setPick(null)}
         >
-          <div className="nightwatch__repos">
-            {status.config.repos.map((r) => (
-              <button
-                type="button"
-                key={r.id}
-                className={`nightwatch__repo${
-                  pick.repoId === r.id ? " nightwatch__repo--on" : ""
-                }`}
-                onClick={() => setPick({ ...pick, repoId: r.id })}
+          <div className="nightwatch__pick-opts">
+            <FormRow label="저장소" column>
+              <select
+                className="nightwatch__repo-select"
+                value={pick.repoId}
+                onChange={(e) => setPick({ ...pick, repoId: e.target.value })}
               >
-                <span className="nightwatch__repo-name">{r.name}</span>
-                <span className="nightwatch__repo-path">{r.path}</span>
-              </button>
-            ))}
+                {status.config.repos.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <p className="hint nightwatch__repo-hint">
+                {status.config.repos.find((r) => r.id === pick.repoId)?.path ??
+                  "설정에서 분석 대상 저장소를 먼저 등록하세요"}
+                {" — "}현재 체크아웃 그대로 분석하며, 선택은 같은
+                프로젝트·말머리 조합에 기억됩니다.
+              </p>
+            </FormRow>
+            <FormRow label="모델" column>
+              <Segment
+                options={[
+                  { value: "", label: "기본" },
+                  { value: "fable", label: "Fable" },
+                  { value: "opus", label: "Opus" },
+                  { value: "sonnet", label: "Sonnet" },
+                  { value: "haiku", label: "Haiku" },
+                ]}
+                value={pick.model}
+                onChange={(v) => setPick({ ...pick, model: v })}
+              />
+            </FormRow>
+            <FormRow label="부가설명 (선택)" column>
+              <Textarea
+                rows={3}
+                value={pick.note}
+                placeholder="재현 경로·의심 지점·참고 맥락 등 분석에 참고할 내용"
+                onChange={(e) => setPick({ ...pick, note: e.target.value })}
+              />
+            </FormRow>
           </div>
-          <p className="hint">
-            현재 체크아웃 그대로 분석합니다 (브랜치 전환·수정 없음). 선택은
-            같은 프로젝트·말머리 조합에 기억됩니다.
-          </p>
           <div className="form-actions">
             <Button
               variant="primary"

@@ -16,6 +16,7 @@ import type {
   PrMergeMethod,
   ApplinkInput,
   MirrorMode,
+  NightwatchAnalyzeOpts,
   NightwatchConfig,
 } from "../shared/types";
 import { contextBridge, ipcRenderer } from "electron";
@@ -235,8 +236,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     hideCandidate: (key: string) => ipcRenderer.invoke("nightwatch:hide", key),
     clearHidden: () => ipcRenderer.invoke("nightwatch:hidden:clear"),
     // 티켓 1건을 선택한 저장소에서 분석 — 완료까지 promise 가 유지된다 (수 분~타임아웃)
-    analyze: (key: string, repoId: string) =>
-      ipcRenderer.invoke("nightwatch:analyze", key, repoId),
+    analyze: (key: string, repoId: string, opts?: NightwatchAnalyzeOpts) =>
+      ipcRenderer.invoke("nightwatch:analyze", key, repoId, opts),
     // 실행 중 분석 중지 (SIGTERM)
     stop: () => ipcRenderer.invoke("nightwatch:stop"),
     // 처리한 티켓 삭제 — 원장 기록 + 리포트·프롬프트·로그·첨부 파일

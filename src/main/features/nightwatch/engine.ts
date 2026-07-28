@@ -4,6 +4,7 @@
 // 미션이 저장소를 건드린 흔적이 보이면 증거 patch 만 남기고 경고한다.
 import type {
   JiraIssue,
+  NightwatchAnalyzeOpts,
   NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchConfig,
@@ -48,7 +49,19 @@ let runningTicket: string | null = null;
 let runningChild: ChildProcess | null = null;
 let lastRunAt: string | undefined;
 // 실행 중 추가된 분석 요청 — 현재 미션이 끝나는 대로 순서대로 실행
-let queue: { key: string; repoId: string }[] = [];
+let queue: { key: string; repoId: string; opts: NightwatchAnalyzeOpts }[] = [];
+
+// 모델 인자 검증 — spawn 인자로만 쓰여 셸 위험은 없지만 오타·이상값을 미리 거른다
+const MODEL_RE = /^[A-Za-z0-9._-]{1,64}$/;
+const NOTE_MAX_LEN = 4000; // 부가설명 상한 — 미션 프롬프트가 무한정 커지지 않게
+
+/** 렌더러에서 온 분석 옵션 정리 — 빈 값은 null 로 통일 */
+function sanitizeAnalyzeOpts(opts?: NightwatchAnalyzeOpts): NightwatchAnalyzeOpts {
+  const model =
+    opts?.model && MODEL_RE.test(opts.model) ? opts.model : null;
+  const note = opts?.note?.trim() ? opts.note.trim().slice(0, NOTE_MAX_LEN) : null;
+  return { model, note };
+}
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
@@ -281,11 +294,13 @@ export function clearHiddenCandidates(): NightwatchCommandResult {
 }
 
 // ── 분석 실행 ───────────────────────────────────────────────────────────
-/** 티켓 1건 분석 — UI [분석]에서 저장소를 골라 호출. 실행 중이면 대기열에 쌓여 순차 실행 */
+/** 티켓 1건 분석 — UI [분석]에서 저장소·모델·부가설명을 골라 호출. 실행 중이면 대기열에 쌓여 순차 실행 */
 export async function analyzeTicket(
   key: string,
-  repoId: string
+  repoId: string,
+  rawOpts?: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
+  const opts = sanitizeAnalyzeOpts(rawOpts);
   if (!TICKET_KEY_RE.test(key)) {
     return { ok: false, output: "잘못된 티켓 키입니다" };
   }
@@ -306,19 +321,20 @@ export async function analyzeTicket(
     return { ok: false, output: `${key} 는 이미 실행·대기 중입니다` };
   }
   if (missionBusy) {
-    queue.push({ key, repoId });
+    queue.push({ key, repoId, opts });
     appendCycleLog(`대기열 추가: ${key} (${repo.name}, ${queue.length}건 대기)`);
     return {
       ok: true,
       output: `${key} 를 대기열에 추가했습니다 (${queue.length}건 대기)`,
     };
   }
-  return runAnalysis(key, repo);
+  return runAnalysis(key, repo, opts);
 }
 
 async function runAnalysis(
   key: string,
-  repo: NightwatchRepo
+  repo: NightwatchRepo,
+  opts: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
   missionBusy = true;
   try {
@@ -329,7 +345,7 @@ async function runAnalysis(
     // 같은 프로젝트·말머리의 다음 분석 때 이 저장소가 기본 선택되도록 기억
     const state = loadNwState();
     state.repoDefaults[repoDefaultKey(key, issue.fields.summary)] = repo.id;
-    return await processTicket(getNightwatchConfig(), state, issue, repo);
+    return await processTicket(getNightwatchConfig(), state, issue, repo, opts);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     appendCycleLog(`분석 오류: ${message}`);
@@ -352,7 +368,7 @@ function drainQueue() {
     return;
   }
   appendCycleLog(`대기열 실행: ${next.key} (${repo.name})`);
-  void runAnalysis(next.key, repo);
+  void runAnalysis(next.key, repo, next.opts);
 }
 
 /** 실행 중 미션 중지 — SIGTERM + 대기열 비움. 결과는 미션 종료 시 원장에 기록된다 */
@@ -429,7 +445,8 @@ async function processTicket(
   cfg: NightwatchConfig,
   state: NwState,
   issue: JiraIssueRaw,
-  repo: NightwatchRepo
+  repo: NightwatchRepo,
+  opts: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
   const p = nwPaths();
   const key = issue.key;
@@ -442,6 +459,7 @@ async function processTicket(
     startedAt,
     repo: repo.name,
     title: issue.fields.summary,
+    model: opts.model ?? null,
   };
   saveNwState(state);
   appendCycleLog(`ticket ${key}: 시작 (${repo.name} — ${issue.fields.summary})`);
@@ -486,6 +504,9 @@ async function processTicket(
         before.status ? ", 작업 중 변경분 있음" : ""
       }) — 현재 체크아웃 그대로 분석`
     );
+    if (opts.model) appendMissionLog(missionLogPath, `모델 지정: ${opts.model}`);
+    if (opts.note)
+      appendMissionLog(missionLogPath, `부가설명 첨부 (${opts.note.length}자)`);
 
     const mission = buildObserveMission({
       key,
@@ -495,6 +516,7 @@ async function processTicket(
       promptPath: path.join(p.reports, `${key}.prompt.md`),
       resultJsonPath: path.join(ticketDir, "result.json"),
       repoName: repo.name,
+      note: opts.note,
     });
     runningTicket = key;
     const missionRun = runMission({
@@ -503,6 +525,7 @@ async function processTicket(
       claudeConfigDir: cfg.claudeConfigDir,
       timeoutMinutes: cfg.timeoutMinutes,
       missionLogPath,
+      model: opts.model,
     });
     runningChild = missionRun.child;
     const outcome = await missionRun.done;
