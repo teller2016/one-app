@@ -395,6 +395,14 @@
     }
   }
 
+  // 헤더 우측 액션 묶음 — [작업 내용 복사] · [Gitea 에서 비교]
+  &-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
   &-list {
     margin: 0;
     padding: 4px 14px;

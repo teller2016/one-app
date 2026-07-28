@@ -11,6 +11,15 @@ import { Banner } from '../../../components/Banner';
 import { Input } from '../../../components/Input';
 import { Icon } from '../../../components/Icon';
 import { TextLink } from '../../../components/TextLink';
+import { useCopy } from '../../../lib/useCopy';
+
+/** 커밋 제목만 줄줄이 — 배포 전 공유 메시지용 (머지 커밋은 작업 내용이 아니라 제외) */
+function buildShareText(commits: { message: string }[]): string {
+  return commits
+    .map((c) => c.message.split('\n')[0].trim())
+    .filter((m) => m && !/^Merge (branch|pull request|remote)/i.test(m))
+    .join('\n');
+}
 
 /** 배포 미리보기 로드 상태 */
 export type PreviewState = {
@@ -36,8 +45,10 @@ export function DeployConfirmModal({
   onClose: () => void;
 }) {
   const [typed, setTyped] = useState('');
+  const copy = useCopy();
   const prodOk = !project.production || typed.trim() === target.name;
   const r = preview.result;
+  const shareText = buildShareText(r?.commits ?? []);
 
   return (
     <Modal title={`${project.name} — ${target.name} 배포`} onClose={onClose}>
@@ -70,15 +81,30 @@ export function DeployConfirmModal({
               마지막 빌드 이후 새 커밋 <b>{r.totalCommits ?? 0}개</b>
               {r.branch ? ` (${r.branch})` : ''}
             </span>
-            {r.compareUrl && (
-              <TextLink
-                small
-                external
-                onClick={() => void window.oneApp.openExternal(r.compareUrl as string)}
-              >
-                Gitea 에서 비교
-              </TextLink>
-            )}
+            <span className="deploy__preview-actions">
+              {shareText && (
+                <TextLink
+                  small
+                  onClick={() =>
+                    void copy(shareText, {
+                      success: '작업 내용이 복사되었습니다 — 공유 채널에 붙여넣으세요',
+                    })
+                  }
+                >
+                  <Icon name="copy" size={12} />
+                  작업 내용 복사
+                </TextLink>
+              )}
+              {r.compareUrl && (
+                <TextLink
+                  small
+                  external
+                  onClick={() => void window.oneApp.openExternal(r.compareUrl as string)}
+                >
+                  Gitea 에서 비교
+                </TextLink>
+              )}
+            </span>
           </div>
           {(r.commits ?? []).length === 0 ? (
             <Banner>
