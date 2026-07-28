@@ -18,6 +18,8 @@ import type {
   MirrorMode,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
+  OvertimeProgress,
+  OvertimeSubmitInput,
 } from "../shared/types";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -182,6 +184,20 @@ contextBridge.exposeInMainWorld("oneApp", {
         cb(action);
       ipcRenderer.on("attendance:stamping", listener);
       return () => ipcRenderer.removeListener("attendance:stamping", listener);
+    },
+  },
+  overtime: {
+    // 입력 기본값 조회 (마지막 상신 값)
+    getDefaults: () => ipcRenderer.invoke("overtime:defaults:get"),
+    // 연장근무내역서 작성·상신 (headless 브라우저 — 수십 초 소요)
+    submit: (input: OvertimeSubmitInput) =>
+      ipcRenderer.invoke("overtime:submit", input),
+    // 상신 진행 단계 구독 (로그인 → 작성 → 상신). 해제 함수를 반환한다.
+    onProgress: (cb: (progress: OvertimeProgress) => void) => {
+      const listener = (_e: unknown, progress: OvertimeProgress) =>
+        cb(progress);
+      ipcRenderer.on("overtime:progress", listener);
+      return () => ipcRenderer.removeListener("overtime:progress", listener);
     },
   },
   weekly: {

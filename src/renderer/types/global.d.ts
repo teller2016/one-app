@@ -56,6 +56,10 @@ import type {
   MailInboxResult,
   MailBodyResult,
   MailUnreadCountResult,
+  OvertimeDefaults,
+  OvertimeProgress,
+  OvertimeSubmitInput,
+  OvertimeSubmitResult,
 } from '../../shared/types';
 
 declare global {
@@ -147,6 +151,11 @@ declare global {
         onStamping: (
           cb: (action: 'come' | 'leave' | null) => void,
         ) => () => void;
+      };
+      overtime: {
+        getDefaults: () => Promise<OvertimeDefaults>;
+        submit: (input: OvertimeSubmitInput) => Promise<OvertimeSubmitResult>;
+        onProgress: (cb: (progress: OvertimeProgress) => void) => () => void;
       };
       weekly: {
         fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;

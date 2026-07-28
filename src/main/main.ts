@@ -7,6 +7,7 @@ import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
 import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
+import { registerOvertimeIpc } from "./features/overtime/ipc";
 import { registerPrsIpc } from "./features/prs/ipc";
 import { registerScheduleIpc } from "./features/schedule/ipc";
 import { registerSettingsIpc } from "./features/settings/ipc";
@@ -37,6 +38,7 @@ registerMirrorIpc();
 registerJiraIpc();
 registerMailIpc();
 registerNightwatchIpc();
+registerOvertimeIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {

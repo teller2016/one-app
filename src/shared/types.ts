@@ -424,6 +424,31 @@ export type AttendanceResult = {
   error?: string;
 };
 
+// ── 야근 결재 (그룹웨어 전자결재 '연장근무내역서' 상신) ──
+
+/** 입력 기본값 — 마지막으로 작성한 업무내용을 저장해 다음 입력에 미리 채운다 (시간은 매번 계산) */
+export type OvertimeDefaults = {
+  target: string; // 업무 대상 (예: A프로젝트)
+  content: string; // 수행 내용
+  reason: string; // 연장근무 사유
+};
+
+export type OvertimeSubmitInput = OvertimeDefaults & {
+  date: string; // 연장근무일 "YYYY-MM-DD"
+  startTime: string; // "HH:MM"
+  endTime: string; // "HH:MM"
+};
+
+export type OvertimeSubmitResult = {
+  ok: boolean;
+  title?: string; // 상신된 문서 제목
+  docUrl?: string; // 문서 보기(결재 버튼) 팝업 URL — '결재하러 가기' 링크
+  error?: string;
+};
+
+/** 상신 진행 단계 (메인 → 렌더러 이벤트 — 모달의 진행 문구) */
+export type OvertimeProgress = { step: string };
+
 // 출퇴근 리마인더 — 요일별로 출근/퇴근 알림 시각을 따로 설정
 export type ReminderSlot = {
   enabled: boolean;

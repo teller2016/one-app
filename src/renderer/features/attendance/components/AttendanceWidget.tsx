@@ -4,6 +4,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { OvertimeModal } from '../../overtime';
 import { publishAttendance } from '../lib/shared';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
@@ -14,6 +15,7 @@ export function AttendanceWidget() {
   const [info, setInfo] = useState<AttendanceInfo | null>(null);
   const [busy, setBusy] = useState<Busy>('fetch');
   const [error, setError] = useState('');
+  const [overtimeOpen, setOvertimeOpen] = useState(false);
 
   const refresh = async () => {
     setBusy('fetch');
@@ -114,6 +116,15 @@ export function AttendanceWidget() {
           )}
         </span>
         <span className="sbw__actions">
+          <button
+            type="button"
+            className="icon-btn"
+            title="야근 결재 상신 (연장근무내역서)"
+            aria-label="야근 결재 상신"
+            onClick={() => setOvertimeOpen(true)}
+          >
+            <Icon name="moon" size={12} />
+          </button>
           <RefreshButton
             size={12}
             spinning={busy === 'fetch'}
@@ -140,6 +151,9 @@ export function AttendanceWidget() {
       )}
 
       {error && <p className="sbw__error">{error}</p>}
+
+      {/* 야근 결재 모달 — 연장근무내역서 작성·상신 */}
+      {overtimeOpen && <OvertimeModal onClose={() => setOvertimeOpen(false)} />}
     </div>
   );
 }
