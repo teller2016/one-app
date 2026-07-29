@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import {
+  fetchIssueDetail,
   fetchMyIssues,
   getTransitions,
   resolveIssue,
@@ -9,6 +10,8 @@ import {
 /** Jira(내 이슈) 관련 IPC 핸들러 등록 */
 export function registerJiraIpc() {
   ipcMain.handle('jira:list', () => fetchMyIssues());
+  // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
+  ipcMain.handle('jira:detail', (_e, key: string) => fetchIssueDetail(key));
   ipcMain.handle('jira:transitions', (_e, key: string) => getTransitions(key));
   ipcMain.handle('jira:transition', (_e, key: string, id: string) =>
     transitionIssue(key, id),

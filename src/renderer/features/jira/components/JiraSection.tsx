@@ -14,6 +14,7 @@ import { usePolling } from '../../../lib/usePolling';
 import { useCopy } from '../../../lib/useCopy';
 
 import { isDone } from '../lib/issue';
+import { JiraDetailPanel } from './JiraDetailPanel';
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
@@ -55,7 +56,7 @@ const prioInfo = (name: string): { level: string; icon: IconName } | null => {
 /** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
 type MenuState = 'loading' | JiraTransition[] | { error: string };
 
-/** 이슈 한 줄 — 티켓번호·티켓명 클릭 = 브라우저 열기, 키 우측 아이콘 = URL 복사, 뱃지 = 전환 메뉴 */
+/** 이슈 한 줄 — 티켓명 클릭 = 앱 내 상세 패널, 티켓번호 클릭 = 브라우저 열기, 뱃지 = 전환 메뉴 */
 function IssueRow({
   issue,
   menu,
@@ -63,6 +64,7 @@ function IssueRow({
   onToggleMenu,
   onTransition,
   onCopyLink,
+  onOpenDetail,
 }: {
   issue: JiraIssue;
   menu: MenuState | null; // null = 메뉴 닫힘
@@ -70,12 +72,13 @@ function IssueRow({
   onToggleMenu: (key: string) => void;
   onTransition: (key: string, t: JiraTransition) => void;
   onCopyLink: (issue: JiraIssue) => void;
+  onOpenDetail: (key: string) => void;
 }) {
   const open = (): void => {
     void window.oneApp.openExternal(issue.url);
   };
-  const linkTitle = [
-    `${issue.key} — 브라우저에서 열기`,
+  const detailTitle = [
+    `${issue.key} — 여기서 바로 보기`,
     issue.priority && `우선순위 ${issue.priority}`,
   ]
     .filter(Boolean)
@@ -89,7 +92,7 @@ function IssueRow({
           type="button"
           className="jira__key"
           onClick={open}
-          title={linkTitle}
+          title={`${issue.key} — 브라우저에서 열기`}
         >
           {issue.key}
         </button>
@@ -114,8 +117,8 @@ function IssueRow({
       <button
         type="button"
         className="jira__title"
-        onClick={open}
-        title={linkTitle}
+        onClick={() => onOpenDetail(issue.key)}
+        title={detailTitle}
       >
         {issue.summary}
       </button>
@@ -211,6 +214,9 @@ export function JiraSection() {
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [menuState, setMenuState] = useState<MenuState>('loading');
   const [transitioningKey, setTransitioningKey] = useState<string | null>(null);
+  // 상세 패널 — 닫을 때 detailKey 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -261,6 +267,12 @@ export function JiraSection() {
   const copy = useCopy();
   const copyLink = (issue: JiraIssue) =>
     copy(issue.url, { success: `${issue.key} 링크를 복사했습니다` });
+
+  // 상세 패널 열기 — 제목 클릭 (같은 이슈를 다시 열어도 새로 조회)
+  const openDetail = (key: string) => {
+    setDetailKey(key);
+    setDetailOpen(true);
+  };
 
   // 전환 실행 — 성공 시 목록 갱신 (그룹 이동 반영)
   const handleTransition = async (key: string, t: JiraTransition) => {
@@ -322,7 +334,7 @@ export function JiraSection() {
         <SectionHeader
           title="Jira"
           icon={<Icon name="clipboard-list" size={18} />}
-          sub="내게 할당된 미해결 이슈입니다. 클릭하면 브라우저에서 열려요."
+          sub="내게 할당된 미해결 이슈입니다. 제목을 클릭하면 여기서 바로 볼 수 있어요."
         />
         <RefreshButton
           size={14}
@@ -378,6 +390,7 @@ export function JiraSection() {
                     onToggleMenu={(k) => void toggleMenu(k)}
                     onTransition={(k, t) => void handleTransition(k, t)}
                     onCopyLink={(it2) => void copyLink(it2)}
+                    onOpenDetail={openDetail}
                   />
                 ))}
               </div>
@@ -405,6 +418,7 @@ export function JiraSection() {
                       onToggleMenu={(k) => void toggleMenu(k)}
                       onTransition={(k, t) => void handleTransition(k, t)}
                       onCopyLink={(it2) => void copyLink(it2)}
+                      onOpenDetail={openDetail}
                     />
                   ))}
                 </div>
@@ -413,6 +427,13 @@ export function JiraSection() {
           )}
         </>
       )}
+
+      {/* 이슈 상세 패널 — 오른쪽 슬라이드 (닫힘 애니메이션을 위해 항상 마운트) */}
+      <JiraDetailPanel
+        issueKey={detailKey}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+      />
     </div>
   );
 }

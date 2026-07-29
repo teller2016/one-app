@@ -316,3 +316,119 @@
   }
 
 }
+
+// ===== 이슈 상세 패널 — 목록 배치는 그대로 두고 오른쪽에서 슬라이드로 떠오르는 레이어
+// (메일 리더 .mail-modal__view 와 동일 문법 — 섹션은 스크롤 영역이라 fixed 로 띄운다)
+.jira-view {
+  position: fixed;
+  top: 56px; // 탑바(44px) + 여백
+  right: 12px;
+  bottom: 12px;
+  z-index: 30; // 상태 전환 드롭다운(20) 위
+  width: min(1080px, calc(100vw - 220px - 48px)); // 본문·스크린샷이 여유 있게 — 사이드바(220px)는 침범하지 않게
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2); // 떠 있는 레이어 전용 그림자
+  transform: translateX(calc(100% + 40px)); // +40px: 그림자까지 완전히 밖으로
+  visibility: hidden;
+  transition:
+    transform var(--dur-2) var(--ease),
+    visibility 0s linear var(--dur-2);
+
+  &--open {
+    transform: none;
+    visibility: visible;
+    transition: transform var(--dur-2) var(--ease);
+  }
+
+  // 우상단 [×] — 패널 닫기
+  &__close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 1;
+  }
+
+  // 로딩 안내 — 패널 가운데 정렬
+  &__placeholder {
+    margin: auto;
+    text-align: center;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__head {
+    flex-shrink: 0;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  // 티켓번호 — 클릭하면 브라우저에서 열기 (목록 .jira__key 와 동일 룩)
+  &__key {
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  }
+
+  &__summary {
+    margin: 0 0 8px;
+    padding-right: 32px; // 우상단 [×] 버튼과 겹치지 않게
+    @include type-title;
+    word-break: break-word;
+  }
+
+  // 메타 한 줄 — 타입 · 우선순위 · 보고자 · 업데이트 시각
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-bottom: 10px;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  // 본문 iframe — 남는 영역을 채우고 내부 스크롤. srcdoc 문서가 테마 팔레트를
+  // 인라인하므로 요소 배경도 --bg 로 맞춰 로드 전 색 튐을 막는다
+  &__frame {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--bg);
+  }
+}

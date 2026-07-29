@@ -1,12 +1,15 @@
 // Jira Cloud 내 이슈 조회·상태 전환 — 환경설정의 주소·이메일·API 토큰(Basic Auth)으로 REST v3 호출
 import type {
   JiraActionResult,
+  JiraComment,
+  JiraDetailResult,
   JiraIssue,
   JiraListResult,
   JiraTransition,
   JiraTransitionsResult,
 } from '../../../shared/types';
 import { getJiraApiConfig } from '../settings/store';
+import { sanitizeHtml } from '../../lib/sanitize';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 // (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
 import { fetchWithTimeout as fetch } from '../../lib/http';
@@ -111,6 +114,171 @@ export async function fetchMyIssues(): Promise<JiraListResult> {
     };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// ── 이슈 상세 (본문·댓글 — 앱 내 패널 표시용) ──
+
+const DETAIL_FIELDS =
+  'summary,status,issuetype,priority,reporter,assignee,created,updated,description,comment';
+
+/** 상세 응답 형태 — renderedFields 는 Jira 가 HTML/표시 문자열로 렌더한 값 */
+interface RawDetail {
+  key?: string;
+  fields: {
+    summary?: string;
+    status?: { name?: string; statusCategory?: { key?: string } };
+    issuetype?: { name?: string };
+    priority?: { name?: string };
+    reporter?: { displayName?: string };
+    assignee?: { displayName?: string };
+    created?: string;
+    updated?: string;
+    comment?: { comments?: { id?: string; author?: { displayName?: string } }[] };
+  };
+  renderedFields?: {
+    description?: string;
+    created?: string;
+    updated?: string;
+    comment?: { comments?: { id?: string; created?: string; body?: string }[] };
+  };
+}
+
+/**
+ * 본문 HTML 속 같은 호스트 이미지(첨부·이모티콘)를 data URI 로 인라인.
+ * Jira 첨부는 인증이 필요해 렌더러의 sandbox iframe 에선 직접 못 불러온다 —
+ * main 에서 Basic Auth 로 받아 심는다. 실패한 이미지는 원본 src 유지(안 보일 뿐).
+ */
+async function inlineJiraImages(
+  htmls: string[],
+  baseUrl: string,
+  authHeader: string,
+): Promise<string[]> {
+  const MAX_IMAGES = 12; // 과도한 본문(대량 스크린샷) 방어
+  const MAX_BYTES = 4 * 1024 * 1024;
+  let origin: string;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return htmls;
+  }
+
+  const srcRe = /<img\b[^>]*?\ssrc=["']([^"']+)["']/gi;
+  const srcs = new Set<string>();
+  for (const html of htmls) {
+    let m: RegExpExecArray | null;
+    while ((m = srcRe.exec(html)) !== null) srcs.add(m[1]);
+  }
+  const targets = [...srcs]
+    .filter((src) => {
+      if (src.startsWith('data:')) return false;
+      try {
+        return new URL(src, origin).origin === origin; // 외부 이미지는 그대로 둔다
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, MAX_IMAGES);
+  if (targets.length === 0) return htmls;
+
+  const inlined = new Map<string, string>();
+  await Promise.all(
+    targets.map(async (src) => {
+      try {
+        const res = await fetch(new URL(src, origin).toString(), {
+          headers: { Authorization: authHeader },
+        });
+        if (!res.ok) return;
+        const type = res.headers.get('content-type') ?? '';
+        if (!type.startsWith('image/')) return;
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.byteLength > MAX_BYTES) return;
+        inlined.set(src, `data:${type};base64,${buf.toString('base64')}`);
+      } catch {
+        /* 실패한 이미지는 원본 유지 */
+      }
+    }),
+  );
+  if (inlined.size === 0) return htmls;
+
+  return htmls.map((html) => {
+    for (const [src, data] of inlined) html = html.split(src).join(data);
+    return html;
+  });
+}
+
+/** 이슈 상세 조회 — 본문·댓글을 Jira 가 렌더한 HTML(expand=renderedFields)로 받는다 */
+export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
+  const cfg = getJiraApiConfig();
+  if (!cfg) {
+    return {
+      ok: false,
+      error: '환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하세요.',
+    };
+  }
+  const authHeader = `Basic ${Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64')}`;
+  try {
+    const res = await fetch(
+      `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=${DETAIL_FIELDS}&expand=renderedFields`,
+      { headers: { Authorization: authHeader, Accept: 'application/json' } },
+    );
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.' };
+    }
+    if (res.status === 404) {
+      return { ok: false, error: '이슈를 찾을 수 없습니다 — 키 또는 권한을 확인하세요.' };
+    }
+    if (!res.ok) {
+      return { ok: false, error: `Jira 응답 오류 (HTTP ${res.status})` };
+    }
+    const data = (await res.json()) as RawDetail;
+    const rendered = data.renderedFields ?? {};
+
+    // 댓글: 작성자는 fields, 렌더된 본문·시각은 renderedFields — id 로 짝을 맞춘다 (없으면 순서)
+    const metaComments = data.fields.comment?.comments ?? [];
+    const renderedComments = rendered.comment?.comments ?? [];
+    const comments: JiraComment[] = renderedComments.map((rc, i) => {
+      const meta =
+        (rc.id && metaComments.find((mc) => mc.id === rc.id)) || metaComments[i];
+      return {
+        author: meta?.author?.displayName ?? '(알 수 없음)',
+        created: rc.created ?? '',
+        html: sanitizeHtml(rc.body ?? ''),
+      };
+    });
+
+    const [descriptionHtml, ...commentHtmls] = await inlineJiraImages(
+      [sanitizeHtml(rendered.description ?? ''), ...comments.map((c) => c.html)],
+      cfg.url,
+      authHeader,
+    );
+
+    const catKey = data.fields.status?.statusCategory?.key;
+    const issueKey = data.key ?? key;
+    return {
+      ok: true,
+      detail: {
+        key: issueKey,
+        summary: data.fields.summary ?? '(제목 없음)',
+        status: data.fields.status?.name ?? '—',
+        statusCategory:
+          catKey === 'done' ? 'done' : catKey === 'indeterminate' ? 'indeterminate' : 'new',
+        issueType: data.fields.issuetype?.name ?? '',
+        priority: data.fields.priority?.name ?? null,
+        reporter: data.fields.reporter?.displayName ?? null,
+        assignee: data.fields.assignee?.displayName ?? null,
+        created: rendered.created ?? data.fields.created ?? '',
+        updated: rendered.updated ?? data.fields.updated ?? '',
+        descriptionHtml,
+        comments: comments.map((c, i) => ({ ...c, html: commentHtmls[i] })),
+        url: `${cfg.url}/browse/${issueKey}`,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Jira 에 연결할 수 없습니다 — ${(err as Error).message}`,
+    };
   }
 }
 

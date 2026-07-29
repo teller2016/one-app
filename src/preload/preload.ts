@@ -122,6 +122,8 @@ contextBridge.exposeInMainWorld("oneApp", {
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)
     list: () => ipcRenderer.invoke("jira:list"),
+    // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
+    getDetail: (key: string) => ipcRenderer.invoke("jira:detail", key),
     // 이 이슈에서 지금 가능한 상태 전환 목록 (이슈별·프로젝트별로 다름)
     getTransitions: (key: string) =>
       ipcRenderer.invoke("jira:transitions", key),

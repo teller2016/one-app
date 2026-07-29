@@ -86,6 +86,36 @@ export type JiraTransitionsResult = {
   error?: string;
 };
 
+/** 이슈 상세의 댓글 하나 — html 은 Jira 가 렌더한 본문 (main 에서 sanitize·이미지 인라인 완료) */
+export type JiraComment = {
+  author: string;
+  created: string; // Jira 가 렌더한 표시용 문자열 (예: 2026-07-29 10:12)
+  html: string;
+};
+
+/** 이슈 상세 — 앱 내 패널에서 본문·댓글을 바로 보기 위한 렌더 완료 데이터 */
+export type JiraIssueDetail = {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: "new" | "indeterminate" | "done"; // 뱃지 색 구분용 (목록과 동일)
+  issueType: string;
+  priority: string | null;
+  reporter: string | null;
+  assignee: string | null;
+  created: string; // 렌더된 표시 문자열 (없으면 ISO)
+  updated: string;
+  descriptionHtml: string; // sanitize 된 HTML — 빈 값이면 본문 없음
+  comments: JiraComment[];
+  url: string; // 브라우저로 열 이슈 링크
+};
+
+export type JiraDetailResult = {
+  ok: boolean;
+  detail?: JiraIssueDetail;
+  error?: string;
+};
+
 // ── 배포 (젠킨스) ──
 
 /** 프로젝트 안의 배포 대상 하나 (예: 스토어, 어드민) */
