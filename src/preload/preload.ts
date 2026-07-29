@@ -201,9 +201,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     },
   },
   weekly: {
-    // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주
-    fetch: (weekOffset: number) =>
-      ipcRenderer.invoke("weekly:fetch", weekOffset),
+    // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주 / monWeek: 월~일 기준
+    fetch: (weekOffset: number, monWeek?: boolean) =>
+      ipcRenderer.invoke("weekly:fetch", weekOffset, monWeek),
     // 수집 진행 단계 구독. 해제 함수를 반환한다.
     onProgress: (cb: (progress: WeeklyProgress) => void) => {
       const listener = (_e: unknown, progress: WeeklyProgress) => cb(progress);

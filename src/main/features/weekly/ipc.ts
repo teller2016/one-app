@@ -5,10 +5,10 @@ import type { WeeklyFetchResult, WeeklyProgress } from '../../../shared/types';
 
 /** 주간보고 관련 IPC 핸들러 등록 */
 export function registerWeeklyIpc() {
-  // 개인별 주간 일정 수집 (weekOffset: 0=이번주, -1=지난주 …)
+  // 개인별 주간 일정 수집 (weekOffset: 0=이번주, -1=지난주 … / monWeek: 월~일 기준)
   ipcMain.handle(
     'weekly:fetch',
-    async (e, weekOffset: number): Promise<WeeklyFetchResult> => {
+    async (e, weekOffset: number, monWeek?: boolean): Promise<WeeklyFetchResult> => {
       const cred = getCredentials();
       if (!cred)
         return {
@@ -17,8 +17,9 @@ export function registerWeeklyIpc() {
         };
       try {
         const offset = Number.isFinite(weekOffset) ? Math.trunc(weekOffset) : 0;
-        console.log(`[weekly] 수집 시작 (offset ${offset})`);
-        const { rows, period } = await collectWeekly(offset, cred, (step) => {
+        const mon = monWeek === true;
+        console.log(`[weekly] 수집 시작 (offset ${offset}${mon ? ', 월~일' : ''})`);
+        const { rows, period } = await collectWeekly(offset, mon, cred, (step) => {
           // 진행 단계를 렌더러와 터미널 로그에 전달 (창이 닫혔으면 무시)
           console.log(`[weekly] ${step}`);
           try {

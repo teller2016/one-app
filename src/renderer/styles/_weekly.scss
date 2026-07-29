@@ -26,6 +26,30 @@
     font-weight: 600;
   }
 
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  // 월~일 기준 토글 (settings__check 와 동일 무드, 툴바용)
+  &__monweek {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    @include type-body;
+    color: var(--text-2);
+    cursor: pointer;
+    user-select: none;
+
+    input[type='checkbox'] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+  }
+
   &__meta {
     display: flex;
     gap: 8px;

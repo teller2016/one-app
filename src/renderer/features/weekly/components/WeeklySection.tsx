@@ -17,6 +17,7 @@ import {
 import type { WeeklyPeriod } from '../../../../shared/types';
 
 const LS_KEY = 'weekly:mmExcluded';
+const LS_MON_WEEK = 'weekly:monWeek';
 const MAX_OFFSET = 12; // 수집기의 최대 이동 거리와 동일
 
 const loadExcluded = (): Set<string> => {
@@ -30,14 +31,17 @@ const loadExcluded = (): Set<string> => {
   }
 };
 
-/** weekOffset 에 해당하는 주(일~토) 표시 문자열 — 예: "6.28(일) ~ 7.4(토)" */
-const weekRangeLabel = (offset: number): string => {
+/** weekOffset 에 해당하는 주 표시 문자열 — 예: "6.28(일) ~ 7.4(토)" / "6.29(월) ~ 7.5(일)" */
+const weekRangeLabel = (offset: number, monWeek: boolean): string => {
   const start = new Date();
-  start.setDate(start.getDate() - start.getDay() + offset * 7);
+  const back = monWeek ? (start.getDay() + 6) % 7 : start.getDay();
+  start.setDate(start.getDate() - back + offset * 7);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   const fmt = (d: Date) => `${d.getMonth() + 1}.${d.getDate()}`;
-  return `${fmt(start)}(일) ~ ${fmt(end)}(토)`;
+  return monWeek
+    ? `${fmt(start)}(월) ~ ${fmt(end)}(일)`
+    : `${fmt(start)}(일) ~ ${fmt(end)}(토)`;
 };
 
 /**
@@ -54,6 +58,18 @@ export function WeeklySection() {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [excluded, setExcluded] = useState<Set<string>>(loadExcluded);
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
+  const [monWeek, setMonWeek] = useState(
+    () => localStorage.getItem(LS_MON_WEEK) === '1',
+  );
+
+  const toggleMonWeek = (on: boolean) => {
+    setMonWeek(on);
+    try {
+      localStorage.setItem(LS_MON_WEEK, on ? '1' : '0');
+    } catch {
+      // 저장 실패해도 동작에는 지장 없음
+    }
+  };
 
   // 수집 진행 단계 구독
   useEffect(() => {
@@ -97,7 +113,7 @@ export function WeeklySection() {
     setProgressStep('수집 시작 중…');
     let res: Awaited<ReturnType<typeof window.oneApp.weekly.fetch>>;
     try {
-      res = await window.oneApp.weekly.fetch(weekOffset);
+      res = await window.oneApp.weekly.fetch(weekOffset, monWeek);
     } catch (err) {
       // IPC 자체가 실패해도(핸들러 미등록 등) 로딩이 멈추지 않게 처리
       setLoading(false);
@@ -153,10 +169,10 @@ export function WeeklySection() {
           </Button>
           <span className="weekly__weeklabel">
             {weekOffset === 0
-              ? `이번주 (${weekRangeLabel(0)})`
+              ? `이번주 (${weekRangeLabel(0, monWeek)})`
               : weekOffset === -1
-                ? `지난주 (${weekRangeLabel(-1)})`
-                : `${weekOffset > 0 ? '+' : ''}${weekOffset}주 (${weekRangeLabel(weekOffset)})`}
+                ? `지난주 (${weekRangeLabel(-1, monWeek)})`
+                : `${weekOffset > 0 ? '+' : ''}${weekOffset}주 (${weekRangeLabel(weekOffset, monWeek)})`}
           </span>
           <Button
             size="sm"
@@ -172,9 +188,23 @@ export function WeeklySection() {
             </Button>
           )}
         </div>
-        <Button variant="primary" onClick={run} loading={loading}>
-          주간보고 분석
-        </Button>
+        <div className="weekly__actions">
+          <label
+            className="weekly__monweek"
+            title="월요일~일요일 기준으로 계산합니다. 페이지가 일~토 단위라 두 주를 수집하므로 시간이 조금 더 걸려요."
+          >
+            <input
+              type="checkbox"
+              checked={monWeek}
+              onChange={(e) => toggleMonWeek(e.target.checked)}
+              disabled={loading}
+            />
+            <span>월~일 기준</span>
+          </label>
+          <Button variant="primary" onClick={run} loading={loading}>
+            주간보고 분석
+          </Button>
+        </div>
       </div>
 
       {error && <Banner variant="danger">{error}</Banner>}

@@ -158,7 +158,7 @@ declare global {
         onProgress: (cb: (progress: OvertimeProgress) => void) => () => void;
       };
       weekly: {
-        fetch: (weekOffset: number) => Promise<WeeklyFetchResult>;
+        fetch: (weekOffset: number, monWeek?: boolean) => Promise<WeeklyFetchResult>;
         onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
       };
       prs: {

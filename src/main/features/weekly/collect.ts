@@ -17,15 +17,43 @@ let running = false;
 /** 텍스트가 정확히 일치하는 요소를 찾는 puppeteer XPath 셀렉터 */
 const xpathByText = (text: string) => `::-p-xpath(//*[text()='${text}'])`;
 
-/** 대상 주의 일요일 날짜(YYYYMMDD). weekOffset: 0=이번주, -1=지난주 */
-function targetWeekStart(weekOffset: number): string {
+/** 대상 주의 시작일. monday=true 면 월요일(월~일 기준), 아니면 일요일(그룹웨어 페이지 기준) */
+function weekAnchor(weekOffset: number, monday: boolean): Date {
   const d = new Date();
-  d.setDate(d.getDate() - d.getDay() + weekOffset * 7);
+  const back = monday ? (d.getDay() + 6) % 7 : d.getDay();
+  d.setDate(d.getDate() - back + weekOffset * 7);
+  return d;
+}
+
+const toYmd = (d: Date): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${y}${m}${dd}`;
-}
+};
+
+const addDays = (d: Date, n: number): Date => {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+};
+
+// 그룹웨어 페이지가 주간 이동(특히 beforeWeek) 시 이전 주 행을 datas 에 누적한 채 남기므로,
+// 캡처 결과를 신뢰하지 않고 대상 구간의 날짜(MM.DD) 집합으로 행을 한정한다.
+/** from 부터 days 일 동안의 "MM.DD" 집합 */
+const mmddSet = (from: Date, days: number): Set<string> => {
+  const s = new Set<string>();
+  for (let i = 0; i < days; i++) {
+    const d = addDays(from, i);
+    s.add(
+      `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`,
+    );
+  }
+  return s;
+};
+
+/** 행의 day("07.27 (월)") 에서 날짜(MM.DD)만 추출 */
+const dayMmdd = (r: WeeklyRawRow) => r.day.slice(0, 5);
 
 const toDashDate = (yyyymmdd: string) =>
   `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
@@ -199,14 +227,13 @@ async function moveToPersonalWeek(page: Page, onProgress?: ProgressFn) {
   return st;
 }
 
-/** beforeWeek()/nextWeek() 호출로 대상 주(일요일 시작)로 이동 */
+/** beforeWeek()/nextWeek() 호출로 대상 주(target: 일요일 YYYYMMDD)로 이동 */
 async function moveToWeek(
   page: Page,
-  weekOffset: number,
+  target: string,
   onProgress?: ProgressFn,
 ): Promise<WeeklyPeriod> {
   const { selectors: sel } = WEEKLY_CONFIG;
-  const target = targetWeekStart(weekOffset);
 
   // 최대 12주 거리까지만 이동 (무한 루프 방지)
   for (let i = 0; i < 12; i++) {
@@ -309,30 +336,11 @@ async function captureRows(page: Page): Promise<WeeklyRawRow[]> {
   }));
 }
 
-/** 실제 수집 흐름 — collectWeekly 의 watchdog 안에서 실행된다 */
-async function runCollect(
-  browser: Browser,
-  weekOffset: number,
-  credentials: Credentials,
+/** 일정 목록 ajax 안정화 대기 후 datas 캡처 (제거하면 빈 결과 레이스 재발) */
+async function stabilizeAndCapture(
+  page: Page,
   onProgress?: ProgressFn,
-): Promise<WeeklyCollectData> {
-  const page = await browser.newPage();
-  // 명시 timeout 이 없는 대기(waitForSelector 등)도 전부 30초로 제한
-  page.setDefaultTimeout(30000);
-  await page.setViewport(WEEKLY_CONFIG.viewport);
-  // 예기치 않은 alert/confirm 으로 흐름이 멈추지 않도록 자동 닫기
-  page.on('dialog', (d: Dialog): void => {
-    d.dismiss().catch((): void => {
-      // 이미 닫힌 다이얼로그면 무시
-    });
-  });
-
-  onProgress?.('그룹웨어 로그인 중…');
-  await login(page, credentials);
-
-  await moveToPersonalWeek(page, onProgress);
-  const period = await moveToWeek(page, weekOffset, onProgress);
-
+): Promise<WeeklyRawRow[]> {
   onProgress?.('일정 데이터 수집 중…');
   // 일정 목록 ajax 가 끝나 datasExcel 이 채워질 때까지 대기.
   // 정말 일정이 없는 주면 계속 비어 있으므로, 시간 초과는 빈 주로 간주하고 진행한다.
@@ -358,8 +366,7 @@ async function runCollect(
   let lastErr: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const rows = await captureRows(page);
-      return { rows, period };
+      return await captureRows(page);
     } catch (err) {
       lastErr = err;
       await sleep(3000);
@@ -368,15 +375,75 @@ async function runCollect(
   throw lastErr;
 }
 
+/** 실제 수집 흐름 — collectWeekly 의 watchdog 안에서 실행된다 */
+async function runCollect(
+  browser: Browser,
+  weekOffset: number,
+  monWeek: boolean,
+  credentials: Credentials,
+  onProgress?: ProgressFn,
+): Promise<WeeklyCollectData> {
+  const page = await browser.newPage();
+  // 명시 timeout 이 없는 대기(waitForSelector 등)도 전부 30초로 제한
+  page.setDefaultTimeout(30000);
+  await page.setViewport(WEEKLY_CONFIG.viewport);
+  // 예기치 않은 alert/confirm 으로 흐름이 멈추지 않도록 자동 닫기
+  page.on('dialog', (d: Dialog): void => {
+    d.dismiss().catch((): void => {
+      // 이미 닫힌 다이얼로그면 무시
+    });
+  });
+
+  onProgress?.('그룹웨어 로그인 중…');
+  await login(page, credentials);
+
+  await moveToPersonalWeek(page, onProgress);
+
+  if (!monWeek) {
+    const sunday = weekAnchor(weekOffset, false);
+    const period = await moveToWeek(page, toYmd(sunday), onProgress);
+    const rows = await stabilizeAndCapture(page, onProgress);
+    const inWeek = mmddSet(sunday, 7); // 일~토
+    return { rows: rows.filter((r) => inWeek.has(dayMmdd(r))), period };
+  }
+
+  // 월~일 기준 — 페이지는 일~토 단위로만 데이터를 주므로 두 주를 이어 붙인다:
+  // 주 A(월요일 전날 일요일 시작)에서 월~토, 다음 주 B에서 일요일 행만 취한다.
+  const monday = weekAnchor(weekOffset, true);
+  await moveToWeek(page, toYmd(addDays(monday, -1)), onProgress);
+  const rowsA = await stabilizeAndCapture(page, onProgress);
+
+  onProgress?.('마지막 일요일 일정 수집 중…');
+  await moveToWeek(page, toYmd(addDays(monday, 6)), onProgress);
+  const rowsB = await stabilizeAndCapture(page, onProgress);
+
+  const monSat = mmddSet(monday, 6); // 월~토
+  const sunOnly = mmddSet(addDays(monday, 6), 1); // 마지막 일요일 하루
+  return {
+    rows: [
+      ...rowsA.filter((r) => monSat.has(dayMmdd(r))),
+      ...rowsB.filter((r) => sunOnly.has(dayMmdd(r))),
+    ],
+    period: {
+      start: toDashDate(toYmd(monday)),
+      end: toDashDate(toYmd(addDays(monday, 6))),
+    },
+  };
+}
+
 // 수집 전체(브라우저 기동~캡처)의 최대 허용 시간 — 초과 시 강제 중단해 무한 로딩을 막는다
 const COLLECT_DEADLINE_MS = 150000;
+// 월~일 기준은 두 주를 수집하므로 여유 시간을 더 준다
+const MON_WEEK_EXTRA_MS = 60000;
 
 /**
  * 주간보고 데이터 수집 실행.
  * 로그인 → 일정 메뉴 → FE챕터 → 개인별 주간 → 대상 주 이동 → datas 캡처.
+ * monWeek=true 면 월~일 기준으로 두 주(일~토 × 2)를 수집해 이어 붙인다.
  */
 export async function collectWeekly(
   weekOffset: number,
+  monWeek: boolean,
   credentials: Credentials,
   onProgress?: ProgressFn,
 ): Promise<WeeklyCollectData> {
@@ -384,6 +451,7 @@ export async function collectWeekly(
   running = true;
   let browser: Browser | null = null;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadlineMs = COLLECT_DEADLINE_MS + (monWeek ? MON_WEEK_EXTRA_MS : 0);
   try {
     // 시스템에 설치된 Google Chrome 사용 (배포판에서 Chromium 동봉 없이 동작)
     browser = await puppeteer.launch({
@@ -397,14 +465,14 @@ export async function collectWeekly(
         () =>
           reject(
             new Error(
-              `수집이 ${COLLECT_DEADLINE_MS / 1000}초 안에 끝나지 않아 중단했습니다. 잠시 후 다시 시도하세요.`,
+              `수집이 ${deadlineMs / 1000}초 안에 끝나지 않아 중단했습니다. 잠시 후 다시 시도하세요.`,
             ),
           ),
-        COLLECT_DEADLINE_MS,
+        deadlineMs,
       );
     });
     return await Promise.race([
-      runCollect(browser, weekOffset, credentials, onProgress),
+      runCollect(browser, weekOffset, monWeek, credentials, onProgress),
       deadline,
     ]);
   } finally {
