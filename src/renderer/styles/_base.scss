@@ -89,6 +89,8 @@
   --r-md: 11px; // 입력·중첩 패널
   --r-lg: 18px; // 카드·모달
   --r-full: 999px; // 버튼 필·뱃지·바
+  --control-h: 36px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
+  --control-h-sm: 30px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
   --shadow-1: 0 1px 2.5px rgba(0, 0, 0, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
   --shadow-2: 0 5px 30px rgba(0, 0, 0, 0.22); // 모달·토스트·팝오버 (애플의 단일 그림자 이식)
   --dur-1: 0.12s; // 색·배경 전환
@@ -558,10 +560,23 @@ body {
   }
 }
 
+// 한 줄 입력 높이 통일 — element 한정으로 textarea(.input--code 등)는 제외.
+// 세로 패딩 대신 고정 높이 + 브라우저 기본 세로 중앙 정렬을 쓴다.
+input.input {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+input.input--sm {
+  height: var(--control-h-sm);
+}
+
 // 파일 선택 등 '입력처럼 보이는 트리거 버튼'
 .filetrigger {
   width: 100%;
-  padding: 8px 12px;
+  height: var(--control-h);
+  padding: 0 12px;
   border: 1px solid var(--border-strong);
   background: var(--surface-1);
   color: var(--text-2);
@@ -617,6 +632,7 @@ body {
 // ===== 세그먼트 토글 (오늘/어제 등) — 배경 승격 방식 =====
 .seg-group {
   display: inline-flex;
+  height: var(--control-h); // 폼 컨트롤 공통 높이 — 칩은 flex stretch 로 채움
   gap: 2px;
   padding: 2px;
   background: var(--bg-sunken);
@@ -625,13 +641,13 @@ body {
 }
 
 .seg {
-  padding: 6px 12px;
+  padding: 0 12px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-2);
   border-radius: var(--r-sm);
   font-family: inherit;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body); // 같은 행의 input·피커(13px)와 글자 크기 통일 — small 이면 혼자 작아 보인다
   font-weight: 400; // 애플 래더 — 500 금지
   cursor: pointer;
   transition:
@@ -1228,7 +1244,8 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 8px 12px;
+    height: var(--control-h);
+    padding: 0 12px;
     background: var(--surface-1);
     border: 1px solid var(--border-strong);
     border-radius: var(--r-md);

@@ -4,16 +4,12 @@
 
 .sched {
   // 툴바 — 날짜 세그먼트·시작 시간 피커를 한 줄로 압축
+  // (컨트롤 높이는 _base.scss 의 --control-h 로 전역 통일 — 여기서 오버라이드 금지)
   &__toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 16px;
-
-    // 피커 입력을 세그먼트 트랙 높이(35px)에 정렬 — 어긋나면 줄이 들쭉날쭉해진다
-    .input {
-      height: 35px;
-    }
   }
 
   &__toolbar-label {

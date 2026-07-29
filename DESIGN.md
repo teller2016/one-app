@@ -69,6 +69,7 @@ typography:
 
 radius: { sm: 8px, md: 11px, lg: 18px, full: 999px }   # 필=액션 문법. 중첩 표면은 부모보다 한 단계 작게
 spacing: [4, 8, 12, 16, 20, 24, 32]                    # 4px 그리드
+control-height: { md: 36px, sm: 30px }                 # 한 줄 폼 컨트롤 공통 높이 (--control-h / --control-h-sm)
 shadow:
   "1": "0 1px 2.5px rgba(0,0,0,0.12)"    # 컨트롤 전용(세그 선택 칩) — 카드 금지
   "2": "0 5px 30px rgba(0,0,0,0.22)"     # 모달·토스트·팝오버 (애플의 단일 그림자 이식)
@@ -213,6 +214,7 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 ## 3. 스페이싱 · 라운드 · 그림자 · 모션 · 포커스
 
 - **스페이싱**: 4px 그리드 — `4/8/12/16/20/24/32`. 컴포넌트 세로 패딩만 ±2px 허용 (예: 버튼 sm 6px).
+- **컨트롤 높이 (한 줄 폼 컨트롤 통일)**: input·세그 트랙·DatePicker/TimePicker·FileTrigger 는 `--control-h: 36px`, 소형(`input--sm` 계열)은 `--control-h-sm: 30px`. 세로 패딩 대신 고정 높이를 쓰고, **기능 SCSS 에서 컨트롤 높이 오버라이드 금지** — 같은 행의 컨트롤은 자동으로 줄이 맞아야 정상.
 - **라운드 (애플 문법 — 섞지 말 것)**: `--r-sm: 8px`(칩·아이콘 버튼·세그 칩) · `--r-md: 11px`(입력·중첩 패널) · `--r-lg: 18px`(카드·모달) · `--r-full: 999px`(**버튼 필**·뱃지·바). **필 = 액션 신호.** 중첩 표면은 부모보다 한 단계 작게.
 - **그림자 (애플 무그림자 크롬)**: 카드·버튼·텍스트에 그림자 **금지** — `card-surface` 는 헤어라인만. `--shadow-1`(0 1px 2.5px rgba(0,0,0,.12))은 **세그 선택 칩 등 컨트롤 전용**, `--shadow-2`(0 5px 30px rgba(0,0,0,.22) — 애플의 단일 제품 그림자 이식)는 **떠 있는 레이어**(모달·토스트·팝오버) 전용.
 - **모션**: `--dur-1: .12s`(색·배경) · `--dur-2: .18s`(transform·펼침) · `--dur-pulse: 1.2s`(상태 점 펄스) · 스피너 .9s · `--ease: cubic-bezier(.25,.6,.3,1)`. `prefers-reduced-motion` 시 transition·pulse 제거.
