@@ -64,30 +64,6 @@
   }
 }
 
-// 시각 입력 — 공용 .input--sm 토큰과 동일 스펙
-.settings__time {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-1);
-  color: var(--text);
-  border-radius: var(--r-md);
-  font-family: inherit;
-  font-size: var(--fs-small);
-  transition: border-color var(--dur-1) var(--ease);
-
-  &:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 0;
-    border-color: var(--accent);
-  }
-
-  &:disabled {
-    opacity: 0.45;
-  }
-}
-
 // 반복 알림 행 (안 찍었으면 N분마다)
 .settings__repeat-row {
   display: flex;

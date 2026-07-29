@@ -5,8 +5,9 @@ import { FormRow } from '../../../components/FormRow';
 import { Banner } from '../../../components/Banner';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
-import { Input } from '../../../components/Input';
 import { Textarea } from '../../../components/Textarea';
+import { DatePicker } from '../../../components/DatePicker';
+import { TimePicker } from '../../../components/TimePicker';
 
 type DateType = 'today' | 'yesterday' | 'date';
 
@@ -81,9 +82,15 @@ export function ScheduleSection() {
       setLog('[경고] 날짜를 선택하세요.\n');
       return;
     }
-    const startTime = timeType === 'custom' ? customTime.trim() : timeType;
-    if (!startTime || !Number.isFinite(Number(startTime))) {
-      setLog('[경고] 시작 시간을 숫자로 입력하세요. (예: 10, 13.5)\n');
+    // 커스텀 시간("HH:MM")은 매크로가 쓰는 십진 시간(10.5 = 10:30)으로 변환
+    const toDecimalHours = (t: string) => {
+      const m = t.match(/^(\d{1,2}):(\d{2})$/);
+      return m ? String(+m[1] + +m[2] / 60) : '';
+    };
+    const startTime =
+      timeType === 'custom' ? toDecimalHours(customTime) : timeType;
+    if (!startTime) {
+      setLog('[경고] 시작 시간을 선택하세요.\n');
       return;
     }
     setLog('');
@@ -132,11 +139,9 @@ export function ScheduleSection() {
             disabled={running}
           />
           {dateType === 'date' && (
-            <Input
-              type="date"
-              className="sched__date"
+            <DatePicker
               value={customDate}
-              onChange={(e) => setCustomDate(e.target.value)}
+              onChange={setCustomDate}
               disabled={running}
             />
           )}
@@ -153,17 +158,11 @@ export function ScheduleSection() {
             disabled={running}
           />
           {timeType === 'custom' && (
-            <>
-              <Input
-                type="text"
-                className="sched__time"
-                value={customTime}
-                onChange={(e) => setCustomTime(e.target.value)}
-                placeholder="예: 10"
-                disabled={running}
-              />
-              <span className="hint">숫자 — 10 = 10:00, 13.5 = 13:30</span>
-            </>
+            <TimePicker
+              value={customTime}
+              onChange={setCustomTime}
+              disabled={running}
+            />
           )}
         </div>
       </FormRow>

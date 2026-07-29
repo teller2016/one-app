@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OvertimeSubmitResult } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
+import { DatePicker } from '../../../components/DatePicker';
 import { FormRow } from '../../../components/FormRow';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Modal } from '../../../components/Modal';
 import { Textarea } from '../../../components/Textarea';
+import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
 
 /** 오늘 날짜 "YYYY-MM-DD" (로컬 기준) */
@@ -139,29 +141,14 @@ export function OvertimeModal({ onClose }: { onClose: () => void }) {
         {error && <Banner variant="danger">{error}</Banner>}
 
         <FormRow label="연장근무일">
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            disabled={busy}
-          />
+          <DatePicker value={date} onChange={setDate} disabled={busy} />
         </FormRow>
 
         <FormRow label="근무시간">
           <div className="overtime-form__times">
-            <Input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              disabled={busy}
-            />
+            <TimePicker value={startTime} onChange={setStartTime} disabled={busy} />
             <span className="overtime-form__tilde">~</span>
-            <Input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              disabled={busy}
-            />
+            <TimePicker value={endTime} onChange={setEndTime} disabled={busy} />
             <span className="overtime-form__total">
               {total ? `합계 ${total}` : '시간을 확인하세요'}
             </span>

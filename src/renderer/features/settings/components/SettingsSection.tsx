@@ -7,6 +7,7 @@ import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
+import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
 import type {
@@ -356,13 +357,11 @@ export function SettingsSection() {
                     disabled={loading}
                     aria-label={`${DAY_LABELS[d.day]} ${type === 'come' ? '출근' : '퇴근'} 알림 사용`}
                   />
-                  <input
-                    type="time"
-                    className="settings__time"
+                  <TimePicker
+                    small
+                    step={5}
                     value={d[type].time}
-                    onChange={(e) =>
-                      updateSlot(d.day, type, { time: e.target.value })
-                    }
+                    onChange={(time) => updateSlot(d.day, type, { time })}
                     disabled={loading || !d[type].enabled}
                   />
                 </div>
