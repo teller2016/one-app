@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { SectionHeader } from '../../../components/SectionHeader';
-import { FormRow } from '../../../components/FormRow';
 import { Banner } from '../../../components/Banner';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
@@ -20,17 +19,16 @@ const DATE_OPTIONS: { value: DateType; label: string }[] = [
   { value: 'date', label: '직접 입력' },
 ];
 
-// 시작 시간 — 자주 쓰는 9시/9시 반은 바로 선택, 그 외엔 직접 입력
-type TimeType = '9' | '9.5' | 'custom';
-
-const TIME_OPTIONS: { value: TimeType; label: string }[] = [
-  { value: '9', label: '09:00' },
-  { value: '9.5', label: '09:30' },
-  { value: 'custom', label: '직접 입력' },
-];
-
 // 하루 작업 기록 항목 — end 는 "HH:MM" (매크로·노션 텍스트로 변환 시 십진 시간)
 type WorkItem = ScheduleWorkItem;
+
+// 점심 규칙 — main/features/schedule/config.ts 의 lunchStartTime/lunchEndTime(12.5/13.5)과 동기.
+// 12:30 에 끝나는 일정 다음은 13:30 에 시작한다 (매크로와 동일하게 미리 보여준다).
+const LUNCH_START_MIN = 12 * 60 + 30;
+const LUNCH_END_MIN = 13 * 60 + 30;
+const WORKDAY_MIN = 8 * 60; // 하루 기준 근무시간 — 초과분은 OT 로 표시
+
+const pad = (n: number) => String(n).padStart(2, '0');
 
 // "HH:MM" → 분 (형식이 어긋나면 -1 — 정렬 시 맨 앞)
 const timeToMinutes = (t: string): number => {
@@ -38,20 +36,25 @@ const timeToMinutes = (t: string): number => {
   return m ? +m[1] * 60 + +m[2] : -1;
 };
 
+// 분 → "HH:MM"
+const minutesToTime = (m: number): string =>
+  `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+
 // "HH:MM" → 노션·매크로용 십진 시간 문자열 (10:30 → "10.5", 11:00 → "11")
 const timeToDecimal = (t: string): string =>
   String(Math.round((timeToMinutes(t) / 60) * 100) / 100);
 
-// 현재 시각을 30분 단위로 반올림한 "HH:MM" — 새 항목의 종료시간 기본값
-const roundedNow = (): string => {
-  const now = new Date();
-  const mins = Math.min(
-    Math.round((now.getHours() * 60 + now.getMinutes()) / 30) * 30,
-    23 * 60 + 30,
-  );
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+// 소요 분 → "1h 30m" (0 이하면 잘못된 순서 — '—')
+const formatDuration = (mins: number): string => {
+  if (mins <= 0) return '—';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return [h ? `${h}h` : '', m ? `${m}m` : ''].filter(Boolean).join(' ');
 };
+
+// 합계 분 → 십진 시간 표기 ("7.5h") — 주간보고 T/OT 감각과 동일
+const formatHours = (mins: number): string =>
+  `${Math.round((mins / 60) * 10) / 10}h`;
 
 // 노션에 붙여넣는 형식 그대로 — "종료시간 일정명" 줄 목록 (매크로 입력과 동일)
 const buildNotionText = (items: WorkItem[]): string =>
@@ -60,14 +63,13 @@ const buildNotionText = (items: WorkItem[]): string =>
     .map((it) => `${timeToDecimal(it.end)} ${it.title.trim()}`)
     .join('\n');
 
-/** 일정 등록 섹션 — 하루 작업을 기록해 두고, 버튼을 누르면 앱 내부 매크로가 실행된다. */
+/** 일정 등록 섹션 — 하루 작업을 타임라인으로 기록해 두고, 버튼 한 번으로 매크로 등록한다. */
 export function ScheduleSection() {
   const [items, setItems] = useState<WorkItem[]>([]);
   const [worklogLoaded, setWorklogLoaded] = useState(false);
-  const [newTime, setNewTime] = useState(roundedNow);
+  const [newTime, setNewTime] = useState('09:30');
   const [newTitle, setNewTitle] = useState('');
-  const [timeType, setTimeType] = useState<TimeType>('9.5');
-  const [customTime, setCustomTime] = useState('');
+  const [startTime, setStartTime] = useState('09:30');
   const [dateType, setDateType] = useState<DateType>('today');
   const [customDate, setCustomDate] = useState('');
   const [running, setRunning] = useState(false);
@@ -141,20 +143,57 @@ export function ScheduleSection() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
 
+  // 타임라인 계산 — 각 항목의 시작은 직전 항목 종료(점심에 끝나면 점심 후)
+  const timeline = useMemo(() => {
+    let cursor = timeToMinutes(startTime);
+    return items.map((item) => {
+      const endMin = timeToMinutes(item.end);
+      const row = {
+        item,
+        startMin: cursor,
+        durMin: endMin - cursor,
+        lunchAfter: endMin === LUNCH_START_MIN,
+      };
+      cursor = endMin === LUNCH_START_MIN ? LUNCH_END_MIN : endMin;
+      return row;
+    });
+  }, [items, startTime]);
+
+  // 다음 항목이 시작할 시각 (추가 행에 미리 표시)
+  const nextStartMin = timeline.length
+    ? (() => {
+        const last = timeline[timeline.length - 1];
+        return last.lunchAfter ? LUNCH_END_MIN : timeToMinutes(last.item.end);
+      })()
+    : timeToMinutes(startTime);
+
+  const totalMin = timeline.reduce((s, r) => s + Math.max(0, r.durMin), 0);
+  const otMin = Math.max(0, totalMin - WORKDAY_MIN);
+
+  // 추가 행의 시간 기본값은 마지막 종료 시각(=다음 시작)을 따라간다 —
+  // 항목 추가·수정·삭제로 다음 시작이 바뀌면 함께 갱신 (직접 바꾼 뒤에도 목록이 바뀌면 리셋)
+  useEffect(() => {
+    setNewTime(minutesToTime(nextStartMin));
+  }, [nextStartMin]);
+
   const sortByEnd = (list: WorkItem[]) =>
     [...list].sort((a, b) => timeToMinutes(a.end) - timeToMinutes(b.end));
 
   const addItem = () => {
     const title = newTitle.trim();
     if (!title) return;
-    setItems((prev) =>
-      sortByEnd([
-        ...prev,
-        { id: crypto.randomUUID(), end: newTime, title },
-      ]),
-    );
+    const next = sortByEnd([
+      ...items,
+      { id: crypto.randomUUID(), end: newTime, title },
+    ]);
+    setItems(next);
     setNewTitle('');
-    setNewTime(roundedNow());
+    // 피커를 항상 새 목록의 다음 시작으로 리셋 — 소급 추가처럼 nextStartMin 이
+    // 안 바뀌는 경우엔 동기화 효과가 안 돌므로 여기서 직접 맞춘다
+    const lastEnd = timeToMinutes(next[next.length - 1].end);
+    setNewTime(
+      minutesToTime(lastEnd === LUNCH_START_MIN ? LUNCH_END_MIN : lastEnd),
+    );
   };
 
   const updateItem = (id: string, patch: Partial<Omit<WorkItem, 'id'>>) => {
@@ -198,19 +237,12 @@ export function ScheduleSection() {
       setLog('[경고] 날짜를 선택하세요.\n');
       return;
     }
-    // 커스텀 시간("HH:MM")은 매크로가 쓰는 십진 시간(10.5 = 10:30)으로 변환
-    const startTime =
-      timeType === 'custom' ? timeToDecimal(customTime) : timeType;
-    if (!startTime || startTime === 'NaN') {
-      setLog('[경고] 시작 시간을 선택하세요.\n');
-      return;
-    }
     setLog('');
     setDone(false);
     setRunning(true);
     const res = await window.oneApp.schedule.run({
       scheduleText,
-      startTime,
+      startTime: timeToDecimal(startTime),
       dateOption:
         dateType === 'date'
           ? { type: 'date', date: customDate }
@@ -244,62 +276,77 @@ export function ScheduleSection() {
         </Banner>
       )}
 
-      {/* 날짜 */}
-      <FormRow label="날짜">
-        <div className="sched__segment">
-          <Segment<DateType>
-            options={DATE_OPTIONS}
-            value={dateType}
-            onChange={setDateType}
+      {/* 툴바 — 날짜·시작 시간 (자주 안 바꾸는 설정은 한 줄로 압축) */}
+      <div className="sched__toolbar">
+        <span className="sched__toolbar-label">날짜</span>
+        <Segment<DateType>
+          options={DATE_OPTIONS}
+          value={dateType}
+          onChange={setDateType}
+          disabled={running}
+        />
+        {dateType === 'date' && (
+          <DatePicker
+            value={customDate}
+            onChange={setCustomDate}
             disabled={running}
           />
-          {dateType === 'date' && (
-            <DatePicker
-              value={customDate}
-              onChange={setCustomDate}
-              disabled={running}
-            />
+        )}
+        <span className="sched__toolbar-label">시작</span>
+        <TimePicker
+          value={startTime}
+          onChange={setStartTime}
+          disabled={running}
+        />
+      </div>
+
+      {/* 타임라인 카드 — 기록이 주인공 */}
+      <div className="sched__card">
+        <div className="sched__card-head">
+          <span className="sched__card-title">작업 기록</span>
+          {items.length > 0 && (
+            <span className="sched__card-total">
+              합계 {formatHours(totalMin)}
+              {otMin > 0 && (
+                <>
+                  {' · '}
+                  <b>OT {formatHours(otMin)}</b>
+                </>
+              )}
+            </span>
           )}
         </div>
-      </FormRow>
 
-      {/* 시작 시간 — 9시/9시 반은 바로 선택, 그 외엔 직접 입력 */}
-      <FormRow label="시작 시간">
-        <div className="sched__segment">
-          <Segment<TimeType>
-            options={TIME_OPTIONS}
-            value={timeType}
-            onChange={setTimeType}
-            disabled={running}
-          />
-          {timeType === 'custom' && (
-            <TimePicker
-              value={customTime}
-              onChange={setCustomTime}
-              disabled={running}
-            />
-          )}
-        </div>
-      </FormRow>
+        {worklogLoaded && items.length === 0 && (
+          <p className="hint sched__empty">
+            아직 기록이 없습니다. 작업을 마칠 때마다 아래에서 추가하세요.
+          </p>
+        )}
 
-      {/* 작업 기록 — 중간중간 추가해 두는 하루 일정 목록 (종료시간순 자동 정렬) */}
-      <FormRow column label="작업 기록 (항목: 종료시간 + 일정명 — 시작은 직전 항목 종료로 계산)">
-        <div className="sched__worklog">
-          {worklogLoaded && items.length === 0 && (
-            <p className="hint sched__worklog-empty">
-              아직 기록이 없습니다. 작업을 마칠 때마다 아래에서 추가하세요.
-            </p>
-          )}
-          {items.map((it) => (
-            <div className="sched__worklog-row" key={it.id}>
+        {timeline.map((row) => (
+          <Fragment key={row.item.id}>
+            <div className="sched__row">
+              <span className="sched__row-start">
+                {minutesToTime(row.startMin)} →
+              </span>
               <TimePicker
-                value={it.end}
-                onChange={(v) => updateItem(it.id, { end: v })}
+                value={row.item.end}
+                onChange={(v) => updateItem(row.item.id, { end: v })}
                 disabled={running}
               />
+              <span
+                className={
+                  'sched__row-dur' +
+                  (row.durMin <= 0 ? ' sched__row-dur--warn' : '')
+                }
+              >
+                {formatDuration(row.durMin)}
+              </span>
               <Input
-                value={it.title}
-                onChange={(e) => updateItem(it.id, { title: e.target.value })}
+                value={row.item.title}
+                onChange={(e) =>
+                  updateItem(row.item.id, { title: e.target.value })
+                }
                 disabled={running}
                 spellCheck={false}
               />
@@ -307,42 +354,47 @@ export function ScheduleSection() {
                 type="button"
                 className="icon-btn"
                 aria-label="항목 삭제"
-                onClick={() => removeItem(it.id)}
+                onClick={() => removeItem(row.item.id)}
                 disabled={running}
               >
                 <Icon name="x" size={14} />
               </button>
             </div>
-          ))}
-          <div className="sched__worklog-add">
-            <TimePicker
-              value={newTime}
-              onChange={setNewTime}
-              disabled={running}
-            />
-            <Input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem();
-              }}
-              placeholder="일정명 — 예: [순수본] QA + 개선건"
-              spellCheck={false}
-              disabled={running}
-            />
-            <Button size="sm" onClick={addItem} disabled={running || !newTitle.trim()}>
-              <Icon name="plus" size={14} />
-              추가
-            </Button>
-          </div>
-        </div>
-      </FormRow>
+            {row.lunchAfter && (
+              <div className="sched__lunch">점심 12:30–13:30</div>
+            )}
+          </Fragment>
+        ))}
 
-      {/* 버튼 — 좌: 등록 실행 / 우: 노션 복사·비우기 */}
+        {/* 추가 행 — 다음 시작 시각을 미리 보여준다 */}
+        <div className="sched__add">
+          <span className="sched__row-start">
+            {minutesToTime(nextStartMin)} →
+          </span>
+          <TimePicker value={newTime} onChange={setNewTime} disabled={running} />
+          <Input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem();
+            }}
+            placeholder="일정명 — 예: [순수본] QA + 개선건"
+            spellCheck={false}
+            disabled={running}
+          />
+          <Button
+            size="sm"
+            onClick={addItem}
+            disabled={running || !newTitle.trim()}
+          >
+            <Icon name="plus" size={14} />
+            추가
+          </Button>
+        </div>
+      </div>
+
+      {/* 액션 — 좌: 등록 실행 / 우: 노션 복사·비우기 */}
       <div className="form-actions">
-        <Button onClick={() => run(true)} disabled={running || !hasItems}>
-          테스트 (등록 안 함)
-        </Button>
         <Button
           variant="primary"
           onClick={() => run(false)}
@@ -350,6 +402,9 @@ export function ScheduleSection() {
           disabled={!hasItems}
         >
           일정 등록
+        </Button>
+        <Button onClick={() => run(true)} disabled={running || !hasItems}>
+          테스트 (등록 안 함)
         </Button>
         {running && (
           <Button variant="danger" onClick={cancel}>
@@ -375,11 +430,18 @@ export function ScheduleSection() {
         열려 있으니 확인 후 직접 닫으세요.
       </p>
 
-      {/* 로그 */}
-      <label className="form-label">실행 로그</label>
-      <pre className="panel-sunken panel-sunken--log sched__log" ref={logRef}>
-        {log || '실행하면 여기에 진행 상황이 표시됩니다.'}
-      </pre>
+      {/* 실행 로그 — 실행 전엔 숨겨 화면을 차지하지 않는다 */}
+      {(running || log) && (
+        <>
+          <label className="form-label">실행 로그</label>
+          <pre
+            className="panel-sunken panel-sunken--log sched__log"
+            ref={logRef}
+          >
+            {log}
+          </pre>
+        </>
+      )}
     </div>
   );
 }

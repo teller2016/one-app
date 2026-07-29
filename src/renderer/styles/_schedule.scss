@@ -3,51 +3,66 @@
 @use './base' as *;
 
 .sched {
-  // 세그먼트(오늘/어제/직접 입력) + 날짜 입력을 한 줄로 배치
-  &__segment {
+  // 툴바 — 날짜 세그먼트·시작 시간 피커를 한 줄로 압축
+  &__toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-bottom: 16px;
 
-    // 직접 입력 인풋을 세그먼트 트랙 높이에 정렬 —
-    // date 인풋은 고유 높이가 살짝 달라(37px) 명시하지 않으면 줄이 어긋난다
-    // 35px = 세그 버튼(6px 패딩 + 12px 글자 라인) + 트랙 패딩 2px×2 + 보더 1px×2
+    // 피커 입력을 세그먼트 트랙 높이(35px)에 정렬 — 어긋나면 줄이 들쭉날쭉해진다
     .input {
       height: 35px;
     }
   }
 
-  // 날짜 입력 — 공용 Input 사용, 행 안에서 내용 폭만큼만 차지
-  &__date {
-    flex: 0 0 auto;
-    width: auto;
+  &__toolbar-label {
+    @include type-caption;
+    color: var(--text-2);
+
+    &:not(:first-child) {
+      margin-left: 10px;
+    }
   }
 
-  // 시작 시간 입력 — 공용 Input 사용, 고정 폭
-  &__time {
-    flex: 0 0 auto;
-    width: 80px;
+  // 타임라인 카드 — 하루 작업 기록이 주인공
+  &__card {
+    max-width: 640px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+    padding: 12px 14px;
   }
 
-  // 작업 기록 리스트 — 행: [종료시간 피커][일정명(가변)][삭제]
-  &__worklog {
+  &__card-head {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-width: 560px;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
   }
 
-  &__worklog-empty {
-    margin: 2px 0;
+  &__card-title {
+    @include type-emph;
   }
 
-  &__worklog-row,
-  &__worklog-add {
+  &__card-total {
+    @include type-caption;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__empty {
+    margin: 4px 0 10px;
+  }
+
+  // 타임라인 행 — [시작 →][종료 피커][소요][일정명(가변)][삭제]
+  &__row,
+  &__add {
     display: flex;
     align-items: center;
     gap: 8px;
 
-    // 일정명 입력이 남는 폭을 차지 (피커 내부 입력은 제외)
+    // 일정명 입력이 남는 폭을 차지 (피커 내부 입력은 컨테이너 안이라 제외됨)
     > .input {
       flex: 1;
     }
@@ -57,10 +72,58 @@
     }
   }
 
-  // 추가 행은 기록 행들과 헤어라인으로 구분
-  &__worklog-add {
-    margin-top: 2px;
-    padding-top: 8px;
+  &__row {
+    padding: 3px 0;
+  }
+
+  // 계산된 시작 시각 — 고정 폭 우측 정렬로 피커 열을 맞춘다
+  &__row-start {
+    @include type-caption;
+    flex: 0 0 auto;
+    width: 58px;
+    text-align: right;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 소요 시간 칩
+  &__row-dur {
+    @include type-caption;
+    flex: 0 0 52px;
+    text-align: center;
+    padding: 2px 0;
+    border-radius: var(--r-sm);
+    background: var(--bg-sunken);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+
+    // 종료가 시작보다 앞이면 잘못된 순서 — 경고색
+    &--warn {
+      color: var(--danger);
+    }
+  }
+
+  // 점심 구분선 — 12:30 에 끝난 항목 다음에만 표시 (매크로 규칙과 동일)
+  &__lunch {
+    @include type-caption;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0;
+    color: var(--text-3);
+
+    &::before,
+    &::after {
+      content: '';
+      flex: 1;
+      border-top: 1px dashed var(--border);
+    }
+  }
+
+  // 추가 행 — 기록 행들과 헤어라인으로 구분
+  &__add {
+    margin-top: 8px;
+    padding-top: 10px;
     border-top: 1px solid var(--border);
   }
 
