@@ -22,6 +22,9 @@ export type ScheduleOutputChunk = { stream: string; data: string };
 
 export type ScheduleDoneInfo = { code: number | null };
 
+/** 하루 작업 기록 항목 — end 는 "HH:MM" (userData/worklog.json 에 저장) */
+export type ScheduleWorkItem = { id: string; end: string; title: string };
+
 // ── 환경설정 ──
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
 export type ThemePref = "system" | "light" | "dark";

@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
   ScheduleRunPayload,
+  ScheduleWorkItem,
   SaveSettingsInput,
   ThemePref,
   SaveDeployProjectInput,
@@ -30,6 +31,10 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("schedule:run", payload),
     // 실행 중지 (자동화 브라우저 닫기)
     cancel: () => ipcRenderer.invoke("schedule:cancel"),
+    // 작업 기록 조회/저장 (userData/worklog.json — 강제 종료에도 유지)
+    getWorklog: () => ipcRenderer.invoke("schedule:worklog:get"),
+    setWorklog: (items: ScheduleWorkItem[]) =>
+      ipcRenderer.invoke("schedule:worklog:set", items),
     // 실행 로그(stdout/stderr/info) 구독. 해제 함수를 반환한다.
     onOutput: (cb: (chunk: { stream: string; data: string }) => void) => {
       const listener = (_e: unknown, chunk: { stream: string; data: string }) =>

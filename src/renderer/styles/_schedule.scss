@@ -29,9 +29,44 @@
     width: 80px;
   }
 
-  // 일정 텍스트에어리어 — 공용 Textarea(code) 사용, 높이만 지정
-  &__textarea {
-    min-height: 200px;
+  // 작업 기록 리스트 — 행: [종료시간 피커][일정명(가변)][삭제]
+  &__worklog {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 560px;
+  }
+
+  &__worklog-empty {
+    margin: 2px 0;
+  }
+
+  &__worklog-row,
+  &__worklog-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    // 일정명 입력이 남는 폭을 차지 (피커 내부 입력은 제외)
+    > .input {
+      flex: 1;
+    }
+
+    .picker--time {
+      flex: 0 0 auto;
+    }
+  }
+
+  // 추가 행은 기록 행들과 헤어라인으로 구분
+  &__worklog-add {
+    margin-top: 2px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  // 버튼 행에서 등록 그룹과 복사·비우기 그룹 사이를 벌리는 스페이서
+  &__actions-gap {
+    flex: 1;
   }
 
   // 실행 로그 — 공용 .panel-sunken--log 사용, 높이만 지정

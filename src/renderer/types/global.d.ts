@@ -4,6 +4,7 @@ import type {
   ScheduleRunResult,
   ScheduleOutputChunk,
   ScheduleDoneInfo,
+  ScheduleWorkItem,
   AppSettingsView,
   SaveSettingsInput,
   ThemePref,
@@ -68,6 +69,8 @@ declare global {
       schedule: {
         run: (payload: ScheduleRunPayload) => Promise<ScheduleRunResult>;
         cancel: () => Promise<{ ok: boolean }>;
+        getWorklog: () => Promise<ScheduleWorkItem[]>;
+        setWorklog: (items: ScheduleWorkItem[]) => Promise<{ ok: boolean }>;
         onOutput: (cb: (chunk: ScheduleOutputChunk) => void) => () => void;
         onDone: (cb: (info: ScheduleDoneInfo) => void) => () => void;
       };

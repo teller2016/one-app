@@ -4,10 +4,18 @@ import { runMacro } from './runMacro';
 import { resolveBaseDate } from './scheduleUtils';
 import { SCHEDULE_CONFIG } from './config';
 import { getCredentials } from '../settings/store';
-import type { ScheduleRunPayload } from '../../../shared/types';
+import { readUserJson, writeUserJson } from '../../lib/store';
+import type {
+  ScheduleRunPayload,
+  ScheduleWorkItem,
+} from '../../../shared/types';
 
 let running = false;
 let currentBrowser: Browser | null = null;
+
+// 작업 기록 — localStorage 는 강제 종료 시 디스크 flush 가 안 돼 유실되므로
+// (2026-07-29 실측: 쓰기 후 45초에도 leveldb 미커밋) userData JSON 에 즉시 저장한다.
+const WORKLOG_FILE = 'worklog.json';
 
 /** 일정 등록 관련 IPC 핸들러 등록 (앱 내부에서 puppeteer 직접 실행) */
 export function registerScheduleIpc() {
@@ -102,6 +110,23 @@ export function registerScheduleIpc() {
 
     return { ok: true };
   });
+
+  ipcMain.handle('schedule:worklog:get', () =>
+    readUserJson<ScheduleWorkItem[]>(WORKLOG_FILE, []).filter(
+      (it) =>
+        typeof it?.id === 'string' &&
+        typeof it?.end === 'string' &&
+        typeof it?.title === 'string',
+    ),
+  );
+
+  ipcMain.handle(
+    'schedule:worklog:set',
+    (_event, items: ScheduleWorkItem[]) => {
+      writeUserJson(WORKLOG_FILE, Array.isArray(items) ? items : []);
+      return { ok: true };
+    },
+  );
 
   ipcMain.handle('schedule:cancel', async () => {
     if (currentBrowser) {
