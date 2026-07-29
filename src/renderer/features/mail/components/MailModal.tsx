@@ -32,8 +32,8 @@ function bodyDoc(html: string, webUrl: string): string {
 }
 
 /**
- * 메일 리더 모달 — 처음엔 받은편지함 목록이 전체폭(제목을 길게), 메일을 선택하면
- * 좌 목록 + 우 본문(sandbox iframe) 분할로 전환. 본문의 [×]로 다시 목록만 보기로 복귀.
+ * 메일 리더 모달 — 받은편지함 목록은 항상 전체폭(배치 유지), 메일을 선택하면
+ * 본문(sandbox iframe) 패널이 오른쪽에서 슬라이드로 떠오른다. [×]로 패널만 닫힌다.
  * 열릴 때 받은편지함을 새로 불러오고, 안읽은 메일을 열면 읽음 처리 후 onRead 로 알린다.
  */
 export function MailModal({
@@ -49,6 +49,8 @@ export function MailModal({
   const [listError, setListError] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
   const [body, setBody] = useState<BodyState>({ kind: 'idle' });
+  // 패널 표시 여부 — 닫을 때 body 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
+  const [viewOpen, setViewOpen] = useState(false);
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -68,6 +70,7 @@ export function MailModal({
 
   const openMail = async (item: MailItem) => {
     setSelected(item.muid);
+    setViewOpen(true);
     setBody({ kind: 'loading', muid: item.muid });
     const unread = !item.seen;
     const res = await window.oneApp.mail.getBody(item.muid, unread);
@@ -89,13 +92,11 @@ export function MailModal({
     void window.oneApp.openExternal(url);
   };
 
-  // 본문 닫기 — 목록 전체폭 보기로 복귀
+  // 본문 패널 닫기 — body 는 유지한 채 슬라이드아웃 (목록 배치는 애초에 안 바뀐다)
   const closeView = () => {
     setSelected(null);
-    setBody({ kind: 'idle' });
+    setViewOpen(false);
   };
-
-  const split = body.kind !== 'idle';
 
   return (
     <Modal
@@ -108,8 +109,8 @@ export function MailModal({
       onClose={onClose}
       wide
     >
-      <div className={'mail-modal' + (split ? ' mail-modal--split' : '')}>
-        {/* 왼쪽 — 받은편지함 목록 (선택 전에는 전체폭) */}
+      <div className="mail-modal">
+        {/* 받은편지함 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
         <div className="mail-modal__list">
           <div className="mail-modal__list-head">
             <span className="mail-modal__list-title">받은편지함</span>
@@ -169,9 +170,13 @@ export function MailModal({
           )}
         </div>
 
-        {/* 오른쪽 — 본문 (메일 선택 시에만 표시) */}
-        {split && (
-        <div className="mail-modal__view">
+        {/* 본문 패널 — 오른쪽에서 슬라이드 인 (닫힘 애니메이션을 위해 항상 마운트) */}
+        <div
+          className={
+            'mail-modal__view' + (viewOpen ? ' mail-modal__view--open' : '')
+          }
+          aria-hidden={!viewOpen}
+        >
           <button
             type="button"
             className="icon-btn mail-modal__view-close"
@@ -180,7 +185,7 @@ export function MailModal({
           >
             <Icon name="x" size={14} />
           </button>
-          {body.kind === 'loading' ? (
+          {body.kind === 'idle' ? null : body.kind === 'loading' ? (
             <div className="mail-modal__placeholder">
               <span className="spinner" />
               <p className="hint">본문 불러오는 중...</p>
@@ -221,7 +226,6 @@ export function MailModal({
             </div>
           )}
         </div>
-        )}
       </div>
     </Modal>
   );
