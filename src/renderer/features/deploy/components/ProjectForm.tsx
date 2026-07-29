@@ -1,5 +1,6 @@
 import type { DeployProjectView } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
+import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
@@ -112,16 +113,13 @@ export function ProjectForm({ form, error, onChange, onSave, onCancel }: Props) 
         저장됩니다.
       </p>
 
-      <label className="deploy__prod-check">
-        <input
-          type="checkbox"
-          checked={form.production}
-          onChange={(e) => onChange({ ...form, production: e.target.checked })}
-        />
-        <span>
-          운영(PROD) 프로젝트 — 배포할 때 대상 이름을 입력해야 실행됩니다
-        </span>
-      </label>
+      <Checkbox
+        danger
+        className="deploy__prod-check"
+        checked={form.production}
+        onChange={(e) => onChange({ ...form, production: e.target.checked })}
+        label="운영(PROD) 프로젝트 — 배포할 때 대상 이름을 입력해야 실행됩니다"
+      />
 
       <label className="form-label">배포 대상</label>
       {form.targets.map((t, i) => (

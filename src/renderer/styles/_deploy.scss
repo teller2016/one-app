@@ -250,22 +250,9 @@
   @include type-caption;
 }
 
-// 프로젝트 폼 — 운영 체크박스 행
+// 프로젝트 폼 — 운영 체크박스 행 (룩은 공용 Checkbox danger, 여기선 배치만)
 .deploy__prod-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 4px 0 14px;
-  @include type-body;
-  cursor: pointer;
-  user-select: none;
-
-  input[type='checkbox'] {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--danger);
-    cursor: pointer;
-  }
 }
 
 // 젠킨스 서버 현황 (ActivityPanel) — 카드 [현황] 팝업 본문. 실행 중 + 대기

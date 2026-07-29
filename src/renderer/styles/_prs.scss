@@ -160,22 +160,11 @@
   }
 }
 
-// 브랜치 선택 — 공용 input 룩과 톤 맞춤 (네이티브 select)
+// 브랜치 선택 — 룩은 공용 Select(small), 여기선 배치만
 .prs__branch-select {
   flex: 1;
   min-width: 0;
   max-width: 360px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-1);
-  color: var(--text);
-  border-radius: var(--r-md);
-  @include type-small;
-
-  &:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
 }
 
 // PR 생성 모달

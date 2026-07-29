@@ -25,21 +25,9 @@
     flex-shrink: 0;
   }
 
-  // 저장소 선택 모달 — 세로 옵션 리스트 (선택 시 액센트 보더)
-  // 분석 설정 모달 — 저장소 셀렉트 (공용 input 룩과 톤 맞춤, prs 브랜치 셀렉트와 동일 패턴)
+  // 분석 설정 모달 — 저장소 셀렉트 (룩은 공용 Select, 여기선 배치만)
   &__repo-select {
     width: 100%;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    background: var(--surface-1);
-    color: var(--text);
-    border-radius: var(--r-md);
-    @include type-small;
-
-    &:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
   }
 
   &__repo-hint {

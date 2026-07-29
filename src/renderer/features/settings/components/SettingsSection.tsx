@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/Button';
+import { Checkbox } from '../../../components/Checkbox';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
@@ -198,15 +199,12 @@ export function SettingsSection() {
         icon={<Icon name="bell" size={14} />}
         storageKey="settings:group:notify"
       >
-        <label className="settings__check">
-          <input
-            type="checkbox"
-            checked={notifyDeploy}
-            onChange={(e) => setNotifyDeploy(e.target.checked)}
-            disabled={loading}
-          />
-          <span>배포가 끝나면 알림 받기 (성공/실패)</span>
-        </label>
+        <Checkbox
+          checked={notifyDeploy}
+          onChange={(e) => setNotifyDeploy(e.target.checked)}
+          disabled={loading}
+          label="배포가 끝나면 알림 받기 (성공/실패)"
+        />
         <div className="settings__test-row">
           <Button size="sm" onClick={() => window.oneApp?.testNotification()}>
             테스트 알림 보내기
@@ -232,15 +230,12 @@ export function SettingsSection() {
             onChange={changeTheme}
           />
         </div>
-        <label className="settings__check">
-          <input
-            type="checkbox"
-            checked={autostart}
-            onChange={(e) => setAutostart(e.target.checked)}
-            disabled={loading}
-          />
-          <span>로그인 시 One App 자동 시작</span>
-        </label>
+        <Checkbox
+          checked={autostart}
+          onChange={(e) => setAutostart(e.target.checked)}
+          disabled={loading}
+          label="로그인 시 One App 자동 시작"
+        />
         <p className="note">
           메뉴바 아이콘은 항상 표시됩니다 — 창을 닫아도 메뉴바에서 열기·출퇴근
           찍기를 할 수 있어요. (자동 시작은 패키징된 앱에서 동작)
@@ -348,8 +343,7 @@ export function SettingsSection() {
               <span className="settings__rem-day">{DAY_LABELS[d.day]}</span>
               {(['come', 'leave'] as const).map((type) => (
                 <div key={type} className="settings__rem-slot">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={d[type].enabled}
                     onChange={(e) =>
                       updateSlot(d.day, type, { enabled: e.target.checked })
@@ -371,16 +365,14 @@ export function SettingsSection() {
         </div>
 
         <div className="settings__repeat-row">
-          <label className="settings__check">
-            <input
-              type="checkbox"
-              checked={repeatEnabled}
-              onChange={(e) => setRepeatEnabled(e.target.checked)}
-              disabled={loading}
-            />
-            <span>안 찍었으면</span>
-          </label>
-          <input
+          <Checkbox
+            checked={repeatEnabled}
+            onChange={(e) => setRepeatEnabled(e.target.checked)}
+            disabled={loading}
+            label="안 찍었으면"
+          />
+          <Input
+            small
             type="number"
             className="settings__minutes"
             min={1}

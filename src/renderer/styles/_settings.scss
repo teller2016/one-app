@@ -3,24 +3,6 @@
 
 @use './base' as *;
 
-// 체크박스 옵션 행 (알림 토글 등)
-.settings__check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  @include type-body;
-  color: var(--text);
-  cursor: pointer;
-  user-select: none;
-
-  input[type='checkbox'] {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
-}
-
 // 출퇴근 리마인더 요일별 표 (Collapsible 그룹 안이라 자체 박스 없음)
 .settings__reminders {
   display: inline-flex;
@@ -54,14 +36,6 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-
-  input[type='checkbox'] {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--accent);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
 }
 
 // 반복 알림 행 (안 찍었으면 N분마다)
@@ -74,27 +48,11 @@
   color: var(--text);
 }
 
+// 반복 알림 분 입력 — 룩은 공용 Input(small), 여기선 배치만
 .settings__minutes {
+  flex: 0 0 auto;
   width: 64px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-1);
-  color: var(--text);
-  border-radius: var(--r-md);
-  font-family: inherit;
-  font-size: var(--fs-small);
   text-align: center;
-  transition: border-color var(--dur-1) var(--ease);
-
-  &:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 0;
-    border-color: var(--accent);
-  }
-
-  &:disabled {
-    opacity: 0.45;
-  }
 }
 
 // 테스트 알림 버튼 행 — 버튼 크기는 Button size=sm 사용 (오버라이드 금지)

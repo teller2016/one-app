@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/Button';
+import { Checkbox } from '../../../components/Checkbox';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
 import { Badge } from '../../../components/Badge';
@@ -189,18 +190,14 @@ export function WeeklySection() {
           )}
         </div>
         <div className="weekly__actions">
-          <label
+          <Checkbox
             className="weekly__monweek"
             title="월요일~일요일 기준으로 계산합니다. 페이지가 일~토 단위라 두 주를 수집하므로 시간이 조금 더 걸려요."
-          >
-            <input
-              type="checkbox"
-              checked={monWeek}
-              onChange={(e) => toggleMonWeek(e.target.checked)}
-              disabled={loading}
-            />
-            <span>월~일 기준</span>
-          </label>
+            checked={monWeek}
+            onChange={(e) => toggleMonWeek(e.target.checked)}
+            disabled={loading}
+            label="월~일 기준"
+          />
           <Button variant="primary" onClick={run} loading={loading}>
             주간보고 분석
           </Button>

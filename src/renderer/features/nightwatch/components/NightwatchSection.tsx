@@ -16,6 +16,7 @@ import { Input } from "../../../components/Input";
 import { Markdown } from "../../../components/Markdown";
 import { Modal } from "../../../components/Modal";
 import { RefreshButton } from "../../../components/RefreshButton";
+import { Select } from "../../../components/Select";
 import { SectionHeader } from "../../../components/SectionHeader";
 import { Segment } from "../../../components/Segment";
 import { Textarea } from "../../../components/Textarea";
@@ -675,17 +676,16 @@ export function NightwatchSection() {
         >
           <div className="nightwatch__pick-opts">
             <FormRow label="저장소" column>
-              <select
+              <Select
                 className="nightwatch__repo-select"
+                aria-label="저장소 선택"
                 value={pick.repoId}
-                onChange={(e) => setPick({ ...pick, repoId: e.target.value })}
-              >
-                {status.config.repos.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(repoId) => setPick({ ...pick, repoId })}
+                options={status.config.repos.map((r) => ({
+                  value: r.id,
+                  label: r.name,
+                }))}
+              />
               <p className="hint nightwatch__repo-hint">
                 {status.config.repos.find((r) => r.id === pick.repoId)?.path ??
                   "설정에서 분석 대상 저장소를 먼저 등록하세요"}

@@ -4,6 +4,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { Select } from '../../../components/Select';
 
 const rel = (ts?: number) => {
   if (!ts) return '';
@@ -94,20 +95,20 @@ export function QuickPr({
             ) : list.length === 0 ? (
               <span className="hint">develop 외 브랜치가 없습니다.</span>
             ) : (
-              <select
+              <Select
+                small
                 className="prs__branch-select"
+                aria-label="브랜치 선택"
                 value={selected[repo] ?? list[0].name}
-                onChange={(e) =>
-                  setSelected((prev) => ({ ...prev, [repo]: e.target.value }))
+                onChange={(name) =>
+                  setSelected((prev) => ({ ...prev, [repo]: name }))
                 }
-              >
-                {list.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                    {b.committedAt ? ` · ${rel(b.committedAt)}` : ''}
-                  </option>
-                ))}
-              </select>
+                options={list.map((b) => ({
+                  value: b.name,
+                  label:
+                    b.name + (b.committedAt ? ` · ${rel(b.committedAt)}` : ''),
+                }))}
+              />
             )}
             {/* 액션 클러스터 — 오른쪽 끝 정렬 (PR 목록 행의 머지 버튼과 동일 패턴) */}
             <div className="prs__quick-actions">

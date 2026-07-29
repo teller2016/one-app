@@ -234,6 +234,8 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 | `TextLink` | `<TextLink small external>` | `.textlink` | `small` · 외부링크 arrow-up-right |
 | `Input` | `<Input small>` | `.input` | `small` → `.input--sm` (11px 라운드 사각 — 필 아님) |
 | `Textarea` | `<Textarea code>` | `.input` | `code` → `.input--code`(모노·**다크 패널**) |
+| `Checkbox` | `<Checkbox label danger>` | `.checkbox` | 라벨 클릭 토글 · accent 체크 / `danger`(운영 확인 등 — danger 체크) |
+| `Select` | `<Select options value onChange small>` | `.select` | 커스텀 팝오버(picker 계열 재사용 — 네이티브 드롭다운 아님). 트리거 `.input` 실루엣·`--control-h`, ↑↓/Enter/Escape 키보드 / `small` |
 | `FileTrigger` | `<FileTrigger>` | `.filetrigger` | — |
 | `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **흰 칩 + shadow-1** (macOS 세그먼트) |
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |

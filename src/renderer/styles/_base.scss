@@ -562,14 +562,97 @@ body {
 
 // 한 줄 입력 높이 통일 — element 한정으로 textarea(.input--code 등)는 제외.
 // 세로 패딩 대신 고정 높이 + 브라우저 기본 세로 중앙 정렬을 쓴다.
+// min-height 필수: .input 은 flex:1(basis 0)이라 세로 flex(form-row--col) 안에서
+// height 가 무시되고 min-content(글줄만)로 찌부러진다 — min-height 가 바닥을 깐다.
 input.input {
   height: var(--control-h);
+  min-height: var(--control-h);
   padding-top: 0;
   padding-bottom: 0;
 }
 
 input.input--sm {
   height: var(--control-h-sm);
+  min-height: var(--control-h-sm);
+}
+
+// 셀렉트 트리거 — .input 실루엣의 버튼. 옵션 리스트는 커스텀 팝오버(.picker__pop 재사용)
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &--sm {
+    height: var(--control-h-sm);
+    min-height: var(--control-h-sm);
+    font-size: var(--fs-small);
+  }
+
+  &__value {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__chev {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+}
+
+// 공통 체크박스 — 라벨 클릭 토글 (danger: 운영 배포 등 위험 확인용)
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  @include type-body;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  &--danger input[type='checkbox'] {
+    accent-color: var(--danger);
+  }
 }
 
 // 파일 선택 등 '입력처럼 보이는 트리거 버튼'
@@ -1288,6 +1371,29 @@ input.input--sm {
   // 시간 입력 (타이핑 허용)
   &--time {
     width: 76px;
+  }
+
+  // 커스텀 셀렉트 — 옵션은 텍스트 라벨이라 왼쪽 정렬 + 말줄임 (시간 리스트와 다름)
+  &--select {
+    min-width: 0;
+
+    .picker__option {
+      text-align: left;
+      font-variant-numeric: normal;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  &--select-sm .picker__option {
+    padding: 5px 8px;
+    @include type-small;
+  }
+
+  // 키보드 하이라이트 — hover 와 같은 톤 (Select 화살표 이동)
+  &__option--hi {
+    background: var(--overlay-hover);
   }
 
   // 좁은 그리드용 소형 변형 (설정 리마인더 등) — 컨테이너 폭을 따라간다
