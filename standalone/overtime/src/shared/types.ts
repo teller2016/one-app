@@ -25,6 +25,37 @@ export type OvertimeSubmitResult = {
 
 export type OvertimeProgress = { step: string };
 
+/** 어떤 결재를 올릴지 — 시작 화면에서 고른다 */
+export type DraftKind = 'overtime' | 'expend';
+
+/** 지출결의서 — 석식대 한 줄 (연장근로 석식비) */
+export type ExpendDinner = {
+  date: string; // 증빙일자 "YYYY-MM-DD"
+  amount: number; // 공급대가
+};
+
+export type ExpendInput = {
+  /** 주차요금 대상 월 "YYYY-MM" — 적요의 'N월'·증빙일자(그 달 말일)에 쓰인다 */
+  month: string;
+  /** 주차요금 (주차권 매수) — 넣지 않으면 null */
+  parking: { manCount: number; halfCount: number } | null;
+  /** 석식대 (여러 건) */
+  dinners: ExpendDinner[];
+};
+
+/** 지출결의서 기본값 — 주차권 매수는 매달 비슷하므로 저장해 재사용한다 */
+export type ExpendDefaults = {
+  manCount: number; // 만원권 매수
+  halfCount: number; // 5천원권 매수
+};
+
+export type ExpendResult = {
+  ok: boolean;
+  added?: number; // 실제로 작성된 항목 수
+  itemCount?: number; // 작성하려던 항목 수
+  error?: string;
+};
+
 /** 렌더러에 보내는 계정 정보 — 비밀번호 값은 보내지 않고 저장 여부만 */
 export type AccountView = {
   id: string;

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { OVERTIME_CONFIG } from './config';
 import type {
   AccountView,
+  ExpendDefaults,
   OvertimeDefaults,
   SaveAccountInput,
 } from '../shared/types';
@@ -17,7 +18,8 @@ interface Stored {
   passwordEnc?: string; // safeStorage 로 암호화된 비밀번호(base64)
   dept?: string; // 근무자 표의 소속 문구
   showBrowser?: boolean; // 자동화 창 표시 (기본 off)
-  defaults?: OvertimeDefaults; // 마지막 작성 내용
+  defaults?: OvertimeDefaults; // 야근 결재 — 마지막 작성 내용
+  expend?: ExpendDefaults; // 지출결의서 — 마지막 주차권 매수
 }
 
 const filePath = () => path.join(app.getPath('userData'), FILE);
@@ -101,4 +103,14 @@ export function getDefaults(): OvertimeDefaults {
 
 export function saveDefaults(defaults: OvertimeDefaults): void {
   write({ ...read(), defaults });
+}
+
+const FALLBACK_EXPEND: ExpendDefaults = { manCount: 0, halfCount: 0 };
+
+export function getExpendDefaults(): ExpendDefaults {
+  return { ...FALLBACK_EXPEND, ...(read().expend ?? {}) };
+}
+
+export function saveExpendDefaults(expend: ExpendDefaults): void {
+  write({ ...read(), expend });
 }

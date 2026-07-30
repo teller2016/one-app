@@ -143,6 +143,13 @@
   }
 }
 
+// ===== 카드 표면 (흰 카드 + 헤어라인, 그림자 없음) =====
+@mixin card-surface {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
 * {
   box-sizing: border-box;
 }

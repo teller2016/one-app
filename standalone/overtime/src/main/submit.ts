@@ -3,22 +3,25 @@
 //
 // One App 본체(src/main/features/overtime/submit.ts)의 puppeteer 판을
 // Electron 자체 BrowserWindow 자동화(browser.ts)로 옮긴 것 — 판정 기준·대기 조건은 동일하다.
-import { closePage, evalInPage, goto, openPage, waitInPage, type Page } from './browser';
+import {
+  closePage,
+  evalInPage,
+  goto,
+  openPage,
+  releasePage,
+  waitInPage,
+  type Page,
+} from './browser';
 import { OVERTIME_CONFIG } from './config';
+import { isLoginPage, login, type Account } from './gw';
+import { closeKeptPage, keepPage } from './keeper';
 import { sleep } from './util';
 import type { OvertimeSubmitInput } from '../shared/types';
 
-export type Account = {
-  id: string;
-  password: string;
-  dept: string; // 근무자 표의 '소속' 칸 문구
-  showBrowser: boolean; // 자동화 창을 보여줄지 (문제 확인용)
-};
+export type { Account };
 
 /** 동시 실행 방지 (브라우저 창 중복 기동 막기) */
 let running = false;
-/** 열려 있는 미리보기 창 — 다음 실행 때 정리한다 */
-let previewPage: Page | null = null;
 
 /** "HH:MM" → 분. 잘못된 형식이면 NaN */
 const toMinutes = (t: string) => {
@@ -45,56 +48,6 @@ export function formatTitle(name: string, input: OvertimeSubmitInput): string {
     return `${pad(h)}시 ${pad(m)}분`;
   };
   return `[연장근무내역] ${name}_${pad(month)}월 ${pad(day)}일 ${part(input.startTime)}~${part(input.endTime)}`;
-}
-
-/** 그룹웨어 로그인 — 폼이 있으면 채우고 제출한다 (실패 판정은 양식 URL 이동 후에 한다) */
-async function login(page: Page, account: Account) {
-  const sel = OVERTIME_CONFIG.selectors;
-  await goto(page, OVERTIME_CONFIG.loginUrl);
-
-  const hasForm = await evalInPage(
-    page,
-    (idSel: string) => !!document.querySelector(idSel),
-    [sel.userId],
-  ).catch(() => false);
-  if (!hasForm) return; // 이미 세션이 있으면 로그인 화면이 뜨지 않는다
-
-  const filled = await evalInPage(
-    page,
-    (idSel: string, pwSel: string, btnSel: string, id: string, pw: string) => {
-      const idEl = document.querySelector(idSel) as HTMLInputElement | null;
-      const pwEl = document.querySelector(pwSel) as HTMLInputElement | null;
-      const btn = document.querySelector(btnSel) as HTMLElement | null;
-      if (!idEl || !pwEl || !btn) return false;
-      // 키 입력 대신 값 설정 + 이벤트 발화 (그룹웨어 스크립트의 input/change 훅 대응)
-      const set = (el: HTMLInputElement, value: string) => {
-        el.focus();
-        el.value = value;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-      };
-      set(idEl, id);
-      set(pwEl, pw);
-      btn.click();
-      return true;
-    },
-    [sel.userId, sel.userPw, sel.loginSubmit, account.id, account.password],
-  );
-  if (!filled) {
-    throw new Error(
-      '로그인 화면을 인식하지 못했습니다 — 그룹웨어 화면이 바뀌었을 수 있습니다.',
-    );
-  }
-
-  // 로그인 처리 대기 — 실패해도 여기서 끊지 않고 양식 URL 이동 결과로 판정한다
-  await waitInPage(
-    page,
-    (idSel: string) => !document.querySelector(idSel),
-    [sel.userId],
-    { timeout: 20000, label: '로그인' },
-  ).catch(() => undefined);
-  await sleep(1200); // 추가 리다이렉트 정리 대기
 }
 
 /**
@@ -325,9 +278,8 @@ export async function runOvertimeSubmit(
   const preview = input.previewOnly === true;
   const step = (s: string) => onStep?.(s);
 
-  // 지난 미리보기 창이 남아 있으면 정리
-  closePage(previewPage);
-  previewPage = null;
+  // 지난 실행에서 남겨둔 창이 있으면 정리
+  closeKeptPage();
 
   // 미리보기는 사용자가 봐야 하므로 항상 창을 띄운다
   const page = await openPage(preview || account.showBrowser);
@@ -338,7 +290,7 @@ export async function runOvertimeSubmit(
 
     step('연장근무내역서 양식 여는 중…');
     await goto(page, OVERTIME_CONFIG.formUrl);
-    if (page.wc.getURL().includes('egovLoginUsr')) {
+    if (isLoginPage(page)) {
       throw new Error(
         '그룹웨어 로그인 실패 — 설정의 사번(ID)·비밀번호를 확인하세요.',
       );
@@ -352,20 +304,14 @@ export async function runOvertimeSubmit(
 
     if (preview) {
       // 상신하지 않고 작성 결과만 보여준다 — 창은 사용자가 닫는다
+      // 자동화 장치(확인창 자동 승낙 등)를 걷어내고 넘긴다
+      await releasePage(page);
       page.win.setTitle('미리보기 — 상신하지 않았습니다 (확인 후 닫으세요)');
       page.win.show();
       page.win.focus();
       keepOpen = true;
-      previewPage = page;
-      // 임시 확인용 창이라 저장할 게 없다 — 페이지 이탈 가드가 남아 있어도 무조건 닫는다
-      page.win.on('close', (e) => {
-        if (page.win.isDestroyed()) return;
-        e.preventDefault();
-        page.win.destroy();
-      });
-      page.win.on('closed', () => {
-        if (previewPage === page) previewPage = null;
-      });
+      // 임시 확인용 창이라 저장할 게 없다 — 이탈 가드가 남아 있어도 X 로 닫히게 keeper 가 처리한다
+      keepPage(page);
       return { title, docUrl: null, preview: true };
     }
 
@@ -395,10 +341,3 @@ export async function runOvertimeSubmit(
   }
 }
 
-/** 미리보기 창 닫기 — 앱 UI 버튼·앱 종료 시 모두 이걸 쓴다 */
-export function closePreviewWindow(): { closed: boolean } {
-  const had = !!previewPage && !previewPage.win.isDestroyed();
-  closePage(previewPage);
-  previewPage = null;
-  return { closed: had };
-}

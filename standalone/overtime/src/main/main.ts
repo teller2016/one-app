@@ -2,7 +2,7 @@
 import { app, BrowserWindow, Menu, nativeTheme } from 'electron';
 import path from 'node:path';
 import { registerIpc } from './ipc';
-import { closePreviewWindow } from './submit';
+import { closeKeptPage } from './keeper';
 
 registerIpc();
 
@@ -49,9 +49,9 @@ app.on('ready', () => {
   createWindow();
 });
 
-// 자동화 창(미리보기)이 남아 있으면 종료 시 함께 정리
+// 남겨둔 자동화 창(미리보기·지출결의서)이 있으면 종료 시 함께 정리
 app.on('before-quit', () => {
-  closePreviewWindow();
+  closeKeptPage();
 });
 
 // 단일 목적 도구라 창을 닫으면 앱도 종료한다 (macOS 포함)
