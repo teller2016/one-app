@@ -3,6 +3,7 @@ import puppeteer, { type Browser } from 'puppeteer';
 import { SCHEDULE_CONFIG } from './config';
 import { PageMacro } from './pageMacro';
 import { getDateTimeFormat, getFilteredData } from './scheduleUtils';
+import { withGroupwareLogin } from '../../lib/groupware';
 
 export interface RunMacroOptions {
   lines: string[];
@@ -31,7 +32,10 @@ export async function runMacro(opts: RunMacroOptions): Promise<void> {
     macro.ignoreAlert();
 
     onLog('🔐 로그인 중...\n');
-    await macro.login(credentials.id, credentials.password);
+    // 로그인 구간만 직렬화 — 메일·근태와 동시 로그인하면 서버가 한쪽을 거부한다
+    await withGroupwareLogin(() =>
+      macro.login(credentials.id, credentials.password),
+    );
     await macro.moveToSchedulePage();
 
     if (testMode) {

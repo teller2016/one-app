@@ -4,6 +4,7 @@ import puppeteer, { type Dialog, type Page } from 'puppeteer';
 import { OVERTIME_CONFIG } from './config';
 import type { OvertimeSubmitInput } from '../../../shared/types';
 import { sleep } from '../../lib/util';
+import { withGroupwareLogin } from '../../lib/groupware';
 
 type Credentials = { id: string; password: string };
 
@@ -275,7 +276,8 @@ export async function runOvertimeSubmit(
     });
 
     step('그룹웨어 로그인 중…');
-    await login(page, credentials);
+    // 로그인 구간만 직렬화 — 메일·근태와 동시 로그인하면 서버가 한쪽을 거부한다
+    await withGroupwareLogin(() => login(page, credentials));
 
     step('연장근무내역서 양식 여는 중…');
     await page

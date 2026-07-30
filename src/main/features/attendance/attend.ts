@@ -4,6 +4,7 @@ import puppeteer, { type Dialog, type Page } from 'puppeteer';
 import { ATTENDANCE_CONFIG } from './config';
 import type { AttendanceInfo } from '../../../shared/types';
 import { sleep, localDateKey } from '../../lib/util';
+import { withGroupwareLogin } from '../../lib/groupware';
 
 export type AttendanceAction = 'status' | 'come' | 'leave';
 
@@ -149,8 +150,11 @@ export async function runAttendance(
       });
     });
 
-    await login(page, credentials);
-    await gotoMain(page);
+    // 로그인 구간만 직렬화 — 메일·주간보고와 동시 로그인하면 서버가 한쪽을 거부한다
+    await withGroupwareLogin(async () => {
+      await login(page, credentials);
+      await gotoMain(page);
+    });
 
     if (action !== 'status') {
       // 위젯 로드 확인 후 그룹웨어 자체 함수 호출 (사이트와 동일한 저장 흐름)

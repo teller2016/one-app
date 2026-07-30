@@ -7,6 +7,7 @@ import { getCredentials } from '../settings/store';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 import { fetchWithTimeout as fetch } from '../../lib/http';
 import { sleep } from '../../lib/util';
+import { withGroupwareLogin } from '../../lib/groupware';
 
 export type MailSession = {
   cookie: string; // "JSESSIONID=…; JSESSIONID=…"
@@ -20,7 +21,10 @@ let cached: MailSession | null = null;
 // 로그인은 무거우니 동시 요청이 겹치면 하나의 establish 를 공유한다
 let inFlight: Promise<MailSession> | null = null;
 
-/** 저장된 비즈박스 계정으로 headless 로그인 → forbiz 쿠키 문자열 반환 */
+/**
+ * 저장된 비즈박스 계정으로 headless 로그인 → forbiz 쿠키 문자열 반환.
+ * 다른 기능(근태·주간보고 등)과 동시에 로그인하면 서버가 거부하므로 공용 큐를 경유한다.
+ */
 async function loginForCookie(): Promise<string> {
   const cred = getCredentials();
   if (!cred) {
@@ -28,6 +32,13 @@ async function loginForCookie(): Promise<string> {
       '비즈박스 계정이 없습니다 — 환경설정에서 ID·비밀번호를 입력하세요.',
     );
   }
+  return withGroupwareLogin(() => loginForCookieNow(cred));
+}
+
+async function loginForCookieNow(cred: {
+  id: string;
+  password: string;
+}): Promise<string> {
   const { selectors: sel } = MAIL_CONFIG;
   const browser = await puppeteer.launch({
     headless: 'new' as const,
