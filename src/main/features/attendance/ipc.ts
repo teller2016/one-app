@@ -18,7 +18,7 @@ export function registerAttendanceIpc() {
         error: '비즈박스 계정이 없습니다. [환경설정]에서 저장하세요.',
       };
     try {
-      return { ok: true, info: await runAttendance('status', cred) };
+      return { ok: true, info: await runAttendance('status') };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
@@ -35,7 +35,7 @@ export function registerAttendanceIpc() {
           error: '비즈박스 계정이 없습니다. [환경설정]에서 저장하세요.',
         };
       try {
-        return { ok: true, info: await runAttendance(action, cred) };
+        return { ok: true, info: await runAttendance(action) };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }

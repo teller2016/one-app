@@ -10,12 +10,10 @@ import type { AttendanceInfo } from '../../../shared/types';
 import { sleep, localDateKey } from '../../lib/util';
 
 /** 근태 상태 조회 — 순간 실패(VPN 블립·동시 실행 충돌)를 흡수하도록 재시도한다 */
-async function fetchStatusWithRetry(
-  cred: NonNullable<ReturnType<typeof getCredentials>>,
-): Promise<AttendanceInfo | null> {
+async function fetchStatusWithRetry(): Promise<AttendanceInfo | null> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await runAttendance('status', cred);
+      return await runAttendance('status');
     } catch {
       if (attempt < 2) await sleep(5000);
     }
@@ -51,7 +49,7 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
   let checkFailed = false;
 
   if (cred) {
-    const info = await fetchStatusWithRetry(cred);
+    const info = await fetchStatusWithRetry();
     if (info) {
       comeTime = info.comeTime;
       leaveTime = info.leaveTime;
@@ -109,7 +107,7 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
       // 계정이 있으면 알럿에서 바로 찍기 제공 (알럿 자체가 확인 대화상자 역할)
       action: cred ? `지금 ${label} 찍기` : undefined,
     });
-    if (stampNow && cred) await stampFromAlert(type, key, cred);
+    if (stampNow && cred) await stampFromAlert(type, key);
   } finally {
     // 반복 간격은 알럿(결과 알럿 포함)을 닫은 시점부터 다시 센다 (방치 중 중복 알럿 방지)
     alertOpen.delete(type);
@@ -118,16 +116,12 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
 }
 
 // 알럿의 '지금 찍기' — 찍은 뒤 결과 알럿을 띄우고, 성공하면 그날 리마인더를 멈춘다
-async function stampFromAlert(
-  type: 'come' | 'leave',
-  key: string,
-  cred: NonNullable<ReturnType<typeof getCredentials>>,
-) {
+async function stampFromAlert(type: 'come' | 'leave', key: string) {
   const label = type === 'come' ? '출근' : '퇴근';
   // 알럿에서 찍기 시작 → 사이드바 위젯도 앱에서 누른 것처럼 '처리중' 비활성 상태로
   pushStamping(type);
   try {
-    const info = await runAttendance(type, cred);
+    const info = await runAttendance(type);
     doneToday.add(key);
     pushAttendanceChanged(info);
     const time = type === 'come' ? info.comeTime : info.leaveTime;

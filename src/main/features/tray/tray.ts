@@ -38,7 +38,7 @@ async function stampFromTray(action: 'come' | 'leave') {
 
   stamping = true;
   try {
-    const info = await runAttendance(action, cred);
+    const info = await runAttendance(action);
     const time = action === 'come' ? info.comeTime : info.leaveTime;
     void notify({
       title: `${label} 완료`,
