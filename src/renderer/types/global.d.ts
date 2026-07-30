@@ -54,6 +54,7 @@ import type {
   NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchTextResult,
+  MailListQuery,
   MailInboxResult,
   MailBodyResult,
   MailUnreadCountResult,
@@ -120,7 +121,7 @@ declare global {
       };
       mail: {
         getUnreadCount: () => Promise<MailUnreadCountResult>;
-        getInbox: (limit?: number) => Promise<MailInboxResult>;
+        getInbox: (query?: MailListQuery) => Promise<MailInboxResult>;
         getBody: (muid: number, unread: boolean) => Promise<MailBodyResult>;
         openWeb: () => Promise<{ ok: boolean }>;
       };

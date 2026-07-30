@@ -581,6 +581,16 @@ export type NightwatchTextResult = {
 
 // ── 메일 (비즈박스 그룹웨어) ──
 
+/** 메일 목록 폴더 — 받은편지함 / 스팸메일함 */
+export type MailFolder = 'inbox' | 'spam';
+
+/** 메일 목록 조회 조건 — 폴더 + 페이지네이션 */
+export type MailListQuery = {
+  folder?: MailFolder; // 기본 inbox
+  page?: number; // 1-based, 기본 1
+  pageSize?: number; // 기본 30
+};
+
 /** 받은편지함 메일 한 건 (목록용 요약) */
 export type MailItem = {
   muid: number; // 메일 고유 id (본문 조회 키)
@@ -592,16 +602,18 @@ export type MailItem = {
   size: number; // 바이트
 };
 
-/** 받은편지함 조회 결과 — 안읽은 수(뱃지) + 최근 메일 목록 */
+/** 메일 목록 조회 결과 — 안읽은 수(뱃지) + 해당 페이지 목록 */
 export type MailInboxResult = {
   ok: boolean;
   configured: boolean; // 비즈박스 계정(환경설정) 설정 여부
-  unreadCount: number; // 안읽은 메일 총 수 (getMailBoxCount allunseen)
+  unreadCount: number; // 안읽은 메일 총 수 (받은편지함 + 스팸, 보낸·임시·휴지통 제외)
   items?: MailItem[];
+  total?: number; // 폴더 전체 건수 (TotalRecordCount) — 페이지 수 계산용
+  page?: number; // 이 응답의 페이지 (요청과 대조해 뒤늦은 응답 무시)
   error?: string;
 };
 
-/** 안읽은 수만 조회 (위젯 폴링용 경량 — 목록 없이 getMailBoxCount 만) */
+/** 안읽은 수만 조회 (위젯 폴링용 경량 — 목록 없이 getMailBoxCount 만, 스팸 포함) */
 export type MailUnreadCountResult = {
   ok: boolean;
   configured: boolean;

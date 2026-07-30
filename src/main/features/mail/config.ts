@@ -28,7 +28,13 @@ export const MAIL_CONFIG = {
 
   // 세션(쿠키+부트스트랩) 재사용 유효시간. 지나면 재로그인. 조회 중 인증 실패 시엔 즉시 무효화.
   sessionTtlMs: 20 * 60 * 1000,
-  // 받은편지함 기본 폴더명 (getMailBoxCount 로 mboxSeq 동적 확인, 실패 시 폴백)
+  // 폴더명 (getMailBoxCount 로 mboxSeq 동적 확인, 실패 시 폴백 — 2026-07-21 정찰값)
   inboxName: 'INBOX',
   inboxSeqFallback: 1977,
+  spamName: 'SPAM',
+  spamSeqFallback: 1981,
+  // 안읽음 뱃지 집계에서 제외할 폴더 — 스팸은 제외하지 않는다(사용자 요청으로 포함).
+  // 서버의 allunseen 은 스팸을 빼고 집계하므로(allexist = INBOX+SENT 로 확인, 2026-07-30)
+  // 뱃지는 여기 없는 폴더들의 unseen 합으로 직접 계산한다.
+  unreadExcludedBoxes: ['SENT', 'DRAFTS', 'TRASH'],
 };

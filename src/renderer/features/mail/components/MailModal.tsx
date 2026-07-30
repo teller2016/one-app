@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { MailBody, MailItem } from '../../../../shared/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MailBody, MailFolder, MailItem } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
+import { Pagination } from '../../../components/Pagination';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { Segment } from '../../../components/Segment';
 import { mailTime, senderName } from '../lib/format';
+
+/** 한 페이지 메일 건수 */
+const PAGE_SIZE = 30;
 
 /** 본문 조회 상태 — 선택한 메일의 로딩/성공/실패 */
 type BodyState =
@@ -32,8 +37,8 @@ function bodyDoc(html: string, webUrl: string): string {
 }
 
 /**
- * 메일 리더 모달 — 받은편지함 목록은 항상 전체폭(배치 유지), 메일을 선택하면
- * 본문(sandbox iframe) 패널이 오른쪽에서 슬라이드로 떠오른다. [×]로 패널만 닫힌다.
+ * 메일 리더 모달 — 목록(받은편지함·스팸 세그먼트 전환)은 항상 전체폭(배치 유지),
+ * 메일을 선택하면 본문(sandbox iframe) 패널이 오른쪽에서 슬라이드로 떠오른다. [×]로 패널만 닫힌다.
  * 열릴 때 받은편지함을 새로 불러오고, 안읽은 메일을 열면 읽음 처리 후 onRead 로 알린다.
  */
 export function MailModal({
@@ -44,19 +49,33 @@ export function MailModal({
   /** 안읽은 메일을 열어 읽음 처리됐을 때 (사이드바 뱃지 즉시 갱신용) */
   onRead: (muid: number) => void;
 }) {
+  const [folder, setFolder] = useState<MailFolder>('inbox');
+  const [page, setPage] = useState(1);
   const [items, setItems] = useState<MailItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
   const [body, setBody] = useState<BodyState>({ kind: 'idle' });
   // 패널 표시 여부 — 닫을 때 body 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
   const [viewOpen, setViewOpen] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  // 요청 순번 — 페이지를 빠르게 넘길 때 뒤늦게 도착한 이전 응답을 버린다
+  const reqSeq = useRef(0);
 
-  const loadInbox = useCallback(async () => {
+  const loadList = useCallback(async (f: MailFolder, p: number) => {
+    const seq = reqSeq.current + 1;
+    reqSeq.current = seq;
     setLoading(true);
-    const res = await window.oneApp.mail.getInbox(30);
+    const res = await window.oneApp.mail.getInbox({
+      folder: f,
+      page: p,
+      pageSize: PAGE_SIZE,
+    });
+    if (seq !== reqSeq.current) return; // 더 최신 요청이 진행 중 — 이 응답은 버림
     if (res.ok && res.items) {
       setItems(res.items);
+      setTotal(res.total ?? res.items.length);
       setListError('');
     } else {
       setListError(res.error ?? '메일을 불러오지 못했습니다.');
@@ -65,8 +84,28 @@ export function MailModal({
   }, []);
 
   useEffect(() => {
-    void loadInbox();
-  }, [loadInbox]);
+    void loadList(folder, page);
+  }, [loadList, folder, page]);
+
+  // 폴더 전환 — 이전 폴더 목록·열린 본문을 비우고 1페이지부터 새로 불러온다
+  const changeFolder = (f: MailFolder) => {
+    if (f === folder) return;
+    setFolder(f);
+    setPage(1);
+    setItems([]);
+    setTotal(0);
+    setSelected(null);
+    setViewOpen(false);
+  };
+
+  // 페이지 이동 — 목록 스크롤을 맨 위로 되돌리고 열린 본문은 닫는다
+  const changePage = (p: number) => {
+    setPage(p);
+    setItems([]);
+    setSelected(null);
+    setViewOpen(false);
+    listRef.current?.scrollTo({ top: 0 });
+  };
 
   const openMail = async (item: MailItem) => {
     setSelected(item.muid);
@@ -110,14 +149,21 @@ export function MailModal({
       wide
     >
       <div className="mail-modal">
-        {/* 받은편지함 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
+        {/* 메일 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
         <div className="mail-modal__list">
           <div className="mail-modal__list-head">
-            <span className="mail-modal__list-title">받은편지함</span>
+            <Segment
+              options={[
+                { value: 'inbox', label: '받은편지함' },
+                { value: 'spam', label: '스팸메일함' },
+              ]}
+              value={folder}
+              onChange={changeFolder}
+            />
             <RefreshButton
               size={13}
               spinning={loading}
-              onClick={() => void loadInbox()}
+              onClick={() => void loadList(folder, page)}
               title="목록 새로고침"
             />
           </div>
@@ -131,10 +177,14 @@ export function MailModal({
               <span className="empty-state__icon">
                 <Icon name="mail" size={20} />
               </span>
-              <p>받은 메일이 없습니다.</p>
+              <p>
+                {folder === 'spam'
+                  ? '스팸 메일이 없습니다.'
+                  : '받은 메일이 없습니다.'}
+              </p>
             </div>
           ) : (
-            <ul className="mail-list">
+            <ul className="mail-list" ref={listRef}>
               {items.map((m) => (
                 <li key={m.muid}>
                   <button
@@ -168,6 +218,15 @@ export function MailModal({
               ))}
             </ul>
           )}
+
+          {/* 과거 메일 — 서버 페이징(폴더 전체 건수 기준) */}
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onChange={changePage}
+            disabled={loading}
+          />
         </div>
 
         {/* 본문 패널 — 오른쪽에서 슬라이드 인 (닫힘 애니메이션을 위해 항상 마운트) */}

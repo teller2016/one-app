@@ -1,13 +1,14 @@
 import { ipcMain, shell } from 'electron';
 import { getBody, getInbox, getUnreadCount } from './mail';
 import { MAIL_CONFIG } from './config';
+import type { MailListQuery } from '../../../shared/types';
 
 /** 메일(비즈박스) 관련 IPC 핸들러 등록 */
 export function registerMailIpc() {
   // 안읽은 수만 (위젯 폴링용 경량)
   ipcMain.handle('mail:unread-count', () => getUnreadCount());
-  // 받은편지함 — 안읽은 수 + 최근 목록
-  ipcMain.handle('mail:inbox', (_e, limit?: number) => getInbox(limit));
+  // 메일 목록 — 안읽은 수 + 폴더(받은편지함·스팸)의 요청 페이지 목록
+  ipcMain.handle('mail:inbox', (_e, query?: MailListQuery) => getInbox(query));
   // 본문 조회 (unread=true 면 열 때 읽음 처리)
   ipcMain.handle('mail:body', (_e, muid: number, unread: boolean) =>
     getBody(muid, unread),

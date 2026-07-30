@@ -13,8 +13,10 @@ import { sanitizeHtml } from '../../lib/sanitize';
 import type {
   MailBody,
   MailBodyResult,
+  MailFolder,
   MailInboxResult,
   MailItem,
+  MailListQuery,
   MailUnreadCountResult,
 } from '../../../shared/types';
 
@@ -57,9 +59,14 @@ type MailListResp = {
 };
 
 /** getMailList 파라미터 — seen=false&flag=false 가 빠지면 서버가 빈 목록을 반환한다(정찰 확인) */
-function listParams(s: MailSession, mboxSeq: number, pageSize: number): string {
+function listParams(
+  s: MailSession,
+  mboxSeq: number,
+  page: number,
+  pageSize: number,
+): string {
   return [
-    'page=1',
+    `page=${page}`,
     `pageSize=${pageSize}`,
     'sortField=',
     'sortType=',
@@ -95,22 +102,40 @@ function parseDate(raw?: string): number {
   return Number.isNaN(ms) ? Date.parse(raw) || 0 : ms;
 }
 
-/** 폴더별 개수 조회 — allunseen(뱃지)과 INBOX mboxSeq 를 함께 반환 */
+/**
+ * 뱃지 안읽음 수 — 폴더별 unseen 합(보낸·임시·휴지통 제외, **스팸 포함**).
+ * 서버의 allunseen 은 스팸을 빼고 집계하므로 그 값을 쓰지 않고 직접 합산한다
+ * (allunseen 에 스팸을 더하는 방식은 서버 집계 규칙이 바뀌면 이중 집계가 된다).
+ */
+function sumUnread(boxes: NonNullable<BoxCountResp['mailboxList']>): number {
+  return boxes
+    .filter(
+      (m) =>
+        !MAIL_CONFIG.unreadExcludedBoxes.includes((m.name ?? '').toUpperCase()),
+    )
+    .reduce((acc, m) => acc + (Number(m.unseen) || 0), 0);
+}
+
+/** 폴더별 개수 조회 — 안읽음 수(뱃지)와 폴더별(받은편지함·스팸) mboxSeq 를 함께 반환 */
 async function fetchBoxCount(
   s: MailSession,
-): Promise<{ unreadCount: number; mboxSeq: number }> {
+): Promise<{ unreadCount: number; inboxSeq: number; spamSeq: number }> {
   const countRes = await mailPost(
     s.cookie,
     MAIL_CONFIG.endpoints.boxCount,
     `id=${encodeURIComponent(s.id)}&domain=${encodeURIComponent(s.domain)}&isExternal=false&isApproval=false`,
   );
   const count = await parseJson<BoxCountResp>(countRes);
-  const inbox = (count.mailboxList ?? []).find(
-    (m) => m.name === MAIL_CONFIG.inboxName,
-  );
+  const boxes = count.mailboxList ?? [];
+  const findSeq = (name: string, fallback: number) =>
+    Number(
+      boxes.find((m) => m.name?.toUpperCase() === name)?.mboxSeq ?? fallback,
+    );
   return {
-    unreadCount: Number(count.allunseen ?? 0),
-    mboxSeq: Number(inbox?.mboxSeq ?? MAIL_CONFIG.inboxSeqFallback),
+    // 폴더 목록이 비어 오면(응답 형식 변경 등) 서버 집계값으로 폴백
+    unreadCount: boxes.length ? sumUnread(boxes) : Number(count.allunseen ?? 0),
+    inboxSeq: findSeq(MAIL_CONFIG.inboxName, MAIL_CONFIG.inboxSeqFallback),
+    spamSeq: findSeq(MAIL_CONFIG.spamName, MAIL_CONFIG.spamSeqFallback),
   };
 }
 
@@ -138,10 +163,17 @@ export async function getUnreadCount(): Promise<MailUnreadCountResult> {
 }
 
 /**
- * 받은편지함 조회 — 안읽은 총 수(뱃지) + 최근 메일 목록.
+ * 메일 목록 조회 — 안읽은 총 수(뱃지) + 폴더(받은편지함·스팸메일함)의 요청 페이지 목록.
  * 계정 미설정이면 configured:false 로 조용히 반환한다(배너 안내용).
+ * 과거 메일은 page 를 올려 조회한다(서버 페이징 — TotalRecordCount 로 전체 건수 확인).
  */
-export async function getInbox(limit = 30): Promise<MailInboxResult> {
+export async function getInbox(
+  query: MailListQuery = {},
+): Promise<MailInboxResult> {
+  const folder: MailFolder = query.folder ?? 'inbox';
+  const page = Math.max(1, Math.trunc(query.page ?? 1));
+  const pageSize = Math.min(200, Math.max(1, Math.trunc(query.pageSize ?? 30)));
+
   if (!getCredentials()) {
     return {
       ok: false,
@@ -153,14 +185,14 @@ export async function getInbox(limit = 30): Promise<MailInboxResult> {
 
   try {
     return await withSession(async (s) => {
-      // 1) 폴더별 개수 — allunseen(뱃지) + INBOX mboxSeq
-      const { unreadCount, mboxSeq } = await fetchBoxCount(s);
+      // 1) 폴더별 개수 — 안읽음 합(뱃지) + 폴더 mboxSeq
+      const { unreadCount, inboxSeq, spamSeq } = await fetchBoxCount(s);
 
-      // 2) 받은편지함 최근 목록
+      // 2) 대상 폴더의 해당 페이지 목록
       const listRes = await mailPost(
         s.cookie,
         MAIL_CONFIG.endpoints.list,
-        listParams(s, mboxSeq, limit),
+        listParams(s, folder === 'spam' ? spamSeq : inboxSeq, page, pageSize),
       );
       const list = await parseJson<MailListResp>(listRes);
       const items: MailItem[] = (list.Records ?? []).map((r) => ({
@@ -174,7 +206,14 @@ export async function getInbox(limit = 30): Promise<MailInboxResult> {
         size: Number(r.size ?? 0),
       }));
 
-      return { ok: true, configured: true, unreadCount, items };
+      return {
+        ok: true,
+        configured: true,
+        unreadCount,
+        items,
+        total: Number(list.TotalRecordCount ?? items.length) || items.length,
+        page,
+      };
     });
   } catch (err) {
     return {

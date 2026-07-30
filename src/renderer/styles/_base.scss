@@ -871,6 +871,71 @@ input.input--sm {
   }
 }
 
+// ===== 페이지네이션 (서버 페이징 목록 공용 — Pagination 컴포넌트) =====
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+
+  &__summary {
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__pages {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  // 번호 칩 — 세그먼트와 같은 어휘(활성만 표면으로 떠오름)
+  &__page {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: var(--fs-small);
+    font-weight: 400; // 애플 래더 — 500 금지
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+    @include focus-ring(0px);
+
+    &:hover:not(:disabled):not(&--on) {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    &--on {
+      background: var(--accent-soft);
+      color: var(--accent);
+      cursor: default;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  &__gap {
+    padding: 0 2px;
+    @include type-small;
+    color: var(--text-3);
+  }
+}
+
 // ===== 아이콘 버튼 (새로고침 등) =====
 .icon-btn {
   display: inline-flex;

@@ -147,10 +147,6 @@
     margin-bottom: 10px;
   }
 
-  &__list-title {
-    @include type-caption;
-  }
-
   // 본문 패널 — 목록 배치는 그대로 두고 오른쪽에서 떠오르는 레이어.
   // 닫힘 애니메이션을 위해 항상 마운트 — visibility 는 슬라이드가 끝난 뒤에 꺼진다.
   &__view {
