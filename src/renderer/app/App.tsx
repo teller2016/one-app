@@ -14,6 +14,7 @@ import { ProjectsSection } from "../features/projects";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
+import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -61,6 +62,12 @@ const SECTIONS: AppSection[] = [
     label: "프로젝트",
     icon: <Icon name="folder" size={16} />,
     render: () => <ProjectsSection />,
+  },
+  {
+    id: "terminal",
+    label: "터미널",
+    icon: <Icon name="terminal" size={16} />,
+    render: () => <TerminalSection />,
   },
   {
     id: "applink",

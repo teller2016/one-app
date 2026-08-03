@@ -20,6 +20,7 @@ import type {
   ApplinkInput,
   MirrorMode,
   MailListQuery,
+  TerminalCreateInput,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
   OvertimeProgress,
@@ -294,6 +295,69 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("nightwatch:mission-log", key),
     // 실행 로그 tail
     getLog: () => ipcRenderer.invoke("nightwatch:log"),
+  },
+  terminal: {
+    // 세션 목록 조회
+    list: () => ipcRenderer.invoke("terminal:list"),
+    // 새 세션 생성 (cwd 미지정 시 홈)
+    create: (opts?: TerminalCreateInput) =>
+      ipcRenderer.invoke("terminal:create", opts),
+    // 세션 attach — 링버퍼 replay 반환 + PTY 크기를 내 크기로 (last-attach-wins)
+    attach: (id: string, cols: number, rows: number) =>
+      ipcRenderer.invoke("terminal:attach", id, cols, rows),
+    // 세션 종료 (프로세스 kill)
+    kill: (id: string) => ipcRenderer.invoke("terminal:kill", id),
+    // 키 입력·리사이즈 — fire-and-forget (invoke 왕복 비용 제거)
+    write: (id: string, data: string) =>
+      ipcRenderer.send("terminal:write", id, data),
+    resize: (id: string, cols: number, rows: number) =>
+      ipcRenderer.send("terminal:resize", id, cols, rows),
+    // 세션 출력 구독 (16ms 배칭, seq 는 attach replay 와의 중복 제거 기준). 해제 함수를 반환한다.
+    onData: (cb: (ev: { id: string; data: string; seq: number }) => void) => {
+      const listener = (
+        _e: unknown,
+        ev: { id: string; data: string; seq: number }
+      ) => cb(ev);
+      ipcRenderer.on("terminal:data", listener);
+      return () => ipcRenderer.removeListener("terminal:data", listener);
+    },
+    // 세션 종료 이벤트 구독. 해제 함수를 반환한다.
+    onExit: (cb: (ev: { id: string; exitCode: number }) => void) => {
+      const listener = (_e: unknown, ev: { id: string; exitCode: number }) =>
+        cb(ev);
+      ipcRenderer.on("terminal:exit", listener);
+      return () => ipcRenderer.removeListener("terminal:exit", listener);
+    },
+    // 세션 목록 변경(생성·종료) 구독. 해제 함수를 반환한다.
+    onSessions: (cb: () => void) => {
+      const listener = () => cb();
+      ipcRenderer.on("terminal:sessions", listener);
+      return () => ipcRenderer.removeListener("terminal:sessions", listener);
+    },
+    // PTY 크기 변경 구독 — 다른 클라이언트(MO)가 리사이즈하면 내 xterm 도 따라간다
+    onResized: (
+      cb: (ev: { id: string; cols: number; rows: number }) => void
+    ) => {
+      const listener = (
+        _e: unknown,
+        ev: { id: string; cols: number; rows: number }
+      ) => cb(ev);
+      ipcRenderer.on("terminal:resized", listener);
+      return () => ipcRenderer.removeListener("terminal:resized", listener);
+    },
+    // MO(모바일) 접속 서버 — 상태·토글(저장 겸)·토큰 재발급
+    server: {
+      status: () => ipcRenderer.invoke("terminal:server:status"),
+      setEnabled: (enabled: boolean) =>
+        ipcRenderer.invoke("terminal:server:set", enabled),
+      regenToken: () => ipcRenderer.invoke("terminal:server:regen-token"),
+      onChanged: (cb: () => void) => {
+        const listener = () => cb();
+        ipcRenderer.on("terminal:server:changed", listener);
+        return () =>
+          ipcRenderer.removeListener("terminal:server:changed", listener);
+      },
+    },
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
   getAutostart: () => ipcRenderer.invoke("app:autostart:get"),

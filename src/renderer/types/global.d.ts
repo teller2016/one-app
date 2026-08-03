@@ -64,6 +64,10 @@ import type {
   OvertimeProgress,
   OvertimeSubmitInput,
   OvertimeSubmitResult,
+  TerminalCreateInput,
+  TerminalSessionInfo,
+  TerminalAttachResult,
+  TerminalServerStatus,
 } from '../../shared/types';
 
 declare global {
@@ -217,6 +221,34 @@ declare global {
         getPrompt: (key: string) => Promise<NightwatchTextResult>;
         getMissionLog: (key: string) => Promise<NightwatchTextResult>;
         getLog: () => Promise<NightwatchTextResult>;
+      };
+      terminal: {
+        list: () => Promise<TerminalSessionInfo[]>;
+        create: (opts?: TerminalCreateInput) => Promise<TerminalSessionInfo>;
+        attach: (
+          id: string,
+          cols: number,
+          rows: number,
+        ) => Promise<TerminalAttachResult>;
+        kill: (id: string) => Promise<{ ok: boolean }>;
+        write: (id: string, data: string) => void;
+        resize: (id: string, cols: number, rows: number) => void;
+        onData: (
+          cb: (ev: { id: string; data: string; seq: number }) => void,
+        ) => () => void;
+        onExit: (
+          cb: (ev: { id: string; exitCode: number }) => void,
+        ) => () => void;
+        onSessions: (cb: () => void) => () => void;
+        onResized: (
+          cb: (ev: { id: string; cols: number; rows: number }) => void,
+        ) => () => void;
+        server: {
+          status: () => Promise<TerminalServerStatus>;
+          setEnabled: (enabled: boolean) => Promise<TerminalServerStatus>;
+          regenToken: () => Promise<TerminalServerStatus>;
+          onChanged: (cb: () => void) => () => void;
+        };
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

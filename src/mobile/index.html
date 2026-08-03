@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- interactive-widget: 안드로이드 Chrome 108+ 는 iOS 처럼 visual viewport 만 줄이는 게
+         기본(resizes-visual)이라 키바가 키보드에 가려질 수 있다 — 레이아웃 뷰포트까지 줄여
+         flex 레이아웃이 스스로 맞게 한다(iOS 는 이 키를 무시하고 mobile.ts 의 visualViewport 처리가 담당). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#1e1e20" />
+    <title>One App 터미널</title>
+    <script type="module" src="/mobile.ts"></script>
+  </head>
+  <body>
+    <header id="topbar">
+      <select id="sessionSelect" aria-label="세션 선택"></select>
+      <button id="newBtn" type="button">새 세션</button>
+      <span class="fontctl">
+        <button id="fontDown" type="button" aria-label="글자 작게">A－</button>
+        <button id="fontUp" type="button" aria-label="글자 크게">A＋</button>
+      </span>
+      <span id="status">연결 중…</span>
+    </header>
+    <main id="term">
+      <button id="toBottom" type="button" hidden aria-label="맨 아래로">↓ 맨 아래로</button>
+    </main>
+    <footer id="keybar">
+      <button type="button" data-key="esc">esc</button>
+      <button type="button" data-key="tab">tab</button>
+      <button type="button" data-key="shift-tab">⇧tab</button>
+      <button type="button" data-key="ctrl" id="ctrlBtn">ctrl</button>
+      <button type="button" data-key="up">↑</button>
+      <button type="button" data-key="down">↓</button>
+      <button type="button" data-key="left">←</button>
+      <button type="button" data-key="right">→</button>
+      <button type="button" data-key="enter">⏎</button>
+    </footer>
+  </body>
+</html>

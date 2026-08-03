@@ -87,6 +87,11 @@ src/
 │       │   ├── ipc.ts
 │       │   ├── create.ts        #    딥링크 생성 API 호출 (메인에서 서버측 호출)
 │       │   └── store.ts         #    API 키 저장 (safeStorage 암호화)
+│       ├── terminal/            #  터미널 (node-pty — 데스크톱·MO 가 세션 공유)
+│       │   ├── ipc.ts           #    IPC 핸들러 + 서버 토글
+│       │   ├── pty.ts           #    세션 소유(Map)·링버퍼·출력 배칭·attach/resize
+│       │   ├── server.ts        #    MO 접속 HTTP 정적 서빙 + WS 브리지 + 토큰 인증
+│       │   └── store.ts         #    포트·토큰(safeStorage)·자동 시작 (terminal.json)
 │       └── tray/                #  메뉴바 트레이
 │           └── tray.ts          #    열기·출퇴근 찍기·종료 메뉴
 │   └── lib/                     #  메인 공통 유틸
@@ -127,6 +132,7 @@ src/
 │   │   ├── jira/                #  Jira 내 이슈 — 목록·상태 전환, 클릭 시 브라우저로
 │   │   ├── nightwatch/          #  Nightwatch — 티켓 분석 대시보드 (후보·리포트·미션 로그)
 │   │   ├── projects/            #  프로젝트 — 중앙 레지스트리 CRUD (Section·Form·Card)
+│   │   ├── terminal/            #  터미널 — 탭 UI(Section)·xterm 뷰(View)·MO 접속 모달
 │   │   └── applink/             #  applink.kr 딥링크 생성
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
@@ -142,10 +148,17 @@ src/
 │   │   ├── _mail.scss           #    메일 위젯·리더 모달
 │   │   ├── _nightwatch.scss     #    Nightwatch
 │   │   ├── _projects.scss       #    프로젝트 레지스트리
+│   │   ├── _terminal.scss       #    터미널 (탭바·xterm 패널·MO 모달)
 │   │   ├── _applink.scss        #    딥링크
 │   │   └── _markdown.scss       #    마크다운 렌더(react-markdown) 공통
 │   └── types/global.d.ts        #  window.oneApp 타입
-└── shared/types.ts              # 🔗 프로세스 간 공용 타입
+├── mobile/                      # 📱 MO(모바일) 터미널 페이지 — 별도 Vite 엔트리(mobile_window)
+│   ├── index.html               #  main 의 HTTP 서버가 정적 서빙 (창으로 안 띄움)
+│   ├── mobile.ts                #  xterm + WS 클라이언트 + 키바 (plain TS, React 없음)
+│   └── mobile.css               #  모바일 전용 최소 CSS (앱 토큰 체계 밖)
+└── shared/
+    ├── types.ts                 # 🔗 프로세스 간 공용 타입
+    └── terminal-protocol.ts     # 🔗 MO 터미널 WS 메시지 타입 (server.ts ↔ mobile.ts)
 ```
 - **규칙**: 기능 간 참조는 `features/<기능>/index.ts`(공개 API)로만. 기능 내부 파일을 다른 기능에서 직접 import 하지 않는다.
 
@@ -181,11 +194,21 @@ src/
 - **메일** (`renderer/features/mail` + `main/features/mail`): 비즈박스 메일을 **사이드바 최상단 위젯**에서 확인. 로그인·쿠키는 **공용 세션 모듈**(`features/groupware`)에 맡기고, 그 쿠키로 `/mail2/` SPA 를 부트스트랩한 뒤 개수·목록·본문 조회는 **전부 순수 HTTP fetch**(리버스 엔지니어링 엔드포인트 — `getMailBoxCount.do`·`getMailList.do`·`readMail.do`/`readMailCont.do`). 메일 캐시는 공용 세션의 `establishedAt` 을 신원으로 삼아, 세션이 새로 수립되면 부트스트랩만 다시 한다. 로그인 페이지 응답이면 공용 세션까지 무효화하고 1회 재로그인, 동시 요청은 establish 공유. **안읽음 폴링은 포커스 적응형**(활성 30초·백그라운드 3분, 창 복귀 시 즉시). 위젯 아이콘 클릭=브라우저로 메일함, 제목 클릭=앱 내 **리더 모달**(좌 목록·우 본문 — 상단 세그먼트로 **받은편지함↔스팸메일함** 전환, 폴더별 `mboxSeq` 는 `getMailBoxCount` 로 동적 조회). 목록 하단에 공용 `Pagination` — `getMailList.do` 의 `page`/`pageSize`(30) 서버 페이징으로 **과거 메일까지 열람**(전체 건수는 `TotalRecordCount`). 조회 조건은 `MailListQuery`({folder, page, pageSize}) 객체로 전달하며, 응답의 `page` 를 요청 순번과 대조해 빠르게 넘길 때 **뒤늦은 응답을 버린다**. **뱃지 안읽음 수는 폴더별 `unseen` 합**(받은편지함+스팸, 보낸·임시·휴지통 제외 — `config.ts` 의 `unreadExcludedBoxes`)으로 직접 계산한다. ⚠️ 서버의 `allunseen`/`allexist` 집계는 스팸·휴지통·임시보관을 **제외**하며(2026-07-30 실측: `allexist` = INBOX+SENT), 스팸 메일은 도착 시점부터 **읽음 상태로 들어와** 실질적으로 뱃지에 잡히지 않는다. 본문은 main 의 `sanitizeHtml`(script/iframe/on* 제거) + **sandbox iframe(srcDoc)** 이중 방어로 렌더하고, 링크는 기본 브라우저로만 나간다(열면 그룹웨어에서도 읽음 처리). 계정은 비즈박스 공용, 자체 파일 저장 없음.
 - **Nightwatch** (`renderer/features/nightwatch` + `main/features/nightwatch`): Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 분석**을 돌려 리포트+작업 프롬프트를 만든다(아침에 실제 세션에 붙여넣어 수정 작업). 흐름: 후보 조회(내 미해결 이슈 − 해결·숨김·기분석) → [분석] → **프로젝트 선택(프로젝트 레지스트리 참조 — 학습값 suggestedRepoId → Jira 키 일치 → 첫 프로젝트 순 기본 선택, 티켓의 Jira 키와 일치하는 프로젝트가 목록 앞에 정렬)** → Jira REST 로 티켓·댓글·첨부 수집 → 관찰 모드 미션 실행 → 저장소 변조 사후 검증 → 원장 기록. **이름과 달리 야간 자동 스케줄러는 없음 — 수동 트리거가 유일한 진입점**, 실행 중 추가 요청은 대기열로 순차 처리. 안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존). 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분 — 분석 대상 저장소 목록은 프로젝트 레지스트리로 이관). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
 - **딥링크** (`renderer/features/applink` + `main/features/applink`): applink.kr 디퍼드 딥링크(단축 URL) 생성. 클라이언트 JS 호출이 막혀 있어 **main 에서** `POST /deeplink/deeplink_create.asp` 를 호출(`X-API-KEY` + `$canonical_url`·선택 OG 필드). **API 키는 safeStorage 암호화**로 `userData/applink.json` 에만 저장. UI 는 키 관리 + 대상 URL + 접이식 공유 정보(제목·설명·이미지·PC 링크) + 생성 시 클립보드 자동 복사 + 이번 세션 생성 목록.
+- **터미널 + MO(모바일) 연동** (`renderer/features/terminal` + `main/features/terminal` + `src/mobile`): 앱 안에서 셸(claude CLI 등 TUI 포함)을 돌리고, **자리를 비웠을 때 폰으로 같은 세션을 이어서** 쓴다. **메인 프로세스가 PTY 의 단일 소유자**(`pty.ts` — `Map<id, 세션>`, node-pty `$SHELL -il`)이고 데스크톱 렌더러(IPC)와 모바일 브라우저(WS)가 각자 **attach** 한다. 세션은 창·클라이언트와 무관하게 앱 실행 중 유지(창을 닫아도 트레이 상주로 유지, `before-quit` 에서 정리).
+  - **attach 프로토콜**: 세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다.
+  - **크기 공유는 last-claim-wins(보고 있는 쪽이 주장)** — 새로 붙은 쪽 크기로 PTY 를 맞추고 `resized` 로 전 클라이언트에 알려 `term.resize()` 로 동기화한다. 여기에 **재주장 규칙**을 더한다: 데스크톱은 **창 포커스** 시(`window 'focus'` → `fit.proposeDimensions()` 와 다르면 재주장), MO 는 **보이는 상태(`visibilityState==='visible'`)에서 `resized` 를 받았을 때** 자기 크기를 되찾는다. 없으면 폰이 줄여 둔 크기로 데스크톱에 빈 공간이 남고(반대로 데스크톱이 키우면 폰은 오른쪽이 잘려 못 읽는다). ⚠️ 데스크톱의 `ResizeObserver` 는 **컨테이너 크기가 실제로 바뀔 때만 fit** 해야 한다(무조건 fit 하면 xterm 내부 리렌더에 반응해 MO 가 맞춘 크기를 즉시 되돌린다 — 2026-08 실측).
+  - ⚠️ **xterm 6 함정 3가지**(전부 2026-08 실측): ①**네이티브 스크롤 영역이 없다** — 5.x 의 `.xterm-scroll-area` 가 사라져 `viewport.scrollTop` 조작이 안 먹는다. 스크롤은 `term.scrollLines(n)`·`scrollToBottom()`, 위치 판정은 `buffer.active.viewportY >= baseY`, 변화 감지는 `term.onScroll` 로만. ②**스크롤바도 자체 구현**(`.xterm-scrollable-element > .scrollbar > .slider`)이라 전역 `::-webkit-scrollbar` 규칙이 안 먹는다. ③번들 `xterm.css` 가 `.xterm .xterm-viewport` 배경을 **#000 하드코딩**해서 테마를 안 따르고, `theme.background` 를 바꿔도 생성 후엔 다시 칠하지 않는다 → 배경은 `theme.background: 'rgba(0,0,0,0)'`(`'transparent'` 는 파서가 못 읽고 검정 폴백) + `allowTransparency` 로 비우고 **패널 CSS**(`panel-dark`)에 맡긴다. ②③ 의 오버라이드는 xterm 선택자와 **동률 특정도면 나중에 주입되는 xterm.css 가 이기므로** 한 단계 더 좁게 쓴다.
+  - 데스크톱 터미널 색은 `TerminalView.buildTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 글자는 `--font-mono` 13px/1.35.
+  - **MO 접속**: 툴바 폰 아이콘 → 서버 on/off + 접속 URL·QR + 토큰 재발급. 도달·암호화는 **Tailscale**(맥·폰에 설치 전제, URL 은 100.64.0.0/10 주소 우선 정렬)이 담당하고 앱은 **토큰 인증**만 한다 — `?token=` 1회 → `timingSafeEqual` 검증 → **HttpOnly 쿠키 승격**, WS(`/term`) upgrade 에서 재검증, 30초 ping 으로 죽은 소켓 회수. 토큰은 `safeStorage` 로 `userData/terminal.json`(포트 기본 18317·자동 시작 여부)에 저장하고, 켜둔 상태면 앱 재시작 시 자동으로 다시 켜진다.
+  - **모바일 페이지는 별도 Vite 엔트리**(`forge.config.ts` renderer 배열의 `mobile_window`) — prod 는 main 이 asar 안 산출물을 `fs` 로 읽어 서빙(경로 정규화로 루트 밖 차단), dev 는 Vite dev 서버로 프록시. UI 는 세션 선택 + **글자 크기 조절(A－/A＋, `localStorage` 저장)** + 키바(esc·tab·⇧tab·ctrl 토글·방향키·⏎ — claude CLI 용)이며 재접속은 1→2→4→5초 백오프 + `visibilitychange`(탭 슬립) 즉시 재연결 = 재attach = replay 복원. **터치 스크롤은 직접 구현**(드래그 이동량 → 행 수 환산 → `scrollLines`, `#term` 은 `touch-action: none`) — xterm 은 폰에서 손가락 스크롤을 지원하지 않아 이게 없으면 지나간 내용을 볼 수 없다. 위로 올린 동안 **[맨 아래로]** 버튼이 뜬다.
+  - **소프트 키보드 대응(iOS·안드로이드 공통)**: Chrome 108+ 안드로이드도 iOS Safari 처럼 **visual viewport 만 줄이는 게 기본**이라 키바가 키보드에 가려질 수 있다 → ①viewport 메타에 `interactive-widget=resizes-content`(안드로이드는 레이아웃 뷰포트까지 줄어 flex 가 스스로 맞음, iOS 는 이 키를 무시) ②`visualViewport`·`innerHeight` 중 **작은 값**으로 body 높이 보정 — 둘을 함께 쓴다. pull-to-refresh(안드로이드)로 세션 화면이 리로드되지 않게 `overscroll-behavior: none` 필수. 한글은 직접 입력·**IME 조합**(Gboard) 둘 다 셸까지 전달됨을 확인(xterm 이 textarea 의 `autocapitalize/autocorrect/spellcheck` 를 이미 off 로 설정한다). CJK 가 2셀 폭으로 보이는 건 터미널 정상 동작.
+  - ⚠️ **패키징 주의**: node-pty 는 `packagerConfig.asar.unpack` 으로 통째 unpack 해야 한다 — macOS 의 `spawn-helper` 는 확장자가 없어 AutoUnpackNatives 의 `*.node` 글롭에 안 걸리고, asar 안에 갇히면 PTY 생성이 전부 실패한다. `postPackage` 는 앱 서명 **전에** unpacked 바이너리를 같은 identity 로 선서명하는데, **Mach-O 만** 서명할 것 — 함께 담긴 win32 prebuild(PE)를 서명하면 codesign 이 서명을 `com.apple.cs.*` 확장 속성으로 붙이고 그게 detritus 로 잡혀 앱 `--deep` 서명이 실패한다(2026-08 실측).
 - **트레이·자동 시작** (`main/features/tray`): 메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀. **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
 
 ## 트러블슈팅
 - `npm install` 시 `ETARGET No matching version`(존재하지 않는 버전) → **npm 캐시 손상**. `npm cache clean --force` 후 `rm -f package-lock.json && npm install`.
-- `puppeteer`는 `vite.main.config.ts`에서 **external 처리**(번들 제외, 런타임 로드). 무거운 네이티브 의존성 추가 시 동일하게 external 고려.
+- `puppeteer`·`node-pty`·`ws` 는 `vite.main.config.ts`에서 **external 처리**(번들 제외, 런타임 로드 — `forge.config.ts` 의 `copyRuntimeDeps` 훅이 패키지에 채워 넣는다). 무거운 네이티브 의존성 추가 시 동일하게 external 고려.
+- `node-pty` prebuild 의 `spawn-helper` 는 **실행 권한이 없는 채로 설치**돼 `posix_spawnp failed` 가 난다 → `package.json` 의 `postinstall` 이 `chmod +x` 로 보정한다(`npm i` 후 오류 시 이 스크립트 확인).
 - 개발 모드 DevTools 자동 오픈은 꺼둠(`main.ts`). 필요하면 창에서 `⌘⌥I`.
 - **핫리로드 범위**: 렌더러만 HMR 적용. `src/main`/`src/preload` 변경은 리빌드는 되지만 **Electron 재시작 안 됨** → `npm start` 를 다시 실행해야 반영.
 

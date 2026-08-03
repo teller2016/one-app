@@ -1,0 +1,169 @@
+/* 모바일(MO) 터미널 전용 최소 스타일 — 앱 디자인 토큰 체계 밖(별도 문서), 다크 고정.
+   색은 데스크톱 TerminalView 의 TERM_THEME 과 동일 계열. */
+:root {
+  --bg: #1e1e20;
+  --fg: #e8e8ea;
+  --bar: #29292c;
+  --border: #3d3d40;
+  --muted: #9a9aa0;
+  --accent: #2997ff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, system-ui, sans-serif;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  /* JS 가 visualViewport 로 갱신 — iOS 키보드가 떠도 키바가 가려지지 않게 */
+  height: 100dvh;
+}
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#sessionSelect {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px; /* 16px 미만이면 iOS 가 포커스 시 확대함 */
+}
+
+#newBtn {
+  height: 36px;
+  padding: 0 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+#newBtn:disabled,
+#sessionSelect:disabled {
+  opacity: 0.45;
+}
+
+#status {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#status.ok {
+  color: #34c759;
+}
+
+.fontctl {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.fontctl button {
+  width: 34px;
+  height: 36px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.fontctl button:disabled {
+  opacity: 0.35;
+}
+
+#term {
+  flex: 1;
+  min-height: 0;
+  padding: 6px 2px 6px 8px;
+  position: relative; /* '맨 아래로' 버튼 기준 */
+  /* 세로 드래그는 mobile.ts 가 scrollLines() 로 직접 처리한다 — 브라우저 제스처에 안 넘김 */
+  touch-action: none;
+}
+
+#term .xterm {
+  height: 100%;
+}
+
+/* 위로 올려 본 동안만 나타나는 복귀 버튼 */
+#toBottom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 45%);
+}
+
+#toBottom[hidden] {
+  display: none;
+}
+
+#keybar {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  background: var(--bar);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#keybar button {
+  flex: 1;
+  min-width: 0; /* 9개 버튼이 좁은 화면에도 전부 보이게 균등 축소 */
+  height: 40px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+#keybar button:active {
+  background: var(--border);
+}
+
+#keybar button.armed {
+  border-color: var(--accent);
+  color: var(--accent);
+}

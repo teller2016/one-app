@@ -683,3 +683,39 @@ export type MailBodyResult = {
   body?: MailBody;
   error?: string;
 };
+
+// ── 터미널 (앱 내 터미널 — 메인 프로세스가 PTY 소유, 데스크톱·MO 가 같은 세션 공유) ──
+
+/** 터미널 세션 요약 — 데스크톱 탭·모바일 세션 목록 공용 */
+export type TerminalSessionInfo = {
+  id: string;
+  title: string; // 표시명 (cwd 마지막 폴더명)
+  cwd: string; // 시작 작업 디렉터리
+  cols: number; // 현재 PTY 크기
+  rows: number;
+};
+
+/** 새 세션 생성 옵션 */
+export type TerminalCreateInput = {
+  cwd?: string; // 없으면 홈 디렉터리
+  cols?: number;
+  rows?: number;
+};
+
+/** attach 결과 — 링버퍼 replay(스크롤백 복원용) + 현재 PTY 크기 */
+export type TerminalAttachResult = {
+  ok: boolean;
+  replay?: string;
+  seq?: number; // 이 값 이하의 라이브 출력 이벤트는 replay 에 이미 포함 (중복 제거 기준)
+  cols?: number;
+  rows?: number;
+  error?: string;
+};
+
+/** MO(모바일) 접속 서버 상태 */
+export type TerminalServerStatus = {
+  running: boolean;
+  port: number;
+  urls: string[]; // 접속 URL 후보 (Tailscale IP 우선, 토큰 포함 — QR/복사용)
+  error?: string; // 포트 충돌 등 시작 실패 사유
+};

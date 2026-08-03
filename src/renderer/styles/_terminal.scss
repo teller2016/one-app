@@ -1,0 +1,202 @@
+@use './base' as *;
+
+// 터미널 — 세션 탭바 + xterm 다크 패널 (섹션 전체를 세로로 채운다)
+.terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 24px 28px 20px;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  &__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--control-h-sm);
+    padding: 0 8px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-1);
+    color: var(--text-2);
+    cursor: pointer;
+    white-space: nowrap;
+    @include type-small;
+    transition:
+      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+
+    &:hover {
+      border-color: var(--border-strong);
+    }
+
+    // 활성 탭은 아래 터미널 패널과 이어진 것처럼 — 같은 니어블랙 타일로 채운다
+    &--active {
+      @include panel-dark;
+      border-color: var(--border-dark);
+      color: var(--on-dark);
+    }
+  }
+
+  &__tab-label {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--r-full);
+    color: var(--text-3);
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover {
+      background: var(--overlay-hover);
+      color: var(--text);
+    }
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  // xterm 이 마운트되는 다크 패널 — 로그·코드 패널과 같은 계열(DESIGN.md panel-dark).
+  // xterm 쪽 색은 TerminalView 의 buildTheme() 이 같은 토큰에서 읽어 맞춘다.
+  &__host {
+    flex: 1;
+    min-height: 0;
+    border: 1px solid;
+    @include panel-dark;
+    border-radius: var(--r-md);
+    padding: 12px 6px 12px 14px; // 우측은 스크롤바 자리라 좁게
+    overflow: hidden;
+
+    .xterm {
+      height: 100%;
+    }
+
+    // xterm 번들 CSS 가 뷰포트 배경을 #000 으로 하드코딩해 둬서 테마를 안 따른다 —
+    // 걷어내고 이 패널의 배경(--surface-dark)이 그대로 비치게 한다.
+    // (TerminalView 는 theme.background 를 rgba(0,0,0,0) 으로 둔다.
+    //  선택자는 `.xterm` 을 끼워 xterm 의 `.xterm .xterm-viewport` 보다 좁게 — 같은 특정도면
+    //  나중에 주입되는 xterm.css 가 이긴다)
+    .xterm .xterm-viewport {
+      background-color: transparent;
+    }
+
+    // xterm 6 은 네이티브 스크롤바가 아니라 자체 슬라이더를 그린다(전역 ::-webkit-scrollbar
+    // 규칙이 안 먹는다). 앱 스크롤바처럼 얇고 은은하게 — 선택자는 xterm 규칙과 같은 모양에
+    // 한 단계를 더해 특정도를 올린다(동률이면 나중에 주입되는 xterm.css 가 이긴다).
+    .xterm .xterm-scrollable-element > .scrollbar > .slider {
+      background: var(--on-dark-3);
+      border: 4px solid transparent;
+      border-radius: var(--r-full);
+      background-clip: padding-box;
+      transition: background var(--dur-1) var(--ease);
+    }
+
+    .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+    .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
+      background: var(--on-dark-2);
+      background-clip: padding-box;
+    }
+  }
+
+  &__empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // MO 접속 버튼 — 서버 켜짐이면 액센트 점 표시
+  &__mo-btn {
+    position: relative;
+
+    &--on::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 6px;
+      height: 6px;
+      border-radius: var(--r-full);
+      background: var(--ok);
+    }
+  }
+}
+
+// MO(모바일) 접속 모달 내용
+.terminal-mo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+
+    img {
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+    }
+  }
+
+  &__urls {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    code {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      @include type-small;
+      color: var(--text-2);
+    }
+  }
+}

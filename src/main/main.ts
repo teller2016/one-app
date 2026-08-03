@@ -13,6 +13,9 @@ import { registerPrsIpc } from "./features/prs/ipc";
 import { registerScheduleIpc } from "./features/schedule/ipc";
 import { registerSettingsIpc } from "./features/settings/ipc";
 import { getThemePref } from "./features/settings/store";
+import { registerTerminalIpc } from "./features/terminal/ipc";
+import { disposeAll as disposeTerminals } from "./features/terminal/pty";
+import { stopServer as stopTerminalServer } from "./features/terminal/server";
 import { createTray } from "./features/tray/tray";
 import { registerVpnIpc } from "./features/vpn/ipc";
 import { registerWeeklyIpc } from "./features/weekly/ipc";
@@ -41,6 +44,7 @@ registerMailIpc();
 registerNightwatchIpc();
 registerOvertimeIpc();
 registerProjectsIpc();
+registerTerminalIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {
@@ -149,6 +153,12 @@ app.on("ready", () => {
     }
     app.focus({ steal: true });
   });
+});
+
+// 앱 종료 시 PTY 세션·MO 서버 정리 — 셸 자식 프로세스가 고아로 남지 않도록
+app.on("before-quit", () => {
+  disposeTerminals();
+  void stopTerminalServer();
 });
 
 // 모든 창이 닫히면 종료 (macOS 제외)
