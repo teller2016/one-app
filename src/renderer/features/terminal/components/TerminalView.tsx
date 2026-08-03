@@ -101,6 +101,11 @@ export function TerminalView({ id }: { id: string }) {
         }
         queue.length = 0;
         term.focus();
+        // 마운트 직후엔 레이아웃이 아직 안정되지 않아 fit 이 좁게 잡힐 수 있다(탭바·스크롤바
+        // 확정 전). 다음 프레임에 한 번 더 맞춰 잘못된 크기를 PTY 에 남기지 않는다.
+        requestAnimationFrame(() => {
+          if (!disposed) fit.fit();
+        });
       });
 
     // 컨테이너 크기가 실제로 바뀔 때만 fit — xterm 내부 리렌더(다른 클라이언트가 보낸

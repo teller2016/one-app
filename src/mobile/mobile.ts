@@ -53,7 +53,7 @@ if (new URLSearchParams(location.search).has('token')) {
 
 // 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다
 const FONT_KEY = 'mo:fontSize';
-const FONT_MIN = 10;
+const FONT_MIN = 6; // claude 같은 넓은 TUI 를 폰에서 통째로 보려면 아주 작게도 필요하다
 const FONT_MAX = 22;
 const initialFont = Number(localStorage.getItem(FONT_KEY)) || 15;
 
@@ -81,7 +81,9 @@ function sendMsg(msg: TermClientMsg) {
 }
 
 function setStatus(text: string, ok: boolean) {
-  statusEl.textContent = text;
+  // 정상 연결이면 초록 점만 남긴다(텍스트 자리 절약) — 문구는 title 로 보존
+  statusEl.textContent = ok ? '' : text;
+  statusEl.title = text;
   statusEl.classList.toggle('ok', ok);
   // 연결이 없으면 버튼이 조용히 죽는 대신 비활성으로 상태를 드러낸다
   newBtn.disabled = !ok;

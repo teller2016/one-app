@@ -35,34 +35,38 @@ body {
 #topbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  padding-top: calc(8px + env(safe-area-inset-top));
+  gap: 5px;
+  padding: 4px 6px;
+  padding-top: calc(4px + env(safe-area-inset-top));
   background: var(--bar);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
+/* 컨트롤 높이 — 터미널 화면을 최대한 넓게 쓰려고 낮게 잡는다 */
+#sessionSelect,
+#newBtn,
+.fontctl button {
+  height: 26px;
+  border-radius: 6px;
+}
+
 #sessionSelect {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 0 8px;
+  padding: 0 4px;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 16px; /* 16px 미만이면 iOS 가 포커스 시 확대함 */
+  font-size: 12px;
 }
 
 #newBtn {
-  height: 36px;
-  padding: 0 12px;
+  padding: 0 8px;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -71,31 +75,35 @@ body {
   opacity: 0.45;
 }
 
+/* 연결 정상일 때는 텍스트 대신 점만 — 글자로 자리를 먹지 않게 */
 #status {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 #status.ok {
-  color: #34c759;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34c759;
 }
 
 .fontctl {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex-shrink: 0;
 }
 
 .fontctl button {
-  width: 34px;
-  height: 36px;
+  width: 26px;
   padding: 0;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 13px;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .fontctl button:disabled {
@@ -105,7 +113,7 @@ body {
 #term {
   flex: 1;
   min-height: 0;
-  padding: 6px 2px 6px 8px;
+  padding: 4px 2px 4px 6px;
   position: relative; /* '맨 아래로' 버튼 기준 */
   /* 세로 드래그는 mobile.ts 가 scrollLines() 로 직접 처리한다 — 브라우저 제스처에 안 넘김 */
   touch-action: none;
