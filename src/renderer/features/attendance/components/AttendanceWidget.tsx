@@ -116,9 +116,10 @@ export function AttendanceWidget() {
           )}
         </span>
         <span className="sbw__actions">
+          {/* sbw__overtime — 폰(MO) 셸에서 숨기는 기준 클래스. 상신(쓰기) 흐름이라 폰 1단계 제외 */}
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn sbw__overtime"
             title="야근 결재 상신 (연장근무내역서)"
             aria-label="야근 결재 상신"
             onClick={() => setOvertimeOpen(true)}

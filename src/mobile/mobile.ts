@@ -50,9 +50,11 @@ const cwdSheet = document.getElementById('cwdSheet') as HTMLElement;
 const cwdBackdrop = document.getElementById('cwdBackdrop') as HTMLElement;
 const cwdList = document.getElementById('cwdList') as HTMLElement;
 
-// 주소창의 토큰은 서버가 쿠키로 승격했으니 지운다 (공유·스크린샷 노출 방지)
+// 주소창의 토큰은 서버가 쿠키로 승격했으니 지운다 (공유·스크린샷 노출 방지).
+// ⚠️ 경로는 현재 경로를 유지할 것 — '/' 로 고정하면 이 페이지(`/terminal/`)가 아니라
+// 앱 셸로 URL 이 바뀌어 새로고침·홈 화면 아이콘이 엉뚱한 화면을 연다.
 if (new URLSearchParams(location.search).has('token')) {
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', location.pathname);
 }
 
 // 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다

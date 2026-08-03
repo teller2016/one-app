@@ -58,11 +58,12 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
     <Modal title="모바일(MO) 접속" onClose={onClose}>
       <div className="terminal-mo">
         <p className="note">
-          같은 Tailscale 네트워크의 폰에서 아래 주소로 접속하면 이 앱의 터미널
-          세션을 그대로 이어서 쓸 수 있습니다. 서버는 켜 두면 앱 시작 시 자동으로
-          다시 켜집니다. <strong>QR 은 처음 한 번만</strong> 찍으면 됩니다 — 열린 뒤
-          브라우저 메뉴에서 <strong>홈 화면에 추가</strong>해 두면 다음부터 아이콘을
-          눌러 바로 연결됩니다(로그인은 1년간 유지).
+          같은 Tailscale 네트워크의 폰에서 아래 주소로 접속하면 <strong>근태·Jira·PR·배포·메일</strong>
+          과 터미널을 폰에서 쓸 수 있습니다(터미널은 하단 탭에서 열리고, 세션은 데스크톱과
+          공유됩니다). 서버는 켜 두면 앱 시작 시 자동으로 다시 켜집니다.{' '}
+          <strong>QR 은 처음 한 번만</strong> 찍으면 됩니다 — 열린 뒤 브라우저 메뉴에서{' '}
+          <strong>홈 화면에 추가</strong>해 두면 다음부터 아이콘을 눌러 바로 연결됩니다
+          (로그인은 1년간 유지).
         </p>
 
         {status?.error && <Banner variant="danger">{status.error}</Banner>}
@@ -107,6 +108,25 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
                 외부에서 접속할 IP 를 찾지 못했습니다 — Tailscale 이 켜져 있는지
                 확인하세요.
               </Banner>
+            )}
+            {/* 터미널만 바로 열고 싶을 때 (앱 셸의 하단 탭으로도 갈 수 있다) */}
+            {status.terminalUrls.length > 0 && (
+              <>
+                <span className="form-label">터미널만 바로 열기</span>
+                <ul className="terminal-mo__urls">
+                  <li>
+                    <code>{status.terminalUrls[0]}</code>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title="복사"
+                      onClick={() => void copy(status.terminalUrls[0])}
+                    >
+                      <Icon name="copy" size={14} />
+                    </button>
+                  </li>
+                </ul>
+              </>
             )}
             <div className="terminal-mo__row">
               <span className="hint">

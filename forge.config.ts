@@ -132,9 +132,14 @@ const config: ForgeConfig = {
           config: 'vite.renderer.config.ts',
         },
         {
-          // 모바일(MO) 터미널 페이지 — main 의 HTTP 서버가 정적 서빙 (창으로 안 띄움)
+          // MO 터미널 페이지(`/terminal/`) — main 의 HTTP 서버가 정적 서빙 (창으로 안 띄움)
           name: 'mobile_window',
           config: 'vite.mobile.config.ts',
+        },
+        {
+          // MO 앱 셸(`/`) — 데스크톱 기능 화면을 폰에서 재사용 (창으로 안 띄움)
+          name: 'mobile_app_window',
+          config: 'vite.mobile-app.config.ts',
         },
       ],
     }),

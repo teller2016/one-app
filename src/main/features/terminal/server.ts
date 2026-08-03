@@ -26,6 +26,7 @@ import {
   resizeSession,
   writeSession,
 } from './pty';
+import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort } from './store';
 
 const COOKIE_NAME = 'oneAppTerm';
@@ -33,6 +34,8 @@ const COOKIE_NAME = 'oneAppTerm';
 // 그러면 폰에서 매번 QR 을 다시 찍어야 한다(홈 화면 아이콘도 인증이 끊긴다).
 const COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
 const WS_PATH = '/term'; // 터미널 전용 upgrade 경로 — dev 모드 Vite HMR ws 와 구분
+const RPC_PATH = '/rpc'; // 폰 앱 셸의 IPC 중계 (rpc.ts)
+const TERMINAL_PREFIX = '/terminal'; // 터미널 페이지 (`/` 는 폰 앱 셸이 쓴다)
 const PING_INTERVAL_MS = 30_000;
 
 let server: http.Server | null = null;
@@ -62,7 +65,10 @@ function timingEqual(a: string, b: string): boolean {
 
 // 홈 화면 추가 시 브라우저는 manifest·아이콘을 쿠키 없이 받아갈 수 있다(스펙상 credentials
 // 모드가 다름) — 비밀이 없는 이 파일들만 인증에서 제외한다. 앱 화면(index.html)은 그대로 보호.
-const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/icon-192.png', '/icon-512.png']);
+// 앱 셸(`/`)과 터미널(`/terminal/`)이 각자 manifest·아이콘을 가진다(홈 화면 아이콘 각각).
+const PUBLIC_FILES = new Set(['manifest.webmanifest', 'icon-192.png', 'icon-512.png']);
+const isPublicPath = (pathname: string) =>
+  PUBLIC_FILES.has(path.basename(pathname));
 
 function isAuthed(req: http.IncomingMessage): boolean {
   const token = getOrCreateToken();
@@ -91,14 +97,22 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
+/**
+ * 정적 서빙 — 엔트리 두 개(앱 셸 `/`, 터미널 `/terminal/`)를 경로로 분기한다.
+ * @param viteName 렌더러 빌드 폴더명 (`MOBILE_APP_WINDOW_VITE_NAME` 등)
+ * @param stripPrefix URL 접두어 제거 (`/terminal`) — ⚠️ normalize 전에 벗겨야 탈출 방어가 유효
+ */
 function serveStatic(
   pathname: string,
   res: http.ServerResponse,
-  extraHeaders: Record<string, string>
+  extraHeaders: Record<string, string>,
+  viteName: string,
+  stripPrefix = ''
 ) {
   // Electron main 의 fs 는 asar 투명 접근 — 패키징에서도 그대로 읽힌다
-  const rootDir = path.join(__dirname, '../renderer', MOBILE_WINDOW_VITE_NAME);
-  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const rootDir = path.join(__dirname, '../renderer', viteName);
+  const raw = stripPrefix ? pathname.slice(stripPrefix.length) : pathname;
+  const rel = raw === '' || raw === '/' ? 'index.html' : raw.replace(/^\/+/, '');
   const filePath = path.normalize(path.join(rootDir, rel));
   if (!filePath.startsWith(rootDir)) {
     res.writeHead(400);
@@ -122,15 +136,14 @@ function serveStatic(
 function proxyToDevServer(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  extraHeaders: Record<string, string>
+  extraHeaders: Record<string, string>,
+  devServerUrl: string
 ) {
-  // dev 전용 — Vite 모듈 경로·쿼리를 그대로 넘기되 토큰만 제거 (HMR ws 는 미지원, 무해)
+  // dev 전용 — Vite 모듈 경로·쿼리를 그대로 넘기되 토큰만 제거 (HMR ws 는 미지원, 무해).
+  // 각 엔트리의 base 와 경로가 일치하므로 접두어는 벗기지 않고 그대로 전달한다.
   const url = new URL(req.url ?? '/', 'http://local');
   url.searchParams.delete('token');
-  const target = new URL(
-    url.pathname + url.search,
-    MOBILE_WINDOW_VITE_DEV_SERVER_URL
-  );
+  const target = new URL(url.pathname + url.search, devServerUrl);
   http
     .get(target, (up) => {
       res.writeHead(up.statusCode ?? 500, { ...up.headers, ...extraHeaders });
@@ -220,7 +233,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
 
   const srv = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://local');
-    if (!PUBLIC_PATHS.has(url.pathname) && !isAuthed(req)) {
+    if (!isPublicPath(url.pathname) && !isAuthed(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Forbidden — One App 터미널 탭의 접속 URL(QR)로 여세요.');
       return;
@@ -232,24 +245,54 @@ export async function startServer(): Promise<TerminalServerStatus> {
         `${COOKIE_NAME}=${encodeURIComponent(getOrCreateToken())}; HttpOnly; SameSite=Lax; ` +
         `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}`;
     }
-    if (MOBILE_WINDOW_VITE_DEV_SERVER_URL) {
-      proxyToDevServer(req, res, extraHeaders);
+    // 엔트리 분기 — `/terminal*` 은 터미널 페이지, 그 외는 폰 앱 셸.
+    // 각 엔트리의 Vite `base` 와 경로가 같아 asset(`/assets/*` vs `/terminal/assets/*`)이 안 겹친다.
+    const isTerminal =
+      url.pathname === TERMINAL_PREFIX ||
+      url.pathname.startsWith(`${TERMINAL_PREFIX}/`);
+    if (isTerminal) {
+      if (MOBILE_WINDOW_VITE_DEV_SERVER_URL) {
+        proxyToDevServer(req, res, extraHeaders, MOBILE_WINDOW_VITE_DEV_SERVER_URL);
+      } else {
+        serveStatic(
+          url.pathname,
+          res,
+          extraHeaders,
+          MOBILE_WINDOW_VITE_NAME,
+          TERMINAL_PREFIX
+        );
+      }
+    } else if (MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL) {
+      proxyToDevServer(req, res, extraHeaders, MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL);
     } else {
-      serveStatic(url.pathname, res, extraHeaders);
+      serveStatic(url.pathname, res, extraHeaders, MOBILE_APP_WINDOW_VITE_NAME);
     }
   });
 
   const wsServer = new WebSocketServer({ noServer: true });
+  const rpcServer = new WebSocketServer({ noServer: true });
   srv.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://local');
-    if (url.pathname !== WS_PATH || !isAuthed(req)) {
+    const target =
+      url.pathname === WS_PATH ? wsServer : url.pathname === RPC_PATH ? rpcServer : null;
+    if (!target || !isAuthed(req)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;
     }
-    wsServer.handleUpgrade(req, socket, head, (ws) =>
-      wsServer.emit('connection', ws)
-    );
+    target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws));
+  });
+
+  // 폰 앱 셸의 RPC — 데스크톱과 같은 IPC 핸들러를 호출한다 (rpc.ts)
+  startRpcBridge();
+  rpcServer.on('connection', (ws: WebSocket) => {
+    socketState.set(ws, { attachedId: null, alive: true }); // ping 루프 공용
+    ws.on('pong', () => {
+      const st = socketState.get(ws);
+      if (st) st.alive = true;
+    });
+    ws.on('close', () => socketState.delete(ws));
+    attachRpcSocket(ws);
   });
 
   wsServer.on('connection', (ws: WebSocket) => {
@@ -312,6 +355,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       if (pingTimer) clearInterval(pingTimer);
       offPty.forEach((off) => off());
       offPty = [];
+      stopRpcBridge();
       resolve();
     });
     srv.listen(getPort(), '0.0.0.0', () => resolve());
@@ -331,6 +375,7 @@ export async function stopServer(): Promise<void> {
   pingTimer = null;
   offPty.forEach((off) => off());
   offPty = [];
+  stopRpcBridge();
   for (const ws of socketState.keys()) ws.terminate();
   socketState.clear();
   wss?.close();
@@ -342,7 +387,7 @@ export async function stopServer(): Promise<void> {
 }
 
 /** 접속 URL 후보 — Tailscale IP(100.64.0.0/10) 우선, 토큰 포함 (QR·복사용) */
-function accessUrls(): string[] {
+function accessUrls(pagePath = '/'): string[] {
   const token = getOrCreateToken();
   const port = getPort();
   const addrs: { ip: string; ts: boolean }[] = [];
@@ -354,7 +399,7 @@ function accessUrls(): string[] {
     }
   }
   addrs.sort((a, b) => Number(b.ts) - Number(a.ts));
-  return addrs.map((a) => `http://${a.ip}:${port}/?token=${token}`);
+  return addrs.map((a) => `http://${a.ip}:${port}${pagePath}?token=${token}`);
 }
 
 export function getServerStatus(): TerminalServerStatus {
@@ -362,7 +407,8 @@ export function getServerStatus(): TerminalServerStatus {
   return {
     running,
     port: getPort(),
-    urls: running ? accessUrls() : [],
+    urls: running ? accessUrls('/') : [], // 폰 앱 셸 (기본 진입점)
+    terminalUrls: running ? accessUrls(`${TERMINAL_PREFIX}/`) : [], // 터미널 페이지
     error: lastError || undefined,
   };
 }

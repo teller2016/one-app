@@ -5,8 +5,9 @@
 import { runAttendance, getKnownAttendanceToday } from './attend';
 import { getReminderConfig } from './reminders';
 import { getCredentials } from '../settings/store';
-import { notify, getNotifyWindow } from '../notify/notify';
+import { notify } from '../notify/notify';
 import type { AttendanceInfo } from '../../../shared/types';
+import { broadcast } from '../../lib/broadcast';
 import { sleep, localDateKey } from '../../lib/util';
 
 /** 근태 상태 조회 — 순간 실패(VPN 블립·동시 실행 충돌)를 흡수하도록 재시도한다 */
@@ -143,14 +144,16 @@ async function stampFromAlert(type: 'come' | 'leave', key: string) {
   }
 }
 
-// 알럿에서 찍으면 사이드바 근태 위젯이 즉시 갱신되도록 렌더러에 알린다
+// 알럿에서 찍으면 사이드바 근태 위젯이 즉시 갱신되도록 알린다.
+// broadcast 를 쓰는 이유: 메인 창뿐 아니라 **MO(폰) 클라이언트도** 받아야 한다
+// (getNotifyWindow() 는 등록된 창 하나만 대상이라 WS 소켓에는 닿지 않는다).
 function pushAttendanceChanged(info: AttendanceInfo) {
-  getNotifyWindow()?.webContents.send('attendance:changed', info);
+  broadcast('attendance:changed', info);
 }
 
 // 알럿에서 찍는 동안 위젯 버튼을 비활성('처리중')으로 동기화한다. 끝나면 null 로 해제.
 function pushStamping(action: 'come' | 'leave' | null) {
-  getNotifyWindow()?.webContents.send('attendance:stamping', action);
+  broadcast('attendance:stamping', action);
 }
 
 function tick() {

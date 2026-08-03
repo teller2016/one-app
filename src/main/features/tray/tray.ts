@@ -4,6 +4,7 @@ import path from 'node:path';
 import { runAttendance } from '../attendance/attend';
 import { getCredentials } from '../settings/store';
 import { notify, getNotifyWindow } from '../notify/notify';
+import { broadcast } from '../../lib/broadcast';
 
 let tray: Tray | null = null;
 let stamping = false; // 트레이에서 중복 찍기 방지
@@ -44,8 +45,8 @@ async function stampFromTray(action: 'come' | 'leave') {
       title: `${label} 완료`,
       body: time ? `${label} 시각 ${time} 으로 기록됐습니다.` : `${label} 처리됐습니다.`,
     });
-    // 사이드바 근태 위젯 즉시 갱신
-    getNotifyWindow()?.webContents.send('attendance:changed', info);
+    // 사이드바 근태 위젯 즉시 갱신 (broadcast — 폰 클라이언트도 함께 받는다)
+    broadcast('attendance:changed', info);
   } catch (err) {
     void notify({ title: `${label} 실패`, body: (err as Error).message });
   } finally {

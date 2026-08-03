@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { handleShared } from '../../lib/moIpc';
 import {
   fetchOpenPrs,
   enrichApprovals,
@@ -29,14 +29,14 @@ const NO_TOKEN =
 /** PR 대시보드 IPC 핸들러 등록 */
 export function registerPrsIpc() {
   // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장 — 폴러도 이 값을 읽는다
-  ipcMain.handle('prs:config:get', (): PrsConfig => getPrsConfig());
-  ipcMain.handle(
+  handleShared('prs:config:get', (): PrsConfig => getPrsConfig());
+  handleShared(
     'prs:config:set',
-    (_e, config: PrsConfig): PrsConfig => savePrsConfig(config),
+    (config: PrsConfig): PrsConfig => savePrsConfig(config),
   );
 
   // 열린 PR 목록 조회 (+ 승인 수 보강)
-  ipcMain.handle('prs:fetch', async (): Promise<PrListResult> => {
+  handleShared('prs:fetch', async (): Promise<PrListResult> => {
     const gitea = getGiteaConfig();
     if (!gitea) return { ok: true, configured: false };
     try {
@@ -49,9 +49,9 @@ export function registerPrsIpc() {
   });
 
   // 저장소의 최근 브랜치 목록 (빠른 PR 후보)
-  ipcMain.handle(
+  handleShared(
     'prs:branches',
-    async (_e, repo: string): Promise<PrBranchesResult> => {
+    async (repo: string): Promise<PrBranchesResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       try {
@@ -63,9 +63,9 @@ export function registerPrsIpc() {
   );
 
   // base 대비 head 커밋 목록 (PR 제목/본문 자동 생성용)
-  ipcMain.handle(
+  handleShared(
     'prs:branch-commits',
-    async (_e, repo: string, base: string, head: string): Promise<PrCommitsResult> => {
+    async (repo: string, base: string, head: string): Promise<PrCommitsResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       try {
@@ -84,9 +84,9 @@ export function registerPrsIpc() {
   );
 
   // PR 생성 (토큰 필수)
-  ipcMain.handle(
+  handleShared(
     'prs:create',
-    async (_e, input: PrCreateInput): Promise<PrCreateResult> => {
+    async (input: PrCreateInput): Promise<PrCreateResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!gitea.token) return { ok: false, error: NO_TOKEN };
@@ -100,9 +100,9 @@ export function registerPrsIpc() {
   );
 
   // 머지 전 상태 확인 (mergeable)
-  ipcMain.handle(
+  handleShared(
     'prs:merge-info',
-    async (_e, repo: string, number: number): Promise<PrMergeInfoResult> => {
+    async (repo: string, number: number): Promise<PrMergeInfoResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       try {
@@ -115,7 +115,7 @@ export function registerPrsIpc() {
   );
 
   // PR 머지 (토큰 필수)
-  ipcMain.handle(
+  handleShared(
     'prs:merge',
     async (
       _e,

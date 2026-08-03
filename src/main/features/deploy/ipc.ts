@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron';
+import { broadcast } from '../../lib/broadcast';
+import { handleShared } from '../../lib/moIpc';
 import {
   listProjects,
   saveProject,
@@ -69,19 +70,19 @@ const inFlight = new Set<string>();
 
 /** 배포(젠킨스) 관련 IPC 핸들러 등록 */
 export function registerDeployIpc() {
-  ipcMain.handle('deploy:projects:get', async () => listProjects());
+  handleShared('deploy:projects:get', async () => listProjects());
 
-  ipcMain.handle(
+  handleShared(
     'deploy:projects:save',
-    async (_e, input: SaveDeployProjectInput) => saveProject(input),
+    async (input: SaveDeployProjectInput) => saveProject(input),
   );
 
-  ipcMain.handle('deploy:projects:delete', async (_e, id: string) =>
+  handleShared('deploy:projects:delete', async (id: string) =>
     deleteProject(id),
   );
 
   // 프로젝트의 배포 대상별 최근 빌드 상태 조회 (화면 진입/새로고침 시)
-  ipcMain.handle('deploy:status:fetch', async (_e, projectId: string) => {
+  handleShared('deploy:status:fetch', async (projectId: string) => {
     const cred = getProjectCredentials(projectId);
     if (!cred) return {};
     const auth: JenkinsAuth = {
@@ -115,9 +116,9 @@ export function registerDeployIpc() {
   });
 
   // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) — 카드별 현황 팝업용
-  ipcMain.handle(
+  handleShared(
     'deploy:activity:fetch',
-    async (_e, projectId: string): Promise<DeployActivityResult> => {
+    async (projectId: string): Promise<DeployActivityResult> => {
       const cred = getProjectCredentials(projectId);
       if (!cred) return { ok: false, error: '젠킨스 계정 정보가 없습니다.' };
       const auth: JenkinsAuth = {
@@ -154,10 +155,9 @@ export function registerDeployIpc() {
   );
 
   // 빌드 상세(커밋 내역·시작자·revision) 조회. buildNumber 없으면 최근 빌드
-  ipcMain.handle(
+  handleShared(
     'deploy:build:detail',
     async (
-      _e,
       projectId: string,
       targetId: string,
       buildNumber?: number,
@@ -185,9 +185,9 @@ export function registerDeployIpc() {
   );
 
   // 최근 빌드 이력 조회 (커밋 내역 패널 상단 목록)
-  ipcMain.handle(
+  handleShared(
     'deploy:history:fetch',
-    async (_e, projectId: string, targetId: string): Promise<DeployHistoryResult> => {
+    async (projectId: string, targetId: string): Promise<DeployHistoryResult> => {
       const r = resolveTarget(projectId, targetId);
       if ('error' in r) return { ok: false, error: r.error };
       try {
@@ -199,10 +199,9 @@ export function registerDeployIpc() {
   );
 
   // 콘솔 로그 tail 조회
-  ipcMain.handle(
+  handleShared(
     'deploy:log:fetch',
     async (
-      _e,
       projectId: string,
       targetId: string,
       buildNumber: number,
@@ -223,9 +222,9 @@ export function registerDeployIpc() {
   );
 
   // 배포 미리보기 — 마지막 빌드 revision 과 저장소 HEAD 를 비교해 이번에 나갈 커밋 목록
-  ipcMain.handle(
+  handleShared(
     'deploy:preview',
-    async (_e, projectId: string, targetId: string): Promise<DeployPreviewResult> => {
+    async (projectId: string, targetId: string): Promise<DeployPreviewResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: true, configured: false }; // 미설정 — 미리보기 생략
 
@@ -280,10 +279,9 @@ export function registerDeployIpc() {
   );
 
   // 진행 중 빌드 중지
-  ipcMain.handle(
+  handleShared(
     'deploy:stop',
     async (
-      _e,
       projectId: string,
       targetId: string,
       buildNumber: number,
@@ -299,11 +297,10 @@ export function registerDeployIpc() {
     },
   );
 
-  // 배포 트리거 — 이후 진행 상태는 deploy:status 이벤트로 전달
-  ipcMain.handle(
+  // 배포 트리거 — 이후 진행 상태는 deploy:status 이벤트(broadcast)로 전달
+  handleShared(
     'deploy:trigger',
     async (
-      event,
       projectId: string,
       targetId: string,
     ): Promise<DeployTriggerResult> => {
@@ -327,7 +324,6 @@ export function registerDeployIpc() {
         username: cred.username,
         secret: cred.secret,
       };
-      const sender = event.sender;
       // 알림 라벨용 프로젝트 이름 (대상 이름은 target.name)
       const projectName =
         listProjects().find((p) => p.id === projectId)?.name ?? '';
@@ -335,11 +331,11 @@ export function registerDeployIpc() {
       let notified = false;
 
       const push = (status: DeployStatus) => {
-        // 창이 살아있으면 상태 이벤트 전달 (창이 닫혀 있어도 알림은 아래에서 처리)
-        if (!sender.isDestroyed()) {
-          const evt: DeployStatusEvent = { projectId, targetId, status };
-          sender.send('deploy:status', evt);
-        }
+        // 상태 이벤트를 전 클라이언트에 전달 — 창이 없으면 no-op 이고, MO(폰)도 받는다.
+        // (예전에는 event.sender 로 호출한 렌더러에만 보냈는데, 그러면 WS 클라이언트에는
+        //  sender 가 없어 폰이 배포 진행을 볼 수 없다. 창은 하나뿐이라 동작은 동일하다.)
+        const evt: DeployStatusEvent = { projectId, targetId, status };
+        broadcast('deploy:status', evt);
         // 완료(성공/실패/오류) 시 알림(알럿) — 대상당 한 번만
         if (
           !notified &&

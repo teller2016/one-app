@@ -716,6 +716,7 @@ export type TerminalAttachResult = {
 export type TerminalServerStatus = {
   running: boolean;
   port: number;
-  urls: string[]; // 접속 URL 후보 (Tailscale IP 우선, 토큰 포함 — QR/복사용)
+  urls: string[]; // 폰 앱 셸(`/`) 접속 URL 후보 — Tailscale IP 우선, 토큰 포함 (QR/복사용)
+  terminalUrls: string[]; // 터미널 페이지(`/terminal/`) 접속 URL 후보
   error?: string; // 포트 충돌 등 시작 실패 사유
 };

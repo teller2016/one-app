@@ -1,0 +1,330 @@
+// 폰(MO) 앱 셸 전용 스타일.
+// ⚠️ 규칙: 데스크톱 SCSS 는 **한 줄도 고치지 않는다**. 폰에서 달라야 하는 것만 `html.mo` 스코프로
+// 덮는다. `html` 에 붙이는 이유 — 공용 `Modal` 이 `document.body` 로 portal 하므로,
+// 셸 div 안에 스코프를 두면 `.modal-overlay`/`.modal` 오버라이드가 전부 빗나간다.
+// 데스크톱 스타일 전체를 그대로 싣고(기능 화면이 이 클래스들을 쓴다),
+// 믹스인·토큰은 base 에서 따로 가져온다 — `@use index` 만으로는 index 가 @use 한 멤버가
+// 전달되지 않아 `Undefined mixin` 이 난다(2026-08 실측).
+@use '../../renderer/styles/index';
+@use '../../renderer/styles/base' as *;
+
+// ── 셸 ──
+
+.mo-app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+
+  &__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    @include type-title;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+  }
+
+  // 연결 상태 — 끊기면 회색, 붙으면 초록
+  &__conn {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--r-full);
+    background: var(--idle);
+    flex-shrink: 0;
+
+    &--on {
+      background: var(--ok);
+    }
+  }
+
+  &__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  &__tabs {
+    display: flex;
+    flex-shrink: 0;
+    background: var(--surface-1);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  &__tab {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 2px;
+    background: none;
+    border: none;
+    color: var(--text-3);
+    text-decoration: none;
+    @include type-caption;
+
+    &--active {
+      color: var(--accent);
+    }
+  }
+}
+
+.mo-view {
+  padding: 12px 12px 20px;
+}
+
+// 위젯을 카드로 승격 (사이드바에서는 배경이 재질이었다)
+.mo-card {
+  @include card-surface;
+  padding: 10px 12px;
+}
+
+// ── 데스크톱 화면을 폰 폭(≈412px)에 맞추는 오버라이드 ──
+
+html.mo {
+  // 터치 타겟 — 데스크톱의 30px 컨트롤은 폰에서 너무 작다
+  --control-h-sm: 36px;
+  // 하단 탭바 높이 — 메일처럼 portal 로 뜨는 화면이 탭바를 덮지 않게 기준값을 공유한다
+  --mo-tabbar: 54px;
+
+  // 섹션 컨테이너: 좌우 44px 패딩·800px 상한을 걷어낸다
+  .section {
+    padding: 12px 14px 24px;
+    max-width: none;
+  }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  // 섹션 헤더 버튼("프로젝트 추가" 등)이 좁은 폭에서 두 줄로 쪼개진다
+  .section-head .btn {
+    white-space: nowrap;
+  }
+
+  // 사이드바 위젯의 야근결재 진입 — 상신(쓰기) 흐름이라 1단계에서는 폰에 노출하지 않는다
+  .sbw__overtime {
+    display: none;
+  }
+
+  // 모달은 풀스크린 시트로 (오버레이 여백·640px 상한 제거)
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal {
+    max-width: none;
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  // 확인 다이얼로그는 가운데 유지 — 풀스크린은 과하다
+  .modal-overlay--center {
+    align-items: center;
+    padding: 0 16px;
+  }
+
+  .confirm {
+    max-width: none;
+    height: auto;
+    border-radius: var(--r-lg);
+  }
+
+  // ── Jira ──
+
+  // `.jira` 는 .section 보다 넓은 상한(--w-wide)을 따로 갖는다 — 함께 걷어내야 한다
+  .jira {
+    max-width: none;
+  }
+
+  // 상세 패널: `width: min(1080px, calc(100vw - 220px - 48px))` 가 사이드바 220px 을
+  // 하드코딩해 폰(412px)에서 144px 로 찌부러진다(_jira.scss:328) → 전체화면 시트로.
+  // 슬라이드 애니메이션(translateX)은 그대로 동작한다.
+  .jira-view {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    border-radius: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  // 행이 6열 단일 flex(키·우선순위·제목·상위항목·상태…)라 폰에서 제목이 0 으로 눌린다
+  // → 제목을 첫 줄 전폭으로 올리고 나머지를 아래 줄에 흘린다
+  .jira__row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 10px 12px;
+  }
+
+  .jira__title {
+    flex: 1 1 100%;
+    order: -1;
+    white-space: normal;
+  }
+
+  .jira__parent {
+    max-width: 100%;
+  }
+
+  // 상태 전환 팝오버 — 데스크톱의 오른쪽 정렬(`right: 0`)을 그대로 둔다.
+  // 왼쪽 정렬로 바꾸면 상태 칩이 행 오른쪽에 있어 오히려 화면 밖으로 삐져나간다(실측).
+  // 폰에서는 폭 상한만 걸어 준다.
+  .jira__menu {
+    max-width: 80vw;
+  }
+
+  // ── PR ──
+
+  // 메타 행(뱃지·작성자·시각 + margin-left:auto 로 밀린 [머지])이 폰 폭을 넘는다
+  .prs__meta {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  // 빠른 PR 한 줄: [저장소칩][브랜치 셀렉트][액션 3개] 가 나란히 있어 폰에서 셀렉트가
+  // 100px 대로 눌려 브랜치명을 못 읽는다 → 셀렉트를 아래 줄 전폭으로 내린다
+  // (저장소 칩과 액션은 첫 줄에 남는다)
+  .prs__quick-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .prs__branch-select {
+    flex: 1 1 100%;
+    max-width: none;
+    order: 1;
+  }
+
+  // PR 제목이 저장소 칩·번호와 한 줄에 눌려 잘린다 → 제목을 전폭으로
+  .prs__main {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .prs__title {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  // Select 팝오버가 절대배치라 우측으로 삐져나갈 수 있다
+  .picker__pop {
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
+
+  // ── 메일 ──
+  // MailModal 은 이미 [목록] + [본문 슬라이드오버] 구조라 폰에서 필요한 전환이 들어 있다.
+  // 고쳐야 하는 건 셋 뿐: 모달 크기 · 본문 패널 폭(68%→100%) · 목록 행의 display:contents 트릭.
+
+  // 메일은 탭 화면이라 오버레이가 하단 탭바를 덮으면 탭 전환이 막힌다 →
+  // 오버레이를 탭바 위에서 끝내고 스크림도 없앤다(뒤에 가릴 화면이 없다)
+  .modal-overlay:has(.mail-modal) {
+    bottom: calc(var(--mo-tabbar) + env(safe-area-inset-bottom));
+    padding: 0;
+    background: none;
+  }
+
+  // 탭 화면으로 쓰므로 모달 껍데기를 남은 영역에 꽉 채운다
+  .modal--wide:has(.mail-modal) {
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  // 데스크톱은 `height: calc(100vh - 200px); min-height: 440px` 로 고정 — 폰에서는 넘친다
+  .mail-modal {
+    height: auto;
+    min-height: 0;
+    flex: 1;
+  }
+
+  // 본문 패널이 목록을 완전히 덮어야 '목록↔본문 전환'이 된다 (데스크톱은 오른쪽 68%)
+  .mail-modal__view {
+    left: 0;
+    width: 100%;
+    border-radius: 0;
+    padding: 10px 12px;
+  }
+
+  // `.mail-list__top { display: contents }` 가 발신자(200px 고정)·시각을 행에 펼쳐
+  // 제목 자리를 130px 대로 만든다 → 트릭을 풀어 [발신자 … 시각] / [제목] 2줄로
+  .mail-list__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mail-list__main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .mail-list__from {
+    width: auto;
+    max-width: 60%;
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  // 제목이 `display: flex` 라 text-overflow 가 동작하지 않아 말줄임 없이 잘린다
+  // (첨부 아이콘 배치용 flex) → 폰에서는 블록으로 바꿔 "…" 가 보이게 한다
+  .mail-list__subject {
+    display: block;
+  }
+
+  // ── 배포 ──
+
+  // 카드 헤더: 이름·PROD 뱃지·젠킨스 URL + 액션 4개가 한 줄 → 세로로 쌓는다
+  .deploy__card-head {
+    flex-direction: column;
+    align-items: stretch;
+    row-gap: 8px;
+  }
+
+  .deploy__card-actions {
+    flex-wrap: wrap;
+  }
+
+  // 젠킨스 전체 URL 이 이름 옆 inline 이라 ellipsis 없이 넘친다
+  .deploy__project-url {
+    display: block;
+    margin-left: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 대상 행: 이름 + [배포] + 상태 뱃지 + [커밋 내역] → 줄바꿈 허용, 이름은 전폭
+  .deploy__target-row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .deploy__target-name {
+    min-width: 100%;
+  }
+}

@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { handleShared } from '../../lib/moIpc';
 import { runAttendance } from './attend';
 import { getCredentials } from '../settings/store';
 import { getReminderConfig, saveReminderConfig } from './reminders';
@@ -9,8 +10,8 @@ import type {
 
 /** 출퇴근(근태) 관련 IPC 핸들러 등록 */
 export function registerAttendanceIpc() {
-  // 현재 출퇴근 시각 조회
-  ipcMain.handle('attendance:fetch', async (): Promise<AttendanceResult> => {
+  // 현재 출퇴근 시각 조회 (MO 공유 — 헤드리스라 폰에서도 안전. 수십 초 걸릴 수 있다)
+  handleShared('attendance:fetch', async (): Promise<AttendanceResult> => {
     const cred = getCredentials();
     if (!cred)
       return {
@@ -24,10 +25,10 @@ export function registerAttendanceIpc() {
     }
   });
 
-  // 출근/퇴근 찍기
-  ipcMain.handle(
+  // 출근/퇴근 찍기 (MO 공유 — 폰에서도 확인 다이얼로그를 거친다)
+  handleShared(
     'attendance:stamp',
-    async (_e, action: 'come' | 'leave'): Promise<AttendanceResult> => {
+    async (action: 'come' | 'leave'): Promise<AttendanceResult> => {
       const cred = getCredentials();
       if (!cred)
         return {
