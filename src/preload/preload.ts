@@ -15,6 +15,8 @@ import type {
   PrsConfig,
   PrCreateInput,
   PrMergeMethod,
+  Project,
+  SaveProjectInput,
   ApplinkInput,
   MirrorMode,
   MailListQuery,
@@ -218,6 +220,22 @@ contextBridge.exposeInMainWorld("oneApp", {
       const listener = (_e: unknown, progress: WeeklyProgress) => cb(progress);
       ipcRenderer.on("weekly:progress", listener);
       return () => ipcRenderer.removeListener("weekly:progress", listener);
+    },
+  },
+  projects: {
+    // 등록된 프로젝트 목록 (프로젝트 레지스트리 — 비밀 없음)
+    list: () => ipcRenderer.invoke("projects:get"),
+    // 추가/수정. 최신 목록을 반환한다
+    save: (input: SaveProjectInput) => ipcRenderer.invoke("projects:save", input),
+    // 삭제. 최신 목록을 반환한다
+    delete: (id: string) => ipcRenderer.invoke("projects:delete", id),
+    // 로컬 경로 폴더 선택 다이얼로그
+    pickDir: () => ipcRenderer.invoke("projects:pick-dir"),
+    // 목록 변경 브로드캐스트 구독 (다른 경로의 저장 반영). 해제 함수를 반환한다.
+    onChanged: (cb: (projects: Project[]) => void) => {
+      const listener = (_e: unknown, projects: Project[]) => cb(projects);
+      ipcRenderer.on("projects:changed", listener);
+      return () => ipcRenderer.removeListener("projects:changed", listener);
     },
   },
   prs: {

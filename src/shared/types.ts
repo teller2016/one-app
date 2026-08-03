@@ -282,10 +282,9 @@ export type PrListResult = {
   error?: string;
 };
 
-/** PR 탭 설정 — 조직 제외 필터(목록·알림 공용) + 빠른 PR 저장소 목록 */
+/** PR 탭 설정 — 조직 제외 필터. 빠른 PR 저장소는 프로젝트 레지스트리에서 파생 */
 export type PrsConfig = {
   excludedOrgs: string[];
-  repos: string[]; // "owner/repo" — 빠른 PR(생성)에 쓸 즐겨찾기 저장소
 };
 
 /** 원격 브랜치 요약 (빠른 PR 후보) */
@@ -353,6 +352,48 @@ export type DeployPreviewResult = {
   branch?: string;
   compareUrl?: string; // Gitea 비교 페이지
   error?: string;
+};
+
+// ── 프로젝트 레지스트리 (중앙 관리 지점 — 배포·PR·Nightwatch 등이 참조) ──
+
+/** 원격 저장소 종류 — 지금은 종류·주소 저장만, API 연동은 각 기능이 담당 */
+export type ProjectRemoteKind = "gitea" | "bitbucket" | "other";
+
+/** main sanitize 와 렌더러 Select options 의 단일 소스 */
+export const PROJECT_REMOTE_KINDS: ProjectRemoteKind[] = [
+  "gitea",
+  "bitbucket",
+  "other",
+];
+
+/** 원격 주소에서 "owner/repo" 추출 (https·ssh 모두, .git 제거) — 실패 시 null */
+export function ownerRepoFromUrl(url: string): string | null {
+  const cleaned = url.trim().replace(/\.git$/, "");
+  if (!cleaned) return null;
+  // git@host:owner/repo 또는 http(s)://host/owner/repo — 마지막 두 세그먼트
+  const m = cleaned.match(/[:/]([^:/]+)\/([^:/]+)$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/** 등록된 프로젝트 하나 — 비밀 없음(토큰은 환경설정 담당), 평문 JSON 저장 */
+export type Project = {
+  id: string;
+  name: string; // 표시명 (필수)
+  localPath: string; // 로컬 저장소 절대 경로 (필수)
+  remoteKind: ProjectRemoteKind; // remoteUrl 이 빈 값이면 의미 없음 (기본 gitea)
+  remoteUrl: string; // 원격 저장소 주소 — 빈 값이면 원격 미설정
+  defaultBranch: string; // 기본 브랜치 (예: develop) — 빈 값 허용
+  jiraProjectKey: string; // Jira 프로젝트 키 (예: BBJ) — 빈 값 허용, 대문자 정규화
+};
+
+export type SaveProjectInput = {
+  id?: string; // 없으면 신규 생성
+  name: string;
+  localPath: string;
+  remoteKind?: ProjectRemoteKind;
+  remoteUrl?: string;
+  defaultBranch?: string;
+  jiraProjectKey?: string;
 };
 
 // ── VPN (OpenVPN) ──
@@ -528,16 +569,9 @@ export type NightwatchAnalyzeOpts = {
   note?: string | null; // 미션 프롬프트에 첨부할 사용자 부가설명
 };
 
-/** 분석 대상 저장소 — 실제 작업 트리 경로 (worktree 없이 현재 체크아웃 그대로 분석) */
-export type NightwatchRepo = {
-  id: string;
-  name: string; // UI 표시명 (babybonjuk store 등)
-  path: string; // 저장소 절대 경로
-};
-
 // 폼 친화적으로 평평하게 유지 — 저장은 userData/nightwatch/config.json
+// (분석 대상 저장소는 프로젝트 레지스트리(Project)를 참조 — 자체 목록 없음)
 export type NightwatchConfig = {
-  repos: NightwatchRepo[]; // 분석 대상 저장소 목록
   claudeConfigDir: string; // 분석 세션 Claude 계정 (~/.claude | ~/.claude-team)
   timeoutMinutes: number; // 티켓당 미션 타임아웃
 };

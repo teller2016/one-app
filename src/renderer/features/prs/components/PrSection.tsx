@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PrItem, PrListResult, PrsConfig } from '../../../../shared/types';
+import type { PrItem, PrListResult, PrsConfig, Project } from '../../../../shared/types';
+import { ownerRepoFromUrl } from '../../../../shared/types';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Icon } from '../../../components/Icon';
 import { Badge } from '../../../components/Badge';
@@ -11,7 +12,7 @@ import { useToast } from '../../../components/Toast';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
-import { QuickPr } from './QuickPr';
+import { QuickPr, QuickPrRepo } from './QuickPr';
 import { CreatePrModal } from './CreatePrModal';
 import { MergeModal } from './MergeModal';
 
@@ -37,9 +38,14 @@ const orgOf = (pr: PrItem) => pr.repo.split('/')[0];
 export function PrSection() {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<PrListResult | null>(null);
-  const [config, setConfig] = useState<PrsConfig>({ excludedOrgs: [], repos: [] });
+  const [config, setConfig] = useState<PrsConfig>({ excludedOrgs: [] });
+  const [projects, setProjects] = useState<Project[]>([]);
   const [hasToken, setHasToken] = useState(false);
-  const [createTarget, setCreateTarget] = useState<{ repo: string; head: string } | null>(null);
+  const [createTarget, setCreateTarget] = useState<{
+    repo: string;
+    head: string;
+    base: string;
+  } | null>(null);
   const [mergeTarget, setMergeTarget] = useState<{
     repo: string;
     number: number;
@@ -79,10 +85,12 @@ export function PrSection() {
     }
   }, []);
 
-  // 진입 시 설정·토큰 여부 로드 (1회)
+  // 진입 시 설정·토큰 여부 로드 (1회) + 프로젝트 레지스트리 구독 (빠른 PR 소스)
   useEffect(() => {
     window.oneApp.prs.getConfig().then(setConfig);
     window.oneApp.settings.get().then((s) => setHasToken(s.hasGiteaToken));
+    void window.oneApp.projects.list().then(setProjects);
+    return window.oneApp.projects.onChanged(setProjects);
   }, []);
   usePolling(load, 120_000); // 조회 + 2분 주기 자동 새로고침
   useTick(60_000); // "n분 전" 갱신용 1분 틱
@@ -99,6 +107,16 @@ export function PrSection() {
     else set.add(org);
     saveConfig({ ...config, excludedOrgs: [...set] });
   };
+
+  // 빠른 PR 대상 파생 — Gitea 원격이 있는 프로젝트만, owner/repo 기준 중복 제거
+  const seenRepos = new Set<string>();
+  const quickRepos: QuickPrRepo[] = projects.flatMap((p) => {
+    if (p.remoteKind !== 'gitea') return [];
+    const repo = ownerRepoFromUrl(p.remoteUrl);
+    if (!repo || seenRepos.has(repo)) return [];
+    seenRepos.add(repo);
+    return [{ repo, base: p.defaultBranch.trim() || 'develop', name: p.name }];
+  });
 
   const prs: PrItem[] = result?.prs ?? [];
   const excluded = new Set(config.excludedOrgs);
@@ -140,20 +158,10 @@ export function PrSection() {
             </Banner>
           )}
 
-          {/* 빠른 PR — push 한 브랜치 → develop PR 생성 */}
+          {/* 빠른 PR — push 한 브랜치 → 기본 브랜치 PR 생성 (프로젝트 레지스트리에서 파생) */}
           <QuickPr
-            repos={config.repos}
-            onAddRepo={(repo) =>
-              !config.repos.includes(repo) &&
-              saveConfig({ ...config, repos: [...config.repos, repo] })
-            }
-            onRemoveRepo={(repo) =>
-              saveConfig({
-                ...config,
-                repos: config.repos.filter((r) => r !== repo),
-              })
-            }
-            onCreate={(repo, head) => setCreateTarget({ repo, head })}
+            repos={quickRepos}
+            onCreate={(repo, head, base) => setCreateTarget({ repo, head, base })}
           />
 
           {/* 조직(프로젝트) 필터 칩 — 클릭으로 목록·알림에서 제외/포함 */}
@@ -261,6 +269,7 @@ export function PrSection() {
         <CreatePrModal
           repo={createTarget.repo}
           head={createTarget.head}
+          base={createTarget.base}
           onClose={() => setCreateTarget(null)}
           onCreated={(number, title) => {
             setCreateTarget(null);

@@ -26,6 +26,8 @@ import type {
   DeployStopResult,
   DeployPreviewResult,
   DeployActivityResult,
+  Project,
+  SaveProjectInput,
   PrListResult,
   PrsConfig,
   PrBranchesResult,
@@ -165,6 +167,13 @@ declare global {
       weekly: {
         fetch: (weekOffset: number, monWeek?: boolean) => Promise<WeeklyFetchResult>;
         onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
+      };
+      projects: {
+        list: () => Promise<Project[]>;
+        save: (input: SaveProjectInput) => Promise<Project[]>;
+        delete: (id: string) => Promise<Project[]>;
+        pickDir: () => Promise<{ path?: string }>;
+        onChanged: (cb: (projects: Project[]) => void) => () => void;
       };
       prs: {
         fetch: () => Promise<PrListResult>;

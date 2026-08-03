@@ -1,0 +1,71 @@
+// 프로젝트 레지스트리 — 룩(카드·뱃지·링크)은 _base.scss 공용이 담당, 여기는 배치만
+@use './base' as *;
+
+.projects {
+  &__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  &__card {
+    @include card-surface;
+    margin-bottom: 12px;
+    padding: 14px 16px;
+
+    &-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    &-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    &-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+  }
+
+  &__name {
+    @include type-title;
+  }
+
+  // 로컬 경로 — 모노 폰트 + 보조 톤, 길면 말줄임
+  &__path {
+    @include type-small;
+    font-family: var(--font-mono);
+    color: var(--text-2);
+    margin-top: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 원격 주소·브랜치·Jira 키 메타 행
+  &__meta {
+    @include type-small;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 6px;
+    min-width: 0;
+  }
+
+  // 폼 — 원격 종류 Select 폭 고정 (주소 Input 이 나머지를 차지)
+  &__form-remote {
+    flex: 0 0 128px;
+  }
+}

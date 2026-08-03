@@ -8,12 +8,13 @@ import type {
   NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchConfig,
-  NightwatchRepo,
   NightwatchStatus,
   NightwatchTextResult,
   NightwatchTicket,
+  Project,
 } from "../../../shared/types";
 import { fetchMyIssues } from "../jira/jira";
+import { getProject } from "../projects/store";
 import { getJiraApiConfig } from "../settings/store";
 import {
   appendMissionLog,
@@ -38,6 +39,14 @@ import path from "node:path";
 
 const GIT = "/usr/bin/git";
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+
+/** 분석 대상 — 프로젝트 레지스트리의 Project 를 엔진 내부 형태로 축약 (path = localPath) */
+type AnalysisRepo = { id: string; name: string; path: string };
+const toAnalysisRepo = (p: Project): AnalysisRepo => ({
+  id: p.id,
+  name: p.name,
+  path: p.localPath,
+});
 const TICKET_KEY_RE = /^[A-Z][A-Z0-9]*-\d+$/;
 const ISSUE_FIELDS =
   "summary,description,priority,labels,created,comment,attachment";
@@ -310,10 +319,15 @@ export async function analyzeTicket(
       output: "Jira 연동이 설정되지 않았습니다 (환경설정 → 연동)",
     };
   }
-  const repo = getNightwatchConfig().repos.find((r) => r.id === repoId);
-  if (!repo) {
-    return { ok: false, output: "저장소를 선택해 주세요" };
+  const project = getProject(repoId);
+  if (!project) {
+    return {
+      ok: false,
+      output: "프로젝트를 찾을 수 없습니다 — 프로젝트 탭에서 등록해 주세요",
+    };
   }
+  const repo = toAnalysisRepo(project);
+  // 레지스트리는 경로의 git 여부를 검증하지 않으므로 실행 직전에 확인한다
   if (!fs.existsSync(path.join(repo.path, ".git"))) {
     return { ok: false, output: `저장소가 없습니다: ${repo.path}` };
   }
@@ -333,7 +347,7 @@ export async function analyzeTicket(
 
 async function runAnalysis(
   key: string,
-  repo: NightwatchRepo,
+  repo: AnalysisRepo,
   opts: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
   missionBusy = true;
@@ -361,9 +375,11 @@ async function runAnalysis(
 function drainQueue() {
   const next = queue.shift();
   if (!next) return;
-  const repo = getNightwatchConfig().repos.find((r) => r.id === next.repoId);
+  // 대기 중 프로젝트가 삭제됐을 수 있으므로 재조회 — 없으면 안전하게 건너뜀
+  const project = getProject(next.repoId);
+  const repo = project && toAnalysisRepo(project);
   if (!repo || !fs.existsSync(path.join(repo.path, ".git"))) {
-    appendCycleLog(`대기열 건너뜀: ${next.key} (저장소 없음)`);
+    appendCycleLog(`대기열 건너뜀: ${next.key} (프로젝트·저장소 없음)`);
     drainQueue();
     return;
   }
@@ -445,7 +461,7 @@ async function processTicket(
   cfg: NightwatchConfig,
   state: NwState,
   issue: JiraIssueRaw,
-  repo: NightwatchRepo,
+  repo: AnalysisRepo,
   opts: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
   const p = nwPaths();

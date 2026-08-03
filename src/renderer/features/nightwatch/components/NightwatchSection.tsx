@@ -1,9 +1,9 @@
 import type {
   NightwatchCandidate,
   NightwatchConfig,
-  NightwatchRepo,
   NightwatchStatus,
   NightwatchTicket,
+  Project,
 } from "../../../../shared/types";
 import { Badge } from "../../../components/Badge";
 import { Banner } from "../../../components/Banner";
@@ -77,6 +77,7 @@ export function NightwatchSection() {
   );
   const [error, setError] = useState("");
   const [form, setForm] = useState<NightwatchConfig | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]); // 분석 대상 — 프로젝트 레지스트리
   const candidatesLoaded = useRef(false);
   const missionLogRef = useRef<HTMLPreElement | null>(null);
   const toast = useToast();
@@ -122,6 +123,15 @@ export function NightwatchSection() {
   // 최초 로드 + 1분 자동 새로고침 (로컬 파일 읽기라 저렴)
   usePolling(load, 60_000);
 
+  // 분석 대상 프로젝트 — 레지스트리 구독 (프로젝트 탭의 변경 즉시 반영)
+  useEffect(() => {
+    void window.oneApp.projects.list().then(setProjects);
+    return window.oneApp.projects.onChanged(setProjects);
+  }, []);
+
+  // 티켓 키의 Jira 프로젝트 키 — "BBJ-123" → "BBJ" (프로젝트 매칭용)
+  const jiraKeyOf = (ticketKey: string) => ticketKey.split("-")[0];
+
   // Jira 연동이 확인되면 후보 목록 1회 자동 조회 (이후엔 새로고침 버튼)
   useEffect(() => {
     if (status?.jiraConfigured && !candidatesLoaded.current) {
@@ -151,19 +161,24 @@ export function NightwatchSection() {
     }
   };
 
-  // [분석] 클릭 → 저장소·모델·부가설명 선택 모달 (학습된 기본값 미리 선택)
+  // [분석] 클릭 → 프로젝트·모델·부가설명 선택 모달
+  // 기본 선택: 학습값(suggestedRepoId) → 티켓의 Jira 키와 일치하는 프로젝트 → 첫 프로젝트
   const openPick = (c: NightwatchCandidate) => {
-    const repos = status?.config.repos ?? [];
     const def =
-      repos.find((r) => r.id === c.suggestedRepoId)?.id ?? repos[0]?.id ?? "";
+      projects.find((p) => p.id === c.suggestedRepoId)?.id ??
+      projects.find((p) => p.jiraProjectKey === jiraKeyOf(c.key))?.id ??
+      projects[0]?.id ??
+      "";
     setPick({ key: c.key, repoId: def, model: "", note: "" });
   };
 
-  // [재분석] 클릭 → 이전에 분석한 저장소를 기본 선택해 같은 모달을 연다
+  // [재분석] 클릭 → 이전에 분석한 프로젝트(원장엔 이름 문자열)를 기본 선택해 같은 모달을 연다
   const openReanalyze = (t: NightwatchTicket) => {
-    const repos = status?.config.repos ?? [];
     const def =
-      repos.find((r) => r.name === t.repo)?.id ?? repos[0]?.id ?? "";
+      projects.find((p) => p.name === t.repo)?.id ??
+      projects.find((p) => p.jiraProjectKey === jiraKeyOf(t.key))?.id ??
+      projects[0]?.id ??
+      "";
     setPick({ key: t.key, repoId: def, model: "", note: "" });
   };
 
@@ -248,31 +263,6 @@ export function NightwatchSection() {
   const patch = (p: Partial<NightwatchConfig>) =>
     setForm((f) => (f ? { ...f, ...p } : f));
 
-  const patchRepo = (index: number, p: Partial<NightwatchRepo>) =>
-    setForm((f) =>
-      f
-        ? {
-            ...f,
-            repos: f.repos.map((r, i) => (i === index ? { ...r, ...p } : r)),
-          }
-        : f
-    );
-
-  const removeRepo = (index: number) =>
-    setForm((f) =>
-      f ? { ...f, repos: f.repos.filter((_, i) => i !== index) } : f
-    );
-
-  const addRepo = () =>
-    setForm((f) =>
-      f
-        ? {
-            ...f,
-            repos: [...f.repos, { id: crypto.randomUUID(), name: "", path: "" }],
-          }
-        : f
-    );
-
   const openJira = (key: string) => {
     if (status?.jiraBaseUrl) {
       void window.oneApp.openExternal(`${status.jiraBaseUrl}/browse/${key}`);
@@ -340,6 +330,12 @@ export function NightwatchSection() {
       {status && !status.claudeFound && (
         <Banner variant="danger">
           claude 바이너리를 찾을 수 없습니다. Claude Code 설치를 확인해 주세요.
+        </Banner>
+      )}
+
+      {status?.jiraConfigured && projects.length === 0 && (
+        <Banner variant="warning">
+          <b>프로젝트</b> 탭에서 분석 대상 프로젝트(로컬 경로)를 먼저 등록하세요.
         </Banner>
       )}
 
@@ -575,34 +571,11 @@ export function NightwatchSection() {
           icon={<Icon name="settings" size={14} />}
           storageKey="nightwatch:settings"
         >
-          <FormRow label="분석 대상 저장소 목록" column>
-            <div className="nightwatch__repo-form">
-              {form.repos.map((r, i) => (
-                <div className="nightwatch__repo-row" key={r.id}>
-                  <Input
-                    small
-                    value={r.name}
-                    placeholder="이름"
-                    onChange={(e) => patchRepo(i, { name: e.target.value })}
-                  />
-                  <Input
-                    value={r.path}
-                    placeholder="/Users/me/projects/..."
-                    onChange={(e) => patchRepo(i, { path: e.target.value })}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeRepo(i)}
-                  >
-                    삭제
-                  </Button>
-                </div>
-              ))}
-              <Button variant="ghost" size="sm" onClick={addRepo}>
-                저장소 추가
-              </Button>
-            </div>
+          <FormRow label="분석 대상 프로젝트">
+            <p className="hint">
+              분석 대상은 <b>프로젝트</b> 탭에서 관리합니다. (로컬 경로가 있는
+              프로젝트가 후보로 표시됩니다)
+            </p>
           </FormRow>
           <FormRow label="티켓당 타임아웃(분)">
             <Input
@@ -675,23 +648,36 @@ export function NightwatchSection() {
           onClose={() => setPick(null)}
         >
           <div className="nightwatch__pick-opts">
-            <FormRow label="저장소" column>
-              <Select
-                className="nightwatch__repo-select"
-                aria-label="저장소 선택"
-                value={pick.repoId}
-                onChange={(repoId) => setPick({ ...pick, repoId })}
-                options={status.config.repos.map((r) => ({
-                  value: r.id,
-                  label: r.name,
-                }))}
-              />
-              <p className="hint nightwatch__repo-hint">
-                {status.config.repos.find((r) => r.id === pick.repoId)?.path ??
-                  "설정에서 분석 대상 저장소를 먼저 등록하세요"}
-                {" — "}현재 체크아웃 그대로 분석하며, 선택은 같은
-                프로젝트·말머리 조합에 기억됩니다.
-              </p>
+            <FormRow label="프로젝트" column>
+              {projects.length === 0 ? (
+                <p className="hint">
+                  등록된 프로젝트가 없습니다 — <b>프로젝트</b> 탭에서 먼저
+                  등록해 주세요.
+                </p>
+              ) : (
+                <>
+                  <Select
+                    className="nightwatch__repo-select"
+                    aria-label="프로젝트 선택"
+                    value={pick.repoId}
+                    onChange={(repoId) => setPick({ ...pick, repoId })}
+                    options={[...projects]
+                      .sort(
+                        // 티켓의 Jira 키와 일치하는 프로젝트를 앞으로 (안정 정렬 — 나머지 순서 유지)
+                        (a, b) =>
+                          Number(b.jiraProjectKey === jiraKeyOf(pick.key)) -
+                          Number(a.jiraProjectKey === jiraKeyOf(pick.key))
+                      )
+                      .map((p) => ({ value: p.id, label: p.name }))}
+                  />
+                  <p className="hint nightwatch__repo-hint">
+                    {projects.find((p) => p.id === pick.repoId)?.localPath ??
+                      "프로젝트를 선택하세요"}
+                    {" — "}현재 체크아웃 그대로 분석하며, 선택은 같은
+                    프로젝트·말머리 조합에 기억됩니다.
+                  </p>
+                </>
+              )}
             </FormRow>
             <FormRow label="모델" column>
               <Segment

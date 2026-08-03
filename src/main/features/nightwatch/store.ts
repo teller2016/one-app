@@ -2,7 +2,6 @@
 // Jira 자격증명은 환경설정 공용(settings/store.ts getJiraApiConfig)이라 여기서 다루지 않는다.
 import type {
   NightwatchConfig,
-  NightwatchRepo,
   NightwatchTicket,
 } from "../../../shared/types";
 import { app } from "electron";
@@ -30,59 +29,8 @@ export function ensureNwDirs() {
   }
 }
 
-const proj = (rel: string) => path.join(os.homedir(), "projects", rel);
-
-// 팀 표준 저장소 배치 기준 기본 목록 — 설정 UI 에서 자유롭게 추가·삭제
-const DEFAULT_REPOS: NightwatchRepo[] = [
-  {
-    id: "bbj-store",
-    name: "babybonjuk store",
-    path: proj("babybonjuk/babybonjuk-metacommerce-vue-store"),
-  },
-  {
-    id: "bbj-admin",
-    name: "babybonjuk admin",
-    path: proj("babybonjuk/babybonjuk-metacommerce-vue-admin"),
-  },
-  {
-    id: "bbj-api",
-    name: "babybonjuk api",
-    path: proj("babybonjuk/babybonjuk-metacommerce-api"),
-  },
-  {
-    id: "mc-store",
-    name: "metacommerce store",
-    path: proj("metacommerce/metacommerce-fe-store"),
-  },
-  {
-    id: "mc-admin",
-    name: "metacommerce admin",
-    path: proj("metacommerce/metacommerce-fe-admin"),
-  },
-  {
-    id: "mc-be",
-    name: "metacommerce be",
-    path: proj("metacommerce/metacommerce-be"),
-  },
-  {
-    id: "gmc-store",
-    name: "global store",
-    path: proj("global-metacommerce/global-metacommerce-fe-store"),
-  },
-  {
-    id: "gmc-admin",
-    name: "global admin",
-    path: proj("global-metacommerce/global-metacommerce-fe-admin"),
-  },
-  {
-    id: "gmc-be",
-    name: "global be",
-    path: proj("global-metacommerce/global-metacommerce-be"),
-  },
-];
-
+// 분석 대상 저장소는 프로젝트 레지스트리(features/projects) 참조 — 여기엔 목록이 없다
 const DEFAULT_CONFIG: NightwatchConfig = {
-  repos: DEFAULT_REPOS,
   claudeConfigDir: path.join(os.homedir(), ".claude"),
   timeoutMinutes: 40,
 };
@@ -103,41 +51,6 @@ function writeJson(file: string, value: unknown) {
   fs.renameSync(tmp, file);
 }
 
-/** repos 입력 정제 — 경로 없는 행 제거, 이름 없으면 폴더명, id 없으면 생성 */
-function sanitizeRepos(input: unknown): NightwatchRepo[] {
-  if (!Array.isArray(input)) return [];
-  return input
-    .filter(
-      (r): r is Partial<NightwatchRepo> =>
-        !!r && typeof r === "object" && typeof r.path === "string" && !!r.path.trim()
-    )
-    .map((r) => {
-      const repoPath = (r.path as string).trim();
-      return {
-        id:
-          typeof r.id === "string" && r.id
-            ? r.id
-            : `repo-${Math.random().toString(36).slice(2, 8)}`,
-        name:
-          typeof r.name === "string" && r.name.trim()
-            ? r.name.trim()
-            : path.basename(repoPath),
-        path: repoPath,
-      };
-    });
-}
-
-export function getNightwatchConfig(): NightwatchConfig {
-  const saved = readJson<Partial<NightwatchConfig>>(nwPaths().config) ?? {};
-  const repos = sanitizeRepos(saved.repos);
-  return {
-    ...DEFAULT_CONFIG,
-    ...saved,
-    // 구버전(scopePath 단일) 설정이거나 목록이 비면 기본 목록으로
-    repos: repos.length ? repos : DEFAULT_REPOS,
-  };
-}
-
 const clamp = (n: unknown, min: number, max: number, fallback: number) => {
   const v = Number(n);
   return Number.isFinite(v)
@@ -145,14 +58,25 @@ const clamp = (n: unknown, min: number, max: number, fallback: number) => {
     : fallback;
 };
 
+// 명시적 구성 — 스프레드를 쓰면 구버전 config.json 의 잔존 키(repos·scopePath·jql 등)가
+// status.config 로 새어 나가므로 필드를 하나씩 채운다
+export function getNightwatchConfig(): NightwatchConfig {
+  const saved = readJson<Partial<NightwatchConfig>>(nwPaths().config) ?? {};
+  return {
+    claudeConfigDir:
+      typeof saved.claudeConfigDir === "string" && saved.claudeConfigDir.trim()
+        ? saved.claudeConfigDir.trim()
+        : DEFAULT_CONFIG.claudeConfigDir,
+    timeoutMinutes: clamp(saved.timeoutMinutes, 5, 120, DEFAULT_CONFIG.timeoutMinutes),
+  };
+}
+
 /** 렌더러 입력을 정제해 저장 — 형식이 깨진 값은 기존값 유지 */
 export function saveNightwatchConfig(
   input: Partial<NightwatchConfig>
 ): NightwatchConfig {
   const prev = getNightwatchConfig();
-  const repos = sanitizeRepos(input.repos);
   const next: NightwatchConfig = {
-    repos: repos.length ? repos : prev.repos,
     claudeConfigDir:
       typeof input.claudeConfigDir === "string" && input.claudeConfigDir.trim()
         ? input.claudeConfigDir.trim()

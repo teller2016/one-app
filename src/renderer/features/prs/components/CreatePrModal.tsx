@@ -12,22 +12,24 @@ const issueKeyOf = (branch: string) =>
   branch.match(/[A-Z][A-Z0-9]{1,9}[-_]\d+/)?.[0]?.replace('_', '-') ?? null;
 
 /**
- * PR 생성 모달 — develop 대비 커밋을 보여주고 제목/본문을 자동 채운 뒤 생성한다.
- * (push 해둔 브랜치 → develop 흐름 전용)
+ * PR 생성 모달 — 기본 브랜치 대비 커밋을 보여주고 제목/본문을 자동 채운 뒤 생성한다.
+ * (push 해둔 브랜치 → 프로젝트 기본 브랜치 흐름 전용)
  */
 export function CreatePrModal({
   repo,
   head,
+  base,
   onClose,
   onCreated,
 }: {
   repo: string;
   head: string;
+  /** PR 대상 브랜치 — 프로젝트 레지스트리의 defaultBranch (빈 값은 호출부에서 develop 폴백) */
+  base: string;
   onClose: () => void;
   /** 생성 성공 — 번호를 넘겨 머지 모달로 이어간다 */
   onCreated: (number: number, title: string) => void;
 }) {
-  const base = 'develop';
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [commits, setCommits] = useState<DeployCommit[] | null>(null);
@@ -37,7 +39,7 @@ export function CreatePrModal({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // develop 대비 커밋 로드 → 제목/본문 자동 생성 (편집 가능)
+  // 기본 브랜치 대비 커밋 로드 → 제목/본문 자동 생성 (편집 가능)
   useEffect(() => {
     let alive = true;
     window.oneApp.prs.getBranchCommits(repo, base, head).then((res) => {
@@ -59,7 +61,7 @@ export function CreatePrModal({
     return () => {
       alive = false;
     };
-  }, [repo, head]);
+  }, [repo, head, base]);
 
   const create = async () => {
     if (!title.trim()) return;
@@ -87,12 +89,12 @@ export function CreatePrModal({
       </p>
 
       {commits === null ? (
-        <p className="hint">develop 대비 커밋을 확인하는 중...</p>
+        <p className="hint">{base} 대비 커밋을 확인하는 중...</p>
       ) : loadError ? (
         <Banner variant="danger">{loadError}</Banner>
       ) : commits.length === 0 ? (
         <Banner>
-          <b>develop 과 커밋 차이가 없습니다</b> — push 를 먼저 했는지 확인하세요.
+          <b>{base} 와 커밋 차이가 없습니다</b> — push 를 먼저 했는지 확인하세요.
         </Banner>
       ) : (
         <>

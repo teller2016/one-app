@@ -10,6 +10,7 @@ import { JiraSection, isDone } from "../features/jira";
 import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
 import { NightwatchSection } from "../features/nightwatch";
+import { ProjectsSection } from "../features/projects";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
@@ -54,6 +55,12 @@ const SECTIONS: AppSection[] = [
     label: "배포",
     icon: <Icon name="rocket" size={16} />,
     render: () => <DeploySection />,
+  },
+  {
+    id: "projects",
+    label: "프로젝트",
+    icon: <Icon name="folder" size={16} />,
+    render: () => <ProjectsSection />,
   },
   {
     id: "applink",

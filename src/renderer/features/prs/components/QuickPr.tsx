@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PrBranch } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
-import { Icon } from '../../../components/Icon';
-import { Input } from '../../../components/Input';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { Select } from '../../../components/Select';
 
@@ -18,24 +16,27 @@ const rel = (ts?: number) => {
 
 type BranchState = { loading: boolean; list?: PrBranch[]; error?: string };
 
+/** 빠른 PR 대상 — 프로젝트 레지스트리의 Gitea 프로젝트에서 파생 (PrSection 이 계산) */
+export type QuickPrRepo = {
+  repo: string; // "owner/repo"
+  base: string; // PR 대상 기본 브랜치 (프로젝트 defaultBranch, 빈 값은 develop 폴백)
+  name: string; // 프로젝트 표시명
+};
+
 /**
- * 빠른 PR — 등록한 저장소의 최근 push 브랜치를 자동으로 찾아
+ * 빠른 PR — 프로젝트 레지스트리의 Gitea 프로젝트별 최근 push 브랜치를 자동으로 찾아
  * [PR 만들기]로 생성 모달을 연다 (push → PR → 머지 루프의 진입점).
+ * 저장소 관리는 프로젝트 탭에서 한다 — 여기엔 추가/삭제 UI 가 없다.
  */
 export function QuickPr({
   repos,
-  onAddRepo,
-  onRemoveRepo,
   onCreate,
 }: {
-  repos: string[];
-  onAddRepo: (repo: string) => void;
-  onRemoveRepo: (repo: string) => void;
-  onCreate: (repo: string, head: string) => void;
+  repos: QuickPrRepo[];
+  onCreate: (repo: string, head: string, base: string) => void;
 }) {
   const [branches, setBranches] = useState<Record<string, BranchState>>({});
   const [selected, setSelected] = useState<Record<string, string>>({});
-  const [repoInput, setRepoInput] = useState('');
   const loadedRef = useRef<Set<string>>(new Set());
 
   const loadBranches = useCallback(async (repo: string) => {
@@ -57,51 +58,53 @@ export function QuickPr({
     }
   }, []);
 
-  // 새로 등록된 저장소의 브랜치 로드
+  // 레지스트리에서 새로 파생된 저장소의 브랜치 로드
   useEffect(() => {
-    repos.forEach((repo) => {
-      if (loadedRef.current.has(repo)) return;
-      loadedRef.current.add(repo);
-      void loadBranches(repo);
+    repos.forEach((r) => {
+      if (loadedRef.current.has(r.repo)) return;
+      loadedRef.current.add(r.repo);
+      void loadBranches(r.repo);
     });
   }, [repos, loadBranches]);
-
-  const add = () => {
-    const repo = repoInput.trim().replace(/^\/+|\/+$/g, '');
-    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return;
-    onAddRepo(repo);
-    setRepoInput('');
-  };
 
   return (
     <div className="prs__quick">
       <div className="prs__quick-head">
         <span className="form-label">빠른 PR</span>
         <span className="hint">
-          push 한 브랜치를 골라 develop 으로 PR 을 만들고 바로 머지까지.
+          push 한 브랜치를 골라 기본 브랜치로 PR 을 만들고 바로 머지까지.
         </span>
       </div>
 
-      {repos.map((repo) => {
-        const st = branches[repo];
+      {repos.length === 0 && (
+        <p className="hint">
+          <b>프로젝트</b> 탭에서 Gitea 원격이 있는 프로젝트를 등록하면 여기
+          자동으로 표시됩니다.
+        </p>
+      )}
+
+      {repos.map((r) => {
+        const st = branches[r.repo];
         const list = st?.list ?? [];
         return (
-          <div key={repo} className="prs__quick-row">
-            <span className="prs__repo">{repo.split('/').pop()}</span>
+          <div key={r.repo} className="prs__quick-row">
+            <span className="prs__repo" title={r.repo}>
+              {r.name}
+            </span>
             {st?.loading ? (
               <span className="hint">브랜치 확인 중...</span>
             ) : st?.error ? (
               <span className="prs__quick-error">{st.error}</span>
             ) : list.length === 0 ? (
-              <span className="hint">develop 외 브랜치가 없습니다.</span>
+              <span className="hint">PR 가능한 브랜치가 없습니다.</span>
             ) : (
               <Select
                 small
                 className="prs__branch-select"
                 aria-label="브랜치 선택"
-                value={selected[repo] ?? list[0].name}
+                value={selected[r.repo] ?? list[0].name}
                 onChange={(name) =>
-                  setSelected((prev) => ({ ...prev, [repo]: name }))
+                  setSelected((prev) => ({ ...prev, [r.repo]: name }))
                 }
                 options={list.map((b) => ({
                   value: b.name,
@@ -115,45 +118,23 @@ export function QuickPr({
               <RefreshButton
                 size={12}
                 spinning={!!st?.loading}
-                onClick={() => void loadBranches(repo)}
+                onClick={() => void loadBranches(r.repo)}
                 title="브랜치 목록 새로고침 (push 직후 누르세요)"
               />
               <Button
                 size="sm"
                 variant="primary"
-                disabled={!selected[repo] && list.length === 0}
-                onClick={() => onCreate(repo, selected[repo] ?? list[0]?.name)}
+                disabled={!selected[r.repo] && list.length === 0}
+                onClick={() =>
+                  onCreate(r.repo, selected[r.repo] ?? list[0]?.name, r.base)
+                }
               >
                 PR 만들기
               </Button>
-              <button
-                type="button"
-                className="icon-btn"
-                title="저장소 제거"
-                aria-label="저장소 제거"
-                onClick={() => onRemoveRepo(repo)}
-              >
-                <Icon name="x" size={12} />
-              </button>
             </div>
           </div>
         );
       })}
-
-      <div className="prs__quick-add">
-        <Input
-          small
-          type="text"
-          value={repoInput}
-          onChange={(e) => setRepoInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="owner/repo (예: babybonjuk_forbiz/babybonjuk-metacommerce-fe-store)"
-        />
-        <Button size="sm" onClick={add} disabled={!repoInput.trim()}>
-          <Icon name="plus" size={12} />
-          저장소 추가
-        </Button>
-      </div>
     </div>
   );
 }
