@@ -28,6 +28,9 @@ import {
 import { getOrCreateToken, getPort } from './store';
 
 const COOKIE_NAME = 'oneAppTerm';
+// 쿠키 수명 1년 — 만료를 안 주면 세션 쿠키가 되어 브라우저를 닫을 때 사라지고,
+// 그러면 폰에서 매번 QR 을 다시 찍어야 한다(홈 화면 아이콘도 인증이 끊긴다).
+const COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
 const WS_PATH = '/term'; // 터미널 전용 upgrade 경로 — dev 모드 Vite HMR ws 와 구분
 const PING_INTERVAL_MS = 30_000;
 
@@ -56,6 +59,10 @@ function timingEqual(a: string, b: string): boolean {
   return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
 }
 
+// 홈 화면 추가 시 브라우저는 manifest·아이콘을 쿠키 없이 받아갈 수 있다(스펙상 credentials
+// 모드가 다름) — 비밀이 없는 이 파일들만 인증에서 제외한다. 앱 화면(index.html)은 그대로 보호.
+const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/icon-192.png', '/icon-512.png']);
+
 function isAuthed(req: http.IncomingMessage): boolean {
   const token = getOrCreateToken();
   const url = new URL(req.url ?? '/', 'http://local');
@@ -76,6 +83,7 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.map': 'application/json',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
@@ -203,17 +211,18 @@ export async function startServer(): Promise<TerminalServerStatus> {
   lastError = '';
 
   const srv = http.createServer((req, res) => {
-    if (!isAuthed(req)) {
+    const url = new URL(req.url ?? '/', 'http://local');
+    if (!PUBLIC_PATHS.has(url.pathname) && !isAuthed(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Forbidden — One App 터미널 탭의 접속 URL(QR)로 여세요.');
       return;
     }
-    const url = new URL(req.url ?? '/', 'http://local');
     const extraHeaders: Record<string, string> = {};
     if (url.searchParams.get('token')) {
-      // 첫 진입(토큰 쿼리)을 쿠키로 승격 — 이후 요청은 URL 에 토큰 없이 인증
+      // 첫 진입(토큰 쿼리)을 쿠키로 승격 — 이후엔 토큰 없는 주소(북마크·홈 화면 아이콘)로도 인증
       extraHeaders['Set-Cookie'] =
-        `${COOKIE_NAME}=${encodeURIComponent(getOrCreateToken())}; HttpOnly; SameSite=Strict; Path=/`;
+        `${COOKIE_NAME}=${encodeURIComponent(getOrCreateToken())}; HttpOnly; SameSite=Lax; ` +
+        `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}`;
     }
     if (MOBILE_WINDOW_VITE_DEV_SERVER_URL) {
       proxyToDevServer(req, res, extraHeaders);

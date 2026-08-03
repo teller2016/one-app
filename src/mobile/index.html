@@ -11,7 +11,12 @@
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="터미널" />
     <meta name="theme-color" content="#1e1e20" />
+    <!-- 홈 화면에 추가하면 주소창 없는 앱처럼 열린다 (토큰은 쿠키에 남아 QR 재촬영 불필요) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>One App 터미널</title>
     <script type="module" src="/mobile.ts"></script>
   </head>

@@ -60,7 +60,9 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
         <p className="note">
           같은 Tailscale 네트워크의 폰에서 아래 주소로 접속하면 이 앱의 터미널
           세션을 그대로 이어서 쓸 수 있습니다. 서버는 켜 두면 앱 시작 시 자동으로
-          다시 켜집니다.
+          다시 켜집니다. <strong>QR 은 처음 한 번만</strong> 찍으면 됩니다 — 열린 뒤
+          브라우저 메뉴에서 <strong>홈 화면에 추가</strong>해 두면 다음부터 아이콘을
+          눌러 바로 연결됩니다(로그인은 1년간 유지).
         </p>
 
         {status?.error && <Banner variant="danger">{status.error}</Banner>}
