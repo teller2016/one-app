@@ -13,6 +13,7 @@ import type {
   TermServerMsg,
 } from '../../../shared/terminal-protocol';
 import type { TerminalServerStatus } from '../../../shared/types';
+import { listProjects } from '../projects/store';
 import {
   attachSession,
   createSession,
@@ -164,6 +165,13 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'list':
       send(ws, { type: 'sessions', sessions: listSessions() });
       break;
+    case 'cwds':
+      // 새 세션 위치 후보 — 데스크톱과 같은 출처(프로젝트 중앙 레지스트리)
+      send(ws, {
+        type: 'cwds',
+        items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
+      });
+      break;
     case 'attach': {
       const res = attachSession(msg.id, msg.cols, msg.rows);
       if (!res.ok) {
@@ -261,6 +269,10 @@ export async function startServer(): Promise<TerminalServerStatus> {
     });
     ws.on('close', () => socketState.delete(ws));
     send(ws, { type: 'sessions', sessions: listSessions() });
+    send(ws, {
+      type: 'cwds',
+      items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
+    });
   });
 
   // PTY 이벤트 → attach 된 소켓으로 전달 (세션 목록은 전체 브로드캐스트)

@@ -143,6 +143,70 @@ body {
   display: none;
 }
 
+/* 새 세션 위치 선택 시트 */
+#cwdSheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+#cwdSheet[hidden] {
+  display: none;
+}
+
+#cwdBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+}
+
+#cwdPanel {
+  position: relative;
+  max-height: 70%;
+  overflow-y: auto;
+  background: var(--bar);
+  border-top: 1px solid var(--border);
+  border-radius: 14px 14px 0 0;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+}
+
+#cwdTitle {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 6px 8px;
+}
+
+#cwdList button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  margin-bottom: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+#cwdList button:active {
+  border-color: var(--accent);
+}
+
+#cwdList .cwd-path {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #keybar {
   display: flex;
   gap: 4px;

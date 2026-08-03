@@ -133,8 +133,11 @@ export function TerminalSection() {
           ))}
         </div>
         <div className="terminal__actions">
+          {/* className 은 Select 의 루트(.picker)에 붙는다 — 루트가 inline-flex 라
+              좁으면 드롭다운 팝오버까지 그 폭에 갇혀 프로젝트 이름이 잘린다 */}
           <Select
             small
+            className="terminal__cwd"
             aria-label="새 세션 위치"
             value={cwd}
             onChange={setCwd}

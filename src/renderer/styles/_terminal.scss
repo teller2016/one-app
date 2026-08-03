@@ -82,6 +82,18 @@
     flex-shrink: 0;
   }
 
+  // 새 세션 위치 셀렉트 — 프로젝트 이름이 잘리지 않을 만큼 넓게
+  // (Select 루트 `.picker` 에 붙는 클래스. 트리거·팝오버가 모두 이 폭을 따른다)
+  &__cwd {
+    width: 220px;
+    flex-shrink: 0;
+
+    // 디렉터리 목록은 왼쪽 정렬이 읽기 쉽다 (공용 옵션 기본값은 시간 리스트용 가운데)
+    .picker__option {
+      text-align: left;
+    }
+  }
+
   // xterm 이 마운트되는 다크 패널 — 로그·코드 패널과 같은 계열(DESIGN.md panel-dark).
   // xterm 쪽 색은 TerminalView 의 buildTheme() 이 같은 토큰에서 읽어 맞춘다.
   &__host {

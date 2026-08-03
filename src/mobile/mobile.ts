@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import './mobile.css';
 import type {
   TermClientMsg,
+  TermCwdOption,
   TermServerMsg,
 } from '../shared/terminal-protocol';
 import type { TerminalSessionInfo } from '../shared/types';
@@ -45,6 +46,9 @@ const ctrlBtn = document.getElementById('ctrlBtn') as HTMLButtonElement;
 const fontDownBtn = document.getElementById('fontDown') as HTMLButtonElement;
 const fontUpBtn = document.getElementById('fontUp') as HTMLButtonElement;
 const bottomBtn = document.getElementById('toBottom') as HTMLButtonElement;
+const cwdSheet = document.getElementById('cwdSheet') as HTMLElement;
+const cwdBackdrop = document.getElementById('cwdBackdrop') as HTMLElement;
+const cwdList = document.getElementById('cwdList') as HTMLElement;
 
 // 주소창의 토큰은 서버가 쿠키로 승격했으니 지운다 (공유·스크린샷 노출 방지)
 if (new URLSearchParams(location.search).has('token')) {
@@ -73,6 +77,7 @@ let ws: WebSocket | null = null;
 let attachedId: string | null = null;
 let attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — 버린다
 let sessions: TerminalSessionInfo[] = [];
+let cwdOptions: TermCwdOption[] = []; // 새 세션 위치 후보 (서버가 프로젝트 레지스트리에서 보내줌)
 let reconnectDelay = 1000;
 let ctrlArmed = false; // ctrl 키바 토글 — 다음 한 글자를 제어문자로
 
@@ -124,6 +129,9 @@ function handleMessage(msg: TermServerMsg) {
         const last = localStorage.getItem(LAST_SESSION_KEY);
         attach(sessions.find((s) => s.id === last)?.id ?? sessions[0].id);
       }
+      break;
+    case 'cwds':
+      cwdOptions = msg.items;
       break;
     case 'created':
       attach(msg.id);
@@ -254,7 +262,37 @@ document.querySelectorAll<HTMLButtonElement>('#keybar button').forEach((btn) => 
 selectEl.addEventListener('change', () => {
   if (selectEl.value && selectEl.value !== attachedId) attach(selectEl.value);
 });
-newBtn.addEventListener('click', () => sendMsg({ type: 'create' }));
+// 새 세션 — 어디서 열지 먼저 고른다 (데스크톱의 위치 셀렉트와 같은 목록)
+function openCwdSheet() {
+  cwdList.innerHTML = '';
+  const add = (label: string, path?: string) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    if (path) {
+      const sub = document.createElement('span');
+      sub.className = 'cwd-path';
+      sub.textContent = path;
+      btn.appendChild(sub);
+    }
+    btn.addEventListener('click', () => {
+      cwdSheet.hidden = true;
+      sendMsg(path ? { type: 'create', cwd: path } : { type: 'create' });
+    });
+    cwdList.appendChild(btn);
+  };
+  add('홈 디렉터리');
+  for (const o of cwdOptions) add(o.name, o.path);
+  cwdSheet.hidden = false;
+}
+
+newBtn.addEventListener('click', () => {
+  sendMsg({ type: 'cwds' }); // 최신 목록으로 갱신 (프로젝트가 추가됐을 수 있음)
+  openCwdSheet();
+});
+cwdBackdrop.addEventListener('click', () => {
+  cwdSheet.hidden = true;
+});
 
 // ── 터치 스크롤 ──
 // 폰에서는 손가락 스크롤이 그냥은 먹지 않는다(터미널 텍스트 레이어가 덮고 있고,
