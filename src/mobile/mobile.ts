@@ -256,16 +256,14 @@ newBtn.addEventListener('click', () => sendMsg({ type: 'create' }));
 
 // ── 터치 스크롤 ──
 // 폰에서는 손가락 스크롤이 그냥은 먹지 않는다(터미널 텍스트 레이어가 덮고 있고,
-// xterm 6 은 네이티브 스크롤 영역을 쓰지 않는다 — 스크롤은 scrollLines() API 로만 한다).
-// 그래서 드래그 이동량을 줄 수로 환산해 직접 스크롤한다.
-const rowHeight = () => {
-  const row = termEl.querySelector('.xterm-rows > div');
-  const h = row?.getBoundingClientRect().height ?? 0;
-  return h > 0 ? h : (term.options.fontSize ?? 15) * 1.25;
-};
+// xterm 6 은 네이티브 스크롤 영역을 쓰지 않는다). 그래서 드래그를 **합성 휠 이벤트**로 바꿔
+// xterm 에 그대로 넘긴다 — 데스크톱에서 휠을 돌린 것과 완전히 같은 경로가 된다:
+//   · 일반 화면    → xterm 이 스크롤백을 스크롤
+//   · 마우스 트래킹 켜진 TUI(claude 등) → xterm 이 마우스 이벤트로 인코딩해 앱에 전달
+//     (claude 는 대체 화면이라 스크롤백이 없다 — scrollLines 를 부르면 아무 일도 안 일어난다)
+const wheelTarget = () => termEl.querySelector<HTMLElement>('.xterm-screen') ?? termEl;
 
 let dragY = 0;
-let dragAccum = 0; // 한 줄이 안 되는 잔여 이동량 — 누적해서 부드럽게
 let dragging = false;
 let dragged = false; // 살짝 눌렀다 뗀 건 탭(포커스=키보드)으로 남긴다
 
@@ -274,7 +272,6 @@ termEl.addEventListener(
   (e) => {
     if (e.touches.length !== 1) return;
     dragY = e.touches[0].clientY;
-    dragAccum = 0;
     dragging = true;
     dragged = false;
   },
@@ -285,18 +282,23 @@ termEl.addEventListener(
   'touchmove',
   (e) => {
     if (!dragging || e.touches.length !== 1) return;
-    const y = e.touches[0].clientY;
-    const dy = dragY - y; // 손가락을 내리면 음수 = 위(과거) 내용
-    dragY = y;
+    const t = e.touches[0];
+    const dy = dragY - t.clientY; // 손가락을 내리면 음수 = 위(과거) 내용
+    dragY = t.clientY;
     if (!dragged && Math.abs(dy) < 4) return; // 탭과 구분되는 최소 이동
     dragged = true;
     e.preventDefault(); // 페이지가 대신 움직이지 않게
-    dragAccum += dy;
-    const lines = Math.trunc(dragAccum / rowHeight());
-    if (lines !== 0) {
-      dragAccum -= lines * rowHeight();
-      term.scrollLines(lines);
-    }
+    // 좌표까지 실어 보낸다 — 마우스 트래킹 앱은 휠 이벤트의 행·열을 함께 보고한다
+    wheelTarget().dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY: dy,
+        deltaMode: 0, // 픽셀 단위
+        clientX: t.clientX,
+        clientY: t.clientY,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
   },
   { passive: false }
 );
