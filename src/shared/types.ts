@@ -25,6 +25,18 @@ export type ScheduleDoneInfo = { code: number | null };
 /** 하루 작업 기록 항목 — end 는 "HH:MM" (userData/worklog.json 에 저장) */
 export type ScheduleWorkItem = { id: string; end: string; title: string };
 
+/** 하루 시작 시각 기본값 — main 저장본 보정과 렌더러 초기값의 단일 소스 */
+export const SCHEDULE_DEFAULT_START_TIME = "09:30";
+
+/**
+ * 작업 기록 저장 단위 — 항목 + 시작 시각 (userData/worklog.json).
+ * 예전 저장본은 항목 배열만 담았으므로 읽을 때 이 형태로 승격한다.
+ */
+export type ScheduleWorklog = {
+  items: ScheduleWorkItem[];
+  startTime: string; // "HH:MM" — 타임라인 계산의 기준
+};
+
 // ── 환경설정 ──
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
 export type ThemePref = "system" | "light" | "dark";

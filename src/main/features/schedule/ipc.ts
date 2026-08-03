@@ -5,9 +5,11 @@ import { resolveBaseDate } from './scheduleUtils';
 import { SCHEDULE_CONFIG } from './config';
 import { getCredentials } from '../settings/store';
 import { readUserJson, writeUserJson } from '../../lib/store';
-import type {
-  ScheduleRunPayload,
-  ScheduleWorkItem,
+import {
+  SCHEDULE_DEFAULT_START_TIME,
+  type ScheduleRunPayload,
+  type ScheduleWorkItem,
+  type ScheduleWorklog,
 } from '../../../shared/types';
 
 let running = false;
@@ -16,6 +18,28 @@ let currentBrowser: Browser | null = null;
 // 작업 기록 — localStorage 는 강제 종료 시 디스크 flush 가 안 돼 유실되므로
 // (2026-07-29 실측: 쓰기 후 45초에도 leveldb 미커밋) userData JSON 에 즉시 저장한다.
 const WORKLOG_FILE = 'worklog.json';
+
+const isTime = (v: unknown): v is string =>
+  typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v);
+
+/** 저장본 정규화 — 항목만 담던 예전 배열 형식도 읽어 객체로 승격한다 */
+function normalizeWorklog(raw: unknown): ScheduleWorklog {
+  const source: Partial<ScheduleWorklog> = Array.isArray(raw)
+    ? { items: raw as ScheduleWorkItem[] }
+    : ((raw as Partial<ScheduleWorklog>) ?? {});
+  const items = Array.isArray(source.items) ? source.items : [];
+  return {
+    items: items.filter(
+      (it) =>
+        typeof it?.id === 'string' &&
+        typeof it?.end === 'string' &&
+        typeof it?.title === 'string',
+    ),
+    startTime: isTime(source.startTime)
+      ? source.startTime
+      : SCHEDULE_DEFAULT_START_TIME,
+  };
+}
 
 /** 일정 등록 관련 IPC 핸들러 등록 (앱 내부에서 puppeteer 직접 실행) */
 export function registerScheduleIpc() {
@@ -112,21 +136,13 @@ export function registerScheduleIpc() {
   });
 
   ipcMain.handle('schedule:worklog:get', () =>
-    readUserJson<ScheduleWorkItem[]>(WORKLOG_FILE, []).filter(
-      (it) =>
-        typeof it?.id === 'string' &&
-        typeof it?.end === 'string' &&
-        typeof it?.title === 'string',
-    ),
+    normalizeWorklog(readUserJson<unknown>(WORKLOG_FILE, null)),
   );
 
-  ipcMain.handle(
-    'schedule:worklog:set',
-    (_event, items: ScheduleWorkItem[]) => {
-      writeUserJson(WORKLOG_FILE, Array.isArray(items) ? items : []);
-      return { ok: true };
-    },
-  );
+  ipcMain.handle('schedule:worklog:set', (_event, worklog: ScheduleWorklog) => {
+    writeUserJson(WORKLOG_FILE, normalizeWorklog(worklog));
+    return { ok: true };
+  });
 
   ipcMain.handle('schedule:cancel', async () => {
     if (currentBrowser) {

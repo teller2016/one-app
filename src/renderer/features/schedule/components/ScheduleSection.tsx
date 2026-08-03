@@ -9,7 +9,11 @@ import { DatePicker } from '../../../components/DatePicker';
 import { TimePicker } from '../../../components/TimePicker';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { useCopy } from '../../../lib/useCopy';
-import type { ScheduleWorkItem } from '../../../../shared/types';
+import {
+  SCHEDULE_DEFAULT_START_TIME,
+  type ScheduleWorkItem,
+  type ScheduleWorklog,
+} from '../../../../shared/types';
 
 type DateType = 'today' | 'yesterday' | 'date';
 
@@ -69,7 +73,7 @@ export function ScheduleSection() {
   const [worklogLoaded, setWorklogLoaded] = useState(false);
   const [newTime, setNewTime] = useState('09:30');
   const [newTitle, setNewTitle] = useState('');
-  const [startTime, setStartTime] = useState('09:30');
+  const [startTime, setStartTime] = useState(SCHEDULE_DEFAULT_START_TIME);
   const [dateType, setDateType] = useState<DateType>('today');
   const [customDate, setCustomDate] = useState('');
   const [running, setRunning] = useState(false);
@@ -77,7 +81,7 @@ export function ScheduleSection() {
   const [log, setLog] = useState('');
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
-  const itemsRef = useRef<WorkItem[]>(items);
+  const worklogRef = useRef<ScheduleWorklog>({ items, startTime });
   const worklogDirtyRef = useRef(false);
   const confirm = useConfirm();
   const copy = useCopy();
@@ -110,30 +114,33 @@ export function ScheduleSection() {
       .then((s) => setCredsReady(!!s.bizboxId && s.hasPassword));
   }, []);
 
-  // 작업 기록 복원 — userData/worklog.json (localStorage 는 강제 종료 시 유실돼 사용 안 함)
+  // 작업 기록·시작 시각 복원 — userData/worklog.json
+  // (localStorage 는 강제 종료 시 유실돼 사용 안 함)
   useEffect(() => {
-    window.oneApp?.schedule.getWorklog().then((list) => {
-      setItems(list);
+    window.oneApp?.schedule.getWorklog().then((saved) => {
+      setItems(saved.items);
+      setStartTime(saved.startTime);
       setWorklogLoaded(true);
     });
   }, []);
 
   // 변경 시 저장 — 타이핑 부하를 피해 300ms 디바운스, 언마운트 시 미저장분 flush
   useEffect(() => {
-    itemsRef.current = items;
+    const worklog = { items, startTime };
+    worklogRef.current = worklog;
     if (!worklogLoaded) return;
     worklogDirtyRef.current = true;
     const t = setTimeout(() => {
       worklogDirtyRef.current = false;
-      window.oneApp?.schedule.setWorklog(items);
+      window.oneApp?.schedule.setWorklog(worklog);
     }, 300);
     return () => clearTimeout(t);
-  }, [items, worklogLoaded]);
+  }, [items, startTime, worklogLoaded]);
 
   useEffect(
     () => () => {
       if (worklogDirtyRef.current)
-        window.oneApp?.schedule.setWorklog(itemsRef.current);
+        window.oneApp?.schedule.setWorklog(worklogRef.current);
     },
     [],
   );
