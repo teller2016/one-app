@@ -10,6 +10,9 @@ export default defineConfig({
   root: path.resolve(__dirname, 'src/mobile-app'),
   // 터미널 페이지는 base '/terminal/' — 두 엔트리의 asset 경로가 겹치지 않게 나눈다
   base: '/',
+  // ⚠️ 엔트리별 의존성 캐시 분리 — 기본값을 공유하면 재최적화가 서로를 무효화해
+  // `504 (Outdated Optimize Dep)` 로 화면이 비어 버린다(vite.mobile.config.ts 주석 참고)
+  cacheDir: path.resolve(__dirname, 'node_modules/.vite-mobile-app'),
   plugins: [react()],
   css: { preprocessorOptions: { scss: { api: 'modern-compiler' } } },
   // root 밖(src/renderer, src/shared)을 import 하므로 dev 서버에 접근 허용이 필요하다

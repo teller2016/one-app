@@ -219,6 +219,8 @@ src/
 - `npm install` 시 `ETARGET No matching version`(존재하지 않는 버전) → **npm 캐시 손상**. `npm cache clean --force` 후 `rm -f package-lock.json && npm install`.
 - `puppeteer`·`node-pty`·`ws` 는 `vite.main.config.ts`에서 **external 처리**(번들 제외, 런타임 로드 — `forge.config.ts` 의 `copyRuntimeDeps` 훅이 패키지에 채워 넣는다). 무거운 네이티브 의존성 추가 시 동일하게 external 고려.
 - `node-pty` prebuild 의 `spawn-helper` 는 **실행 권한이 없는 채로 설치**돼 `posix_spawnp failed` 가 난다 → `package.json` 의 `postinstall` 이 `chmod +x` 로 보정한다(`npm i` 후 오류 시 이 스크립트 확인).
+- **dev 모드에서 화면이 비면(`504 Outdated Optimize Dep`)** — 렌더러 엔트리가 3개(main_window·mobile_window·mobile_app_window)인데 Vite 의존성 캐시 기본값(`node_modules/.vite`)을 공유하면 한 서버의 재최적화가 다른 서버 페이지의 URL 을 무효화해 빈 화면이 된다. 그래서 각 설정에 **`cacheDir` 을 분리**해 뒀다(`.vite-mobile`·`.vite-mobile-app`). 엔트리를 더 추가할 때도 반드시 분리할 것. 그래도 빈 화면이 나면 `rm -rf node_modules/.vite*` 후 재시작.
+- **adb 데몬은 콜드 시작이 3초를 넘는다** — 폰 감지(`mirror/scrcpy.ts`)의 타임아웃을 3초로 두면 데몬이 식어 있을 때 매번 실패한다(실측 콜드 3.03초 / 웜 0.01초). 10초 + 조회 전 `adb start-server` 로 해결. 감지 실패 시 `adb devices -l` 을 직접 돌려 데몬 상태부터 확인할 것.
 - 개발 모드 DevTools 자동 오픈은 꺼둠(`main.ts`). 필요하면 창에서 `⌘⌥I`.
 - **핫리로드 범위**: 렌더러만 HMR 적용. `src/main`/`src/preload` 변경은 리빌드는 되지만 **Electron 재시작 안 됨** → `npm start` 를 다시 실행해야 반영.
 
