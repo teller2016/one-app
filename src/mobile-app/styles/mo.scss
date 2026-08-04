@@ -92,6 +92,21 @@
   padding: 10px 12px;
 }
 
+// ── 변경 탭 — 프로젝트 선택 + 데스크톱 ChangesView 재사용 ──
+.mo-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 14px;
+
+  .changes {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
 // ── 데스크톱 화면을 폰 폭(≈412px)에 맞추는 오버라이드 ──
 
 html.mo {

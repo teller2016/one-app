@@ -1,5 +1,6 @@
 import { registerApplinkIpc } from "./features/applink/ipc";
 import { registerAttendanceIpc } from "./features/attendance/ipc";
+import { registerChangesIpc } from "./features/changes/ipc";
 import { startReminderScheduler } from "./features/attendance/scheduler";
 import { registerDeployIpc } from "./features/deploy/ipc";
 import { registerJiraIpc } from "./features/jira/ipc";
@@ -45,6 +46,7 @@ registerNightwatchIpc();
 registerOvertimeIpc();
 registerProjectsIpc();
 registerTerminalIpc();
+registerChangesIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {

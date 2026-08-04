@@ -92,6 +92,9 @@ src/
 │       │   ├── pty.ts           #    세션 소유(Map)·링버퍼·출력 배칭·attach/resize
 │       │   ├── server.ts        #    MO 접속 HTTP 정적 서빙 + WS 브리지 + 토큰 인증
 │       │   └── store.ts         #    포트·토큰(safeStorage)·자동 시작 (terminal.json)
+│       ├── changes/             #  변경사항 (워킹트리 git 상태·diff·push)
+│       │   ├── ipc.ts           #    handleShared 등록 (MO 공용) — 대상은 projectId/sessionId 만
+│       │   └── git.ts           #    git status/diff/push 실행·porcelain 파싱
 │       └── tray/                #  메뉴바 트레이
 │           └── tray.ts          #    열기·출퇴근 찍기·종료 메뉴
 │   └── lib/                     #  메인 공통 유틸
@@ -133,6 +136,7 @@ src/
 │   │   ├── nightwatch/          #  Nightwatch — 티켓 분석 대시보드 (후보·리포트·미션 로그)
 │   │   ├── projects/            #  프로젝트 — 중앙 레지스트리 CRUD (Section·Form·Card)
 │   │   ├── terminal/            #  터미널 — 탭 UI(Section)·xterm 뷰(View)·MO 접속 모달
+│   │   ├── changes/             #  변경사항 — ChangesView (터미널 드로어·MO '변경' 탭 공용)
 │   │   └── applink/             #  applink.kr 딥링크 생성
 │   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
 │   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
@@ -149,6 +153,7 @@ src/
 │   │   ├── _nightwatch.scss     #    Nightwatch
 │   │   ├── _projects.scss       #    프로젝트 레지스트리
 │   │   ├── _terminal.scss       #    터미널 (탭바·xterm 패널·MO 모달)
+│   │   ├── _changes.scss        #    변경사항 (파일 목록·diff·푸시)
 │   │   ├── _applink.scss        #    딥링크
 │   │   └── _markdown.scss       #    마크다운 렌더(react-markdown) 공통
 │   └── types/global.d.ts        #  window.oneApp 타입
@@ -217,6 +222,7 @@ src/
   - **폰 셸**(`mobile-app/`): 하단 탭바 5개 + 터미널 링크. **활성 탭만 렌더**한다(데스크톱과 같은 규칙 — 5개를 동시에 마운트하면 각 섹션 폴러가 사내 서버를 동시에 두드린다). `openExternal` 은 RPC 로 보내지 않고 **`window.open`** 으로 폰에서 연다(맥에서 열리면 폰은 무반응). optional 후행 인자는 **`undefined` 를 잘라내 보낸다** — JSON 직렬화가 `null` 로 바꾸면 기본 파라미터(`getInbox(q = {})`)가 무력화돼 터진다.
   - **폰 스타일**(`mobile-app/styles/mo.scss`): 데스크톱 SCSS 는 **무수정**, 폰 차이만 `html.mo` 스코프로 덮는다. ⚠️ `<html>` 에 붙이는 이유 — 공용 `Modal` 이 `document.body` 로 portal 하므로 셸 div 스코프면 모달 오버라이드가 전부 빗나간다. 실측으로 덮어야 했던 것: `.jira-view` 의 `calc(100vw - 220px - 48px)`(사이드바 폭 하드코딩 → 폰에서 144px), `.mail-list__top` 의 `display:contents` 트릭(발신자 200px 고정이 제목을 130px 로 만든다 → 2줄 전환), `.mail-list__subject` 는 `display:flex` 라 `text-overflow` 가 안 먹어 블록으로, 메일 오버레이는 **탭바 위에서 끝내기**(안 하면 portal 이 탭바를 덮어 탭 전환 불가), 각 행의 `flex-wrap`. ⚠️ `@use '../../renderer/styles/index'` 만으로는 **믹스인이 전달되지 않는다**(`Undefined mixin`) — `base` 를 따로 `as *` 로 함께 불러온다.
   - 폰은 평문 http = insecure context 라 **`navigator.clipboard` 가 없다** → `lib/useCopy.ts` 에 `execCommand` 폴백을 넣었다(데스크톱은 기존 경로).
+- **변경사항** (`renderer/features/changes` + `main/features/changes`): "AI 에 작업 시키고 → 변경 확인 → AI 로 커밋 → 푸시" 루프의 **확인·푸시** 담당 — 커밋은 만들지 않는다(커밋은 터미널 세션의 에이전트가). 진입점 둘: **터미널 우측 드로어**(툴바 git-branch 토글, localStorage `terminal:changesOpen`, 활성 세션 cwd 대상 — 좌측 grip 드래그로 너비 조절 240~640px, localStorage `terminal:changesWidth`)와 **MO '변경' 탭**(`mobile-app/views/MoChangesView` — 프로젝트 레지스트리 선택 + 같은 `ChangesView` 재사용). main 은 `/usr/bin/git` execFile 로 ①상태: `status --porcelain --branch --untracked-files=all`(⚠️ 기본값은 새 디렉터리를 통째 `dir/` 로 묶어 파일별 diff 가 안 된다 — 2026-08 실측) + `diff HEAD --numstat`(+/− 수) + `log @{u}..HEAD`(푸시 대기 커밋) ②파일 diff: 추적 파일은 `diff HEAD`, untracked 는 `--no-index /dev/null`(**exit 1 이 정상**), 512KB 초과는 truncated ③푸시: upstream 없으면 `-u origin HEAD`. 전 명령 `core.quotepath=false`(한글 경로 보존) + `GIT_TERMINAL_PROMPT=0`+타임아웃(headless 인증 프롬프트 hang 차단). IPC 3채널 전부 `handleShared`(MO 화이트리스트) — ⚠️ **클라이언트가 경로를 직접 못 넘긴다**: `ChangesTarget`(projectId/sessionId)만 받아 main 이 해석하고, diff 파일 경로도 저장소 밖 탈출을 검증한다(폰에 열리는 채널이라 임의 디렉터리 git 실행 차단). 뷰는 보이는 동안 5초 폴링(선택 파일 diff 도 함께 갱신 — 에이전트가 고치는 중 따라감), 커밋되면 파일 목록이 비고 '푸시 대기 커밋'+[푸시 ↑N] 로 나타난다. 세션 종료와 폴링의 레이스는 try/catch 로 에러 화면 처리(안 하면 매 틱 unhandled rejection — 실측). diff 렌더는 라이브러리 없이 줄 prefix 파싱 + `panel-dark` 토큰(--ok/--danger 재매핑).
 - **트레이·자동 시작** (`main/features/tray`): 메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀. **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
 
 ## 트러블슈팅

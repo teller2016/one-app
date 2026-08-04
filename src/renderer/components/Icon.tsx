@@ -49,7 +49,8 @@ export type IconName =
   | "mail"
   | "paperclip"
   | "folder"
-  | "terminal";
+  | "terminal"
+  | "git-branch";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -264,6 +265,14 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <polyline points="4 17 10 11 4 5" />
       <line x1="12" x2="20" y1="19" y2="19" />
+    </>
+  ),
+  "git-branch": (
+    <>
+      <line x1="6" x2="6" y1="3" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
     </>
   ),
 };

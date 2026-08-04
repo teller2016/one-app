@@ -1,0 +1,200 @@
+@use './base' as *;
+
+// 변경사항 — 워킹트리 파일 목록 + unified diff + 푸시 (터미널 드로어·MO '변경' 탭 공용)
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+
+  // 스피너·빈 상태 중앙 배치 (루트 겸용 + 파일 없음 영역)
+  &--center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  // ── 헤더: 브랜치 · behind · [새로고침][푸시] ──
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+
+  &__branch {
+    @include type-small;
+    font-family: var(--font-mono);
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__ab {
+    @include type-small;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+
+    &--behind {
+      color: var(--warning);
+    }
+  }
+
+  &__spacer {
+    flex: 1;
+  }
+
+  // ── 푸시 대기 커밋 (AI 가 커밋을 만들면 여기로 나타난다) ──
+  &__commits {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+  }
+
+  &__commits-title {
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  &__commit {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+
+    code {
+      font-family: var(--font-mono);
+      font-size: var(--fs-caption);
+      color: var(--text-3);
+      flex-shrink: 0;
+    }
+
+    span {
+      @include type-small;
+      color: var(--text-2);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  // ── 변경 파일 목록 ──
+  &__files {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    max-height: 45%;
+  }
+
+  &__file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 8px;
+    border: none;
+    border-radius: var(--r-sm);
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover,
+    &--active {
+      background: var(--overlay-hover);
+    }
+  }
+
+  // 종류 글자(A/M/D/R/U) — 색으로 종류 구분
+  &__kind {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    width: 12px;
+    flex-shrink: 0;
+    text-align: center;
+
+    &--added {
+      color: var(--ok);
+    }
+    &--modified {
+      color: var(--warning);
+    }
+    &--deleted {
+      color: var(--danger);
+    }
+    &--renamed {
+      color: var(--accent);
+    }
+    &--conflict {
+      color: var(--danger);
+    }
+  }
+
+  &__path {
+    @include type-small;
+    font-family: var(--font-mono);
+    color: var(--text-2);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__counts {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+
+  // ── unified diff — 로그·터미널과 같은 다크 패널 계열 (panel-dark 가 --ok 등을 재매핑) ──
+  &__diff {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid;
+    border-radius: var(--r-md);
+    @include panel-dark;
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    line-height: 1.5;
+    white-space: pre;
+  }
+
+  &__dline {
+    display: block;
+    min-width: max-content; // 긴 줄은 가로 스크롤 — 배경색이 줄 끝까지 가게
+
+    &--add {
+      color: var(--ok);
+    }
+    &--del {
+      color: var(--danger);
+    }
+    &--hunk {
+      color: var(--accent);
+    }
+    &--meta {
+      display: block;
+      color: var(--text-3);
+    }
+  }
+}

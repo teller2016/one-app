@@ -20,6 +20,8 @@ import type {
   ApplinkInput,
   MirrorMode,
   MailListQuery,
+  ChangesTarget,
+  ChangesDiffFile,
   TerminalCreateInput,
   TerminalNotifyLevel,
   TerminalSessionInfo,
@@ -297,6 +299,16 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("nightwatch:mission-log", key),
     // 실행 로그 tail
     getLog: () => ipcRenderer.invoke("nightwatch:log"),
+  },
+  changes: {
+    // 워킹트리 상태 — 브랜치·ahead/behind·변경 파일 목록 (projectId 또는 sessionId 로 대상 지정)
+    status: (target: ChangesTarget) =>
+      ipcRenderer.invoke("changes:status", target),
+    // 파일 하나의 unified diff
+    diff: (target: ChangesTarget, file: ChangesDiffFile) =>
+      ipcRenderer.invoke("changes:diff", target, file),
+    // git push (upstream 없으면 -u origin HEAD 로 원격 브랜치 생성)
+    push: (target: ChangesTarget) => ipcRenderer.invoke("changes:push", target),
   },
   terminal: {
     // 세션 목록 조회

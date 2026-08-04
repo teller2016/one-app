@@ -9,6 +9,7 @@ import { DeploySection } from '../renderer/features/deploy';
 import { JiraSection } from '../renderer/features/jira';
 import { PrSection } from '../renderer/features/prs';
 import { MoAttendanceView } from './views/MoAttendanceView';
+import { MoChangesView } from './views/MoChangesView';
 import { MoMailView } from './views/MoMailView';
 import { onRpcStatus } from './shim/rpc';
 import { useEffect, useState } from 'react';
@@ -40,6 +41,12 @@ const TABS: MoTab[] = [
     label: 'PR',
     icon: 'git-pull-request',
     render: () => <PrSection />,
+  },
+  {
+    id: 'changes',
+    label: '변경',
+    icon: 'git-branch',
+    render: () => <MoChangesView />,
   },
   {
     id: 'deploy',

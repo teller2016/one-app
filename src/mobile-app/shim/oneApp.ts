@@ -60,6 +60,11 @@ const SPEC: Spec = {
     list: { ch: 'projects:get' },
     onChanged: { ev: 'projects:changed' },
   },
+  changes: {
+    status: { ch: 'changes:status' },
+    diff: { ch: 'changes:diff' },
+    push: { ch: 'changes:push' },
+  },
 };
 
 /**

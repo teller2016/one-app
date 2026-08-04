@@ -60,6 +60,11 @@ import type {
   MailInboxResult,
   MailBodyResult,
   MailUnreadCountResult,
+  ChangesTarget,
+  ChangesDiffFile,
+  ChangesStatus,
+  ChangesDiffResult,
+  ChangesPushResult,
   OvertimeDefaults,
   OvertimeProgress,
   OvertimeSubmitInput,
@@ -223,6 +228,14 @@ declare global {
         getPrompt: (key: string) => Promise<NightwatchTextResult>;
         getMissionLog: (key: string) => Promise<NightwatchTextResult>;
         getLog: () => Promise<NightwatchTextResult>;
+      };
+      changes: {
+        status: (target: ChangesTarget) => Promise<ChangesStatus>;
+        diff: (
+          target: ChangesTarget,
+          file: ChangesDiffFile,
+        ) => Promise<ChangesDiffResult>;
+        push: (target: ChangesTarget) => Promise<ChangesPushResult>;
       };
       terminal: {
         list: () => Promise<TerminalSessionInfo[]>;

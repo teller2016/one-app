@@ -760,3 +760,68 @@ export type TerminalServerStatus = {
   terminalUrls: string[]; // 터미널 페이지(`/terminal/`) 접속 URL 후보
   error?: string; // 포트 충돌 등 시작 실패 사유
 };
+
+// ── 변경사항 (워킹트리 git 상태·diff·push — 터미널 드로어와 MO '변경' 탭 공용) ──
+
+/**
+ * 조회 대상 — ⚠️ 클라이언트는 경로를 직접 넘길 수 없다(MO 에 열리는 채널이라 임의
+ * 디렉터리 차단). projectId(프로젝트 레지스트리) 또는 sessionId(터미널 세션의 cwd)로만
+ * 지정하고 main 이 경로를 해석한다.
+ */
+export type ChangesTarget = {
+  projectId?: string;
+  sessionId?: string;
+};
+
+export type ChangedFileKind =
+  | 'added'
+  | 'modified'
+  | 'deleted'
+  | 'renamed'
+  | 'conflict';
+
+/** 워킹트리 변경 파일 한 건 (HEAD 대비 — 스테이징 여부 무관) */
+export type ChangedFile = {
+  path: string; // 저장소 상대 경로
+  origPath?: string; // 이름 변경 전 경로 (renamed 만)
+  kind: ChangedFileKind;
+  untracked: boolean; // 아직 추적 안 되는 새 파일 (diff 조회 방식이 다르다)
+  additions?: number; // numstat — untracked·바이너리·rename 은 없을 수 있음
+  deletions?: number;
+};
+
+/** upstream 에 아직 안 올라간 커밋 (푸시 확인용 요약) */
+export type ChangesCommit = { hash: string; subject: string };
+
+export type ChangesStatus = {
+  ok: boolean;
+  repo: boolean; // git 저장소인가 (아니면 나머지 필드 없음)
+  branch?: string;
+  upstream?: string; // 없으면 아직 push 안 한 새 브랜치 (푸시는 -u 로)
+  ahead?: number; // upstream 대비 안 푸시된 커밋 수
+  behind?: number;
+  files?: ChangedFile[];
+  unpushed?: ChangesCommit[]; // 최근 20개
+  error?: string;
+};
+
+/** diff 조회 시 파일 지정 — ChangedFile 에서 필요한 것만 */
+export type ChangesDiffFile = {
+  path: string;
+  origPath?: string;
+  untracked?: boolean;
+};
+
+export type ChangesDiffResult = {
+  ok: boolean;
+  diff?: string;
+  binary?: boolean; // 바이너리 파일 — diff 본문 대신 안내 표시
+  truncated?: boolean; // 표시 상한 초과로 잘림
+  error?: string;
+};
+
+export type ChangesPushResult = {
+  ok: boolean;
+  output?: string; // git push 출력 tail (성공·실패 공통 — 사유 확인용)
+  error?: string;
+};

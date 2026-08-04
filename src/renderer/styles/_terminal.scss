@@ -187,6 +187,49 @@
     justify-content: center;
   }
 
+  // ── 변경사항 드로어 (우측 — 활성 세션 cwd 의 git 상태·diff·푸시) ──
+  // 너비는 인라인 스타일 — 좌측 grip 드래그로 조절 (TerminalSection, localStorage 기억)
+  &__changes {
+    position: relative;
+    flex-shrink: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  // 리사이즈 grip — .terminal 의 gap(12px) 위에 걸치는 히트 영역, 호버 시 세로선 표시
+  &__changes-grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -8px;
+    width: 11px;
+    cursor: col-resize;
+    z-index: 1;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 4px;
+      width: 2px;
+      border-radius: var(--r-full);
+      background: transparent;
+      transition: background var(--dur-1) var(--ease);
+    }
+
+    &:hover::after,
+    &:active::after {
+      background: var(--border);
+    }
+  }
+
+  // 드로어 토글 버튼 — 열려 있으면 액센트로 표시
+  &__changes-btn--on {
+    color: var(--accent);
+  }
+
   // MO 접속 버튼 — 서버 켜짐이면 액센트 점 표시
   &__mo-btn {
     position: relative;

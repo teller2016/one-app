@@ -7,10 +7,12 @@ import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
 import { StatusDot } from '../../../components/StatusDot';
 import { useToast } from '../../../components/Toast';
+import { ChangesView } from '../../changes';
 import { MoAccessModal } from './MoAccessModal';
 import { NewSessionModal } from './NewSessionModal';
 import { TerminalView } from './TerminalView';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
@@ -33,6 +35,18 @@ const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
   idle: '유휴',
 };
 
+// 변경사항 드로어 너비 — 좌측 모서리 드래그로 조절, localStorage 기억
+const CHANGES_MIN_W = 240;
+const CHANGES_MAX_W = 640;
+const CHANGES_DEFAULT_W = 320;
+
+function savedChangesWidth(): number {
+  const saved = Number(localStorage.getItem('terminal:changesWidth'));
+  return Number.isFinite(saved) && saved >= CHANGES_MIN_W && saved <= CHANGES_MAX_W
+    ? saved
+    : CHANGES_DEFAULT_W;
+}
+
 export function TerminalSection() {
   const confirm = useConfirm();
   const toast = useToast();
@@ -41,7 +55,47 @@ export function TerminalSection() {
   const [newOpen, setNewOpen] = useState(false);
   const [moOpen, setMoOpen] = useState(false);
   const [moRunning, setMoRunning] = useState(false);
+  // 변경사항 드로어 — 열림 여부는 세션과 무관한 화면 취향이라 localStorage 로 기억
+  const [changesOpen, setChangesOpen] = useState(
+    () => localStorage.getItem('terminal:changesOpen') === '1'
+  );
   const available = !!terminalApi();
+
+  const toggleChanges = () =>
+    setChangesOpen((v) => {
+      localStorage.setItem('terminal:changesOpen', v ? '0' : '1');
+      return !v;
+    });
+
+  // 드로어 너비 드래그 — 이동 중엔 상태만 갱신하고 저장은 놓는 순간 1회
+  const [changesWidth, setChangesWidth] = useState(savedChangesWidth);
+  const changesWidthRef = useRef(changesWidth);
+
+  const onChangesGripDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = changesWidthRef.current;
+    // 드래그 중 xterm 위를 지나도 커서·텍스트 선택이 흔들리지 않게 body 에 고정
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const move = (ev: PointerEvent) => {
+      const w = Math.min(
+        CHANGES_MAX_W,
+        Math.max(CHANGES_MIN_W, startW + startX - ev.clientX)
+      );
+      changesWidthRef.current = w;
+      setChangesWidth(w);
+    };
+    const up = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('terminal:changesWidth', String(changesWidthRef.current));
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   const applySessions = useCallback((list: TerminalSessionInfo[]) => {
     setSessions(list);
@@ -113,6 +167,14 @@ export function TerminalSection() {
             </button>
             <button
               type="button"
+              className={`icon-btn${changesOpen ? ' terminal__changes-btn--on' : ''}`}
+              title="변경사항 (활성 세션 위치의 git 상태·diff·푸시)"
+              onClick={toggleChanges}
+            >
+              <Icon name="git-branch" size={16} />
+            </button>
+            <button
+              type="button"
               className={`icon-btn terminal__mo-btn${
                 moRunning ? ' terminal__mo-btn--on' : ''
               }`}
@@ -178,6 +240,20 @@ export function TerminalSection() {
           </div>
         )}
       </div>
+
+      {/* 변경사항 드로어 — 활성 세션 cwd 의 git 상태. key 로 세션 전환 시 상태 리셋 */}
+      {changesOpen && activeId && (
+        <aside className="terminal__changes" style={{ width: changesWidth }}>
+          <div
+            className="terminal__changes-grip"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="변경사항 패널 너비 조절"
+            onPointerDown={onChangesGripDown}
+          />
+          <ChangesView key={activeId} target={{ sessionId: activeId }} />
+        </aside>
+      )}
 
       {newOpen && (
         <NewSessionModal
