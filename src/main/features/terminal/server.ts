@@ -6,6 +6,7 @@ import type WebSocket from 'ws';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import type {
@@ -28,6 +29,7 @@ import {
 } from './pty';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort } from './store';
+import { ensureTls } from './tls';
 
 const COOKIE_NAME = 'oneAppTerm';
 // 쿠키 수명 1년 — 만료를 안 주면 세션 쿠키가 되어 브라우저를 닫을 때 사라지고,
@@ -38,9 +40,12 @@ const RPC_PATH = '/rpc'; // 폰 앱 셸의 IPC 중계 (rpc.ts)
 const TERMINAL_PREFIX = '/terminal'; // 터미널 페이지 (`/` 는 폰 앱 셸이 쓴다)
 const PING_INTERVAL_MS = 30_000;
 
-let server: http.Server | null = null;
+let server: http.Server | https.Server | null = null;
+// HTTPS 로 떴을 때의 도메인 — 인증서가 그 이름으로만 유효하므로 접속 URL 도 이 이름을 쓴다
+let tlsDomain: string | null = null;
 let wss: WebSocketServer | null = null;
 let pingTimer: NodeJS.Timeout | null = null;
+let certTimer: NodeJS.Timeout | null = null;
 let offPty: Array<() => void> = []; // pty 구독 해제 목록
 let lastError = '';
 
@@ -231,7 +236,12 @@ export async function startServer(): Promise<TerminalServerStatus> {
   if (server) return getServerStatus();
   lastError = '';
 
-  const srv = http.createServer((req, res) => {
+  // Tailscale 인증서가 있으면 HTTPS — 그래야 폰에서 설치형 PWA(주소창 없음)가 되고
+  // secure context 로 클립보드·wss 가 정상 동작한다. 없으면 기존처럼 HTTP.
+  const tls = await ensureTls();
+  tlsDomain = tls?.domain ?? null;
+
+  const handler: http.RequestListener = (req, res) => {
     const url = new URL(req.url ?? '/', 'http://local');
     if (!isPublicPath(url.pathname) && !isAuthed(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -267,7 +277,36 @@ export async function startServer(): Promise<TerminalServerStatus> {
     } else {
       serveStatic(url.pathname, res, extraHeaders, MOBILE_APP_WINDOW_VITE_NAME);
     }
-  });
+  };
+
+  const srv = tls
+    ? https.createServer(
+        { cert: fs.readFileSync(tls.cert), key: fs.readFileSync(tls.key) },
+        handler
+      )
+    : http.createServer(handler);
+
+  // 인증서 자동 갱신 — Tailscale 인증서는 90일이고 앱은 몇 달 켜져 있을 수 있다.
+  // 재시작 없이 교체할 수 있도록 setSecureContext 로 갈아끼운다(하루 1회 확인).
+  if (tls) {
+    const httpsSrv = srv as https.Server;
+    certTimer = setInterval(
+      () => {
+        void ensureTls().then((next) => {
+          if (!next) return;
+          try {
+            httpsSrv.setSecureContext({
+              cert: fs.readFileSync(next.cert),
+              key: fs.readFileSync(next.key),
+            });
+          } catch {
+            // 갱신 실패는 다음 확인에서 재시도 (기존 인증서로 계속 동작)
+          }
+        });
+      },
+      24 * 60 * 60 * 1000
+    );
+  }
 
   const wsServer = new WebSocketServer({ noServer: true });
   const rpcServer = new WebSocketServer({ noServer: true });
@@ -353,6 +392,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       server = null;
       wss = null;
       if (pingTimer) clearInterval(pingTimer);
+      if (certTimer) clearInterval(certTimer);
       offPty.forEach((off) => off());
       offPty = [];
       stopRpcBridge();
@@ -373,6 +413,8 @@ export async function stopServer(): Promise<void> {
   if (!server) return;
   if (pingTimer) clearInterval(pingTimer);
   pingTimer = null;
+  if (certTimer) clearInterval(certTimer);
+  certTimer = null;
   offPty.forEach((off) => off());
   offPty = [];
   stopRpcBridge();
@@ -386,10 +428,18 @@ export async function stopServer(): Promise<void> {
   emit();
 }
 
-/** 접속 URL 후보 — Tailscale IP(100.64.0.0/10) 우선, 토큰 포함 (QR·복사용) */
+/**
+ * 접속 URL 후보 — 토큰 포함 (QR·복사용).
+ * HTTPS 로 떴으면 **인증서 도메인(MagicDNS 이름) 하나만** 준다 — IP 로 접속하면 인증서
+ * 이름이 안 맞아 경고가 뜨고, 그러면 설치형 PWA 조건도 깨진다.
+ * HTTP 폴백일 때는 예전처럼 Tailscale IP(100.64.0.0/10) 우선으로 정렬한다.
+ */
 function accessUrls(pagePath = '/'): string[] {
   const token = getOrCreateToken();
   const port = getPort();
+  if (tlsDomain) {
+    return [`https://${tlsDomain}:${port}${pagePath}?token=${token}`];
+  }
   const addrs: { ip: string; ts: boolean }[] = [];
   for (const infos of Object.values(os.networkInterfaces())) {
     for (const info of infos ?? []) {

@@ -118,7 +118,6 @@ export function registerPrsIpc() {
   handleShared(
     'prs:merge',
     async (
-      _e,
       repo: string,
       number: number,
       method: PrMergeMethod,

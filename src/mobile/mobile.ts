@@ -191,7 +191,9 @@ function handleMessage(msg: TermServerMsg) {
 
 function connect() {
   setStatus('연결 중…', false);
-  const sock = new WebSocket(`ws://${location.host}/term`);
+  // 스킴은 페이지를 따라간다 — https 페이지에서 ws:// 는 브라우저가 mixed content 로 막는다
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const sock = new WebSocket(`${scheme}://${location.host}/term`);
   ws = sock;
   sock.onopen = () => {
     reconnectDelay = 1000;

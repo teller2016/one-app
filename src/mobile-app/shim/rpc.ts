@@ -79,7 +79,9 @@ function handle(msg: MoServerMsg) {
 }
 
 function connect() {
-  const sock = new WebSocket(`ws://${location.host}/rpc`);
+  // 스킴은 페이지를 따라간다 — https 페이지에서 ws:// 는 브라우저가 mixed content 로 막는다
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const sock = new WebSocket(`${scheme}://${location.host}/rpc`);
   ws = sock;
   sock.onopen = () => {
     reconnectDelay = 1000;
