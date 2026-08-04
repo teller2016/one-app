@@ -15,6 +15,7 @@ import type {
 } from '../../../shared/terminal-protocol';
 import type { TerminalServerStatus } from '../../../shared/types';
 import { listProjects } from '../projects/store';
+import { listAgents } from './agents';
 import {
   attachSession,
   createSession,
@@ -190,6 +191,9 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
         items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
       });
       break;
+    case 'agents':
+      void listAgents().then((items) => send(ws, { type: 'agents', items }));
+      break;
     case 'attach': {
       const res = attachSession(msg.id, msg.cols, msg.rows);
       if (!res.ok) {
@@ -220,7 +224,7 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
         resizeSession(state.attachedId, msg.cols, msg.rows);
       break;
     case 'create': {
-      const info = createSession({ cwd: msg.cwd });
+      const info = createSession({ cwd: msg.cwd, agentId: msg.agentId });
       send(ws, { type: 'created', id: info.id });
       break;
     }
@@ -355,6 +359,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       type: 'cwds',
       items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
     });
+    void listAgents().then((items) => send(ws, { type: 'agents', items }));
   });
 
   // PTY 이벤트 → attach 된 소켓으로 전달 (세션 목록은 전체 브로드캐스트)

@@ -9,7 +9,12 @@ import type {
   TermCwdOption,
   TermServerMsg,
 } from '../shared/terminal-protocol';
-import type { TerminalSessionInfo } from '../shared/types';
+import type {
+  TerminalAgentId,
+  TerminalAgentInfo,
+  TerminalSessionInfo,
+} from '../shared/types';
+import { TERMINAL_AGENT_NAMES } from '../shared/types';
 
 const LAST_SESSION_KEY = 'mo:lastSession';
 
@@ -49,6 +54,7 @@ const bottomBtn = document.getElementById('toBottom') as HTMLButtonElement;
 const cwdSheet = document.getElementById('cwdSheet') as HTMLElement;
 const cwdBackdrop = document.getElementById('cwdBackdrop') as HTMLElement;
 const cwdList = document.getElementById('cwdList') as HTMLElement;
+const cwdTitle = document.getElementById('cwdTitle') as HTMLElement;
 
 // 주소창의 토큰은 서버가 쿠키로 승격했으니 지운다 (공유·스크린샷 노출 방지).
 // ⚠️ 경로는 현재 경로를 유지할 것 — '/' 로 고정하면 이 페이지(`/terminal/`)가 아니라
@@ -57,11 +63,13 @@ if (new URLSearchParams(location.search).has('token')) {
   history.replaceState(null, '', location.pathname);
 }
 
-// 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다
+// 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다.
+// 기본값은 최소 크기 — claude 같은 넓은 TUI 를 폰에서 통째로 보는 게 첫 화면의 목적이고,
+// 키우는 건 A＋ 로 바로 되지만 잘려 있으면 무엇을 키워야 할지조차 안 보인다.
 const FONT_KEY = 'mo:fontSize';
-const FONT_MIN = 6; // claude 같은 넓은 TUI 를 폰에서 통째로 보려면 아주 작게도 필요하다
+const FONT_MIN = 6;
 const FONT_MAX = 22;
-const initialFont = Number(localStorage.getItem(FONT_KEY)) || 15;
+const initialFont = Number(localStorage.getItem(FONT_KEY)) || FONT_MIN;
 
 const term = new Terminal({
   fontSize: Math.min(FONT_MAX, Math.max(FONT_MIN, initialFont)),
@@ -80,6 +88,7 @@ let attachedId: string | null = null;
 let attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — 버린다
 let sessions: TerminalSessionInfo[] = [];
 let cwdOptions: TermCwdOption[] = []; // 새 세션 위치 후보 (서버가 프로젝트 레지스트리에서 보내줌)
+let agentOptions: TerminalAgentInfo[] = []; // 에이전트 후보 (설치 감지 포함)
 let reconnectDelay = 1000;
 let ctrlArmed = false; // ctrl 키바 토글 — 다음 한 글자를 제어문자로
 
@@ -97,12 +106,21 @@ function setStatus(text: string, ok: boolean) {
   selectEl.disabled = !ok;
 }
 
+// 상태 글리프 — <option> 은 스타일이 안 먹어 텍스트 글리프가 유일한 표현 수단
+const STATUS_GLYPHS: Record<TerminalSessionInfo['status'], string> = {
+  waiting: '●', // 입력 대기 — 주의 필요
+  busy: '◐', // 작업 중
+  idle: '○',
+};
+
 function renderSessions() {
   selectEl.innerHTML = '';
   for (const s of sessions) {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = s.title;
+    const glyph = STATUS_GLYPHS[s.status] ?? '○';
+    const agent = s.agentId && s.agentId !== 'shell' ? ` (${TERMINAL_AGENT_NAMES[s.agentId]})` : '';
+    opt.textContent = `${glyph} ${s.title}${agent}`;
     selectEl.appendChild(opt);
   }
   if (!sessions.length) {
@@ -134,6 +152,9 @@ function handleMessage(msg: TermServerMsg) {
       break;
     case 'cwds':
       cwdOptions = msg.items;
+      break;
+    case 'agents':
+      agentOptions = msg.items;
       break;
     case 'created':
       attach(msg.id);
@@ -266,33 +287,58 @@ document.querySelectorAll<HTMLButtonElement>('#keybar button').forEach((btn) => 
 selectEl.addEventListener('change', () => {
   if (selectEl.value && selectEl.value !== attachedId) attach(selectEl.value);
 });
-// 새 세션 — 어디서 열지 먼저 고른다 (데스크톱의 위치 셀렉트와 같은 목록)
-function openCwdSheet() {
+// 새 세션 — 같은 시트에서 ①위치 → ②에이전트 순으로 고른다 (둘 다 데스크톱과 같은 출처)
+let pendingCwd: string | undefined;
+
+function sheetButton(label: string, sub: string | undefined, onPick: () => void) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = label;
+  if (sub) {
+    const span = document.createElement('span');
+    span.className = 'cwd-path';
+    span.textContent = sub;
+    btn.appendChild(span);
+  }
+  btn.addEventListener('click', onPick);
+  cwdList.appendChild(btn);
+}
+
+function openCwdStep() {
+  cwdTitle.textContent = '새 세션 위치';
   cwdList.innerHTML = '';
-  const add = (label: string, path?: string) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = label;
-    if (path) {
-      const sub = document.createElement('span');
-      sub.className = 'cwd-path';
-      sub.textContent = path;
-      btn.appendChild(sub);
-    }
-    btn.addEventListener('click', () => {
-      cwdSheet.hidden = true;
-      sendMsg(path ? { type: 'create', cwd: path } : { type: 'create' });
-    });
-    cwdList.appendChild(btn);
-  };
-  add('홈 디렉터리');
-  for (const o of cwdOptions) add(o.name, o.path);
+  sheetButton('홈 디렉터리', undefined, () => pickCwd(undefined));
+  for (const o of cwdOptions) sheetButton(o.name, o.path, () => pickCwd(o.path));
   cwdSheet.hidden = false;
+}
+
+function pickCwd(path: string | undefined) {
+  pendingCwd = path;
+  const choices = agentOptions.filter((a) => a.installed);
+  // 에이전트 목록이 없으면(구버전 서버·감지 실패) 고를 게 없다 — 바로 셸 세션
+  if (choices.length <= 1) {
+    createSession('shell');
+    return;
+  }
+  cwdTitle.textContent = '에이전트';
+  cwdList.innerHTML = '';
+  for (const a of choices) {
+    sheetButton(a.name, a.id === 'shell' ? '자동 실행 없음' : undefined, () =>
+      createSession(a.id)
+    );
+  }
+}
+
+function createSession(agentId: TerminalAgentId) {
+  cwdSheet.hidden = true;
+  // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환
+  sendMsg({ type: 'create', cwd: pendingCwd, agentId });
 }
 
 newBtn.addEventListener('click', () => {
   sendMsg({ type: 'cwds' }); // 최신 목록으로 갱신 (프로젝트가 추가됐을 수 있음)
-  openCwdSheet();
+  sendMsg({ type: 'agents' }); // 에이전트 설치 감지 결과도 함께
+  openCwdStep();
 });
 cwdBackdrop.addEventListener('click', () => {
   cwdSheet.hidden = true;

@@ -21,6 +21,8 @@ import type {
   MirrorMode,
   MailListQuery,
   TerminalCreateInput,
+  TerminalNotifyLevel,
+  TerminalSessionInfo,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
   OvertimeProgress,
@@ -307,6 +309,14 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("terminal:attach", id, cols, rows),
     // 세션 종료 (프로세스 kill)
     kill: (id: string) => ipcRenderer.invoke("terminal:kill", id),
+    // 에이전트 후보 목록 (로그인 셸 PATH 기준 설치 감지 포함)
+    agents: () => ipcRenderer.invoke("terminal:agents"),
+    // 입력대기 알림 강도 (badge/sound/alert — 뱃지는 항상)
+    notifyLevel: {
+      get: () => ipcRenderer.invoke("terminal:notify-level:get"),
+      set: (level: TerminalNotifyLevel) =>
+        ipcRenderer.invoke("terminal:notify-level:set", level),
+    },
     // 키 입력·리사이즈 — fire-and-forget (invoke 왕복 비용 제거)
     write: (id: string, data: string) =>
       ipcRenderer.send("terminal:write", id, data),
@@ -328,9 +338,13 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.on("terminal:exit", listener);
       return () => ipcRenderer.removeListener("terminal:exit", listener);
     },
-    // 세션 목록 변경(생성·종료) 구독. 해제 함수를 반환한다.
-    onSessions: (cb: () => void) => {
-      const listener = () => cb();
+    // 세션 목록·상태 변경 구독 — payload 로 전체 목록을 실어 재조회가 필요 없다.
+    // payload 가 없으면(구버전 main 과의 개발 중 어긋남) undefined 그대로 전달 —
+    // 빈 목록(마지막 세션 종료)과 구분해야 하므로 여기서 [] 로 뭉개지 않는다.
+    // 해제 함수를 반환한다.
+    onSessions: (cb: (sessions?: TerminalSessionInfo[]) => void) => {
+      const listener = (_e: unknown, sessions?: TerminalSessionInfo[]) =>
+        cb(sessions);
       ipcRenderer.on("terminal:sessions", listener);
       return () => ipcRenderer.removeListener("terminal:sessions", listener);
     },

@@ -1,70 +1,120 @@
 @use './base' as *;
 
-// 터미널 — 세션 탭바 + xterm 다크 패널 (섹션 전체를 세로로 채운다)
+// 터미널 — 좌측 세션 목록(에이전트·상태) + 우측 xterm 다크 패널 (Superset 스타일)
 .terminal {
   display: flex;
-  flex-direction: column;
   gap: 12px;
   height: 100%;
   padding: 24px 28px 20px;
 
-  &__toolbar {
+  // ── 좌측 세션 패널 ──
+  &__side {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+    width: 240px;
+    flex-shrink: 0;
+    min-height: 0;
   }
 
-  &__tabs {
+  &__side-head {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-    overflow-x: auto;
+    justify-content: space-between;
+    gap: 8px;
   }
 
-  &__tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: var(--control-h-sm);
-    padding: 0 8px 0 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: var(--surface-1);
-    color: var(--text-2);
-    cursor: pointer;
-    white-space: nowrap;
+  &__side-title {
     @include type-small;
+    color: var(--text-3);
+  }
+
+  &__side-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+  }
+
+  &__list-empty {
+    margin: 8px 2px;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  // 세션 행 — [상태점][제목/에이전트·상태][닫기]. 활성 행은 우측 터미널 패널과
+  // 이어진 것처럼 같은 니어블랙 타일로 채운다 (panel-dark 가 텍스트 토큰을 재매핑)
+  &__session {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 8px 8px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: none;
+    text-align: left;
+    cursor: pointer;
     transition:
       background var(--dur-1) var(--ease),
-      border-color var(--dur-1) var(--ease),
-      color var(--dur-1) var(--ease);
+      border-color var(--dur-1) var(--ease);
 
     &:hover {
-      border-color: var(--border-strong);
+      background: var(--overlay-hover);
     }
 
-    // 활성 탭은 아래 터미널 패널과 이어진 것처럼 — 같은 니어블랙 타일로 채운다
     &--active {
       @include panel-dark;
       border-color: var(--border-dark);
-      color: var(--on-dark);
     }
   }
 
-  &__tab-label {
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  &__session-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
-  &__tab-close {
+  &__session-title {
+    @include type-small;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 에이전트명·상태 서브라벨 — type-caption 은 uppercase 변형이라 혼합 텍스트에 부적합
+  &__session-sub {
+    font-size: var(--fs-caption);
+    line-height: 1.35;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 입력대기 행 — 상태 서브라벨을 초록으로 (panel-dark 안에선 --ok 가 on-dark 값으로 재매핑)
+  &__session--waiting &__session-sub {
+    color: var(--ok);
+  }
+
+  &__session-close {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 16px;
     height: 16px;
+    flex-shrink: 0;
     border-radius: var(--r-full);
     color: var(--text-3);
     transition: background var(--dur-1) var(--ease);
@@ -75,23 +125,17 @@
     }
   }
 
-  &__actions {
+  // ── 우측 터미널 영역 ──
+  // ⚠️ min-width·min-height 0 은 필수 — flex 아이템의 기본 min-*:auto 는 콘텐츠 기반이라
+  // xterm 이 커지면 이 래퍼가 늘어나고, 그러면 host(flex:1)도 커져 fit→resize→더 큰 xterm
+  // 으로 이어지는 무한 성장 루프가 된다(창 리사이즈 중 터미널이 요동치는 원인 — 2026-08 실측).
+  &__main {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  // 새 세션 위치 셀렉트 — 프로젝트 이름이 잘리지 않을 만큼 넓게
-  // (Select 루트 `.picker` 에 붙는 클래스. 트리거·팝오버가 모두 이 폭을 따른다)
-  &__cwd {
-    width: 220px;
-    flex-shrink: 0;
-
-    // 디렉터리 목록은 왼쪽 정렬이 읽기 쉽다 (공용 옵션 기본값은 시간 리스트용 가운데)
-    .picker__option {
-      text-align: left;
-    }
+    flex-direction: column;
+    overflow: hidden;
   }
 
   // xterm 이 마운트되는 다크 패널 — 로그·코드 패널과 같은 계열(DESIGN.md panel-dark).
@@ -209,6 +253,22 @@
       font-family: var(--font-mono);
       @include type-small;
       color: var(--text-2);
+    }
+  }
+}
+
+// 새 세션 모달 — 위치·에이전트 선택 폼
+.terminal-new {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  &__select {
+    width: 100%;
+
+    // 프로젝트·에이전트 이름은 왼쪽 정렬이 읽기 쉽다 (공용 옵션 기본값은 시간 리스트용 가운데)
+    .picker__option {
+      text-align: left;
     }
   }
 }

@@ -19,6 +19,36 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="icon-192.png" />
     <title>One App 터미널</title>
+    <!-- 첫 페인트용 크리티컬 CSS — mobile.css 는 mobile.ts 가 import 하므로 **dev 모드에선
+         JS 실행 후에야 주입**되고, 그 사이 흰 배경·정렬 안 된 바가 한 프레임 보인다(FOUC).
+         prod 빌드는 Vite 가 head 에 <link> 를 넣어 대체로 없지만, 두 모드 모두 첫 프레임부터
+         다크 골격이 잡히도록 최소 규칙만 여기 둔다(정본은 mobile.css). -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #1e1e20;
+        color: #e8e8ea;
+        font-family: -apple-system, system-ui, sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      #topbar,
+      #keybar {
+        background: #29292c;
+        flex-shrink: 0;
+      }
+      #term {
+        flex: 1;
+        min-height: 0;
+      }
+      #cwdSheet[hidden] {
+        display: none;
+      }
+    </style>
     <script type="module" src="/mobile.ts"></script>
   </head>
   <body>

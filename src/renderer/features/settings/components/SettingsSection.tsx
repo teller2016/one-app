@@ -14,6 +14,7 @@ import { applyThemePref, getThemePref } from '../../../lib/theme';
 import type {
   ReminderConfig,
   DayReminderConfig,
+  TerminalNotifyLevel,
   ThemePref,
 } from '../../../../shared/types';
 
@@ -51,6 +52,7 @@ export function SettingsSection() {
   const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatMinutes, setRepeatMinutes] = useState('10');
+  const [termNotify, setTermNotify] = useState<TerminalNotifyLevel>('sound');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
@@ -71,6 +73,7 @@ export function SettingsSection() {
       setLoading(false);
     });
     window.oneApp?.getAutostart().then((r) => setAutostart(r.enabled));
+    window.oneApp?.terminal?.notifyLevel.get().then(setTermNotify);
     window.oneApp?.attendance.getReminders().then((r) => {
       if (r.days?.length) setReminders(r.days);
       if (r.repeat) {
@@ -99,6 +102,14 @@ export function SettingsSection() {
     applyThemePref(next);
     window.oneApp?.settings.setTheme(next).catch(() => {
       toast('테마 저장에 실패했습니다', 'fail');
+    });
+  };
+
+  // 터미널 입력대기 알림 강도 — 테마처럼 즉시 저장
+  const changeTermNotify = (next: TerminalNotifyLevel) => {
+    setTermNotify(next);
+    window.oneApp?.terminal?.notifyLevel.set(next).catch(() => {
+      toast('알림 설정 저장에 실패했습니다', 'fail');
     });
   };
 
@@ -211,6 +222,29 @@ export function SettingsSection() {
           </Button>
           <span className="hint">알림(알럿)이 어떻게 뜨는지 미리 확인</span>
         </div>
+      </Collapsible>
+
+      <Collapsible
+        title="터미널"
+        icon={<Icon name="terminal" size={14} />}
+        storageKey="settings:group:terminal"
+      >
+        <div className="form-row">
+          <span className="form-row__label">입력대기 알림</span>
+          <Segment
+            options={[
+              { value: 'badge', label: '뱃지만' },
+              { value: 'sound', label: '뱃지+소리' },
+              { value: 'alert', label: '뱃지+알럿' },
+            ]}
+            value={termNotify}
+            onChange={changeTermNotify}
+          />
+        </div>
+        <p className="note">
+          에이전트(claude 등)가 작업을 마치고 입력을 기다리면 사이드바·독(Dock)
+          뱃지로 표시됩니다 — 소리나 알럿을 더할지 선택하세요. (즉시 저장)
+        </p>
       </Collapsible>
 
       <Collapsible

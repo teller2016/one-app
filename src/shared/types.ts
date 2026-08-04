@@ -686,18 +686,58 @@ export type MailBodyResult = {
 
 // ── 터미널 (앱 내 터미널 — 메인 프로세스가 PTY 소유, 데스크톱·MO 가 같은 세션 공유) ──
 
-/** 터미널 세션 요약 — 데스크톱 탭·모바일 세션 목록 공용 */
+/** 세션에서 자동 실행하는 AI 에이전트 CLI — 'shell' 은 순수 셸(자동 실행 없음) */
+export type TerminalAgentId =
+  | 'shell'
+  | 'claude'
+  | 'femc'
+  | 'codex'
+  | 'gemini';
+
+/** 에이전트 표시명 — main(알림 문구)·렌더러(목록)·MO 가 공용 */
+export const TERMINAL_AGENT_NAMES: Record<TerminalAgentId, string> = {
+  shell: '셸',
+  claude: 'Claude Code',
+  femc: 'FEMC',
+  codex: 'Codex CLI',
+  gemini: 'Gemini CLI',
+};
+
+/**
+ * 세션 상태 — main 의 출력/침묵 휴리스틱이 판정한다.
+ * busy: 작업 중(스피너 포함) · waiting: 턴 종료 후 입력 대기(알림 대상) · idle: 그 외
+ */
+export type TerminalSessionStatus = 'busy' | 'waiting' | 'idle';
+
+/** 에이전트 선택지 — installed 는 로그인 셸 PATH 기준 설치 감지 결과 */
+export type TerminalAgentInfo = {
+  id: TerminalAgentId;
+  name: string;
+  installed: boolean;
+};
+
+/** 입력대기 알림 강도 — 뱃지(사이드바·독)는 레벨 무관 항상 표시 */
+export type TerminalNotifyLevel = 'badge' | 'sound' | 'alert';
+
+/** 터미널 세션 요약 — 데스크톱 목록·모바일 세션 목록 공용 */
 export type TerminalSessionInfo = {
   id: string;
-  title: string; // 표시명 (cwd 마지막 폴더명)
+  title: string; // 표시명 (프로젝트명 또는 cwd 마지막 폴더명)
   cwd: string; // 시작 작업 디렉터리
   cols: number; // 현재 PTY 크기
   rows: number;
+  agentId: TerminalAgentId;
+  projectId?: string; // 프로젝트 레지스트리 id (홈이면 없음)
+  projectName?: string; // 표시용 — MO 가 재조회 없이 쓴다
+  status: TerminalSessionStatus;
+  createdAt: number;
 };
 
 /** 새 세션 생성 옵션 */
 export type TerminalCreateInput = {
   cwd?: string; // 없으면 홈 디렉터리
+  projectId?: string; // 있으면 프로젝트 레지스트리에서 cwd 해석 (cwd 보다 우선)
+  agentId?: TerminalAgentId; // 기본 'shell'
   cols?: number;
   rows?: number;
 };

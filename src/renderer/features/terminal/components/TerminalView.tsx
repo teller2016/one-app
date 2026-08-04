@@ -9,6 +9,9 @@ import { useEffect, useRef } from 'react';
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
+const PTY_RESIZE_DEBOUNCE_MS = 120;
+
 /**
  * 터미널 색 — DESIGN.md 의 **다크 패널(panel-dark)** 토큰에서 가져온다.
  * 로그·코드 패널과 같은 계열이라 라이트/다크 테마 모두에서 앱의 일부처럼 보인다.
@@ -86,9 +89,17 @@ export function TerminalView({ id }: { id: string }) {
         term.resize(ev.cols, ev.rows);
     });
     const dataSub = term.onData((data) => window.oneApp.terminal.write(id, data));
-    const resizeSub = term.onResize(({ cols, rows }) =>
-      window.oneApp.terminal.resize(id, cols, rows)
-    );
+    // PTY 크기 전달은 디바운스 — 창 드래그 중엔 매 프레임 크기가 바뀌고, 그때마다
+    // SIGWINCH 를 보내면 claude 같은 TUI 가 전체 리렌더를 반복해 화면이 요동친다.
+    // 마지막 값만 보내면 드래그가 끝난 크기로 한 번 맞춰진다(last-claim-wins 유지).
+    let ptyResizeTimer: number | null = null;
+    const resizeSub = term.onResize(({ cols, rows }) => {
+      if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
+      ptyResizeTimer = window.setTimeout(() => {
+        ptyResizeTimer = null;
+        window.oneApp.terminal.resize(id, cols, rows);
+      }, PTY_RESIZE_DEBOUNCE_MS);
+    });
 
     void window.oneApp.terminal
       .attach(id, term.cols, term.rows)
@@ -110,12 +121,21 @@ export function TerminalView({ id }: { id: string }) {
 
     // 컨테이너 크기가 실제로 바뀔 때만 fit — xterm 내부 리렌더(다른 클라이언트가 보낸
     // resize 등)로 옵서버가 깨어나도 fit 을 돌리면 MO 가 맞춘 PTY 크기를 즉시 되돌려 버린다.
+    // fit 자체는 rAF 로 코얼레스한다 — 드래그 중 옵서버는 프레임마다 깨어나고,
+    // fit 이 xterm DOM 을 건드려 다시 옵서버를 깨우므로 즉시 실행하면 진동이 커진다.
     let lastBox = `${host.clientWidth}x${host.clientHeight}`;
+    let fitRaf: number | null = null;
     const ro = new ResizeObserver(() => {
       const box = `${host.clientWidth}x${host.clientHeight}`;
       if (box === lastBox) return;
       lastBox = box;
-      fit.fit();
+      if (fitRaf !== null) return;
+      fitRaf = requestAnimationFrame(() => {
+        fitRaf = null;
+        if (disposed) return;
+        lastBox = `${host.clientWidth}x${host.clientHeight}`; // fit 직전 크기로 기준 갱신
+        fit.fit();
+      });
     });
     ro.observe(host);
 
@@ -136,6 +156,8 @@ export function TerminalView({ id }: { id: string }) {
     return () => {
       disposed = true;
       ro.disconnect();
+      if (fitRaf !== null) cancelAnimationFrame(fitRaf);
+      if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
       window.removeEventListener('focus', reclaimSize);
       offData();
       offResized();

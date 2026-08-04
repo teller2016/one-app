@@ -19,6 +19,7 @@ import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import type { TerminalSessionInfo } from "../../shared/types";
 
 // 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다
 // render 는 섹션 이동 함수(navigate)를 받는다 — 홈 대시보드 카드 클릭 이동용
@@ -211,6 +212,20 @@ export function App() {
     setJiraUnread(0);
   }, [activeId, jiraOpenKeys]);
 
+  // 사이드바 터미널 뱃지 — 입력대기(waiting) 세션 수. main 이 상태를 판정해 push 한다
+  const [termWaiting, setTermWaiting] = useState(0);
+  useEffect(() => {
+    const api = window.oneApp?.terminal;
+    if (!api) return;
+    const count = (sessions: TerminalSessionInfo[]) =>
+      setTermWaiting(sessions.filter((s) => s.status === "waiting").length);
+    void api.list().then(count);
+    return api.onSessions((sessions) => {
+      if (sessions) count(sessions);
+      else void api.list().then(count); // payload 미탑재(구버전 main) 폴백
+    });
+  }, []);
+
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
 
   // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환
@@ -226,16 +241,21 @@ export function App() {
       <ConfirmProvider>
         <div className="app">
           <Sidebar
-            sections={SECTIONS.map((s) =>
-              s.id === "jira"
-                ? {
-                    ...s,
-                    // 확인 안 한 새 티켓이 있으면 그 수를 액센트로 강조, 없으면 미해결 수
-                    badge: jiraUnread > 0 ? jiraUnread : jiraCount,
-                    badgeAccent: jiraUnread > 0,
-                  }
-                : s
-            )}
+            sections={SECTIONS.map((s) => {
+              if (s.id === "jira") {
+                return {
+                  ...s,
+                  // 확인 안 한 새 티켓이 있으면 그 수를 액센트로 강조, 없으면 미해결 수
+                  badge: jiraUnread > 0 ? jiraUnread : jiraCount,
+                  badgeAccent: jiraUnread > 0,
+                };
+              }
+              // 터미널 — 입력대기 세션이 있을 때만 액센트 뱃지
+              if (s.id === "terminal" && termWaiting > 0) {
+                return { ...s, badge: termWaiting, badgeAccent: true };
+              }
+              return s;
+            })}
             activeId={activeId}
             onSelect={navigate}
             header={<MailWidget />}

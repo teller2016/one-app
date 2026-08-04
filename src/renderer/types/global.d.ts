@@ -68,6 +68,8 @@ import type {
   TerminalSessionInfo,
   TerminalAttachResult,
   TerminalServerStatus,
+  TerminalAgentInfo,
+  TerminalNotifyLevel,
 } from '../../shared/types';
 
 declare global {
@@ -231,6 +233,11 @@ declare global {
           rows: number,
         ) => Promise<TerminalAttachResult>;
         kill: (id: string) => Promise<{ ok: boolean }>;
+        agents: () => Promise<TerminalAgentInfo[]>;
+        notifyLevel: {
+          get: () => Promise<TerminalNotifyLevel>;
+          set: (level: TerminalNotifyLevel) => Promise<TerminalNotifyLevel>;
+        };
         write: (id: string, data: string) => void;
         resize: (id: string, cols: number, rows: number) => void;
         onData: (
@@ -239,7 +246,10 @@ declare global {
         onExit: (
           cb: (ev: { id: string; exitCode: number }) => void,
         ) => () => void;
-        onSessions: (cb: () => void) => () => void;
+        // payload 미탑재(구버전 main)면 undefined — 호출부가 list() 로 폴백한다
+        onSessions: (
+          cb: (sessions?: TerminalSessionInfo[]) => void,
+        ) => () => void;
         onResized: (
           cb: (ev: { id: string; cols: number; rows: number }) => void,
         ) => () => void;

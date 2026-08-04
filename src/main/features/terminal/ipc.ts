@@ -1,11 +1,19 @@
-import { app, ipcMain } from 'electron';
-import type { TerminalCreateInput } from '../../../shared/types';
+import { app, ipcMain, shell } from 'electron';
+import type {
+  TerminalCreateInput,
+  TerminalNotifyLevel,
+  TerminalSessionInfo,
+} from '../../../shared/types';
+import { TERMINAL_AGENT_NAMES } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
+import { notify } from '../notify/notify';
+import { listAgents } from './agents';
 import {
   attachSession,
   createSession,
   killSession,
   listSessions,
+  onAgentWaiting,
   onPtyResized,
   onSessionsChanged,
   onTerminalData,
@@ -19,7 +27,19 @@ import {
   startServer,
   stopServer,
 } from './server';
-import { getServerEnabled, regenerateToken, setServerEnabled } from './store';
+import {
+  getNotifyLevel,
+  getServerEnabled,
+  regenerateToken,
+  setNotifyLevel,
+  setServerEnabled,
+} from './store';
+
+// 독(Dock) 뱃지 — 입력대기 세션 수. 0 이면 반드시 비워 잔존을 막는다
+function updateDockBadge(sessions: TerminalSessionInfo[]) {
+  const waiting = sessions.filter((s) => s.status === 'waiting').length;
+  app.dock?.setBadge(waiting > 0 ? String(waiting) : '');
+}
 
 /** 터미널 관련 IPC 핸들러 등록 */
 export function registerTerminalIpc() {
@@ -33,6 +53,12 @@ export function registerTerminalIpc() {
   ipcMain.handle('terminal:kill', (_e, id: string) => {
     killSession(id);
     return { ok: true };
+  });
+  ipcMain.handle('terminal:agents', () => listAgents());
+  ipcMain.handle('terminal:notify-level:get', () => getNotifyLevel());
+  ipcMain.handle('terminal:notify-level:set', (_e, level: TerminalNotifyLevel) => {
+    setNotifyLevel(level);
+    return getNotifyLevel();
   });
 
   // 키 입력·리사이즈는 fire-and-forget(send) — invoke 왕복 비용 제거
@@ -59,11 +85,29 @@ export function registerTerminalIpc() {
   // 세션 이벤트를 모든 창에 push (모바일 WS 는 server.ts 가 별도 구독)
   onTerminalData((id, data, seq) => broadcast('terminal:data', { id, data, seq }));
   onTerminalExit((id, exitCode) => broadcast('terminal:exit', { id, exitCode }));
-  onSessionsChanged(() => broadcast('terminal:sessions'));
+  // 목록·상태 변경 — payload 를 실어 렌더러의 재조회를 없애고, 독 뱃지도 함께 갱신
+  onSessionsChanged(() => {
+    const sessions = listSessions();
+    broadcast('terminal:sessions', sessions);
+    updateDockBadge(sessions);
+  });
   onPtyResized((id, cols, rows) =>
     broadcast('terminal:resized', { id, cols, rows })
   );
   onServerChanged(() => broadcast('terminal:server:changed'));
+
+  // 입력대기 알림 — 뱃지(사이드바·독)는 sessions 브로드캐스트가 담당하고, 여기선 강도별 추가 신호만
+  onAgentWaiting((info) => {
+    const level = getNotifyLevel();
+    if (level === 'sound') shell.beep();
+    if (level === 'alert') {
+      void notify({
+        title: '⏳ 입력 대기',
+        body: `'${info.title}' 세션의 ${TERMINAL_AGENT_NAMES[info.agentId]} 가 입력을 기다립니다.`,
+        section: 'terminal',
+      });
+    }
+  });
 
   // 켜두고 종료했으면 자동 시작 — 자리 비움 시나리오상 재시작 후에도 MO 접속이 살아야 한다
   if (getServerEnabled()) {
