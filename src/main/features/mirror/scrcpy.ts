@@ -22,6 +22,20 @@ const ADB_CANDIDATES = ['/opt/homebrew/bin/adb', '/usr/local/bin/adb'];
 const findBin = (candidates: string[]): string | null =>
   candidates.find((p) => fs.existsSync(p)) ?? null;
 
+// adb 데몬이 꺼져 있으면 `adb devices` 가 데몬을 먼저 띄우는데, 그게 **3초를 넘는다**
+// (2026-08 실측: 콜드 3.03초 / 웜 0.01초). 예전 타임아웃이 3초여서 데몬이 식어 있는 동안
+// 기기 감지가 매번 실패했다 — 넉넉히 잡고, 첫 조회 전에 데몬을 미리 띄운다.
+const ADB_TIMEOUT_MS = 10_000;
+let adbWarmed = false;
+
+function warmAdbDaemon(adb: string): Promise<void> {
+  if (adbWarmed) return Promise.resolve();
+  adbWarmed = true;
+  return new Promise((resolve) => {
+    execFile(adb, ['start-server'], { timeout: ADB_TIMEOUT_MS }, () => resolve());
+  });
+}
+
 let child: ChildProcess | null = null;
 let runningMode: MirrorMode | null = null;
 let starting = false; // 기기 확인(await) 중 재진입 방지 — 없으면 scrcpy 가 이중 실행돼 하나가 유실됨
@@ -38,13 +52,18 @@ export function onMirrorChanged(cb: () => void) {
 async function getUsbDevice(): Promise<string | null> {
   const adb = findBin(ADB_CANDIDATES);
   if (!adb) return null;
+  await warmAdbDaemon(adb);
   return new Promise((resolve) => {
-    execFile(adb, ['devices', '-l'], { timeout: 3000 }, (err, stdout) => {
+    execFile(adb, ['devices', '-l'], { timeout: ADB_TIMEOUT_MS }, (err, stdout) => {
       if (err) return resolve(null);
+      // 데몬 시작 배너("* daemon not running..." 등)가 섞일 수 있어 헤더 한 줄만 잘라내는 대신
+      // 기기 항목 형태(시리얼 + 상태)로 직접 걸러낸다
       const line = stdout
         .split('\n')
-        .slice(1) // 헤더 제거
-        .find((l) => /\bdevice\b/.test(l) && !/offline|unauthorized/.test(l));
+        .find(
+          (l) =>
+            /^\S+\s+device\b/.test(l.trim()) && !/offline|unauthorized/.test(l)
+        );
       if (!line) return resolve(null);
       // "SERIAL device usb:... model:SM_G991N ..." → 모델명, 없으면 시리얼
       const model = line.match(/model:(\S+)/)?.[1]?.replace(/_/g, ' ');
