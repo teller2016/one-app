@@ -23,13 +23,16 @@ import {
   listPersisted,
   removePersisted,
   savePersisted,
+  updatePersistedSize,
 } from './sessions-store';
 import {
   getTmuxBin,
   hasTmuxSession,
   initTmux,
+  isTmuxAltScreen,
   killTmuxSession,
   listTmuxSessions,
+  refreshTmuxClients,
   sessionIdFromTmuxName,
   tmuxAttachArgs,
   tmuxNewSessionArgs,
@@ -400,6 +403,8 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
       projectId: session.projectId,
       projectName: session.projectName,
       createdAt: now,
+      cols,
+      rows,
     });
   }
 
@@ -434,9 +439,13 @@ export async function restoreSessions(): Promise<void> {
     if (!id || sessions.has(id)) continue;
     const meta = persisted.get(id);
     const cwd = meta?.cwd ?? os.homedir();
+    // 마지막 크기로 attach — 80x24 로 붙였다 되돌리면 TUI(claude)가 앱 시작마다
+    // 두 번 리플로우하며 화면이 출렁인다
+    const cols = meta?.cols ?? 80;
+    const rows = meta?.rows ?? 24;
     let proc: pty.IPty;
     try {
-      proc = pty.spawn(bin, tmuxAttachArgs(name), ptyOptions(cwd, 80, 24));
+      proc = pty.spawn(bin, tmuxAttachArgs(name), ptyOptions(cwd, cols, rows));
     } catch (e) {
       console.error(`[terminal] 세션 복원 실패 (${name}):`, e);
       continue;
@@ -447,8 +456,8 @@ export async function restoreSessions(): Promise<void> {
       tmuxName: name,
       title: meta?.title ?? (path.basename(cwd) || cwd),
       cwd,
-      cols: 80,
-      rows: 24,
+      cols,
+      rows,
       agentId: meta?.agentId ?? 'shell',
       projectId: meta?.projectId,
       projectName: meta?.projectName,
@@ -498,21 +507,37 @@ function launchAgent(s: Session, command: string) {
 
 /**
  * 세션 attach — last-attach-wins: 새로 붙은 클라이언트 크기로 PTY 를 맞춘다.
- * 크기가 같으면 SIGWINCH 토글로 TUI 강제 리렌더 (replay 는 스크롤백 복원용이고,
- * 현재 화면의 진실은 이 redraw 가 담당한다).
+ * 크기가 같으면 SIGWINCH 토글(폴백)/refresh-client(tmux)로 현재 화면을 다시 그린다
+ * (replay 는 스크롤백 복원용이고, 현재 화면의 진실은 이 redraw 가 담당한다).
  * 반환 seq 이하의 라이브 이벤트는 replay 에 이미 포함 — 클라이언트가 버려서 중복을 막는다.
+ *
+ * ⚠️ tmux 세션이 대체 화면(claude 등 TUI)이면 replay 를 **생략**한다 — 옛 프레임을
+ * 재생하면 그 사이 크기가 달랐던 프레임의 글자가 우측 끝에 눌어붙는데, TUI 는 자기
+ * 렌더 모델과의 diff 만 다시 그려서 그 잔상을 영영 지우지 않는다(2026-08-05 실측:
+ * ◉ × 조각·잘린 에이전트 칩). 빈 화면에 tmux 전체 리드로(라인 클리어 포함) 한 프레임이
+ * superset 과 같은 클린 attach 다. 일반 셸은 스크롤백 가치가 있어 replay 를 유지한다.
  */
-export function attachSession(id: string, cols: number, rows: number): TerminalAttachResult {
+export async function attachSession(
+  id: string,
+  cols: number,
+  rows: number
+): Promise<TerminalAttachResult> {
   const s = sessions.get(id);
   if (!s) return { ok: false, error: '세션이 없습니다.' };
   flush(s); // replay 에 대기 출력까지 포함
   // 턴 진행 중(busy)이 아니면 이어질 SIGWINCH redraw 가 합성 waiting 을 만든다 —
   // 알림 기회를 미리 소진해 가짜 알림음을 막는다 (진짜 턴은 입력이 플래그를 리셋)
   if (s.status !== 'busy') s.notifiedSinceInput = true;
-  const replay = s.ring.join('');
+  // ⚠️ alt 질의(await) 중의 flush 는 ring·seq 에 반영된 뒤 아래에서 스냅샷된다 — 유실 없음
+  const skipReplay = s.tmuxName ? await isTmuxAltScreen(s.tmuxName) : false;
+  const replay = skipReplay ? '' : s.ring.join('');
   if (cols > 0 && rows > 0) {
     if (cols !== s.cols || rows !== s.rows) {
       resizeSession(id, cols, rows); // 크기 변경 자체가 SIGWINCH → TUI 가 다시 그림
+    } else if (s.tmuxName) {
+      // tmux 는 화면 모델을 갖고 있다 — refresh-client 가 내부 앱(claude)을 건드리지
+      // 않고 전체 화면을 다시 보내준다 (rows±1 토글의 이중 리플로우·출렁임 없음)
+      void refreshTmuxClients(s.tmuxName);
     } else {
       // 같은 크기면 토글로 SIGWINCH 만 유발 — 일시적이므로 resized 이벤트는 내지 않는다
       try {
@@ -551,6 +576,8 @@ export function resizeSession(id: string, cols: number, rows: number): void {
   }
   s.cols = cols;
   s.rows = rows;
+  // 영속 세션은 크기도 기억 — 다음 복원 attach 를 마지막 크기로 해 리플로우를 없앤다
+  if (s.tmuxName) updatePersistedSize(s.id, cols, rows);
   // attach 와 같은 이유 — redraw 가 만드는 합성 waiting 의 알림을 막는다
   if (s.status !== 'busy') s.notifiedSinceInput = true;
   resizeListeners.forEach((cb) => cb(id, cols, rows));

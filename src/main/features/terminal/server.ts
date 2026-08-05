@@ -195,21 +195,26 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       void listAgents().then((items) => send(ws, { type: 'agents', items }));
       break;
     case 'attach': {
-      const res = attachSession(msg.id, msg.cols, msg.rows);
-      if (!res.ok) {
-        send(ws, { type: 'error', message: res.error ?? 'attach 실패' });
-        break;
-      }
-      // attachedId 는 attach 스냅샷 이후에 설정 — 스냅샷에 포함된 flush 가
-      // 이 소켓으로 이중 전달(라이브 data + replay)되는 것을 막는다
-      state.attachedId = msg.id;
-      send(ws, {
-        type: 'attached',
-        id: msg.id,
-        replay: res.replay ?? '',
-        seq: res.seq ?? 0,
-        cols: res.cols ?? 0,
-        rows: res.rows ?? 0,
+      const attachId = msg.id;
+      const { cols, rows } = msg;
+      void attachSession(attachId, cols, rows).then((res) => {
+        if (!res.ok) {
+          send(ws, { type: 'error', message: res.error ?? 'attach 실패' });
+          return;
+        }
+        // attachedId 는 attach 스냅샷 이후에 설정 — 스냅샷에 포함된 flush 가
+        // 이 소켓으로 이중 전달(라이브 data + replay)되는 것을 막는다.
+        // (attachSession 내부 await 중의 flush 는 스냅샷 seq 에 포함되므로,
+        // 스냅샷→여기(마이크로태스크) 사이에 끼어들 flush 는 없다 — 유실 없음)
+        state.attachedId = attachId;
+        send(ws, {
+          type: 'attached',
+          id: attachId,
+          replay: res.replay ?? '',
+          seq: res.seq ?? 0,
+          cols: res.cols ?? 0,
+          rows: res.rows ?? 0,
+        });
       });
       break;
     }

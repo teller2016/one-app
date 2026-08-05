@@ -18,12 +18,17 @@ const CANDIDATES = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/t
 // 앱이 시작할 때마다 다시 쓰는 전용 설정 — tmux 를 "보이지 않는 영속화 계층"으로만 쓴다.
 // 상태바·프리픽스를 꺼서 사용자는 tmux 의 존재를 모르게 하고, 마우스·BEL·truecolor 는
 // 기존(직접 spawn) 동작과 동일하게 패스스루한다.
+// ⚠️ terminal-features 의 sync 는 필수 — tmux 기본값(xterm*)엔 sync 가 없어서
+// claude 의 동기화 출력(DEC 2026)이 무력화되고, xterm.js 에 그리다 만 중간 프레임이
+// 노출돼 화면이 깨져 보인다(반쪽 구분선 등 — 2026-08-05 실측). hyperlinks 도 같은 이유
+// (기본값에 없으면 OSC 8 링크가 tmux 에서 소거된다).
 const CONF = `# One App 전용 tmux 설정 — 앱이 시작 시마다 덮어쓴다 (직접 수정 금지)
 set -g prefix None
 set -g status off
 set -s escape-time 0
 set -g default-terminal "tmux-256color"
 set -as terminal-overrides ",xterm-256color:RGB"
+set -as terminal-features ",xterm-256color:RGB:sync:hyperlinks"
 set -g history-limit 10000
 set -g bell-action any
 set -g focus-events on
@@ -74,6 +79,9 @@ async function detect(): Promise<string | null> {
     }
   }
   tmuxBin = bin;
+  // conf 는 서버 시작 시에만 읽힌다 — 이전 실행의 서버가 살아있으면(영속 세션)
+  // 새 conf 를 반영하도록 재적용한다. 서버가 없으면 조용히 실패(무해).
+  if (bin) await run(['source-file', confPath()]);
   return bin;
 }
 
@@ -130,4 +138,40 @@ export async function hasTmuxSession(name: string): Promise<boolean> {
 export async function killTmuxSession(name: string): Promise<boolean> {
   const { ok } = await run(['kill-session', '-t', `=${name}`]);
   return ok;
+}
+
+/**
+ * 대체 화면(alt screen) 여부 — claude 같은 TUI 가 ?1049h 로 켠 상태인지.
+ * attach 의 replay 생략 판단에 쓴다 (pane 포맷이라 list-panes -s 로 세션 타깃 질의 —
+ * 3.7b 에서 display-message 등 pane 타깃 명령은 '=세션명' 을 못 받는다, 실측).
+ */
+export async function isTmuxAltScreen(name: string): Promise<boolean> {
+  const { ok, stdout } = await run([
+    'list-panes',
+    '-s',
+    '-t',
+    `=${name}`,
+    '-F',
+    '#{alternate_on}',
+  ]);
+  return ok && stdout.trim().startsWith('1');
+}
+
+/**
+ * 세션에 붙은 클라이언트 전체 리프레시 — tmux 가 자기 화면 모델로 전체를 다시 그린다.
+ * SIGWINCH 토글(rows±1)과 달리 내부 앱(claude)을 건드리지 않아 이중 리플로우가 없고,
+ * sync 광고와 함께면 원자적 프레임으로 온다. (refresh-client 는 target-client(tty) 만
+ * 받으므로 list-clients 로 tty 를 먼저 찾는다)
+ */
+export async function refreshTmuxClients(name: string): Promise<void> {
+  const { ok, stdout } = await run([
+    'list-clients',
+    '-t',
+    `=${name}`,
+    '-F',
+    '#{client_tty}',
+  ]);
+  if (!ok) return;
+  const ttys = stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  await Promise.all(ttys.map((tty) => run(['refresh-client', '-t', tty])));
 }

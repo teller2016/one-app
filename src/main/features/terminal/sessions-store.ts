@@ -15,6 +15,8 @@ export type PersistedSession = {
   projectId?: string;
   projectName?: string;
   createdAt: number;
+  cols?: number; // 마지막 PTY 크기 — 복원 attach 를 이 크기로 해 TUI 리플로우를 없앤다
+  rows?: number;
 };
 
 type SessionsFile = Record<string, PersistedSession>; // key = 세션 id
@@ -35,4 +37,12 @@ export function removePersisted(id: string): void {
   if (!(id in all)) return;
   delete all[id];
   writeUserJson(FILE, all);
+}
+
+/** 크기만 갱신 — 리사이즈마다 불리므로 변화 없으면 쓰지 않는다 */
+export function updatePersistedSize(id: string, cols: number, rows: number): void {
+  const all = read();
+  const meta = all[id];
+  if (!meta || (meta.cols === cols && meta.rows === rows)) return;
+  writeUserJson(FILE, { ...all, [id]: { ...meta, cols, rows } });
 }
