@@ -86,6 +86,8 @@ export function MailWidget() {
   };
 
   const hasUnread = configured && unread != null && unread > 0;
+  // 접힌 사이드바의 뱃지용 — 세 자리는 72px 폭을 넘치게 하므로 클램프한다
+  const unreadBadge = unread != null && unread > 99 ? '99+' : String(unread ?? 0);
   const status = !configured
     ? '계정 설정 필요'
     : spinning && unread === null
@@ -109,13 +111,27 @@ export function MailWidget() {
           disabled={!configured}
           title={
             collapsed
-              ? '메일 열기'
+              ? hasUnread
+                ? `메일 열기 (${status})`
+                : '메일 열기'
               : '비즈박스 메일함 열기 (브라우저)'
           }
-          aria-label={collapsed ? '메일 열기' : '비즈박스 메일함 열기'}
+          aria-label={
+            collapsed
+              ? hasUnread
+                ? `메일 열기 — ${status}`
+                : '메일 열기'
+              : '비즈박스 메일함 열기'
+          }
         >
           <Icon name="mail" size={18} />
-          {hasUnread && <span className="mail-nav__dot" aria-hidden="true" />}
+          {/* 접힌 상태에선 개수 뱃지, 펼친 상태에선 점 (개수는 옆 상태 텍스트가 말한다) */}
+          {hasUnread &&
+            (collapsed ? (
+              <span className="mail-nav__count">{unreadBadge}</span>
+            ) : (
+              <span className="mail-nav__dot" aria-hidden="true" />
+            ))}
         </button>
 
         {/* 제목 + 상태 — 클릭 시 앱 내 리더 모달 */}

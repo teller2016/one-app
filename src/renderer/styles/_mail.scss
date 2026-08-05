@@ -57,6 +57,26 @@
     border: 2px solid var(--bg);
   }
 
+  // 안읽음 개수 — 사이드바가 접혔을 때 점을 대신한다.
+  // 접히면 상태 텍스트('새 메일 3통')가 사라져 개수를 알 방법이 없으므로,
+  // 사이드바 섹션 뱃지와 같은 규칙(아이콘 우상단 액센트 필)으로 숫자를 띄운다.
+  &__count {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: var(--r-full);
+    background: var(--accent-btn);
+    border: 2px solid var(--bg);
+    color: var(--on-accent);
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    text-align: center;
+  }
+
   // 제목 + 상태 2줄 — 클릭 = 앱 내 리더 모달
   &__main {
     flex: 1;
