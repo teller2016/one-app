@@ -4,6 +4,7 @@ import { Button } from '../../../components/Button';
 import { FileTrigger } from '../../../components/FileTrigger';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
+import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 
 /** 사이드바 하단 VPN 위젯 — OpenVPN 연결 상태 표시 + 연결/해제 */
@@ -113,97 +114,106 @@ export function VpnWidget() {
           : '연결 안 됨';
   const errorMsg = st === 'error' ? (status.error ?? error) : error;
   const ovpnName = formOvpn ? formOvpn.split('/').pop() : '';
+  // 아이콘·상태점은 축소 타일에도 그대로 쓴다 (SidebarWidget 이 팝오버 진입점으로 삼는다)
+  const icon = <Icon name="lock" size={12} />;
+  const dot = <StatusDot status={dotStatus} />;
+  const tooltip = `VPN — ${statusText}`;
 
   return (
-    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신한다
-    <div className="sbw" title={`VPN — ${statusText}`}>
-      {/* 한 줄: 아이콘 · 상태 · 우측 액션 (설정 ⚙ + 연결/해제) */}
-      <div className="sbw__row">
-        <span className="sbw__icon">
-          <Icon name="lock" size={12} />
-        </span>
-        <span className="sbw__label">
-          <StatusDot status={dotStatus} />
-          {/* 자물쇠 아이콘이 VPN 정체성 — 접두사 없이 상태만 (말줄임 방지) */}
-          <span className="sbw__text" title={`VPN — ${statusText}`}>
-            {statusText}
+    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
+    <SidebarWidget icon={icon} dot={dot} tooltip={tooltip}>
+      <div className="sbw" title={tooltip}>
+        {/* 한 줄: 아이콘 · 상태 · 우측 액션 (설정 ⚙ + 연결/해제) */}
+        <div className="sbw__row">
+          <span className="sbw__icon">{icon}</span>
+          <span className="sbw__label">
+            {dot}
+            {/* 자물쇠 아이콘이 VPN 정체성 — 접두사 없이 상태만 (말줄임 방지) */}
+            <span className="sbw__text" title={tooltip}>
+              {statusText}
+            </span>
           </span>
-        </span>
-        <span className="sbw__actions">
-          <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
-            <Icon name="settings" size={12} />
-          </button>
-        </span>
+          <span className="sbw__actions">
+            <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
+              <Icon name="settings" size={12} />
+            </button>
+          </span>
+        </div>
+
+        {/* 액션 줄 — 연결/해제 (설정 폼이 열려 있으면 폼의 저장 버튼이 대신함) */}
+        {!showConfig && (
+          <div className="sbw__buttons">
+            {st === 'connected' ? (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={disconnect}
+                loading={busy}
+              >
+                연결 해제
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={connect}
+                loading={busy || st === 'connecting'}
+              >
+                VPN 연결
+              </Button>
+            )}
+          </div>
+        )}
+
+        {showConfig && settings && (
+          <div className="sbw__sub">
+            {!settings.openvpnInstalled && (
+              <p className="vpnw__warn">
+                openvpn CLI 필요 — 터미널에서 <code>brew install openvpn</code>
+              </p>
+            )}
+            <Input
+              small
+              placeholder="VPN 계정 이름"
+              value={formUser}
+              onChange={(e) => setFormUser(e.target.value)}
+            />
+            <Input
+              small
+              type="password"
+              placeholder={
+                settings.hasTotpSecret ? 'OTP 시크릿 키 (저장됨)' : 'OTP 시크릿 키'
+              }
+              value={formSecret}
+              onChange={(e) => setFormSecret(e.target.value)}
+            />
+            <FileTrigger onClick={pickOvpn} title={formOvpn}>
+              {ovpnName || '.ovpn 파일 선택…'}
+            </FileTrigger>
+            <Button variant="primary" size="sm" onClick={saveConfig}>
+              저장
+            </Button>
+          </div>
+        )}
+
+        {!showConfig &&
+          st !== 'connected' &&
+          settings &&
+          !settings.hasTotpSecret && (
+            <div className="sbw__sub">
+              <Input
+                small
+                placeholder="Google OTP 6자리"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
+            </div>
+          )}
+
+        {errorMsg && <p className="sbw__error">{errorMsg}</p>}
       </div>
-
-      {/* 액션 줄 — 연결/해제 (설정 폼이 열려 있으면 폼의 저장 버튼이 대신함) */}
-      {!showConfig && (
-        <div className="sbw__buttons">
-          {st === 'connected' ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={disconnect}
-              loading={busy}
-            >
-              연결 해제
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={connect}
-              loading={busy || st === 'connecting'}
-            >
-              VPN 연결
-            </Button>
-          )}
-        </div>
-      )}
-
-      {showConfig && settings && (
-        <div className="sbw__sub">
-          {!settings.openvpnInstalled && (
-            <p className="vpnw__warn">
-              openvpn CLI 필요 — 터미널에서 <code>brew install openvpn</code>
-            </p>
-          )}
-          <Input
-            small
-            placeholder="VPN 계정 이름"
-            value={formUser}
-            onChange={(e) => setFormUser(e.target.value)}
-          />
-          <Input
-            small
-            type="password"
-            placeholder={settings.hasTotpSecret ? 'OTP 시크릿 키 (저장됨)' : 'OTP 시크릿 키'}
-            value={formSecret}
-            onChange={(e) => setFormSecret(e.target.value)}
-          />
-          <FileTrigger onClick={pickOvpn} title={formOvpn}>
-            {ovpnName || '.ovpn 파일 선택…'}
-          </FileTrigger>
-          <Button variant="primary" size="sm" onClick={saveConfig}>
-            저장
-          </Button>
-        </div>
-      )}
-
-      {!showConfig && st !== 'connected' && settings && !settings.hasTotpSecret && (
-        <div className="sbw__sub">
-          <Input
-            small
-            placeholder="Google OTP 6자리"
-            inputMode="numeric"
-            maxLength={6}
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-          />
-        </div>
-      )}
-
-      {errorMsg && <p className="sbw__error">{errorMsg}</p>}
-    </div>
+    </SidebarWidget>
   );
 }

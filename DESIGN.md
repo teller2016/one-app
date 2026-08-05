@@ -240,6 +240,7 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 | `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **흰 칩 + shadow-1** (macOS 세그먼트) |
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |
 | `StatusDot` | `<StatusDot status md>` | `.status-dot` | `busy`·`ok`·`fail`·`idle` / `md` |
+| `SidebarWidget` | `<SidebarWidget icon dot tooltip>` | `.sbwx` | 축소 사이드바 위젯 셸 — 아이콘 타일(`__mini`) + 오른쪽 팝오버(`__body--pop`). 펼침 시엔 개입 없음(`display: contents`) |
 | `Banner` | `<Banner variant>` | `.banner` | `warning`(기본)·`danger`·`info` |
 | `Collapsible` | `<Collapsible title icon storageKey defaultOpen>` | `.collapsible` | — |
 | `SectionHeader` | `<SectionHeader icon title sub>` | `.section-head` | 제목은 `type-h2`(600·타이트 자간) |
@@ -303,6 +304,8 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
   - ⚠️ **축소 폭 72px 은 임의값이 아니다** — `titleBarStyle: 'hiddenInset'` 이라 macOS 신호등이 창 좌상단에 고정이고, 더 좁히면 신호등이 콘텐츠 영역을 침범한다.
   - ⚠️ grip 에 **`-webkit-app-region: no-drag` 필수** — `.sidebar` 가 `drag` 라 이게 없으면 창 드래그가 pointerdown 을 가로채 리사이즈가 시작조차 안 된다.
   - 축소 시엔 **글자만 감추고 상태를 나르는 점은 남긴다**(StatusDot·메일 안읽음 점·근태 완료 체크). 위젯 루트의 `title` 이 감춰진 글자를 대신한다.
+  - ⚠️ **축소 상태에서도 조작 경로는 반드시 남긴다** — 사이드바 위젯(VPN·미러링·근태)은 공용 `SidebarWidget` 셸이 아이콘 타일(`.sbwx__mini`)만 남기고, 타일을 누르면 위젯 본체가 **오른쪽 팝오버**(`.sbwx__body--pop`, 232px · usePopover `side: 'right'`)로 펼쳐진다(macOS 메뉴바 위젯). 접은 채로 미러링·VPN 연결·출퇴근·야근 결재까지 다 된다. 메일 위젯은 예외로 타일 자신이 진입점(접혀 있으면 브라우저가 아니라 앱 내 모달).
+  - ⚠️ **조작 버튼을 `display:none` 으로 감추지 말 것** — 예전엔 축소 모드에서 `.sbw__actions`·`.sbw__buttons` 를 지웠고, 그래서 접은 채로는 아이콘을 눌러도 아무 일도 일어나지 않았다(2026-08-05 사용자 지적).
 - **스크롤바**: thumb --border-strong, hover --scrollbar-hover
 - **macOS 신호등 여백**(padding-top 28px)·`hiddenInset` 보존
 - ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질이 가려짐(로드 전 배경도 재질이라 플래시 없음)

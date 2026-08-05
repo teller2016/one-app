@@ -30,7 +30,7 @@ paths:
 ## 출퇴근
 `renderer/features/attendance` + `main/features/attendance`
 
-사이드바 하단 고정 위젯. headless puppeteer 로 **공용 그룹웨어 세션 쿠키를 주입**해(`gotoWithSession`, 로그인 화면 안 거침) userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용(로그인은 공용 세션 모듈이 담당 — `runAttendance(action)` 는 계정 인자를 받지 않는다). 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거친다.
+사이드바 하단 고정 위젯(공용 `SidebarWidget` 셸 — 접히면 아이콘 타일 + 팝오버. 축소 타일에는 조회 실패를 `StatusDot fail` 로, 출퇴근 완료를 체크로 알린다). headless puppeteer 로 **공용 그룹웨어 세션 쿠키를 주입**해(`gotoWithSession`, 로그인 화면 안 거침) userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용(로그인은 공용 세션 모듈이 담당 — `runAttendance(action)` 는 계정 인자를 받지 않는다). 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거친다.
 
 ### 출퇴근 리마인더
 `main/features/attendance/scheduler.ts` + `reminders.ts`
@@ -44,7 +44,7 @@ paths:
 ## 야근 결재 (연장근무내역서 상신)
 `renderer/features/overtime` + `main/features/overtime`
 
-진입점은 **출퇴근 위젯의 아이콘 버튼**(`sbw__overtime`) → `OvertimeModal`. **상신(쓰기) 흐름이라 MO(폰) 셸에서는 이 클래스를 숨겨 제외**한다.
+진입점은 **출퇴근 위젯의 아이콘 버튼**(`sbw__overtime`) → `OvertimeModal`. **상신(쓰기) 흐름이라 MO(폰) 셸에서는 이 클래스를 숨겨 제외**한다. 사이드바를 접었을 때는 근태 아이콘 타일 → 팝오버 안에 이 버튼이 있다(공용 `SidebarWidget` — 예전엔 축소 모드에서 `.sbw__actions` 가 감춰져 진입로 자체가 없었다).
 
 headless 브라우저로 전자결재 **연장근무내역서 양식 팝업**(`EAAppDocPop.do?form_id=41`)을 URL 로 직접 열어 제목·근무자 표·업무내용을 채우고 [상신]까지 자동화한다. 결재선 기본값이 '본인'이라 **승인은 사용자가 미결함에서 직접** 한다. 완료 후 모달의 '결재하러 가기'가 `docViewUrl(docId)` 를 기본 브라우저로 연다. 그룹웨어 화면이 바뀌면 `config.ts` 의 `selectors` 만 고치면 된다.
 

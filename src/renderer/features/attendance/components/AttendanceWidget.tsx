@@ -3,6 +3,8 @@ import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { SidebarWidget } from '../../../components/SidebarWidget';
+import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { OvertimeModal } from '../../overtime';
 import { publishAttendance } from '../lib/shared';
@@ -112,61 +114,73 @@ export function AttendanceWidget() {
             ? `근태 — 출근 ${info.comeTime}`
             : `근태 — ${info.comeTime} → ${info.leaveTime} (완료)`;
 
+  const icon = <Icon name="building" size={12} />;
+  // 출퇴근 완료 체크 — 근태는 상태점 없이 글자로 말하므로, 이것만은 축소 타일에도 남긴다
+  const okMark =
+    info && !nextAction ? (
+      <span className="sbw__ok" title="오늘 출퇴근 완료">
+        <Icon name="check" size={12} />
+      </span>
+    ) : null;
+
   return (
-    <div className="sbw" title={summaryTitle}>
-      {/* 한 줄: 아이콘 · 요약(다음 행동 기준) · 우측 액션 (새로고침 + 출근/퇴근) */}
-      <div className="sbw__row">
-        <span className="sbw__icon">
-          <Icon name="building" size={12} />
-        </span>
-        <span className="sbw__label">
-          <span className="sbw__text">{summary}</span>
-          {info && !nextAction && (
-            <span className="sbw__ok" title="오늘 출퇴근 완료">
-              <Icon name="check" size={12} />
-            </span>
-          )}
-        </span>
-        <span className="sbw__actions">
-          {/* sbw__overtime — 폰(MO) 셸에서 숨기는 기준 클래스. 상신(쓰기) 흐름이라 폰 1단계 제외 */}
-          <button
-            type="button"
-            className="icon-btn sbw__overtime"
-            title="야근 결재 상신 (연장근무내역서)"
-            aria-label="야근 결재 상신"
-            onClick={() => setOvertimeOpen(true)}
-          >
-            <Icon name="moon" size={12} />
-          </button>
-          <RefreshButton
-            size={12}
-            spinning={busy === 'fetch'}
-            onClick={refresh}
-            disabled={busy !== null}
-            title="출퇴근 시각 새로고침"
-          />
-        </span>
-      </div>
-
-      {/* 액션 줄 — 다음 행동이 있을 때만 (완료면 위젯은 1줄) */}
-      {nextAction && (
-        <div className="sbw__buttons">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => stamp(nextAction)}
-            disabled={busy !== null}
-            loading={busy === 'come' || busy === 'leave'}
-          >
-            {nextAction === 'come' ? '출근하기' : '퇴근하기'}
-          </Button>
+    // 축소 타일에는 조회 실패를 점으로 알린다 — 접힌 채로는 아래 에러 문구가 보이지 않는다
+    <SidebarWidget
+      icon={icon}
+      dot={error ? <StatusDot status="fail" /> : okMark}
+      tooltip={error ? `근태 — ${error}` : summaryTitle}
+    >
+      <div className="sbw" title={summaryTitle}>
+        {/* 한 줄: 아이콘 · 요약(다음 행동 기준) · 우측 액션 (새로고침 + 출근/퇴근) */}
+        <div className="sbw__row">
+          <span className="sbw__icon">{icon}</span>
+          <span className="sbw__label">
+            <span className="sbw__text">{summary}</span>
+            {okMark}
+          </span>
+          <span className="sbw__actions">
+            {/* sbw__overtime — 폰(MO) 셸에서 숨기는 기준 클래스. 상신(쓰기) 흐름이라 폰 1단계 제외 */}
+            <button
+              type="button"
+              className="icon-btn sbw__overtime"
+              title="야근 결재 상신 (연장근무내역서)"
+              aria-label="야근 결재 상신"
+              onClick={() => setOvertimeOpen(true)}
+            >
+              <Icon name="moon" size={12} />
+            </button>
+            <RefreshButton
+              size={12}
+              spinning={busy === 'fetch'}
+              onClick={refresh}
+              disabled={busy !== null}
+              title="출퇴근 시각 새로고침"
+            />
+          </span>
         </div>
-      )}
 
-      {error && <p className="sbw__error">{error}</p>}
+        {/* 액션 줄 — 다음 행동이 있을 때만 (완료면 위젯은 1줄) */}
+        {nextAction && (
+          <div className="sbw__buttons">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => stamp(nextAction)}
+              disabled={busy !== null}
+              loading={busy === 'come' || busy === 'leave'}
+            >
+              {nextAction === 'come' ? '출근하기' : '퇴근하기'}
+            </Button>
+          </div>
+        )}
 
-      {/* 야근 결재 모달 — 연장근무내역서 작성·상신 */}
-      {overtimeOpen && <OvertimeModal onClose={() => setOvertimeOpen(false)} />}
-    </div>
+        {error && <p className="sbw__error">{error}</p>}
+
+        {/* 야근 결재 모달 — 연장근무내역서 작성·상신 */}
+        {overtimeOpen && (
+          <OvertimeModal onClose={() => setOvertimeOpen(false)} />
+        )}
+      </div>
+    </SidebarWidget>
   );
 }

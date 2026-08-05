@@ -7,6 +7,7 @@ import {
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 
 /** 사이드바 하단 미러링 위젯 — scrcpy 로 USB 폰 화면을 미러링한다. */
@@ -55,75 +56,81 @@ export function MirrorWidget() {
           : '제어 중 (화면 없음)'
         : (status.device ?? issue?.label ?? 'USB 기기 없음');
   const canStart = !!status?.installed && !!status?.device;
+  // 아이콘·상태점은 축소 타일에도 그대로 쓴다 (SidebarWidget 이 팝오버 진입점으로 삼는다)
+  const icon = <Icon name="smartphone" size={12} />;
+  const dot = (
+    <StatusDot
+      status={running ? 'ok' : status?.error || issue ? 'fail' : 'idle'}
+    />
+  );
+  const tooltip = `폰 미러링 — ${statusText}`;
 
   return (
-    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신한다
-    <div className="sbw" title={`폰 미러링 — ${statusText}`}>
-      {/* 한 줄: 아이콘 · 기기/상태 · 우측 액션 — 기기 없으면 새로고침만, 있으면 모드 버튼 */}
-      <div className="sbw__row">
-        <span className="sbw__icon">
-          <Icon name="smartphone" size={12} />
-        </span>
-        <span className="sbw__label">
-          <StatusDot
-            status={running ? 'ok' : status?.error || issue ? 'fail' : 'idle'}
-          />
-          <span className="sbw__text" title={statusText}>
-            {statusText}
+    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
+    <SidebarWidget icon={icon} dot={dot} tooltip={tooltip}>
+      <div className="sbw" title={tooltip}>
+        {/* 한 줄: 아이콘 · 기기/상태 · 우측 액션 — 기기 없으면 새로고침만, 있으면 모드 버튼 */}
+        <div className="sbw__row">
+          <span className="sbw__icon">{icon}</span>
+          <span className="sbw__label">
+            {dot}
+            <span className="sbw__text" title={statusText}>
+              {statusText}
+            </span>
           </span>
-        </span>
-        <span className="sbw__actions">
-          {!running && (
-            <RefreshButton
-              size={12}
-              onClick={() => void refresh()}
-              title="USB 기기 다시 확인"
-            />
-          )}
-        </span>
-      </div>
-
-      {/* 액션 줄 — 기기 있으면 모드 선택, 실행 중이면 종료. 기기 없으면 줄 자체가 없음 */}
-      {running ? (
-        <div className="sbw__buttons">
-          <Button variant="danger" size="sm" onClick={stop} loading={busy}>
-            {running === 'mirror' ? '미러링 종료' : '제어 종료'}
-          </Button>
+          <span className="sbw__actions">
+            {!running && (
+              <RefreshButton
+                size={12}
+                onClick={() => void refresh()}
+                title="USB 기기 다시 확인"
+              />
+            )}
+          </span>
         </div>
-      ) : (
-        canStart && (
+
+        {/* 액션 줄 — 기기 있으면 모드 선택, 실행 중이면 종료. 기기 없으면 줄 자체가 없음 */}
+        {running ? (
           <div className="sbw__buttons">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => void start('mirror')}
-              loading={busy}
-              title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
-            >
-              미러링
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void start('control')}
-              loading={busy}
-              title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
-            >
-              제어
+            <Button variant="danger" size="sm" onClick={stop} loading={busy}>
+              {running === 'mirror' ? '미러링 종료' : '제어 종료'}
             </Button>
           </div>
-        )
-      )}
+        ) : (
+          canStart && (
+            <div className="sbw__buttons">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void start('mirror')}
+                loading={busy}
+                title="폰 화면을 미러링합니다 (폰 화면은 꺼짐)"
+              >
+                미러링
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void start('control')}
+                loading={busy}
+                title="화면 미러 없이 맥 키보드·마우스로 폰을 조작합니다"
+              >
+                제어
+              </Button>
+            </div>
+          )
+        )}
 
-      {(error || status?.error) && (
-        <p className="sbw__error">{error || status?.error}</p>
-      )}
-      {status && !status.installed && (
-        <p className="hint">brew install scrcpy 로 설치하세요.</p>
-      )}
-      {/* 원인별 해결 힌트 — 실패 사유(에러)가 이미 떠 있으면 문구가 겹치므로 생략 */}
-      {status?.installed && !running && issue && !error && !status.error && (
-        <p className="hint">{issue.hint}</p>
-      )}
-    </div>
+        {(error || status?.error) && (
+          <p className="sbw__error">{error || status?.error}</p>
+        )}
+        {status && !status.installed && (
+          <p className="hint">brew install scrcpy 로 설치하세요.</p>
+        )}
+        {/* 원인별 해결 힌트 — 실패 사유(에러)가 이미 떠 있으면 문구가 겹치므로 생략 */}
+        {status?.installed && !running && issue && !error && !status.error && (
+          <p className="hint">{issue.hint}</p>
+        )}
+      </div>
+    </SidebarWidget>
   );
 }

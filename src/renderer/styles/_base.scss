@@ -988,7 +988,11 @@ input.input--sm {
 .sbw {
   padding: 6px 0;
 
-  + .sbw {
+  // 위젯 사이 구분선 — 형제 판정은 셸 래퍼(.sbwx__body, SidebarWidget) 기준이다.
+  // ⚠️ `.sbw + .sbw` 로 두면 안 된다 — 래퍼가 한 겹 끼어 인접 형제가 아니게 된다.
+  //    축소 모드에선 래퍼 사이에 아이콘 타일이 끼므로 이 셀렉터가 자연히 풀린다
+  //    (팝오버는 각자 독립된 카드라 구분선이 붙으면 안 된다).
+  .sbwx__body + .sbwx__body & {
     border-top: 1px solid var(--border);
   }
 
@@ -1068,6 +1072,65 @@ input.input--sm {
     @include type-small;
     color: var(--danger);
     word-break: break-word;
+  }
+}
+
+// ===== 사이드바 위젯 셸 (공용 SidebarWidget) =====
+// 축소 모드에서 위젯을 계속 쓸 수 있게 하는 껍데기 — 사이드바에는 아이콘 타일(__mini)만
+// 남기고, 본체(.sbw)는 __body 가 오른쪽 팝오버로 띄운다 (macOS 메뉴바 위젯).
+.sbwx {
+  // 축소 타일 — 아이콘 + 상태점. 사이드바 메뉴 항목과 같은 hover 톤을 쓴다
+  &__mini {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
+
+    &:hover,
+    &--open {
+      background: var(--overlay-hover);
+    }
+  }
+
+  &__mini-icon {
+    display: inline-flex;
+  }
+
+  // 펼친 사이드바에선 껍데기가 레이아웃에 개입하지 않는다 (본체가 제자리 그대로)
+  &__body {
+    display: contents;
+
+    // ⚠️ display 를 지정한 뒤엔 UA 의 `[hidden] { display: none }` 이 밀리므로 직접 쓴다.
+    //    닫힘을 언마운트가 아니라 hidden 으로 처리하는 이유는 SidebarWidget 주석 참고.
+    &[hidden] {
+      display: none;
+    }
+
+    // 축소 모드의 팝오버 카드 — 좌표는 usePopover(side: 'right') 가 인라인으로 준다
+    &--pop {
+      display: block;
+      z-index: 20; // 프로스트 탑바(10) 위, 모달(90) 아래
+      width: 232px;
+      max-height: calc(100vh - 16px);
+      overflow-y: auto;
+      padding: 2px 12px 4px;
+      background: var(--surface-1);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      box-shadow: var(--shadow-2);
+      animation: modal-pop var(--dur-2) var(--ease);
+      -webkit-app-region: no-drag; // 사이드바가 drag 라 명시하지 않으면 클릭을 창 드래그가 먹는다
+    }
   }
 }
 
