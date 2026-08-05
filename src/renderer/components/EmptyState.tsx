@@ -6,13 +6,16 @@ export function EmptyState({
   icon,
   message,
   hint,
+  className,
 }: {
   icon?: IconName;
   message: ReactNode;
   hint?: ReactNode;
+  /** 기능 scss 의 배치용 후크 (여백 등 — 룩은 공용 .empty-state 가 담당) */
+  className?: string;
 }) {
   return (
-    <div className="empty-state">
+    <div className={'empty-state' + (className ? ` ${className}` : '')}>
       {icon && (
         <span className="empty-state__icon">
           <Icon name={icon} size={20} />

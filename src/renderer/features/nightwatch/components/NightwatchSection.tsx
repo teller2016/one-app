@@ -395,6 +395,7 @@ export function NightwatchSection() {
           {candidates &&
             (candidates.length === 0 ? (
               <EmptyState
+                className="nightwatch__empty"
                 message={
                   <>
                     {status && status.tickets.length > 0

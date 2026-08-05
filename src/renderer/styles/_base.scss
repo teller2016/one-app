@@ -1214,6 +1214,16 @@ input.input--sm {
   color: var(--text-3);
   @include type-body;
 
+  // 브라우저 기본 <p> 마진(13px 상하)이 남으면 박스가 26px 부풀고
+  // 아이콘·힌트와의 간격도 흔들린다 — 여백은 여기서만 통제
+  p {
+    margin: 0;
+  }
+
+  p + p {
+    margin-top: 6px;
+  }
+
   &__icon {
     display: inline-flex;
     margin-bottom: 8px;
