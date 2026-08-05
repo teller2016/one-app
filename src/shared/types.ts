@@ -425,10 +425,37 @@ export type VpnStatus = {
 /** mirror = 화면 미러링(+폰 화면 끔) · control = 화면 없이 키보드·마우스로 폰 조작(uhid) */
 export type MirrorMode = "mirror" | "control";
 
+/**
+ * adb 가 기기를 보긴 했지만 쓸 수 없는 상태.
+ * 케이블이 빠진 것과 구분해 원인별 안내를 띄우기 위한 값 — 이게 없으면
+ * 승인만 남은 상태도 'USB 기기 없음' 으로 보여 케이블·포트를 의심하게 된다.
+ */
+export type MirrorDeviceIssue = "unauthorized" | "offline" | "no-permission";
+
+/** 기기 문제 상태별 표시 문구·해결 힌트 (main·렌더러 공용 — 문구 중복 정의 금지) */
+export const MIRROR_DEVICE_ISSUE_TEXT: Record<
+  MirrorDeviceIssue,
+  { label: string; hint: string }
+> = {
+  unauthorized: {
+    label: "USB 디버깅 승인 필요",
+    hint: '폰 화면 잠금을 풀고 허용 팝업에서 "이 컴퓨터에서 항상 허용" 을 체크하세요. 팝업이 없으면 개발자 옵션 → USB 디버깅 승인 취소 후 재연결.',
+  },
+  offline: {
+    label: "기기 오프라인",
+    hint: "USB 케이블을 다시 꽂거나 폰을 재부팅하세요.",
+  },
+  "no-permission": {
+    label: "USB 접근 권한 없음",
+    hint: "adb 가 기기에 접근할 수 없습니다. 케이블을 다시 꽂아 보세요.",
+  },
+};
+
 export type MirrorStatus = {
   installed: boolean; // scrcpy 바이너리 존재 여부 (Homebrew)
   running: MirrorMode | null; // 실행 중인 모드 (한 번에 하나만)
-  device: string | null; // USB 로 연결된 기기 모델명 (없으면 null)
+  device: string | null; // 바로 쓸 수 있는 기기 모델명 ('device' 상태만, 없으면 null)
+  deviceIssue?: MirrorDeviceIssue; // 기기는 붙어 있으나 쓸 수 없는 이유
   error?: string; // 마지막 비정상 종료 사유
 };
 

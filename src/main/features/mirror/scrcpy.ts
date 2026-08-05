@@ -3,10 +3,12 @@
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import type {
-  MirrorActionResult,
-  MirrorMode,
-  MirrorStatus,
+import {
+  MIRROR_DEVICE_ISSUE_TEXT,
+  type MirrorActionResult,
+  type MirrorDeviceIssue,
+  type MirrorMode,
+  type MirrorStatus,
 } from '../../../shared/types';
 
 // 모드별 scrcpy 인자 — 바탕화면 런처 앱들과 동일
@@ -48,35 +50,60 @@ export function onMirrorChanged(cb: () => void) {
   listeners.add(cb);
 }
 
-/** USB 로 연결된 기기 모델명 조회 (adb devices -l — 'device' 상태만, 미인증/오프라인 제외) */
-async function getUsbDevice(): Promise<string | null> {
+// adb 기기 상태 → 사용자 조치가 필요한 원인. 여기 없는 상태(recovery·sideload 등)는
+// 미러링 대상이 아니라 '기기 없음' 으로 둔다.
+const ISSUE_BY_STATE: Record<string, MirrorDeviceIssue> = {
+  unauthorized: 'unauthorized',
+  authorizing: 'unauthorized', // 승인 진행 중 — 안내가 같으므로 묶는다
+  offline: 'offline',
+};
+
+type DeviceScan = { device: string | null; issue?: MirrorDeviceIssue };
+
+/**
+ * `adb devices -l` 출력 파싱.
+ * 쓸 수 있는 기기('device')가 있으면 모델명을, 없으면 붙어 있는 기기의 문제 상태를 돌려준다.
+ * ⚠️ 문제 상태를 버리고 null 만 반환하면 위젯에서 '케이블이 빠짐' 과 '승인만 남음' 을
+ *    구분할 수 없다 — 실제로 unauthorized 를 기기 없음으로 표시해 오진을 유발했다(2026-08 실측).
+ */
+export function parseAdbDevices(stdout: string): DeviceScan {
+  let issue: MirrorDeviceIssue | undefined;
+  for (const raw of stdout.split('\n')) {
+    const line = raw.trim();
+    // 헤더('List of devices attached')·데몬 시작 배너('* daemon not running...') 제외
+    if (!line || line.startsWith('*') || /^List of devices/i.test(line)) continue;
+    const [serial, state, ...rest] = line.split(/\s+/);
+    if (!serial || !state) continue;
+    if (state === 'device') {
+      // "SERIAL device usb:... model:SM_G991N ..." → 모델명, 없으면 시리얼
+      const model = rest.join(' ').match(/model:(\S+)/)?.[1]?.replace(/_/g, ' ');
+      return { device: model ?? serial };
+    }
+    // 'no permissions (user in plugdev group...)' 는 공백이 섞여 두 번째 토큰이 'no' 로 잘린다
+    issue ??= state === 'no' ? 'no-permission' : ISSUE_BY_STATE[state];
+  }
+  return { device: null, issue };
+}
+
+/** USB 로 연결된 기기 조회 (모델명 또는 쓸 수 없는 이유) */
+async function scanDevices(): Promise<DeviceScan> {
   const adb = findBin(ADB_CANDIDATES);
-  if (!adb) return null;
+  if (!adb) return { device: null };
   await warmAdbDaemon(adb);
   return new Promise((resolve) => {
     execFile(adb, ['devices', '-l'], { timeout: ADB_TIMEOUT_MS }, (err, stdout) => {
-      if (err) return resolve(null);
-      // 데몬 시작 배너("* daemon not running..." 등)가 섞일 수 있어 헤더 한 줄만 잘라내는 대신
-      // 기기 항목 형태(시리얼 + 상태)로 직접 걸러낸다
-      const line = stdout
-        .split('\n')
-        .find(
-          (l) =>
-            /^\S+\s+device\b/.test(l.trim()) && !/offline|unauthorized/.test(l)
-        );
-      if (!line) return resolve(null);
-      // "SERIAL device usb:... model:SM_G991N ..." → 모델명, 없으면 시리얼
-      const model = line.match(/model:(\S+)/)?.[1]?.replace(/_/g, ' ');
-      resolve(model ?? line.trim().split(/\s+/)[0]);
+      resolve(err ? { device: null } : parseAdbDevices(stdout));
     });
   });
 }
 
 export async function getMirrorStatus(): Promise<MirrorStatus> {
+  const scan = await scanDevices();
   return {
     installed: !!findBin(SCRCPY_CANDIDATES),
     running: child ? runningMode : null,
-    device: await getUsbDevice(),
+    device: scan.device,
+    deviceIssue: scan.issue,
     error: lastError || undefined,
   };
 }
@@ -90,9 +117,16 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
 
   starting = true;
   try {
-    // 시작 직전 기기 재확인 (위젯 상태가 오래됐을 수 있음)
-    if (!(await getUsbDevice())) {
-      return { ok: false, error: 'USB 로 연결된 기기가 없습니다.' };
+    // 시작 직전 기기 재확인 (위젯 상태가 오래됐을 수 있음) — 실패 사유는 원인까지 알려준다
+    const scan = await scanDevices();
+    if (!scan.device) {
+      const issue = scan.issue && MIRROR_DEVICE_ISSUE_TEXT[scan.issue];
+      return {
+        ok: false,
+        error: issue
+          ? `${issue.label} — ${issue.hint}`
+          : 'USB 로 연결된 기기가 없습니다.',
+      };
     }
 
     lastError = '';

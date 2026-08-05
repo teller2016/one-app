@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { MirrorMode, MirrorStatus } from '../../../../shared/types';
+import {
+  MIRROR_DEVICE_ISSUE_TEXT,
+  type MirrorMode,
+  type MirrorStatus,
+} from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
@@ -39,6 +43,8 @@ export function MirrorWidget() {
   };
 
   const running = status?.running ?? null;
+  // 기기가 붙어 있으나 쓸 수 없는 상태(승인 대기 등) — 원인을 그대로 보여준다
+  const issue = status?.deviceIssue ? MIRROR_DEVICE_ISSUE_TEXT[status.deviceIssue] : null;
   const statusText = !status
     ? '확인 중...'
     : !status.installed
@@ -47,7 +53,7 @@ export function MirrorWidget() {
         ? running === 'mirror'
           ? '미러링 중'
           : '제어 중 (화면 없음)'
-        : (status.device ?? 'USB 기기 없음');
+        : (status.device ?? issue?.label ?? 'USB 기기 없음');
   const canStart = !!status?.installed && !!status?.device;
 
   return (
@@ -58,7 +64,9 @@ export function MirrorWidget() {
           <Icon name="smartphone" size={12} />
         </span>
         <span className="sbw__label">
-          <StatusDot status={running ? 'ok' : status?.error ? 'fail' : 'idle'} />
+          <StatusDot
+            status={running ? 'ok' : status?.error || issue ? 'fail' : 'idle'}
+          />
           <span className="sbw__text" title={statusText}>
             {statusText}
           </span>
@@ -110,6 +118,10 @@ export function MirrorWidget() {
       )}
       {status && !status.installed && (
         <p className="hint">brew install scrcpy 로 설치하세요.</p>
+      )}
+      {/* 원인별 해결 힌트 — 실패 사유(에러)가 이미 떠 있으면 문구가 겹치므로 생략 */}
+      {status?.installed && !running && issue && !error && !status.error && (
+        <p className="hint">{issue.hint}</p>
       )}
     </div>
   );
