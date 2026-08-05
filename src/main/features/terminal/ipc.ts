@@ -19,8 +19,10 @@ import {
   onTerminalData,
   onTerminalExit,
   resizeSession,
+  restoreSessions,
   writeSession,
 } from './pty';
+import { initTmux } from './tmux';
 import {
   getServerStatus,
   onServerChanged,
@@ -55,6 +57,8 @@ export function registerTerminalIpc() {
     return { ok: true };
   });
   ipcMain.handle('terminal:agents', () => listAgents());
+  // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다
+  ipcMain.handle('terminal:backend', async () => ({ tmux: !!(await initTmux()) }));
   ipcMain.handle('terminal:notify-level:get', () => getNotifyLevel());
   ipcMain.handle('terminal:notify-level:set', (_e, level: TerminalNotifyLevel) => {
     setNotifyLevel(level);
@@ -113,4 +117,9 @@ export function registerTerminalIpc() {
   if (getServerEnabled()) {
     void app.whenReady().then(() => startServer());
   }
+
+  // tmux 백엔드면 이전 실행의 영속 세션을 재접속 복원 (미설치면 no-op)
+  void restoreSessions().catch((e) =>
+    console.error('[terminal] 세션 복원 실패:', e)
+  );
 }

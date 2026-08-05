@@ -157,7 +157,8 @@ app.on("ready", () => {
   });
 });
 
-// 앱 종료 시 PTY 세션·MO 서버 정리 — 셸 자식 프로세스가 고아로 남지 않도록
+// 앱 종료 시 PTY 클라이언트·MO 서버 정리 — tmux 백엔드 세션은 서버에 남아
+// 다음 시작에 복원되고, 직접 spawn 폴백 세션만 여기서 함께 죽는다
 app.on("before-quit", () => {
   disposeTerminals();
   void stopTerminalServer();

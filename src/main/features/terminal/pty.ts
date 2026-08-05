@@ -1,6 +1,11 @@
 // PTY 세션 관리 — 메인 프로세스가 세션의 단일 소유자(단일 진실).
 // 데스크톱(IPC 경유)과 모바일(WS 경유)이 같은 세션에 attach 해 입출력을 공유하고,
 // 세션은 창·클라이언트와 무관하게 One App 이 실행 중인 동안 유지된다.
+//
+// tmux 백엔드(설치 시): node-pty 가 셸 대신 tmux 클라이언트를 spawn 한다.
+// 실제 셸은 tmux 서버(-L oneapp) 소유라 앱을 재시작해도 세션·에이전트가 살아있고,
+// 시작 시 restoreSessions() 가 sidecar(terminal-sessions.json)와 대조해 재접속한다.
+// tmux 미설치면 기존 직접 spawn — 이 경우 세션은 앱 수명과 같다(영속 없음).
 import * as pty from 'node-pty';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -14,6 +19,22 @@ import type {
 } from '../../../shared/types';
 import { getProject } from '../projects/store';
 import { agentCommand } from './agents';
+import {
+  listPersisted,
+  removePersisted,
+  savePersisted,
+} from './sessions-store';
+import {
+  getTmuxBin,
+  hasTmuxSession,
+  initTmux,
+  killTmuxSession,
+  listTmuxSessions,
+  sessionIdFromTmuxName,
+  tmuxAttachArgs,
+  tmuxNewSessionArgs,
+  tmuxSessionName,
+} from './tmux';
 
 const RING_MAX_BYTES = 512 * 1024; // attach replay 용 출력 보관 상한 (chunk 단위 링버퍼)
 const BATCH_MS = 16; // 출력 배칭 — 대량 출력 시 IPC/WS 이벤트 폭주 방지
@@ -39,7 +60,9 @@ const STATUS_DEBUG = process.env.ONEAPP_TERM_DEBUG === '1'; // 상수 보정용 
 
 type Session = {
   id: string;
-  pty: pty.IPty;
+  pty: pty.IPty; // tmux 백엔드면 attach 클라이언트 — 재접속 시 교체된다
+  tmuxName?: string; // tmux 세션 이름 (없으면 직접 spawn 폴백 — 영속 없음)
+  killing: boolean; // killSession 진행 중 — onExit 의 재attach 방어와 구분용
   title: string;
   cwd: string;
   cols: number;
@@ -64,6 +87,7 @@ type Session = {
 };
 
 const sessions = new Map<string, Session>();
+let disposing = false; // 앱 종료 정리 중 — tmux 세션·sidecar 를 건드리지 않는다
 
 // 구독 — ipc.ts(데스크톱 broadcast)와 server.ts(모바일 WS)가 각각 구독한다
 type DataListener = (id: string, data: string, seq: number) => void;
@@ -217,6 +241,115 @@ export function listSessions(): TerminalSessionInfo[] {
   return [...sessions.values()].map(toInfo);
 }
 
+/** node-pty 공통 옵션 — 직접 spawn·tmux 클라이언트·재attach 가 전부 공유 */
+const ptyOptions = (cwd: string, cols: number, rows: number) => ({
+  name: 'xterm-256color',
+  cols,
+  rows,
+  cwd: fs.existsSync(cwd) ? cwd : os.homedir(),
+  env: {
+    ...process.env,
+    COLORTERM: 'truecolor',
+    LANG: process.env.LANG ?? 'ko_KR.UTF-8',
+  } as { [key: string]: string },
+});
+
+/** 세션 객체 골격 — 생성·복원이 공유 (휴리스틱 추적값은 전부 0 초기화) */
+function makeSession(init: {
+  id: string;
+  proc: pty.IPty;
+  tmuxName?: string;
+  title: string;
+  cwd: string;
+  cols: number;
+  rows: number;
+  agentId: TerminalSessionInfo['agentId'];
+  projectId?: string;
+  projectName?: string;
+  createdAt: number;
+  suppressNotifyUntil: number;
+}): Session {
+  return {
+    id: init.id,
+    pty: init.proc,
+    tmuxName: init.tmuxName,
+    killing: false,
+    title: init.title,
+    cwd: init.cwd,
+    cols: init.cols,
+    rows: init.rows,
+    agentId: init.agentId,
+    projectId: init.projectId,
+    projectName: init.projectName,
+    createdAt: init.createdAt,
+    ring: [],
+    ringBytes: 0,
+    pending: '',
+    flushTimer: null,
+    seq: 0,
+    status: 'idle',
+    lastOutputAt: 0,
+    lastInputAt: 0,
+    bytesSinceInput: 0,
+    bellAt: 0,
+    notifiedSinceInput: false,
+    suppressNotifyUntil: init.suppressNotifyUntil,
+  };
+}
+
+/** onData(배칭)·onExit 배선 — 재attach 로 pty 가 교체될 때마다 다시 건다 */
+function wireSession(s: Session) {
+  const proc = s.pty;
+  proc.onData((data) => {
+    s.pending += data;
+    if (!s.flushTimer) {
+      s.flushTimer = setTimeout(() => flush(s), BATCH_MS);
+    }
+  });
+  proc.onExit(({ exitCode }) => {
+    flush(s);
+    if (s.tmuxName && !disposing && !s.killing) {
+      // tmux 백엔드 — 클라이언트가 끊긴 것(외부 detach 등)과 세션 종료를 구분한다.
+      // 세션이 살아있으면 조용히 재접속해 목록에서 사라지지 않게 한다.
+      const name = s.tmuxName;
+      void hasTmuxSession(name).then((alive) => {
+        if (alive && sessions.get(s.id) === s) reattach(s);
+        else finalizeExit(s, exitCode);
+      });
+      return;
+    }
+    finalizeExit(s, exitCode);
+  });
+}
+
+/** 세션 종말 처리 — 목록 제거·sidecar 정리·exit 전파 (중복 호출 안전) */
+function finalizeExit(s: Session, exitCode: number) {
+  if (sessions.get(s.id) !== s) return; // disposeAll 등으로 이미 정리됨
+  sessions.delete(s.id);
+  if (s.tmuxName) removePersisted(s.id); // tmux 세션이 실제로 죽었을 때만 온다
+  stopStatusTimerIfEmpty();
+  exitListeners.forEach((cb) => cb(s.id, exitCode));
+  emitChanged();
+}
+
+/** 살아있는 tmux 세션에 attach 클라이언트만 다시 붙인다 (외부 detach 복구) */
+function reattach(s: Session) {
+  const bin = getTmuxBin();
+  if (!bin || !s.tmuxName) {
+    finalizeExit(s, 0);
+    return;
+  }
+  try {
+    s.pty = pty.spawn(bin, tmuxAttachArgs(s.tmuxName), ptyOptions(s.cwd, s.cols, s.rows));
+  } catch {
+    finalizeExit(s, 0);
+    return;
+  }
+  // attach 의 redraw 가 만드는 합성 waiting 이 소리내지 않게 (attachSession 과 같은 이유)
+  if (s.status !== 'busy') s.notifiedSinceInput = true;
+  wireSession(s);
+}
+
 export function createSession(opts: TerminalCreateInput = {}): TerminalSessionInfo {
   const shell = process.env.SHELL ?? '/bin/zsh';
   // projectId 가 있으면 프로젝트 레지스트리에서 위치 해석 (cwd 보다 우선)
@@ -229,22 +362,20 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
   const cols = opts.cols ?? 80;
   const rows = opts.rows ?? 24;
   const now = Date.now();
+  const id = crypto.randomUUID().slice(0, 8);
 
-  const proc = pty.spawn(shell, ['-il'], {
-    name: 'xterm-256color',
-    cols,
-    rows,
-    cwd,
-    env: {
-      ...process.env,
-      COLORTERM: 'truecolor',
-      LANG: process.env.LANG ?? 'ko_KR.UTF-8',
-    } as { [key: string]: string },
-  });
+  // tmux 가 있으면 셸 대신 tmux 클라이언트를 spawn — 실제 셸은 tmux 서버 소유(영속)
+  const bin = getTmuxBin();
+  const tmuxName = bin ? tmuxSessionName(id) : undefined;
+  const proc =
+    bin && tmuxName
+      ? pty.spawn(bin, tmuxNewSessionArgs(tmuxName, cwd), ptyOptions(cwd, cols, rows))
+      : pty.spawn(shell, ['-il'], ptyOptions(cwd, cols, rows));
 
-  const session: Session = {
-    id: crypto.randomUUID().slice(0, 8),
-    pty: proc,
+  const session = makeSession({
+    id,
+    proc,
+    tmuxName,
     title: usedProject?.name ?? (path.basename(cwd) || cwd),
     cwd,
     cols,
@@ -253,43 +384,87 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
     projectId: usedProject?.id,
     projectName: usedProject?.name,
     createdAt: now,
-    ring: [],
-    ringBytes: 0,
-    pending: '',
-    flushTimer: null,
-    seq: 0,
-    status: 'idle',
-    lastOutputAt: 0,
-    lastInputAt: 0,
-    bytesSinceInput: 0,
-    bellAt: 0,
-    notifiedSinceInput: false,
     // claude 는 뜨자마자 프롬프트에서 대기하므로 상태는 waiting 이 맞지만,
     // 방금 만든 사용자에게 소리·알럿은 소음 — 첫 waiting 알림만 억제한다
     suppressNotifyUntil: agentId !== 'shell' ? now + CREATE_NOTIFY_GRACE_MS : 0,
-  };
+  });
   sessions.set(session.id, session);
   ensureStatusTimer();
+
+  if (tmuxName) {
+    savePersisted({
+      id,
+      title: session.title,
+      cwd,
+      agentId,
+      projectId: session.projectId,
+      projectName: session.projectName,
+      createdAt: now,
+    });
+  }
 
   const command = agentCommand(agentId);
   if (command) launchAgent(session, command);
 
-  proc.onData((data) => {
-    session.pending += data;
-    if (!session.flushTimer) {
-      session.flushTimer = setTimeout(() => flush(session), BATCH_MS);
-    }
-  });
-  proc.onExit(({ exitCode }) => {
-    flush(session);
-    sessions.delete(session.id);
-    stopStatusTimerIfEmpty();
-    exitListeners.forEach((cb) => cb(session.id, exitCode));
-    emitChanged();
-  });
-
+  wireSession(session);
   emitChanged();
   return toInfo(session);
+}
+
+/**
+ * 앱 시작 시 영속 세션 복원 — tmux 생존 세션(oneapp-*)과 sidecar 를 대조한다.
+ * sidecar 만 남은 항목은 정리(크래시로 tmux 서버까지 죽은 경우)하고,
+ * sidecar 없는 고아 tmux 세션도 셸로 복원한다(사용자가 잃는 것보단 낫다).
+ */
+export async function restoreSessions(): Promise<void> {
+  const bin = await initTmux();
+  if (!bin) return;
+  const live = await listTmuxSessions();
+  const liveIds = new Set(
+    live.map(sessionIdFromTmuxName).filter((v): v is string => !!v)
+  );
+  const persisted = new Map(listPersisted().map((p) => [p.id, p]));
+  for (const id of persisted.keys()) {
+    if (!liveIds.has(id)) removePersisted(id);
+  }
+  const now = Date.now();
+  let restored = false;
+  for (const name of live) {
+    const id = sessionIdFromTmuxName(name);
+    if (!id || sessions.has(id)) continue;
+    const meta = persisted.get(id);
+    const cwd = meta?.cwd ?? os.homedir();
+    let proc: pty.IPty;
+    try {
+      proc = pty.spawn(bin, tmuxAttachArgs(name), ptyOptions(cwd, 80, 24));
+    } catch (e) {
+      console.error(`[terminal] 세션 복원 실패 (${name}):`, e);
+      continue;
+    }
+    const session = makeSession({
+      id,
+      proc,
+      tmuxName: name,
+      title: meta?.title ?? (path.basename(cwd) || cwd),
+      cwd,
+      cols: 80,
+      rows: 24,
+      agentId: meta?.agentId ?? 'shell',
+      projectId: meta?.projectId,
+      projectName: meta?.projectName,
+      createdAt: meta?.createdAt ?? now,
+      // 재시작 직후 attach redraw 가 waiting 을 합성한다 — 알림은 억제, 뱃지는 그대로
+      suppressNotifyUntil: now + CREATE_NOTIFY_GRACE_MS,
+    });
+    session.notifiedSinceInput = true;
+    sessions.set(id, session);
+    wireSession(session);
+    restored = true;
+  }
+  if (restored) {
+    ensureStatusTimer();
+    emitChanged();
+  }
 }
 
 /**
@@ -382,11 +557,34 @@ export function resizeSession(id: string, cols: number, rows: number): void {
 }
 
 export function killSession(id: string): void {
-  sessions.get(id)?.pty.kill(); // 정리는 onExit 핸들러가 담당 (목록 push 포함)
+  const s = sessions.get(id);
+  if (!s) return;
+  if (s.tmuxName) {
+    // tmux 세션 자체를 죽인다 — attach 클라이언트도 끊기며 onExit 흐름으로 정리된다
+    s.killing = true;
+    const name = s.tmuxName;
+    void killTmuxSession(name).then((ok) => {
+      if (ok) return;
+      // tmux 서버가 이미 죽은 등 명령 실패 — 클라이언트라도 정리한다
+      try {
+        s.pty.kill();
+      } catch {
+        // 이미 죽은 프로세스 — 무해
+      }
+      finalizeExit(s, 0);
+    });
+    return;
+  }
+  s.pty.kill(); // 정리는 onExit 핸들러가 담당 (목록 push 포함)
 }
 
-/** 앱 종료 시 전체 정리 (before-quit) */
+/**
+ * 앱 종료 시 정리 (before-quit) — tmux 백엔드 세션은 attach 클라이언트만 끊는다.
+ * 셸·에이전트는 tmux 서버에 살아남고 다음 시작의 restoreSessions() 가 복원한다.
+ * sidecar 도 그대로 둔다(finalizeExit 를 타지 않게 disposing 플래그로 막는다).
+ */
 export function disposeAll(): void {
+  disposing = true;
   for (const s of sessions.values()) {
     if (s.flushTimer) clearTimeout(s.flushTimer);
     try {

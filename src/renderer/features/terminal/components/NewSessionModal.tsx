@@ -25,6 +25,7 @@ export function NewSessionModal({
   const [projectId, setProjectId] = useState(''); // '' = 홈 디렉터리
   const [agentId, setAgentId] = useState<TerminalAgentId>('shell');
   const [creating, setCreating] = useState(false);
+  const [tmux, setTmux] = useState(true); // 확인 전엔 힌트를 띄우지 않는다
 
   useEffect(() => {
     void window.oneApp?.projects.list().then(setProjects);
@@ -33,6 +34,8 @@ export function NewSessionModal({
       // 주 사용 사례가 claude 세션 — 설치돼 있으면 기본 선택
       if (list.some((a) => a.id === 'claude' && a.installed)) setAgentId('claude');
     });
+    // ?.() — dev HMR 로 구 preload(backend 없음) 위에서 렌더될 때 죽지 않게
+    void window.oneApp?.terminal.backend?.().then((b) => setTmux(b.tmux));
   }, []);
 
   const create = async () => {
@@ -77,6 +80,12 @@ export function NewSessionModal({
               .map((a) => ({ value: a.id, label: a.name }))}
           />
         </FormRow>
+        {!tmux && (
+          <p className="hint">
+            tmux 를 설치하면(brew install tmux) 앱을 재시작해도 세션이
+            유지됩니다.
+          </p>
+        )}
         <div className="form-actions">
           <Button loading={creating} onClick={() => void create()}>
             시작

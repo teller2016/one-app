@@ -247,6 +247,7 @@ declare global {
         ) => Promise<TerminalAttachResult>;
         kill: (id: string) => Promise<{ ok: boolean }>;
         agents: () => Promise<TerminalAgentInfo[]>;
+        backend: () => Promise<{ tmux: boolean }>;
         notifyLevel: {
           get: () => Promise<TerminalNotifyLevel>;
           set: (level: TerminalNotifyLevel) => Promise<TerminalNotifyLevel>;

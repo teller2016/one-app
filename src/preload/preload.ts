@@ -323,6 +323,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     kill: (id: string) => ipcRenderer.invoke("terminal:kill", id),
     // 에이전트 후보 목록 (로그인 셸 PATH 기준 설치 감지 포함)
     agents: () => ipcRenderer.invoke("terminal:agents"),
+    // 백엔드 정보 — tmux(영속) 가용 여부 (미설치 힌트 표시용)
+    backend: () => ipcRenderer.invoke("terminal:backend"),
     // 입력대기 알림 강도 (badge/sound/alert — 뱃지는 항상)
     notifyLevel: {
       get: () => ipcRenderer.invoke("terminal:notify-level:get"),
