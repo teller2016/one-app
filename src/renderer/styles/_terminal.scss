@@ -306,12 +306,9 @@
   flex-direction: column;
   gap: 12px;
 
+  // 옵션 왼쪽 정렬은 공용 .picker__pop--select 가 담당한다
+  // (팝오버는 body 로 portal 되므로 여기서 스코프로 걸 수 없다)
   &__select {
     width: 100%;
-
-    // 프로젝트·에이전트 이름은 왼쪽 정렬이 읽기 쉽다 (공용 옵션 기본값은 시간 리스트용 가운데)
-    .picker__option {
-      text-align: left;
-    }
   }
 }

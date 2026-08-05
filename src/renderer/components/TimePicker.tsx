@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { usePopover } from '../lib/usePopover';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -27,6 +29,7 @@ const normalizeTime = (raw: string): string | null => {
 /**
  * 시간 선택 — 직접 타이핑 가능한 입력 + N분 단위 리스트 팝오버
  * (네이티브 input[type=time] 대체). value 는 "HH:MM". 스타일은 _base.scss 의 .picker 계열.
+ * 팝오버는 body 로 portal + fixed 배치(usePopover) — 모달 본문 안에 갇혀 잘리지 않게.
  * small: 좁은 그리드(설정 리마인더 등)용 — 입력이 작아지고 컨테이너 폭을 따라간다.
  * step: 리스트 간격(분) — 기본 30. 리마인더처럼 세밀한 등록이 필요하면 5 등으로.
  */
@@ -54,16 +57,24 @@ export function TimePicker({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(value);
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // 앵커는 컨테이너가 아니라 입력 — .picker 는 부모 flex 에서 stretch 될 수 있다
+  const popStyle = usePopover(open, inputRef, listRef, {
+    matchWidth: true,
+    fitHeight: true,
+  });
 
   // 밖에서 값이 바뀌면 입력 텍스트 동기화
   useEffect(() => setText(value), [value]);
 
-  // 바깥 클릭으로 닫기
+  // 바깥 클릭으로 닫기 — 팝오버는 portal 로 root 밖이라 함께 판정해야 한다
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!rootRef.current?.contains(t) && !listRef.current?.contains(t))
+        setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -111,6 +122,7 @@ export function TimePicker({
       }}
     >
       <input
+        ref={inputRef}
         className={'input' + (small ? ' input--sm' : '') + ' picker__time-input'}
         value={text}
         disabled={disabled}
@@ -127,29 +139,37 @@ export function TimePicker({
         placeholder="HH:MM"
         autoComplete="off"
       />
-      {open && (
-        <div className="picker__pop picker__list" ref={listRef} role="listbox">
-          {options.map((opt) => (
-            <button
-              type="button"
-              key={opt}
-              role="option"
-              aria-selected={opt === value}
-              className={
-                'picker__option' + (opt === value ? ' picker__option--active' : '')
-              }
-              // blur(commitText)보다 먼저 처리되도록 mousedown 에서 선택
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(opt);
-                setOpen(false);
-              }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            className={'picker__pop picker__list' + (small ? ' picker__pop--sm' : '')}
+            style={popStyle}
+            ref={listRef}
+            role="listbox"
+          >
+            {options.map((opt) => (
+              <button
+                type="button"
+                key={opt}
+                role="option"
+                aria-selected={opt === value}
+                className={
+                  'picker__option' +
+                  (opt === value ? ' picker__option--active' : '')
+                }
+                // blur(commitText)보다 먼저 처리되도록 mousedown 에서 선택
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(opt);
+                  setOpen(false);
+                }}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

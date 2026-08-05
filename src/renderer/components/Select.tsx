@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { usePopover } from '../lib/usePopover';
 
 export type SelectOption = { value: string; label: ReactNode };
 
 /**
  * 공통 셀렉트 — 네이티브 드롭다운 대신 TimePicker 계열의 커스텀 팝오버.
  * 트리거는 .input 실루엣(.select), 옵션 리스트는 공용 .picker__pop/.picker__option 재사용.
+ * 옵션 리스트는 body 로 portal + fixed 배치(usePopover) — 모달 본문 안에 갇혀
+ * 잘리거나 스크롤을 만들지 않게 한다.
  * 키보드: Enter/Space/↓ 열기 · ↑↓ 이동 · Enter 선택 · Escape 닫기(모달로 전파 안 함).
  */
 export function Select({
@@ -31,16 +35,23 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0); // 키보드 하이라이트 인덱스
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const popStyle = usePopover(open, btnRef, listRef, {
+    matchWidth: true,
+    fitHeight: true,
+  });
 
   const selectedIdx = options.findIndex((o) => o.value === value);
   const selected = options[selectedIdx];
 
-  // 바깥 클릭으로 닫기
+  // 바깥 클릭으로 닫기 — 팝오버는 portal 로 root 밖이라 함께 판정해야 한다
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!rootRef.current?.contains(t) && !listRef.current?.contains(t))
+        setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -101,15 +112,14 @@ export function Select({
   return (
     <div
       className={
-        'picker picker--select' +
-        (small ? ' picker--select-sm' : '') +
-        (className ? ` ${className}` : '')
+        'picker picker--select' + (className ? ` ${className}` : '')
       }
       ref={rootRef}
       onKeyDown={onKeyDown}
     >
       <button
         type="button"
+        ref={btnRef}
         className={'select' + (small ? ' select--sm' : '')}
         disabled={disabled}
         aria-haspopup="listbox"
@@ -124,31 +134,41 @@ export function Select({
           <Icon name="chevron-down" size={12} />
         </span>
       </button>
-      {open && (
-        <div className="picker__pop picker__list" ref={listRef} role="listbox">
-          {options.map((opt, i) => (
-            <button
-              type="button"
-              key={opt.value}
-              role="option"
-              aria-selected={opt.value === value}
-              className={
-                'picker__option' +
-                (opt.value === value ? ' picker__option--active' : '') +
-                (i === hi ? ' picker__option--hi' : '')
-              }
-              // 트리거 blur 보다 먼저 처리되도록 mousedown 에서 선택 (TimePicker 와 동일)
-              onMouseDown={(e) => {
-                e.preventDefault();
-                commit(i);
-              }}
-              onMouseEnter={() => setHi(i)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            className={
+              'picker__pop picker__list picker__pop--select' +
+              (small ? ' picker__pop--sm' : '')
+            }
+            style={popStyle}
+            ref={listRef}
+            role="listbox"
+          >
+            {options.map((opt, i) => (
+              <button
+                type="button"
+                key={opt.value}
+                role="option"
+                aria-selected={opt.value === value}
+                className={
+                  'picker__option' +
+                  (opt.value === value ? ' picker__option--active' : '') +
+                  (i === hi ? ' picker__option--hi' : '')
+                }
+                // 트리거 blur 보다 먼저 처리되도록 mousedown 에서 선택 (TimePicker 와 동일)
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  commit(i);
+                }}
+                onMouseEnter={() => setHi(i)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

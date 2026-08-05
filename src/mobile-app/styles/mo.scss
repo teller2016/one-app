@@ -239,13 +239,6 @@ html.mo {
     white-space: normal;
   }
 
-  // Select 팝오버가 절대배치라 우측으로 삐져나갈 수 있다
-  .picker__pop {
-    left: 0;
-    right: 0;
-    min-width: 0;
-  }
-
   // ── 메일 ──
   // MailModal 은 이미 [목록] + [본문 슬라이드오버] 구조라 폰에서 필요한 전환이 들어 있다.
   // 고쳐야 하는 건 셋 뿐: 모달 크기 · 본문 패널 폭(68%→100%) · 목록 행의 display:contents 트릭.
