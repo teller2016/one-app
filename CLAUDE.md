@@ -1,16 +1,12 @@
 # One App — Claude 작업 가이드
 
-> 이 파일은 Claude Code가 자동으로 읽는 프로젝트 지침입니다. 작업 전 반드시 참고하세요.
-> (사용자·코드·문서 모두 **한국어**를 사용합니다.)
-
-## 프로젝트 개요
-- **One App**: macOS 데스크톱 앱. 하나의 창에서 사내 도구(일정 등록, VPN 등)를 관리하는 **워크스페이스형 허브**.
-- UX: 왼쪽 **사이드바 + 탑바 + 메인 영역**. 기능이 늘수록 사이드바에 섹션이 추가되는 구조. 룩앤필은 `DESIGN.md`(Linear/Raycast 무드 다크 테마) 기준.
+> macOS 데스크톱 앱. 하나의 창에서 사내 도구를 관리하는 **워크스페이스형 허브**(사이드바 + 탑바 + 메인 영역).
+> 사용자·코드·문서 모두 **한국어**를 사용합니다.
 
 ## 기술 스택
-- **Electron + React + TypeScript**
-- 빌드/패키징: **Electron Forge + Vite**
+- **Electron + React + TypeScript** / 빌드·패키징 **Electron Forge + Vite**
 - 런타임: Node.js 22 · Electron 43 · React 18
+- 스타일: SCSS (`sass-embedded`) — 룩앤필 기준은 `DESIGN.md`
 
 ## 명령어
 | 명령 | 설명 |
@@ -23,235 +19,71 @@
 ## 프로젝트 구조 (feature 중심 — Bulletproof React 스타일)
 ```
 src/
-├── main/                        # 🖥️ 메인 프로세스 (Node)
-│   ├── main.ts                  #  진입점: 창 생성 + IPC 등록 (이름 고정)
-│   ├── features/                #  기능 모듈 — ipc.ts(핸들러) + 로직을 함께 배치
-│       ├── schedule/            #  일정 매크로 (puppeteer)
-│       │   ├── ipc.ts           #    IPC 핸들러
-│       │   ├── config.ts        #    비즈박스 URL·셀렉터·타이밍
-│       │   ├── scheduleUtils.ts #    일정 파싱·시간/날짜 변환
-│       │   ├── pageMacro.ts     #    브라우저 페이지 조작
-│       │   └── runMacro.ts      #    실행 흐름(로그인→이동→등록)
-│       ├── deploy/              #  젠킨스 배포 (REST API)
-│       │   ├── ipc.ts
-│       │   ├── jenkins.ts       #    빌드 트리거·상태 폴링 (crumb 처리 포함)
-│       │   └── store.ts         #    프로젝트 저장 (토큰 safeStorage 암호화)
-│       ├── settings/            #  환경설정
-│       │   ├── ipc.ts
-│       │   └── store.ts         #    설정 저장 (safeStorage 암호화)
-│       ├── attendance/          #  출퇴근 (headless puppeteer)
-│       │   ├── ipc.ts
-│       │   ├── config.ts        #    그룹웨어 URL·셀렉터·플래그
-│       │   ├── attend.ts        #    로그인→근태 조회/찍기
-│       │   ├── reminders.ts     #    요일별 출퇴근 리마인더 설정 저장(평문 JSON)
-│       │   └── scheduler.ts     #    매 30초 확인→시각 되면 상태조회 후 알림
-│       ├── mirror/              #  폰 미러링 (scrcpy CLI)
-│       │   ├── ipc.ts
-│       │   └── scrcpy.ts        #    scrcpy 실행·상태 추적 + adb 기기 감지
-│       ├── vpn/                 #  VPN (openvpn CLI + management 인터페이스)
-│       │   ├── ipc.ts
-│       │   ├── config.ts        #    바이너리 탐색·런타임 파일 경로
-│       │   ├── totp.ts          #    RFC 6238 TOTP (Google OTP 자동 생성)
-│       │   ├── store.ts         #    계정·시크릿 저장 (safeStorage 암호화)
-│       │   └── openvpn.ts       #    root 데몬 실행·상태 추적·연결/해제
-│       ├── weekly/              #  주간보고 (headless puppeteer)
-│       │   ├── ipc.ts
-│       │   ├── config.ts        #    그룹웨어 개인별 주간 화면 셀렉터
-│       │   └── collect.ts       #    로그인→FE챕터→개인별 주간→datas 캡처
-│       ├── groupware/           #  그룹웨어 세션 (공통 인프라 — 로그인 1회를 여러 기능이 공유)
-│       │   ├── config.ts        #    로그인 URL·셀렉터·세션 TTL(20분)
-│       │   └── session.ts       #    로그인→쿠키 확보·캐시 + gotoWithSession(쿠키 주입 이동)
-│       ├── notify/              #  알림 (공통 인프라)
-│       │   └── notify.ts        #    앱을 앞으로 + 알럿(dialog) 표시, '이동' 시 섹션 이동
-│       ├── prs/                 #  PR (Gitea — 생성·머지·목록)
-│       │   ├── ipc.ts
-│       │   ├── gitea.ts         #    전역 PR 검색·브랜치·생성·머지·승인 수
-│       │   └── store.ts         #    조직 필터 (prs.json 평문 — 빠른 PR 저장소는 프로젝트 레지스트리 파생)
-│       ├── projects/            #  프로젝트 레지스트리 (공통 인프라 — 다른 기능이 참조)
-│       │   ├── ipc.ts
-│       │   └── store.ts         #    CRUD·조회 헬퍼 (projects.json 평문, 변경 시 projects:changed)
-│       ├── jira/                #  Jira 내 이슈 (REST v3)
-│       │   ├── ipc.ts
-│       │   └── jira.ts          #    내 이슈 조회·상태 전환 (Basic Auth)
-│       ├── mail/                #  비즈박스 메일 (리버스 엔지니어링 HTTP API)
-│       │   ├── ipc.ts
-│       │   ├── config.ts        #    메일 엔드포인트·셀렉터
-│       │   ├── session.ts       #    로그인 1회 → 쿠키 세션 재사용
-│       │   └── mail.ts          #    안읽은 수·목록·본문 조회
-│       ├── nightwatch/          #  Jira 티켓 무인 분석 (claude CLI — 수동 트리거)
-│       │   ├── ipc.ts
-│       │   ├── engine.ts        #    후보 조회·분석 실행/대기열·변조 검증·산출물 관리
-│       │   ├── mission.ts       #    미션 템플릿·claude spawn·stream-json 파싱
-│       │   └── store.ts         #    config/state 원장 (userData/nightwatch, 원자 쓰기)
-│       ├── applink/             #  applink.kr 딥링크 생성
-│       │   ├── ipc.ts
-│       │   ├── create.ts        #    딥링크 생성 API 호출 (메인에서 서버측 호출)
-│       │   └── store.ts         #    API 키 저장 (safeStorage 암호화)
-│       ├── terminal/            #  터미널 (node-pty — 데스크톱·MO 가 세션 공유)
-│       │   ├── ipc.ts           #    IPC 핸들러 + 서버 토글
-│       │   ├── pty.ts           #    세션 소유(Map)·링버퍼·출력 배칭·attach/resize
-│       │   ├── server.ts        #    MO 접속 HTTP 정적 서빙 + WS 브리지 + 토큰 인증
-│       │   └── store.ts         #    포트·토큰(safeStorage)·자동 시작 (terminal.json)
-│       ├── changes/             #  변경사항 (워킹트리 git 상태·diff·push)
-│       │   ├── ipc.ts           #    handleShared 등록 (MO 공용) — 대상은 projectId/sessionId 만
-│       │   └── git.ts           #    git status/diff/push 실행·porcelain 파싱
-│       └── tray/                #  메뉴바 트레이
-│           └── tray.ts          #    열기·출퇴근 찍기·종료 메뉴
-│   └── lib/                     #  메인 공통 유틸
-│       ├── http.ts              #    fetchWithTimeout — 기본 15초 타임아웃 fetch 래퍼
-│       ├── store.ts             #    userData JSON 읽기/쓰기 + safeStorage 암복호화
-│       ├── util.ts              #    sleep·localDateKey
-│       ├── broadcast.ts         #    모든 창에 webContents.send
-│       └── groupware.ts         #    withGroupwareLogin — 그룹웨어 로그인 직렬화 큐
-├── preload/preload.ts           # 🌉 contextBridge (window.oneApp) (이름 고정)
-├── renderer/                    # 🎨 React UI
-│   ├── renderer.tsx             #  React 마운트 진입점 (이름 고정)
-│   ├── app/App.tsx              #  앱 셸(사이드바/탑바/메인) + SECTIONS + ToastProvider
-│   ├── components/              #  공용 UI — Sidebar · Button · Input · Textarea · FormRow ·
-│   │                            #  SectionHeader · Banner · RefreshButton · Collapsible ·
-│   │                            #  Icon(SVG) · Badge · StatusDot · TextLink · FileTrigger ·
-│   │                            #  Segment · Toast(useToast) · Modal · ConfirmDialog(useConfirm) ·
-│   │                            #  EmptyState · Markdown · DatePicker · TimePicker · Checkbox · Select ·
-│   │                            #  Pagination
-│   ├── lib/                     #  공용 훅·유틸
-│   │   ├── theme.ts             #    테마 전환 — data-theme 적용·localStorage 미러·useThemeMode 훅
-│   │   ├── usePolling.ts        #    usePolling(주기 폴링)·useTick(시계 틱 리렌더)
-│   │   ├── useCopy.ts           #    클립보드 복사 + 결과 토스트
-│   │   └── usePopover.ts        #    팝오버 fixed 배치(트리거 기준·flip·클램프·스크롤 추적)
-│   ├── features/                #  기능별 폴더 — index.ts 가 공개 API
-│   │   ├── schedule/
-│   │   │   ├── components/ScheduleSection.tsx
-│   │   │   └── index.ts
-│   │   ├── deploy/
-│   │   │   ├── components/      #  Section(오케스트레이션)·Card·Form·Badge·DetailPanel
-│   │   │   ├── lib/format.ts    #  키·시간 포맷 헬퍼
-│   │   │   └── index.ts
-│   │   ├── settings/            #  (schedule 과 동일 구조)
-│   │   ├── attendance/          #  출퇴근 위젯 (사이드바 하단 고정)
-│   │   ├── vpn/                 #  VPN 위젯 (사이드바 하단 고정)
-│   │   ├── mirror/              #  폰 미러링 위젯 (사이드바 하단 고정)
-│   │   ├── mail/                #  메일 위젯(사이드바 상단) + 리더 모달 (MailWidget·MailModal)
-│   │   ├── weekly/              #  주간보고 — 좌우 2단(팀 목록 RosterRow + 상세 Detail). components(Section·RosterRow·Detail·Chips) + lib/report.ts(T/OT·MM 가공)
-│   │   ├── prs/                 #  PR 대시보드 — 열린 PR 목록(승인 수·상대시간)
-│   │   ├── jira/                #  Jira 내 이슈 — 목록·상태 전환, 클릭 시 브라우저로
-│   │   ├── nightwatch/          #  Nightwatch — 티켓 분석 대시보드 (후보·리포트·미션 로그)
-│   │   ├── projects/            #  프로젝트 — 중앙 레지스트리 CRUD (Section·Form·Card)
-│   │   ├── terminal/            #  터미널 — 탭 UI(Section)·xterm 뷰(View)·MO 접속 모달
-│   │   ├── changes/             #  변경사항 — ChangesView (터미널 드로어·MO '변경' 탭 공용)
-│   │   └── applink/             #  applink.kr 딥링크 생성
-│   ├── styles/                  #  SCSS — index.scss 진입점 + 기능별 분리
-│   │   ├── index.scss           #    @use 모음 (새 기능은 _<기능>.scss 추가)
-│   │   ├── _base.scss           #    디자인 토큰·믹스인·공통 클래스 (DESIGN.md 가 기준)
-│   │   ├── _layout.scss         #    사이드바·탑바·메인 (셸)
-│   │   ├── _schedule.scss       #    일정 등록
-│   │   ├── _settings.scss       #    환경설정
-│   │   ├── _deploy.scss         #    배포
-│   │   ├── _vpn.scss            #    VPN 위젯 고유 요소 (배치는 _base.scss 의 공용 .sbw)
-│   │   ├── _weekly.scss         #    주간보고
-│   │   ├── _prs.scss            #    PR 대시보드
-│   │   ├── _jira.scss           #    Jira 내 이슈
-│   │   ├── _mail.scss           #    메일 위젯·리더 모달
-│   │   ├── _nightwatch.scss     #    Nightwatch
-│   │   ├── _projects.scss       #    프로젝트 레지스트리
-│   │   ├── _terminal.scss       #    터미널 (탭바·xterm 패널·MO 모달)
-│   │   ├── _changes.scss        #    변경사항 (파일 목록·diff·푸시)
-│   │   ├── _applink.scss        #    딥링크
-│   │   └── _markdown.scss       #    마크다운 렌더(react-markdown) 공통
-│   └── types/global.d.ts        #  window.oneApp 타입
-├── mobile/                      # 📱 MO(모바일) 터미널 페이지 — 별도 Vite 엔트리(mobile_window)
-│   ├── index.html               #  main 의 HTTP 서버가 정적 서빙 (창으로 안 띄움)
-│   ├── mobile.ts                #  xterm + WS 클라이언트 + 키바 (plain TS, React 없음)
-│   └── mobile.css               #  모바일 전용 최소 CSS (앱 토큰 체계 밖)
-└── shared/
-    ├── types.ts                 # 🔗 프로세스 간 공용 타입
-    └── terminal-protocol.ts     # 🔗 MO 터미널 WS 메시지 타입 (server.ts ↔ mobile.ts)
+├── main/                     # 🖥️ 메인 프로세스 (Node)
+│   ├── main.ts               #   진입점: 창 생성 + register*Ipc() 호출  ← 파일명 고정
+│   ├── features/<기능>/      #   ipc.ts(핸들러) + 로직 + store.ts 를 한 폴더에
+│   └── lib/                  #   공통 유틸 — http · store · util · broadcast · groupware · moIpc · sanitize
+├── preload/preload.ts        # 🌉 contextBridge (window.oneApp)          ← 파일명 고정
+├── renderer/                 # 🎨 React UI
+│   ├── renderer.tsx          #   React 마운트 진입점                      ← 파일명 고정
+│   ├── app/App.tsx           #   앱 셸(사이드바/탑바/메인) + SECTIONS + ToastProvider
+│   ├── components/           #   공용 UI (Button·Modal·DatePicker·Pagination …)
+│   ├── lib/                  #   공용 훅 — theme · usePolling · useCopy · usePopover
+│   ├── features/<기능>/      #   components/ + lib/ + index.ts(공개 API)
+│   └── styles/               #   index.scss + _base.scss(토큰) + _<기능>.scss
+├── mobile/                   # 📱 MO 터미널 페이지 (Vite 엔트리 mobile_window, plain TS)
+├── mobile-app/               # 📱 MO 앱 셸 (Vite 엔트리 mobile_app_window, 렌더러 재사용)
+└── shared/                   # 🔗 프로세스 공용 — types.ts · terminal-protocol.ts · mo-protocol.ts
 ```
-- **규칙**: 기능 간 참조는 `features/<기능>/index.ts`(공개 API)로만. 기능 내부 파일을 다른 기능에서 직접 import 하지 않는다.
+
+**기능 목록**
+- **섹션**(`App.tsx` 의 `SECTIONS` 순): 홈 · Jira · Nightwatch · PR · 배포 · 프로젝트 · 터미널 · 딥링크 · 일정 등록 · 주간보고 · 환경설정
+- **사이드바 위젯**: 메일(상단) · 폰 미러링 · VPN · 출퇴근(하단 — 야근 결재 모달 진입점 포함)
+- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재(출퇴근 위젯의 모달)
+- **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리) · `tray`
 
 ## ⚠️ 반드시 지킬 것
-- **진입점 파일명 고정**: `src/main/main.ts`, `src/preload/preload.ts`, `src/renderer/renderer.tsx` 의 **파일 이름**이 빌드 산출물 이름(`main.js`/`preload.js`)이 됨. 바꾸면 실행이 깨짐.
+- **진입점 파일명 고정**: `src/main/main.ts`, `src/preload/preload.ts`, `src/renderer/renderer.tsx` 의 **파일 이름**이 빌드 산출물 이름(`main.js`/`preload.js`)이 된다. 바꾸면 실행이 깨진다.
 - **컨텍스트 분리 유지**: main(Node) / preload(bridge) / renderer(React). 렌더러에서 Node API 직접 사용 금지.
-- **통신은 IPC + contextBridge 경유**: 렌더러↔메인은 preload에 노출한 `window.oneApp` API로만. (`nodeIntegration` 켜지 말 것)
+- **통신은 IPC + contextBridge 경유**: 렌더러↔메인은 preload 에 노출한 `window.oneApp` API로만. (`nodeIntegration` 켜지 말 것)
 - **공용 타입은 `src/shared/types.ts`에** 두고 3개 컨텍스트에서 import.
-- **비밀/계정 정보 커밋 금지**: 비밀번호는 `safeStorage`로 암호화해 userData에만 저장. 코드·리포에 하드코딩 X. `.env`/`settings.json`(계정) 커밋 금지.
-
-## 새 기능(섹션) 추가 방법
-1. `src/renderer/features/<기능>/components/<기능>Section.tsx` 작성 + `index.ts` 로 export
-2. `src/renderer/app/App.tsx` 의 `SECTIONS`에 항목 추가 (`render` 필드에 컴포넌트 — switch 분기 없음)
-3. `src/renderer/styles/_<기능>.scss` 작성 + `index.scss`에 `@use` 추가
-4. (파일·프로세스·네이티브 작업이 필요하면) 아래도 함께:
-   - `src/main/features/<기능>/ipc.ts` 에 핸들러 작성 → `main.ts`에서 `register...Ipc()` 호출 (로직 파일도 같은 폴더에)
-   - `src/preload/preload.ts` 에 API 노출
-   - `src/shared/types.ts` 에 타입 추가 + `src/renderer/types/global.d.ts` 의 `window.oneApp` 타입 갱신
-
-## 주요 기능 메모
-- **일정 등록** (`renderer/features/schedule` + `main/features/schedule`): 비즈박스 그룹웨어에 하루 일정을 puppeteer로 자동 등록. 하루 작업은 **타임라인 카드**(행마다 계산된 시작→종료·소요시간 칩, 12:30 종료 뒤 점심 구분선, 헤더에 합계·OT — 점심 규칙 12.5/13.5 는 `config.ts` 와 동기)로 중간중간 기록(종료시간 TimePicker + 일정명 + [추가], 시간순 자동 정렬, 추가 행에 다음 시작 시각 표시). 날짜·시작 시간은 상단 툴바 한 줄(시작은 TimePicker), 실행 로그는 실행 전엔 숨김 — **작업 항목과 시작 시각**(`ScheduleWorklog` = `{ items, startTime }`)이 **`userData/worklog.json`** 에 IPC(`schedule:worklog:get/set`, 렌더러 300ms 디바운스)로 즉시 저장되어 탭 이동·재시작·강제 종료에도 유지된다(예전 배열 형식 저장본은 읽을 때 자동 승격, [비우기]는 항목만 지우고 시작 시각은 유지, 기본값 `SCHEDULE_DEFAULT_START_TIME`. 날짜 선택은 오등록 방지를 위해 저장하지 않고 매번 '오늘'로 시작). (⚠️ localStorage 는 이 앱에서 강제 종료 시 디스크 flush 가 안 돼 유실됨 — 2026-07-29 실측, 보존할 데이터에 쓰지 말 것). 등록·복사 시 `종료시간(십진) 일정명` 줄 텍스트로 변환하며(10:30→`10.5`), **[노션용 복사]** 버튼으로 그 형식 그대로 클립보드에 복사(노션 기록용), [비우기]는 확인 다이얼로그 경유. 계정 정보는 **환경설정 탭**에서 입력 → `safeStorage`로 암호화 저장. 실행 시 자동화 브라우저가 열리며, 완료 후에도 확인용으로 유지됨.
-- **환경설정** (`renderer/features/settings` + `main/features/settings`): 비즈박스 ID/비밀번호 관리 + **터미널 입력대기 알림 강도**(터미널 그룹 — `terminal:notify-level` IPC, 즉시 저장) + **테마(시스템/라이트/다크)** — 테마는 [저장] 없이 세그먼트 변경 즉시 적용·저장(`settings:theme:set`). 적용은 `renderer/lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지), 다크 토큰은 `_base.scss` 의 `:root[data-theme='dark']` 블록, main 은 창 생성 시 `theme`+`nativeTheme` 으로 backgroundColor 선택.
-- **출퇴근** (`renderer/features/attendance` + `main/features/attendance`): 사이드바 하단 고정 위젯. headless puppeteer 로 **공용 그룹웨어 세션 쿠키를 주입**해(`gotoWithSession`, 로그인 화면 안 거침) userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용(로그인은 공용 세션 모듈이 담당 — `runAttendance(action)` 는 계정 인자를 받지 않는다). 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거침.
-- **VPN** (`renderer/features/vpn` + `main/features/vpn`): 사이드바 하단 위젯. Homebrew `openvpn` CLI(**필수 의존성**, `/opt/homebrew/sbin/openvpn`)를 osascript 관리자 인증으로 root 데몬 실행하고, management 인터페이스(127.0.0.1 TCP + 비밀번호 파일)로 자격증명 전달·상태 추적·해제(SIGTERM). 비밀번호는 Google OTP — 위젯 설정에 TOTP 시크릿 키를 저장하면 자동 생성(`totp.ts`, RFC 6238), 없으면 매번 수동 입력. 계정·시크릿은 `safeStorage` 암호화로 `userData/vpn.json`에 저장. **앱을 종료해도 VPN 데몬은 유지**되고, 재시작 시 `userData/vpn/session.json`으로 management에 재접속해 상태 복원. openvpn 로그는 `userData/vpn/openvpn.log`(root 소유).
-- **폰 미러링** (`renderer/features/mirror` + `main/features/mirror`): 사이드바 하단 위젯(맨 위 — 미러링→VPN→근태 순). Homebrew `scrcpy`(선택 의존성)를 spawn — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식. **두 모드**: `미러링`(`-d --turn-screen-off` — 화면 미러+폰 화면 끔) / `제어`(`-d --no-video --no-audio --keyboard=uhid --mouse=uhid` — 화면 없이 맥 키보드·마우스로 폰 조작). 한 번에 한 모드만. `adb devices -l` 로 USB 기기 모델명을 표시하고 기기 없으면 버튼 비활성. **기기가 붙어 있으나 쓸 수 없는 상태는 원인을 그대로 표시**(`MirrorDeviceIssue` = unauthorized/offline/no-permission → 위젯 라벨 + 해결 힌트, 문구는 `shared/types.ts` 의 `MIRROR_DEVICE_ISSUE_TEXT` 한 곳 — main 의 실행 실패 사유와 공용). scrcpy 창을 닫으면 exit 이벤트로 위젯 상태 자동 갱신(`mirror:changed`), 비정상 종료는 stderr 마지막 줄을 에러로 표시. 앱 종료 시 scrcpy 도 함께 종료됨(VPN 과 달리 독립 유지 안 함). 설정·저장 없음.
-- **주간보고** (`renderer/features/weekly` + `main/features/weekly`): FE챕터 공유일정의 **개인별 주간** 화면을 headless puppeteer 로 수집해 팀원별 T/OT·MM 을 카드+차트(chart.js)로 표시. 엑셀 다운로드 없이 페이지의 `calendarExcelSave()` form submit 을 후킹해 `datas`(JSON payload)를 가로챈다(익스텐션 `fe-schedule-extension` 이식). 주간 이동은 페이지 함수 `beforeWeek()`/`nextWeek()`, 현재 주는 iframe 전역 `startDate`/`endDate`(YYYYMMDD)로 판별. 개인별 주간 진입/주간 이동 직후 일정 목록이 ajax 로 늦게 채워지므로 **datasExcel 행 수 안정화 대기 + 캡처 재시도**가 들어 있음(제거하면 빈 결과 레이스 재발). T/OT 규칙: 하루 8시간까지 T, 초과분 OT, MM=시간÷8÷20.6. 전체 MM 제외 프로젝트는 칩 클릭으로 토글(localStorage `weekly:mmExcluded`, 기본 FE·전사·본부·휴가·연차·시차). 주 기준은 기본 일~토(페이지 단위)이며, 툴바 **[월~일 기준] 체크박스**(localStorage `weekly:monWeek`)를 켜면 두 주(일~토 ×2)를 수집해 월~토+다음 주 일요일을 이어 붙인다(수집 시간 증가, 데드라인 +60초). ⚠️ 주간 이동(특히 `beforeWeek()`) 시 페이지가 이전 주 행을 `datas` 에 누적한 채 남기므로, **캡처 행을 대상 주 날짜(MM.DD) 집합으로 한정하는 필터가 필수**(`mmddSet`·`dayMmdd`, 제거하면 여러 주 합산 재발 — 2026-07 실측 확인). 계정은 환경설정의 비즈박스 계정 공용.
-- **알림** (`main/features/notify`): 알림 공통 인프라. `notify({title, body, section, action})` 호출 시 앱 창을 앞으로 가져와(`app.focus({steal:true})`) **알럿(`dialog.showMessageBox`)** 으로 표시. `section` 지정 시 '이동' 버튼 → `app:navigate` IPC 로 해당 섹션 이동(App.tsx `onNavigate` 구독), `action`(버튼 라벨) 지정 시 그 버튼이 기본 버튼이 되고 **클릭 여부를 반환**해 호출부가 후속 동작을 처리한다. macOS 미서명/개발 모드에서 Electron `Notification` 이 표시되지 않아(UNErrorDomain 1) OS 알림 권한과 무관한 알럿 방식을 사용한다. 창이 닫혀 있으면(맥) 알럿만 독립적으로 뜬다. 창 참조는 `main.ts`에서 `setNotifyWindow()` 로 등록. 사용처: ①배포 완료/실패 알림(환경설정 `settings.notifyDeploy` on/off) ②출퇴근 리마인더. 환경설정에 **테스트 알림 버튼**(`notify:test` IPC → `window.oneApp.testNotification()`)이 있어 모양 확인 가능. 새 알림이 필요하면 이 모듈을 재사용.
-- **출퇴근 리마인더** (`main/features/attendance/scheduler.ts` + `reminders.ts`): 환경설정에서 **요일별(월~금)로 출근·퇴근 알림 시각**을 각각 지정(체크박스+시각). 메인 스케줄러가 매 30초 현재 시각을 확인해, 설정 시각(±2분, 슬립 대비)이 되면 근태 상태를 조회(`runAttendance('status')`)하고 **이미 찍었으면 건너뛰고 안 찍었을 때만** 알림(스마트 스킵). 알럿의 **[지금 출근/퇴근 찍기]** 버튼으로 그 자리에서 바로 찍을 수 있고(성공/실패 결과 알럿 표시, 성공 시 그날 리마인더 중지 + `attendance:changed` 이벤트로 사이드바 위젯 즉시 갱신), 상태 확인 실패(계정 없음·VPN 등)면 놓치지 않도록 알림을 띄운다(실패 알림은 하루 1회). 평일만, 기본 하루 한 번(중복 방지). **반복 알림**(`repeat: {enabled, minutes}`, 1~120분)을 켜면 설정 시각 이후 안 찍은 동안 N분 간격으로 재알림 — 앱을 늦게 켜도 발화하고, 찍은 게 확인되면 그날은 멈추며, 알럿을 안 닫고 있는 동안은 반복하지 않는다(닫은 시점부터 다시 카운트). 설정은 `userData/reminders.json`(평문). 스케줄러는 저장값을 매 tick 읽으므로 저장 후 재시작 불필요.
-- **배포** (`renderer/features/deploy` + `main/features/deploy`): 프로젝트별 젠킨스 잡을 REST API로 트리거하고 상태(대기→빌드중→성공/실패)를 폴링해 표시. [배포]를 누르면 **확인 모달**이 뜨는데, 환경설정에 Gitea 주소가 있으면 **이번 배포에 포함될 커밋 미리보기**(마지막 빌드 revision vs 저장소 HEAD를 Gitea compare API로 비교, `gitea.ts`)를 보여주고, 프로젝트가 **운영(PROD)으로 표시**돼 있으면(폼 체크박스, 카드에 PROD 뱃지) **대상 이름을 타이핑해야 배포 버튼이 활성화**된다(오배포 방지). 커밋 내역의 **커밋 해시는 Gitea 커밋 페이지로, 메시지 속 이슈 키(BBJ-1234)는 Jira로 링크화**(환경설정의 Gitea/Jira 주소 사용, 미설정이면 평문 — 젠킨스가 기록한 저장소 주소는 내부망이라 호스트는 설정된 Gitea 주소로 치환). 대상별 [커밋 내역]을 누르면 **공용 Modal**로 열리며, 안에 **최근 10개 빌드 이력 스트립**(성공/실패 색, 클릭 시 그 빌드의 커밋 내역으로 전환)과 **콘솔 로그 tail**(마지막 64KB, progressiveText 2단계 조회 — 크기 probe 후 끝부분만)이 있고, **빌드중이면 진행바(estimatedDuration 대비 경과)와 [중지] 버튼**(`/stop`, crumb 재시도)이 뜬다. 상태는 배포 탭을 보는 동안 1분마다 자동 새로고침(젠킨스에서 직접 돌린 빌드도 반영), 빌드중엔 5초 틱으로 진행률 갱신. 프로젝트 하나에 배포 대상 여러 개(스토어·어드민 등) 등록 가능. 젠킨스 URL·계정은 배포 탭에서 프로젝트별로 등록하고, API 토큰(또는 비밀번호)은 `safeStorage`로 암호화해 `userData/deploy.json`에 저장. 인증은 Basic Auth + API 토큰 권장(비밀번호 인증은 CSRF crumb 자동 처리).
-- **PR** (`renderer/features/prs` + `main/features/prs`): push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **빠른 PR**: **프로젝트 레지스트리의 Gitea 프로젝트**(`remoteKind==='gitea'` + owner/repo 파싱 가능)별로 최근 push 브랜치를 자동 표시(branches API, 커밋시간 정렬 — 저장소 관리는 프로젝트 탭, 여기엔 추가/삭제 UI 없음) → [PR 만들기] 모달에서 **프로젝트 defaultBranch(빈 값 develop)** 대비 커밋 확인 + 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿) 자동 생성 → 생성 성공 시 **머지 모달로 자동 연결**. **머지**: 목록 행 [머지] → `mergeable`(컨플릭트) 사전 확인 + 방식(merge/squash/rebase) 선택 → `/pulls/{n}/merge`. 생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지, **조직(owner)별 그룹핑** + 조직 칩 제외 필터(`store.ts`, `userData/prs.json`), 2분 자동 새로고침.
-- **프로젝트** (`renderer/features/projects` + `main/features/projects`): **프로젝트 중앙 레지스트리(관리 지점)** — 이름·로컬 경로(필수) + 원격 저장소 종류(gitea/bitbucket/기타)·주소·기본 브랜치·Jira 프로젝트 키를 `userData/projects.json`(평문 — 비밀 없음, 토큰은 환경설정 담당)에 CRUD. **새 기능이 프로젝트 경로·저장소 정보가 필요하면 자체 저장하지 말고 여기를 참조할 것**: main 은 `features/projects/store.ts` 의 조회 헬퍼(`getProject`·`findProjectByPath`·`findProjectByRepo`·`findProjectsByJiraKey`·`remoteOwnerRepo`)를 직접 import, 렌더러는 `window.oneApp.projects.*`(list/save/delete/pickDir/onChanged) + 원격 주소의 owner/repo 파싱은 `shared/types.ts` 의 `ownerRepoFromUrl`(main·렌더러 공용). 저장·삭제 시 `projects:changed` 브로드캐스트로 전 창 실시간 반영. sanitize: 로컬 경로 `~/` 치환+절대경로 정규화·끝 슬래시 제거, Jira 키 대문자, remoteKind 검증 실패 시 gitea. **PR(빠른 PR)·Nightwatch(분석 대상)는 레지스트리 참조로 전환 완료** — 배포(젠킨스)는 저장소 주소를 빌드 메타데이터에서 런타임 추출하므로 아직 자체 관리(연결 키가 없어 스키마 변경이 선행돼야 함).
-- **Jira** (`renderer/features/jira` + `main/features/jira`): 내게 할당된 미해결 이슈 목록(최신 갱신순 50개, 다시열림 누락 방지 JQL 보정). 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹, 행에 **우선순위 화살표·상위항목 칩**, [⋯] 메뉴로 **상태 전환**(전환 목록 동적 조회)·링크 복사, 내용 확인은 클릭 → 브라우저(Jira)로. **사이드바 뱃지**에 미해결 수 표시 — 확인 안 한 새 티켓은 액센트 강조(App.tsx, localStorage `jira:seenKeys`). 인증은 환경설정 → 연동의 Jira 주소+**이메일+API 토큰**(Basic Auth, 토큰은 safeStorage 암호화) — 셋 다 있어야 동작, 미설정이면 안내 배너. REST `search/jql`(신형) 우선, 404 시 구형 `search` 폴백. 2분 자동 새로고침.
-- **메일** (`renderer/features/mail` + `main/features/mail`): 비즈박스 메일을 **사이드바 최상단 위젯**에서 확인. 로그인·쿠키는 **공용 세션 모듈**(`features/groupware`)에 맡기고, 그 쿠키로 `/mail2/` SPA 를 부트스트랩한 뒤 개수·목록·본문 조회는 **전부 순수 HTTP fetch**(리버스 엔지니어링 엔드포인트 — `getMailBoxCount.do`·`getMailList.do`·`readMail.do`/`readMailCont.do`). 메일 캐시는 공용 세션의 `establishedAt` 을 신원으로 삼아, 세션이 새로 수립되면 부트스트랩만 다시 한다. 로그인 페이지 응답이면 공용 세션까지 무효화하고 1회 재로그인, 동시 요청은 establish 공유. **안읽음 폴링은 포커스 적응형**(활성 30초·백그라운드 3분, 창 복귀 시 즉시). 위젯 아이콘 클릭=브라우저로 메일함(**단 사이드바가 접혀 있으면 앱 내 모달** — 아이콘이 유일한 진입점이 되므로 `useSidebarCollapsed()` 로 분기), 제목 클릭=앱 내 **리더 모달**(좌 목록·우 본문 — 상단 세그먼트로 **받은편지함↔스팸메일함** 전환, 폴더별 `mboxSeq` 는 `getMailBoxCount` 로 동적 조회). 목록 하단에 공용 `Pagination` — `getMailList.do` 의 `page`/`pageSize`(30) 서버 페이징으로 **과거 메일까지 열람**(전체 건수는 `TotalRecordCount`). 조회 조건은 `MailListQuery`({folder, page, pageSize}) 객체로 전달하며, 응답의 `page` 를 요청 순번과 대조해 빠르게 넘길 때 **뒤늦은 응답을 버린다**. **뱃지 안읽음 수는 폴더별 `unseen` 합**(받은편지함+스팸, 보낸·임시·휴지통 제외 — `config.ts` 의 `unreadExcludedBoxes`)으로 직접 계산한다. ⚠️ 서버의 `allunseen`/`allexist` 집계는 스팸·휴지통·임시보관을 **제외**하며(2026-07-30 실측: `allexist` = INBOX+SENT), 스팸 메일은 도착 시점부터 **읽음 상태로 들어와** 실질적으로 뱃지에 잡히지 않는다. 본문은 main 의 `sanitizeHtml`(script/iframe/on* 제거) + **sandbox iframe(srcDoc)** 이중 방어로 렌더하고, 링크는 기본 브라우저로만 나간다(열면 그룹웨어에서도 읽음 처리). 계정은 비즈박스 공용, 자체 파일 저장 없음.
-- **Nightwatch** (`renderer/features/nightwatch` + `main/features/nightwatch`): Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 분석**을 돌려 리포트+작업 프롬프트를 만든다(아침에 실제 세션에 붙여넣어 수정 작업). 흐름: 후보 조회(내 미해결 이슈 − 해결·숨김·기분석) → [분석] → **프로젝트 선택(프로젝트 레지스트리 참조 — 학습값 suggestedRepoId → Jira 키 일치 → 첫 프로젝트 순 기본 선택, 티켓의 Jira 키와 일치하는 프로젝트가 목록 앞에 정렬)** → Jira REST 로 티켓·댓글·첨부 수집 → 관찰 모드 미션 실행 → 저장소 변조 사후 검증 → 원장 기록. **이름과 달리 야간 자동 스케줄러는 없음 — 수동 트리거가 유일한 진입점**, 실행 중 추가 요청은 대기열로 순차 처리. 안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존). 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분 — 분석 대상 저장소 목록은 프로젝트 레지스트리로 이관). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
-- **딥링크** (`renderer/features/applink` + `main/features/applink`): applink.kr 디퍼드 딥링크(단축 URL) 생성. 클라이언트 JS 호출이 막혀 있어 **main 에서** `POST /deeplink/deeplink_create.asp` 를 호출(`X-API-KEY` + `$canonical_url`·선택 OG 필드). **API 키는 safeStorage 암호화**로 `userData/applink.json` 에만 저장. UI 는 키 관리 + 대상 URL + 접이식 공유 정보(제목·설명·이미지·PC 링크) + 생성 시 클립보드 자동 복사 + 이번 세션 생성 목록.
-- **터미널 + MO(모바일) 연동** (`renderer/features/terminal` + `main/features/terminal` + `src/mobile`): Superset(superset.sh) 스타일 **에이전트 세션 오케스트레이터** — 좌측 세션 목록(상태 표시)에서 여러 claude 세션을 병렬로 관리하고, **자리를 비웠을 때 폰으로 같은 세션을 이어서** 쓴다. **메인 프로세스가 PTY 의 단일 소유자**(`pty.ts` — `Map<id, 세션>`)이고 데스크톱 렌더러(IPC)와 모바일 브라우저(WS)가 각자 **attach** 한다. 세션은 창·클라이언트와 무관하게 유지되고(창을 닫아도 트레이 상주), **tmux 백엔드면 앱을 재시작해도 살아남는다**(아래).
-  - **세션 영속화 — tmux 백엔드 (2026-08)**: tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux -L oneapp -f userData/tmux.conf new-session -A -s oneapp-<id>`)를 spawn — 실제 셸은 tmux 서버 소유라 **앱 재시작·크래시에도 세션·에이전트가 살아있고**, 시작 시 `restoreSessions()`(`pty.ts`) 가 `list-sessions` 와 sidecar(`userData/terminal-sessions.json` — 제목·cwd·에이전트·프로젝트 메타, 평문)를 대조해 재접속 복원한다(E2E 실측: 재시작 전 심은 셸 변수가 복원 후 그대로 — 동일 프로세스). 전용 소켓(`-L oneapp`)·전용 conf(`tmux.ts` 가 시작 시 덮어쓰고 **살아있는 서버엔 `source-file` 로 재적용**: `prefix None`·`status off`·`escape-time 0`·truecolor)로 **사용자 개인 tmux 와 분리 + 완전 투명**(상태바·단축키 없음, claude 마우스 트래킹·BEL 은 기존과 동일 패스스루). ⚠️ conf 의 `terminal-features ",xterm-256color:RGB:sync:hyperlinks"` 는 **지우면 안 된다** — tmux 기본 features(xterm*)엔 `sync` 가 없어 claude 의 동기화 출력(DEC 2026)이 무력화되고 xterm.js 에 그리다 만 중간 프레임(반쪽 구분선 등)이 노출된다(2026-08-05 실측, hyperlinks 도 없으면 OSC 8 링크 소거). attach 시 같은 크기면 rows±1 SIGWINCH 토글 대신 **`refresh-client`**(tmux 가 화면 모델로 전체 재전송 — claude 이중 리플로우 없음)를 쓰고, **마지막 PTY 크기를 sidecar 에 기억**해 복원 attach 를 그 크기로 한다(80x24 왕복 리플로우 제거). ⚠️ **tmux 세션이 대체 화면(TUI, `alternate_on=1`)이면 attach replay 를 생략한다** — 옛 프레임을 재생하면 크기가 달랐던 시점의 글자가 우측 끝에 눌어붙고, TUI 는 자기 모델과의 diff 만 그려서 그 잔상을 영영 못 지운다(2026-08-05 실측: ◉ × 조각·잘린 에이전트 칩). 빈 xterm + tmux 전체 리드로 한 프레임이 superset 식 클린 attach 고, 일반 셸은 스크롤백 가치가 있어 replay 유지. alt 질의는 `list-panes -s -t '=이름'`(pane 타깃 명령은 `=세션명` 불가 — 실측) 경유라 `attachSession` 은 **async** 다. 세션 [x]=`kill-session`(onExit 흐름으로 정리+sidecar 제거), `before-quit`(`disposeAll`)은 **클라이언트만 끊는다**(detach — sidecar 유지). 외부 detach 로 클라이언트만 죽으면 `has-session` 확인 후 조용히 재attach. **미설치면 기존 직접 spawn 폴백**(영속 없음 — 새 세션 모달에 설치 힌트, `terminal:backend` IPC). ⚠️ 재시작 후 스크롤백은 현재 화면부터 시작(링버퍼는 앱 메모리라 함께 사라짐 — tmux history 시딩은 미구현). ⚠️ tmux 타깃은 `=이름` 정확 매칭을 쓸 것 — 단 target-session 계열(has/kill/attach)에서만 검증됨, 3.7b 에서 `send-keys` 등 pane 타깃엔 `=` 가 안 먹는 것 실측.
-  - **세션 오케스트레이터 (2026-08 개편)**: 상단 탭바 → **좌측 세션 패널**(행 = 상태점 + 제목 + `에이전트 · 상태` 서브라벨) + 우측 xterm. 새 세션은 [+] 모달에서 **위치(프로젝트 레지스트리) + 에이전트**(`agents.ts` — 셸·claude·femc·codex·gemini, `zsh -lc "whence -p"` 1회 캐시로 설치 감지 → **미설치는 선택지에서 조용히 제외**, 안내 문구 없음) 선택 → 셸 spawn 후 명령을 자동 입력(에이전트가 죽어도 셸 세션은 유지). 에이전트를 추가할 때는 `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES`(3 컨텍스트 공용 표시명)와 `agents.ts` 의 `AGENTS` 두 곳만 손대면 된다. ⚠️ **spawn 직후 즉시 `write` 하면 zsh 초기화(ZLE)가 입력 버퍼를 비우며 명령을 버린다**(2026-08 실측) — `launchAgent()` 가 **첫 출력 후 350ms 잠잠해지면**(프롬프트 완성) 보내고 상한 3초를 둔다. `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
-  - **상태 휴리스틱** (`pty.ts` — 상수는 파일 상단, `ONEAPP_TERM_DEBUG=1` 로 전이 로그): `busy`(출력 있음 — claude 스피너는 ~1Hz 로 계속 그리므로 작업 중엔 busy 유지) / `waiting`(에이전트 세션이 **완전 침묵 2.5초** + 입력 후 출력 ≥50B — 입력 대기, 뱃지·알림 대상) / `idle`(그 외 — **셸 세션은 waiting 없음**). bare BEL(OSC 종결자 필터 후)은 조기 판정(0.3초)+바이트 면제. ⚠️ **바이트 문턱을 크게(600) 잡으면 claude 래퍼의 계정 선택 프롬프트(145B) 같은 작은 입력 대기를 놓친다**(실측). ⚠️ **attach/resize 의 SIGWINCH redraw 를 grace 로 걸러내면 안 된다** — 터미널 섹션을 열어둔 채 세션을 만들면 즉시 attach 되어 첫 렌더가 통째로 먹히고 **영영 idle 에 갇힌다**(실측). 대신 redraw 는 busy 로 흘려보내고, **알림음 중복은 `notifiedSinceInput`(입력=턴당 알림 1회, attach/resize 시 busy 가 아니면 선소진)** 이 막는다. 알림은 **입력대기 수 뱃지(사이드바 액센트 + 독)** 상시 + 강도 선택(`terminal.json` `notifyLevel`: badge/sound(기본)/alert — **환경설정 → 터미널** 그룹의 Segment, 테마처럼 즉시 저장): 생성 후 20초·직전 입력 5초 내 전이는 소리 생략.
-  - ⚠️ **창 리사이즈 중 터미널이 요동치던 원인은 SIGWINCH 폭주**였다 — 드래그 중 프레임마다 PTY resize 를 보내면 claude 가 매번 전체 리렌더를 한다(실측: 20회 연속 resize → **28.3KB/38 chunk** vs 마지막 1회만 → **1.5KB/2 chunk**). 그래서 `TerminalView` 는 **PTY resize IPC 를 120ms 디바운스**(마지막 값만 — last-claim-wins 유지)하고 **fit 을 rAF 로 코얼레스**한다. 더불어 세션 패널 도입으로 생긴 래퍼 `.terminal__main` 에는 **`min-width/min-height: 0` + `overflow: hidden` 이 필수** — flex 아이템의 기본 `min-*: auto` 는 콘텐츠 기반이라 xterm 이 커지면 래퍼가 늘고 host(flex:1)도 커져 fit→resize→더 큰 xterm 무한 성장 루프가 된다.
-  - **attach 프로토콜**: 세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다.
-  - **크기 공유는 last-claim-wins(보고 있는 쪽이 주장)** — 새로 붙은 쪽 크기로 PTY 를 맞추고 `resized` 로 전 클라이언트에 알려 `term.resize()` 로 동기화한다. 여기에 **재주장 규칙**을 더한다: 데스크톱은 **창 포커스** 시(`window 'focus'` → `fit.proposeDimensions()` 와 다르면 재주장), MO 는 **보이는 상태(`visibilityState==='visible'`)에서 `resized` 를 받았을 때** 자기 크기를 되찾는다. 없으면 폰이 줄여 둔 크기로 데스크톱에 빈 공간이 남고(반대로 데스크톱이 키우면 폰은 오른쪽이 잘려 못 읽는다). ⚠️ 데스크톱의 `ResizeObserver` 는 **컨테이너 크기가 실제로 바뀔 때만 fit** 해야 한다(무조건 fit 하면 xterm 내부 리렌더에 반응해 MO 가 맞춘 크기를 즉시 되돌린다 — 2026-08 실측).
-  - **claude CLI 는 대체 화면(`?1049h`) + 전체 마우스 트래킹(`?1000/1002/1003/1006h`)을 세션 내내 유지**한다(2026-08 실측). 그래서 ①터미널 스크롤백이 존재하지 않고 ②휠은 앱으로 전달돼 **claude 가 자체 스크롤**한다(자체 `Jump to bottom` 표시). 즉 터미널 쪽에서 스크롤을 흉내내면 안 되고 **휠 이벤트를 그대로 넘겨야** 한다.
-  - ⚠️ **xterm 6 함정 3가지**(전부 2026-08 실측): ①**네이티브 스크롤 영역이 없다** — 5.x 의 `.xterm-scroll-area` 가 사라져 `viewport.scrollTop` 조작이 안 먹는다. 스크롤백 스크롤은 `term.scrollLines(n)`·`scrollToBottom()`, 위치 판정은 `buffer.active.viewportY >= baseY`, 변화 감지는 `term.onScroll`. ②**스크롤바도 자체 구현**(`.xterm-scrollable-element > .scrollbar > .slider`)이라 전역 `::-webkit-scrollbar` 규칙이 안 먹는다. ③번들 `xterm.css` 가 `.xterm .xterm-viewport` 배경을 **#000 하드코딩**해서 테마를 안 따르고, `theme.background` 를 바꿔도 생성 후엔 다시 칠하지 않는다 → 배경은 `theme.background: 'rgba(0,0,0,0)'`(`'transparent'` 는 파서가 못 읽고 검정 폴백) + `allowTransparency` 로 비우고 **패널 CSS**(`panel-dark`)에 맡긴다. ②③ 의 오버라이드는 xterm 선택자와 **동률 특정도면 나중에 주입되는 xterm.css 가 이기므로** 한 단계 더 좁게 쓴다.
-  - 데스크톱 터미널 색은 `TerminalView.buildTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 글자는 `--font-mono` 13px/1.35.
-  - **MO 접속**: 툴바 폰 아이콘 → 서버 on/off + 접속 URL·QR + 토큰 재발급. 도달·암호화는 **Tailscale**(맥·폰에 설치 전제, URL 은 100.64.0.0/10 주소 우선 정렬)이 담당하고 앱은 **토큰 인증**만 한다 — `?token=` 1회 → `timingSafeEqual` 검증 → **HttpOnly 쿠키 승격**, WS(`/term`) upgrade 에서 재검증, 30초 ping 으로 죽은 소켓 회수. 토큰은 `safeStorage` 로 `userData/terminal.json`(포트 기본 18317·자동 시작 여부)에 저장하고, 켜둔 상태면 앱 재시작 시 자동으로 다시 켜진다.
-  - **HTTPS (Tailscale 인증서)** — `terminal/tls.ts` 가 `tailscale cert` 로 MagicDNS 이름(`<host>.<tailnet>.ts.net`) 인증서를 받아 `userData/mo-cert/` 에 두고, 서버는 그게 있으면 `https`, 없으면 기존 `http` 로 뜬다(폴백). **왜 필요한가**: Chrome 은 **HTTPS 를 설치형 PWA 의 필수 조건**으로 본다(2025 년부터 서비스 워커 요구는 없어졌지만 HTTPS 는 예외 없음) — 평문 HTTP 로 '홈 화면에 추가' 하면 그냥 탭 바로가기가 되어 **주소창이 남는다**. HTTPS 면 `display: standalone` 이 실제 적용돼 주소창 없이 앱처럼 열리고, secure context 라 `navigator.clipboard` 도 정식 동작한다. ⚠️ 접속 URL 은 **인증서 도메인만** 준다(IP 로 접속하면 이름이 안 맞아 경고 + 설치 조건 깨짐). 클라이언트 WS 는 `location.protocol` 을 따라 `wss` 로 붙어야 한다(https 페이지의 `ws://` 는 mixed content 로 차단). 인증서는 90일이라 하루 1회 `ensureTls()` → `setSecureContext()` 로 **재시작 없이 갱신**한다. 전제: 사용자가 Tailscale 관리 콘솔 DNS 탭에서 **HTTPS Certificates 활성화**(안 켜져 있으면 발급 실패 → HTTP 폴백). ⚠️ `tailscale cert` 는 출력 경로를 안 주면 **현재 디렉터리**에 파일을 쓴다 — 항상 `--cert-file/--key-file` 을 명시할 것.
-  - **QR 은 처음 한 번만** — 쿠키에 `Max-Age`(1년)를 줘 **지속 쿠키**로 만들었다(안 주면 세션 쿠키가 되어 브라우저를 닫을 때 사라지고, 그러면 매번 QR 을 다시 찍어야 한다). `SameSite=Lax` 는 북마크·QR 스캐너 같은 최상위 이동에서 쿠키가 확실히 실려 가도록 한 선택(`Strict` 는 외부 앱에서 진입할 때 빠질 수 있다). 페이지는 진입 후 `history.replaceState` 로 주소창의 토큰을 지우므로, **홈 화면에 추가**하면 토큰 없는 주소가 저장되고 인증은 쿠키가 맡는다 — 아이콘 탭 = 바로 터미널.
-  - **홈 화면 아이콘**(`src/mobile/public/manifest.webmanifest` + `icon-192/512.png`, 앱 아이콘을 `sips` 로 리사이즈): `display: standalone` 이라 주소창 없이 앱처럼 열린다. ⚠️ 브라우저는 manifest·아이콘을 **쿠키 없이** 받아갈 수 있어(스펙상 credentials 모드가 다름) 그 세 경로만 `PUBLIC_PATHS` 로 인증에서 제외했다 — 비밀이 없는 파일이고, 앱 화면(`/`·`mobile.ts`)은 그대로 403 이다. Vite `publicDir`(= `src/mobile/public`)이라 해시 없이 고정 경로로 서빙되고, `.webmanifest` MIME 은 `server.ts` 의 MIME 맵에 있다.
-  - **모바일 페이지는 별도 Vite 엔트리**(`forge.config.ts` renderer 배열의 `mobile_window`, base `/terminal/`) — prod 는 main 이 asar 안 산출물을 `fs` 로 읽어 서빙(경로 정규화로 루트 밖 차단), dev 는 Vite dev 서버로 프록시. 폰에서 `/` 는 **앱 셸**이고 터미널은 `/terminal/` 이다(아래 'MO 앱 셸' 참고). UI 는 세션 선택(`<option>` 은 스타일 불가라 상태를 **텍스트 글리프**로 — waiting `●`·busy `◐`·idle `○` + 에이전트명) + **새 세션 시트**(같은 바텀시트에서 ①위치(홈+프로젝트 레지스트리, WS `cwds`) → ②에이전트(WS `agents`, 설치된 것만) 2단계 — 에이전트 목록이 없으면 셸로 즉시 생성) + **글자 크기 조절(A－/A＋, `localStorage` 저장 — 기본값은 최소 6px: claude 같은 넓은 TUI 를 폰에서 통째로 보는 게 첫 화면의 목적이고, 잘려 있으면 무엇을 키울지조차 안 보인다)** + 키바(esc·tab·⇧tab·ctrl 토글·방향키·⏎ — claude CLI 용)이며 재접속은 1→2→4→5초 백오프 + `visibilitychange`(탭 슬립) 즉시 재연결 = 재attach = replay 복원. **터치 스크롤은 직접 구현** — xterm 은 폰에서 손가락 스크롤을 지원하지 않는다. 드래그를 **합성 `WheelEvent` 로 바꿔 `.xterm-screen` 에 디스패치**하고(`#term` 은 `touch-action: none`), 처리는 xterm 에 맡긴다: 일반 화면이면 스크롤백을 스크롤하고, **마우스 트래킹을 켠 TUI(claude 등)면 xterm 이 마우스 이벤트로 인코딩해 앱에 전달**한다 — 데스크톱에서 휠을 돌린 것과 완전히 같은 경로. ⚠️ `scrollLines()` 를 직접 부르면 **claude 안에서 스크롤이 안 된다**(claude 는 대체 화면이라 스크롤백이 없음 — 2026-08 실측). 일반 화면에서 위로 올린 동안은 **[맨 아래로]** 버튼이 뜬다(대체 화면에서는 claude 자체의 `Jump to bottom` 이 담당).
-  - **첫 페인트 깜빡임(FOUC)**: `mobile.css` 는 `mobile.ts` 가 `import` 하므로 **dev 모드에선 JS 실행 후에야 주입**되고 그 사이 흰 배경·정렬 안 된 바가 한 프레임 보인다(prod 빌드는 Vite 가 head 에 `<link>` 를 넣어 대체로 없다). 그래서 `index.html` `<head>` 에 **크리티컬 CSS**(배경·색·flex 골격 최소)를 인라인으로 둔다 — 정본은 여전히 `mobile.css` 이고, 여기 규칙을 늘리지 말 것(두 곳이 어긋나면 디버깅이 어려워진다).
-  - **소프트 키보드 대응(iOS·안드로이드 공통)**: Chrome 108+ 안드로이드도 iOS Safari 처럼 **visual viewport 만 줄이는 게 기본**이라 키바가 키보드에 가려질 수 있다 → ①viewport 메타에 `interactive-widget=resizes-content`(안드로이드는 레이아웃 뷰포트까지 줄어 flex 가 스스로 맞음, iOS 는 이 키를 무시) ②`visualViewport`·`innerHeight` 중 **작은 값**으로 body 높이 보정 — 둘을 함께 쓴다. pull-to-refresh(안드로이드)로 세션 화면이 리로드되지 않게 `overscroll-behavior: none` 필수. 한글은 직접 입력·**IME 조합**(Gboard) 둘 다 셸까지 전달됨을 확인(xterm 이 textarea 의 `autocapitalize/autocorrect/spellcheck` 를 이미 off 로 설정한다). CJK 가 2셀 폭으로 보이는 건 터미널 정상 동작.
-  - ⚠️ **패키징 주의**: node-pty 는 `packagerConfig.asar.unpack` 으로 통째 unpack 해야 한다 — macOS 의 `spawn-helper` 는 확장자가 없어 AutoUnpackNatives 의 `*.node` 글롭에 안 걸리고, asar 안에 갇히면 PTY 생성이 전부 실패한다. `postPackage` 는 앱 서명 **전에** unpacked 바이너리를 같은 identity 로 선서명하는데, **Mach-O 만** 서명할 것 — 함께 담긴 win32 prebuild(PE)를 서명하면 codesign 이 서명을 `com.apple.cs.*` 확장 속성으로 붙이고 그게 detritus 로 잡혀 앱 `--deep` 서명이 실패한다(2026-08 실측).
-- **MO 앱 셸** (`src/mobile-app` + `main/lib/moIpc.ts` + `main/features/terminal/rpc.ts`): 폰에서 **근태·Jira·PR·배포·메일**을 쓴다. 핵심은 **데스크톱 기능 화면(`renderer/features/*`)을 한 줄도 고치지 않고 재사용**하는 것 — 폰에는 preload 가 없으니 `window.oneApp` 을 **WS RPC shim**(`mobile-app/shim/`)이 만든다. 렌더러는 electron/node 를 직접 import 하지 않으므로(실측 0건) 브라우저 번들이 된다.
-  - **브리지**: `ipcMain` 에는 등록된 handle 을 main 에서 호출하는 API 가 없다 → `lib/moIpc.ts` 의 **`handleShared(channel, fn)`** 이 `ipcMain.handle` 등록과 동시에 함수를 레지스트리에 잡아 두고, `/rpc` WS 가 그 함수를 그대로 부른다(로직 중복 0). ⚠️ 시그니처에서 `IpcMainInvokeEvent` 를 **의도적으로 제거**했다 — `event.sender` 에 의존하는 핸들러를 실수로 폰에 열 수 없게 타입으로 막는다. **`handleShared` 로 등록하는 것 자체가 MO 화이트리스트 선언**이고, 안 여는 채널(`projects:pick-dir`·`settings:theme:set`·`mail:open-web`·vpn·mirror·schedule·nightwatch)은 기존 `ipcMain.handle` 로 남긴다.
-  - **push**: WS 클라이언트는 BrowserWindow 가 아니라 `broadcast()` 로도 안 닿는다 → `lib/broadcast.ts` 에 **fan-out 훅(`onBroadcast`)** 을 두고 `rpc.ts` 가 구독한다(구독한 채널만 전달 — `terminal:data` 같은 고빈도가 새지 않게). 그래서 `deploy:status`(예전 `event.sender.send`)와 `attendance:changed/stamping`(예전 `getNotifyWindow()`)을 **broadcast 로 전환**했다. 창이 하나뿐이라 데스크톱 동작은 동일하고, 빌드 중 창을 닫았다 열면 상태를 못 받던 버그가 함께 고쳐졌다. ⚠️ `getNotifyWindow()` 자체는 지우지 말 것 — 알럿의 부모 창으로 쓰인다.
-  - **폰 셸**(`mobile-app/`): 하단 탭바 5개 + 터미널 링크. **활성 탭만 렌더**한다(데스크톱과 같은 규칙 — 5개를 동시에 마운트하면 각 섹션 폴러가 사내 서버를 동시에 두드린다). `openExternal` 은 RPC 로 보내지 않고 **`window.open`** 으로 폰에서 연다(맥에서 열리면 폰은 무반응). optional 후행 인자는 **`undefined` 를 잘라내 보낸다** — JSON 직렬화가 `null` 로 바꾸면 기본 파라미터(`getInbox(q = {})`)가 무력화돼 터진다.
-  - **폰 스타일**(`mobile-app/styles/mo.scss`): 데스크톱 SCSS 는 **무수정**, 폰 차이만 `html.mo` 스코프로 덮는다. ⚠️ `<html>` 에 붙이는 이유 — 공용 `Modal` 이 `document.body` 로 portal 하므로 셸 div 스코프면 모달 오버라이드가 전부 빗나간다. 실측으로 덮어야 했던 것: `.jira-view` 의 `calc(100vw - 220px - 48px)`(사이드바 폭 하드코딩 → 폰에서 144px), `.mail-list__top` 의 `display:contents` 트릭(발신자 200px 고정이 제목을 130px 로 만든다 → 2줄 전환), `.mail-list__subject` 는 `display:flex` 라 `text-overflow` 가 안 먹어 블록으로, 메일 오버레이는 **탭바 위에서 끝내기**(안 하면 portal 이 탭바를 덮어 탭 전환 불가), 각 행의 `flex-wrap`. ⚠️ `@use '../../renderer/styles/index'` 만으로는 **믹스인이 전달되지 않는다**(`Undefined mixin`) — `base` 를 따로 `as *` 로 함께 불러온다.
-  - 폰은 평문 http = insecure context 라 **`navigator.clipboard` 가 없다** → `lib/useCopy.ts` 에 `execCommand` 폴백을 넣었다(데스크톱은 기존 경로).
-- **변경사항** (`renderer/features/changes` + `main/features/changes`): "AI 에 작업 시키고 → 변경 확인 → AI 로 커밋 → 푸시" 루프의 **확인·푸시** 담당 — 커밋은 만들지 않는다(커밋은 터미널 세션의 에이전트가). 진입점 둘: **터미널 우측 드로어**(툴바 git-branch 토글, localStorage `terminal:changesOpen`, 활성 세션 cwd 대상 — 좌측 grip 드래그로 너비 조절 240~640px, localStorage `terminal:changesWidth`)와 **MO '변경' 탭**(`mobile-app/views/MoChangesView` — 프로젝트 레지스트리 선택 + 같은 `ChangesView` 재사용). main 은 `/usr/bin/git` execFile 로 ①상태: `status --porcelain --branch --untracked-files=all`(⚠️ 기본값은 새 디렉터리를 통째 `dir/` 로 묶어 파일별 diff 가 안 된다 — 2026-08 실측) + `diff HEAD --numstat`(+/− 수) + `log @{u}..HEAD`(푸시 대기 커밋) ②파일 diff: 추적 파일은 `diff HEAD`, untracked 는 `--no-index /dev/null`(**exit 1 이 정상**), 512KB 초과는 truncated ③푸시: upstream 없으면 `-u origin HEAD`. 전 명령 `core.quotepath=false`(한글 경로 보존) + `GIT_TERMINAL_PROMPT=0`+타임아웃(headless 인증 프롬프트 hang 차단). IPC 3채널 전부 `handleShared`(MO 화이트리스트) — ⚠️ **클라이언트가 경로를 직접 못 넘긴다**: `ChangesTarget`(projectId/sessionId)만 받아 main 이 해석하고, diff 파일 경로도 저장소 밖 탈출을 검증한다(폰에 열리는 채널이라 임의 디렉터리 git 실행 차단). 뷰는 보이는 동안 5초 폴링(선택 파일 diff 도 함께 갱신 — 에이전트가 고치는 중 따라감), 커밋되면 파일 목록이 비고 '푸시 대기 커밋'+[푸시 ↑N] 로 나타난다. 세션 종료와 폴링의 레이스는 try/catch 로 에러 화면 처리(안 하면 매 틱 unhandled rejection — 실측). diff 렌더는 라이브러리 없이 줄 prefix 파싱 + `panel-dark` 토큰(--ok/--danger 재매핑).
-- **트레이·자동 시작** (`main/features/tray`): 메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀. **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
-
-## 트러블슈팅
-- `npm install` 시 `ETARGET No matching version`(존재하지 않는 버전) → **npm 캐시 손상**. `npm cache clean --force` 후 `rm -f package-lock.json && npm install`.
-- `puppeteer`·`node-pty`·`ws` 는 `vite.main.config.ts`에서 **external 처리**(번들 제외, 런타임 로드 — `forge.config.ts` 의 `copyRuntimeDeps` 훅이 패키지에 채워 넣는다). 무거운 네이티브 의존성 추가 시 동일하게 external 고려.
-- `node-pty` prebuild 의 `spawn-helper` 는 **실행 권한이 없는 채로 설치**돼 `posix_spawnp failed` 가 난다 → `package.json` 의 `postinstall` 이 `chmod +x` 로 보정한다(`npm i` 후 오류 시 이 스크립트 확인).
-- **dev 모드에서 화면이 비면(`504 Outdated Optimize Dep`)** — 렌더러 엔트리가 3개(main_window·mobile_window·mobile_app_window)인데 Vite 의존성 캐시 기본값(`node_modules/.vite`)을 공유하면 한 서버의 재최적화가 다른 서버 페이지의 URL 을 무효화해 빈 화면이 된다. 그래서 각 설정에 **`cacheDir` 을 분리**해 뒀다(`.vite-mobile`·`.vite-mobile-app`). 엔트리를 더 추가할 때도 반드시 분리할 것. 그래도 빈 화면이 나면 `rm -rf node_modules/.vite*` 후 재시작.
-- **adb 데몬은 콜드 시작이 3초를 넘는다** — 폰 감지(`mirror/scrcpy.ts`)의 타임아웃을 3초로 두면 데몬이 식어 있을 때 매번 실패한다(실측 콜드 3.03초 / 웜 0.01초). 10초 + 조회 전 `adb start-server` 로 해결. 감지 실패 시 `adb devices -l` 을 직접 돌려 데몬 상태부터 확인할 것.
-- **"연결했는데 기기 인식 안 됨" 의 실제 원인 1위는 `unauthorized`** — 폰 화면이 잠긴 채 케이블을 꽂으면 "USB 디버깅 허용" 팝업이 잠금화면 뒤에 가려지고, 승인 없이 방치되면 `adb devices` 가 `unauthorized` 로 남는다(2026-08-05 실측). "이 컴퓨터에서 항상 허용" 을 체크하지 않으면 재연결마다 반복된다. 해결은 폰 잠금 해제 → 재연결 → 항상 허용 체크(팝업이 안 뜨면 개발자 옵션 → **USB 디버깅 승인 취소** 후 재연결). ⚠️ **파싱에서 이 상태를 버리지 말 것** — 예전 코드가 `unauthorized|offline` 행을 필터로 제외해 `device: null` 로만 만들었고, 위젯이 '기기 없음' 만 띄워 케이블·포트를 의심하게 했다.
-- 개발 모드 DevTools 자동 오픈은 꺼둠(`main.ts`). 필요하면 창에서 `⌘⌥I`.
-- **핫리로드 범위**: 렌더러만 HMR 적용. `src/main`/`src/preload` 변경은 리빌드는 되지만 **Electron 재시작 안 됨** → `npm start` 를 다시 실행해야 반영.
+- **비밀/계정 정보 커밋 금지**: 비밀번호는 `safeStorage`로 암호화해 userData 에만 저장. 코드·리포에 하드코딩 X. `.env`/`settings.json`(계정) 커밋 금지.
+- **⚠️ 그룹웨어 접근은 공용 세션(`main/features/groupware/session.ts`)을 쓸 것** — 같은 계정 동시 로그인은 서버가 거부한다.
+- **⚠️ 보존할 데이터를 localStorage 에 저장하지 말 것** — 강제 종료 시 flush 안 됨(2026-07-29 실측). IPC 로 userData JSON 에 저장한다.
 
 ## 컨벤션
 - 코드 주석·문서·대화는 **한국어**.
-- **UI 스타일 기준은 `DESIGN.md`** — 색·크기·모션은 반드시 `_base.scss` 토큰(`var(--*)`)과 타이포 믹스인(`type-*`)에서 가져온다 (hex·px 매직넘버 금지). 이모지·텍스트 글리프 대신 공용 `Icon` 컴포넌트(Lucide path) 사용.
-- **스타일은 SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts`에서 modern-compiler API 사용). BEM 클래스를 `&__`/`&--` 네스팅으로 작성하고, 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss`에 `@use` 추가. 믹스인이 필요하면 파일 최상단에 `@use './base' as *;`.
-- **공용 UI는 `components/`의 컴포넌트 사용** — 버튼 `Button`(variant: primary/ghost/danger · size: md/sm · loading), 입력 `Input`(small)·`Textarea`(code), 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`(icon), 배너 `Banner`(variant: warning/danger/info), 새로고침 `RefreshButton`, 열고닫기 `Collapsible`(icon·storageKey), 아이콘 `Icon`, 상태 뱃지 `Badge`·`StatusDot`, 링크형 버튼 `TextLink`, 파일 선택 `FileTrigger`, 세그먼트 `Segment`, 토스트 `useToast`, 모달 `Modal`(title·onClose·wide — Escape/오버레이 클릭 닫힘, 부모가 조건부 렌더로 제어), 확인 다이얼로그 `useConfirm`(promise 기반 window.confirm 대체 — `await confirm({title, danger})`), 빈 상태 `EmptyState`(icon·message·hint), 마크다운 렌더 `Markdown`, 날짜 선택 `DatePicker`(미니 캘린더 팝오버 — "YYYY-MM-DD"), 시간 선택 `TimePicker`(타이핑 허용 + N분 단위 리스트 — "HH:MM", `step` 기본 30분·`small` 변형), 체크박스 `Checkbox`(label 래핑·클릭 토글 — `danger`: 운영 확인용), 셀렉트 `Select`(`options` prop — TimePicker 계열 커스텀 팝오버 드롭다운, `small` 변형), 페이지네이션 `Pagination`(`page`(1-based)·`pageSize`·`total`·`onChange` — 서버 페이징 목록 공용. `1 … 6 [7] 8 … 616` 창 방식 + 좌측 "31–60 / 18,475건" 요약, 한 페이지면 아무것도 렌더 안 함, `span`·`unitLabel` 로 조정). **네이티브 `input[type=date/time]`·원시 `<input type=checkbox>`·`<select>` 직접 사용 금지** — 항상 공용 컴포넌트 사용. `.btn`/`.input` 등 공통 클래스 직접 사용 금지, 기능 scss 에서 공용 클래스 크기 오버라이드 금지(size variant 사용).
-- **피커 팝오버는 `body` 로 portal + `fixed`** (`Select`·`TimePicker`·`DatePicker` → `lib/usePopover.ts`): 절대배치로 두면 **모달 본문(`.modal__body`, `overflow-y:auto`)의 스크롤 높이에 포함돼 스크롤바가 생기고 잘린다**(2026-08 실측). 훅이 트리거 rect 기준으로 좌표를 계산하고 아래 공간이 모자라면 위로 flip, 좌우는 뷰포트 클램프, scroll(capture)·resize 에서 재배치한다. 그래서 ⚠️ **옵션 스타일을 조상 스코프(`.picker--select .picker__option`·`.terminal-new__select .picker__option`)로 걸면 안 먹는다** — 팝오버 자신의 클래스(`.picker__pop--select`·`--sm`)에 쓸 것. 폭도 CSS `width: 100%` 가 body 기준이 되므로 훅이 인라인으로 트리거 폭을 준다(`matchWidth`). 앵커는 컨테이너(`.picker`)가 아니라 **트리거 요소**를 넘긴다(부모 flex 에서 stretch 되면 6px 간격이 어긋난다).
-- **공통 유틸 재사용 (중복 정의 금지)** — 렌더러: 주기 폴링·시계 틱은 `lib/usePolling.ts`(usePolling·useTick), 클립보드 복사+토스트는 `lib/useCopy.ts`, 드롭다운·팝오버 배치는 `lib/usePopover.ts`. 메인: REST 호출은 `main/lib/http.ts` 의 `fetchWithTimeout`(전역 fetch 직접 사용 금지 — 타임아웃이 없어 소켓 hang 시 IPC 가 영영 안 풀림, `import { fetchWithTimeout as fetch }` 패턴), userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(readUserJson·writeUserJson·encryptSecret·decryptSecret), 전 창 이벤트는 `main/lib/broadcast.ts`, `sleep`·`localDateKey` 는 `main/lib/util.ts`.
-- **⚠️ 그룹웨어 접근은 `features/groupware/session.ts` 의 공용 세션을 쓸 것.** 같은 계정으로 **거의 동시에 로그인하면 서버가 뒤쪽을 거부**해 로그인 페이지로 되돌려보낸다(2026-07-30 실측: 시작 시 메일+근태가 각자 로그인 → 메일 4/4 실패, "계정 정보를 확인하세요" 라는 오해성 메시지. 중복 로그인 확인창은 안 뜨므로 다이얼로그 처리로는 해결 불가). 그래서 **로그인은 1회만 하고 쿠키를 공유**한다.
-  - `getGroupwareSession()` → 쿠키 확보(TTL 20분 캐시, 동시 요청은 하나의 로그인을 공유). HTTP 호출은 `session.header`(메일), 브라우저가 필요한 기능은 **`gotoWithSession(page, url, waitUntil?)`** — 쿠키를 주입해 **로그인 화면을 건너뛰고** 목표 URL 로 직행하고, 세션이 서버에서 만료돼 튕기면 **1회 재로그인 후 재시도**한다. 인증 실패를 감지하면 `invalidateGroupwareSession()`.
-  - ⚠️ 쿠키는 이름이 같고 경로만 다른 `JSESSIONID` **2개**(`gw.forbiz.co.kr` `/gw` + `.forbiz.co.kr` `/`)다 — 합친 문자열이 아니라 **도메인·경로가 붙은 객체 목록이 정본**이고 헤더는 파생값.
-  - ⚠️ `waitUntil` 기본값은 `networkidle2` 지만 **포털 화면(userMain.do)은 상시 폴링이 있어 idle 판정이 14~20초까지 늘어진다** — 뒤에서 필요한 요소를 직접 기다리는 호출부(근태의 `readInfo`)는 `'domcontentloaded'` 를 넘길 것.
-  - 적용 현황: **메일·근태는 공용 세션**(근태 조회 4.5초 → **0.7초**, 6~7배). **주간보고·야근결재·일정 등록은 아직 각자 로그인**하며 `main/lib/groupware.ts` 의 `withGroupwareLogin()` 직렬화 큐를 경유한다(공용 세션의 로그인도 같은 큐를 지나므로 서로 충돌하지 않음). 이들도 `gotoWithSession` 으로 옮기면 같은 이득을 얻지만, 야근결재는 상신(쓰기) 흐름이라 E2E 검증이 어려워 보류했다. `standalone/` 은 별도 프로세스라 큐·세션이 공유되지 않는다.
-  - 참고: 근태 조회가 드물게 20초 이상 걸리는 건 **그룹웨어가 `userMain.do` 응답을 늦게 주는 경우**(단계별 계측으로 goto 구간 확인, 8회 중 1회) — 앱 코드 문제가 아니다.
-- 공통 레이아웃 클래스(`_base.scss`): 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **사이드바 위젯 `.sbw`**(VPN·미러링·근태 공용 — `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
-- **비브런시 셸 주의**: 창은 `vibrancy: 'sidebar'` — html/body/.sidebar 는 **투명 유지**, 불투명 채색은 `.content`(--bg)에서만. **BrowserWindow 에 backgroundColor 지정 금지**(재질이 가려짐). 탑바는 `.content` 위 absolute 프로스트 오버레이(--frost + backdrop-blur)라 높이(44px) 변경 시 `.main` padding-top 동기화.
-- 커밋: 한국어 conventional commit (`feat`/`fix`/`refactor`/`docs`/`chore`). **커밋 메시지에 Claude 서명(Co-Authored-By 등) 넣지 말 것.** → **`/commit` 스킬 사용.**
+- **기능 간 참조는 `features/<기능>/index.ts`(공개 API)로만.** 기능 내부 파일을 다른 기능에서 직접 import 하지 않는다.
+- **공용 UI 컴포넌트를 쓸 것** (`renderer/components/`) — 네이티브 `input[type=date/time]`·원시 체크박스·`<select>` 직접 사용 금지, `.btn`/`.input` 등 공통 클래스 직접 사용 금지. 이모지 대신 공용 `Icon`.
+- **공통 유틸 재사용 (중복 정의 금지)** — 렌더러 `lib/`(usePolling·useCopy·usePopover), 메인 `lib/`(fetchWithTimeout·store·broadcast·util). 특히 **전역 fetch 직접 사용 금지**(타임아웃 없어 IPC hang).
+- **색·크기·모션은 `_base.scss` 토큰(`var(--*)`)에서** — hex·px 매직넘버 금지. 기준은 `DESIGN.md`.
+- 커밋: 한국어 conventional commit (`feat`/`fix`/`refactor`/`docs`/`chore`). **Claude 서명(Co-Authored-By 등) 넣지 말 것.** → **`/commit` 스킬 사용.**
+- 새 기능(섹션) 추가는 **`/new-section` 스킬** 참고 (렌더러→SECTIONS→SCSS→IPC→타입 순서).
 - 새 라이브러리/기술 도입 전 **공식 문서 확인**. 큰 리팩터링은 사용자 승인 후 진행.
-- 자세한 로드맵은 `ROADMAP.md` 참고.
+
+## 트러블슈팅 (개발 전반)
+- `npm install` 시 `ETARGET No matching version` → **npm 캐시 손상**. `npm cache clean --force` 후 `rm -f package-lock.json && npm install`.
+- **dev 모드에서 화면이 비면(`504 Outdated Optimize Dep`)** → `rm -rf node_modules/.vite*` 후 재시작. (엔트리별 `cacheDir` 분리가 이미 되어 있다 — 엔트리 추가 시에도 분리 필수)
+- **핫리로드 범위**: 렌더러만 HMR. `src/main`/`src/preload` 변경은 **Electron 재시작 안 됨** → `npm start` 재실행.
+- 개발 모드 DevTools 자동 오픈은 꺼둠(`main.ts`). 필요하면 창에서 `⌘⌥I`.
+- `npm i` 후 `posix_spawnp failed` → `node-pty` 의 `spawn-helper` 실행 권한 문제. `package.json` 의 `postinstall` 확인.
+
+## 상세 규칙은 `.claude/rules/` 에 있다
+작업 대상 파일을 열면 아래 규칙이 **자동으로 로드**된다. 기능 상세·함정·실측 기록은 CLAUDE.md 가 아니라 여기에 쓴다.
+
+| 파일 | 적용 경로 | 내용 |
+|------|-----------|------|
+| `main-process.md` | `src/main/**` · `src/preload/**` · `src/shared/**` | 공통 유틸·IPC 등록·`handleShared`(MO 화이트리스트) |
+| `renderer-ui.md` | `src/renderer/**` · `src/mobile-app/**` (ts·tsx) | 공용 컴포넌트 목록·피커 팝오버·공통 훅 |
+| `styles.md` | `**/*.scss` · `DESIGN.md` | SCSS 작성법·공통 클래스·비브런시 셸·폰 스타일 |
+| `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |
+| `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
+| `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
+| `features/mo-app.md` | `src/mobile-app/**` · moIpc · rpc | RPC shim·broadcast fan-out·폰 셸 |
+| `features/groupware-apps.md` | schedule · attendance · overtime · weekly · mail | 다섯 기능의 동작·실측 함정 |
+| `features/devops.md` | projects · deploy · prs · jira · nightwatch | 프로젝트 레지스트리·젠킨스·Gitea·Jira·분석 미션 |
+| `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
+| `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
+
+**스킬**: `/commit`(커밋) · `/new-section`(새 기능 추가)
+**로드맵**: `ROADMAP.md`
