@@ -171,17 +171,28 @@ export function ChangesView({ target }: { target: ChangesTarget }) {
     <div className="changes">
       <div className="changes__head">
         <Icon name="git-branch" size={13} />
-        <span className="changes__branch" title={status.upstream ?? undefined}>
+        <span
+          className="changes__branch"
+          title={
+            status.branch
+              ? status.upstream
+                ? `${status.branch} → ${status.upstream}`
+                : status.branch
+              : undefined
+          }
+        >
           {status.branch ?? '(브랜치 없음)'}
         </span>
         {(status.behind ?? 0) > 0 && (
           <span className="changes__ab changes__ab--behind">↓{status.behind}</span>
         )}
         <span className="changes__spacer" />
-        <RefreshButton onClick={() => void refresh()} />
-        <Button size="sm" variant="primary" loading={pushing} disabled={!canPush} onClick={() => void push()}>
-          푸시{(status.ahead ?? 0) > 0 ? ` ↑${status.ahead}` : ''}
-        </Button>
+        <div className="changes__actions">
+          <RefreshButton onClick={() => void refresh()} />
+          <Button size="sm" variant="primary" loading={pushing} disabled={!canPush} onClick={() => void push()}>
+            푸시{(status.ahead ?? 0) > 0 ? ` ↑${status.ahead}` : ''}
+          </Button>
+        </div>
       </div>
 
       {unpushed.length > 0 && (

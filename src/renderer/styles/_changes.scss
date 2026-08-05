@@ -49,6 +49,15 @@
     flex: 1;
   }
 
+  // 우측 액션(새로고침·푸시) — 브랜치명이 길 때 flex 수축으로 버튼이
+  // 찌그러지지 않게 묶어서 수축 금지 (줄어드는 건 브랜치명 ellipsis 만)
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
   // ── 푸시 대기 커밋 (AI 가 커밋을 만들면 여기로 나타난다) ──
   &__commits {
     display: flex;
