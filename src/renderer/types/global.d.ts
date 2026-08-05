@@ -245,6 +245,10 @@ declare global {
           cols: number,
           rows: number,
         ) => Promise<TerminalAttachResult>;
+        rename: (id: string, title: string) => Promise<{ ok: boolean }>;
+        revealCwd: (
+          id: string,
+        ) => Promise<{ ok: boolean; error?: string }>;
         kill: (id: string) => Promise<{ ok: boolean }>;
         agents: () => Promise<TerminalAgentInfo[]>;
         backend: () => Promise<{ tmux: boolean }>;

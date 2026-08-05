@@ -52,17 +52,13 @@
 
   // 세션 행 — [상태점][제목/에이전트·상태][닫기]. 활성 행은 우측 터미널 패널과
   // 이어진 것처럼 같은 니어블랙 타일로 채운다 (panel-dark 가 텍스트 토큰을 재매핑)
+  // 래퍼는 div — 선택/닫기가 각각 button 형제다(중첩 인터랙티브 금지, 둘 다 탭 순회)
   &__session {
     display: flex;
     align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 8px 8px 8px 12px;
+    padding-right: 8px;
     border: 1px solid transparent;
     border-radius: var(--r-md);
-    background: none;
-    text-align: left;
-    cursor: pointer;
     transition:
       background var(--dur-1) var(--ease),
       border-color var(--dur-1) var(--ease);
@@ -74,6 +70,36 @@
     &--active {
       @include panel-dark;
       border-color: var(--border-dark);
+    }
+  }
+
+  // 선택 버튼 — 행의 대부분을 차지해 예전 '행 전체 클릭' 감각을 유지한다
+  &__session-hit {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px 8px 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  // 이름 편집 행 — 상태점은 그대로 두고 제목 자리에만 입력창
+  &__session-edit {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 4px 6px 12px;
+
+    .input {
+      flex: 1;
+      min-width: 0;
     }
   }
 
@@ -108,16 +134,23 @@
     color: var(--ok);
   }
 
+  // 닫기 — 16px/text-3 로는 점처럼 보여 아예 못 찾았다(2026-08-05 사용자 지적).
+  // 히트 영역을 22px 로 키우고 글리프도 한 단계 진하게 한다.
   &__session-close {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     flex-shrink: 0;
+    border: 0;
     border-radius: var(--r-full);
-    color: var(--text-3);
-    transition: background var(--dur-1) var(--ease);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
 
     &:hover {
       background: var(--overlay-hover);
@@ -130,12 +163,110 @@
   // xterm 이 커지면 이 래퍼가 늘어나고, 그러면 host(flex:1)도 커져 fit→resize→더 큰 xterm
   // 으로 이어지는 무한 성장 루프가 된다(창 리사이즈 중 터미널이 요동치는 원인 — 2026-08 실측).
   &__main {
+    position: relative; // 숨긴 세션 pane 의 absolute 기준
     flex: 1;
     min-width: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  // 세션 화면 = [툴바][xterm 패널] 세로 스택 (+ 검색바는 위에 떠 있는 오버레이)
+  &__pane {
+    position: relative; // 검색 오버레이의 기준
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    // 보이지 않는 세션 — 마운트는 유지한다(스크롤백·선택·검색 상태 보존).
+    // ⚠️ display:none 을 쓰면 안 된다 — xterm 크기가 0 이 되면서 fit 이 최소값을 잡고,
+    // 다시 보일 때 80x24 를 거쳐 커지며 TUI 가 두 번 리플로우한다.
+    // absolute + inset:0 이라 숨은 pane 도 활성 pane 과 **같은 크기**를 유지해
+    // 전환 순간 리사이즈가 아예 발생하지 않는다.
+    &--hidden {
+      visibility: hidden;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+  }
+
+  // 툴바 — 좌측 제목·에이전트, 우측 아이콘 액션. 높이를 최소로 유지해 터미널을 덜 먹는다
+  &__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+  }
+
+  &__bar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    @include type-small;
+    color: var(--text-2);
+  }
+
+  &__bar-agent {
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+  }
+
+  &__bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  // 현재 글자 크기 — 아이콘 자리에 숫자를 넣어 버튼 크기를 아이콘과 맞춘다
+  &__bar-size {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 검색바 — 터미널 위에 **떠 있는** 오버레이.
+  // ⚠️ 세로 스택에 한 줄로 끼우면 host 높이가 줄어 PTY 행이 바뀌고(62→60 실측),
+  // 검색을 열고 닫을 때마다 claude 같은 TUI 가 전체 리플로우한다(SIGWINCH 주의 — terminal.md).
+  // 자리를 차지하지 않게 absolute 로 띄워 터미널 크기를 건드리지 않는다.
+  &__search {
+    position: absolute;
+    top: 30px; // 툴바(24px) + 여백
+    right: 10px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: min(360px, calc(100% - 24px));
+    padding: 6px;
+    border: 1px solid var(--border-dark);
+    border-radius: var(--r-md);
+    background: var(--surface-dark-2);
+    box-shadow: var(--shadow-2);
+
+    .input {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  &__search-count {
+    flex-shrink: 0;
+    min-width: 44px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-caption);
+    color: var(--text-3);
   }
 
   // xterm 이 마운트되는 다크 패널 — 로그·코드 패널과 같은 계열(DESIGN.md panel-dark).

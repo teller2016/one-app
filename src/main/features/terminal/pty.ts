@@ -24,6 +24,7 @@ import {
   removePersisted,
   savePersisted,
   updatePersistedSize,
+  updatePersistedTitle,
 } from './sessions-store';
 import {
   getTmuxBin,
@@ -60,6 +61,7 @@ const STATUS_TICK_MS = 1000; // 침묵 판정 틱 (세션별 타이머 대신 �
 const AGENT_LAUNCH_QUIET_MS = 350; // 출력이 이만큼 잠잠해지면 프롬프트가 완성됐다고 본다
 const AGENT_LAUNCH_MAX_WAIT_MS = 3000; // 출력이 계속 이어지는 셸 테마 대비 발사 상한
 const STATUS_DEBUG = process.env.ONEAPP_TERM_DEBUG === '1'; // 상수 보정용 전이 로그
+const TITLE_MAX_LEN = 60; // 사용자 지정 제목 상한 — 목록은 한 줄 ellipsis 라 그 이상은 무의미
 
 type Session = {
   id: string;
@@ -555,6 +557,23 @@ export async function attachSession(
     }
   }
   return { ok: true, replay, seq: s.seq, cols: s.cols, rows: s.rows };
+}
+
+/**
+ * 세션 제목 변경 — 같은 프로젝트에서 여러 세션을 열면 기본 제목(프로젝트명)이 전부
+ * 같아 목록에서 구분할 수 없다. 사용자가 직접 붙인 이름은 tmux 백엔드일 때
+ * sidecar 에도 반영해 앱 재시작 복원 후에도 남는다.
+ */
+export function renameSession(id: string, title: string): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  // 개행·제어문자는 목록 한 줄 렌더를 깨므로 제거하고, 길이는 목록 폭에 맞춰 자른다
+  // eslint-disable-next-line no-control-regex -- 붙여넣기로 들어오는 제어문자 제거가 목적
+  const next = title.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, TITLE_MAX_LEN);
+  if (!next || next === s.title) return;
+  s.title = next;
+  if (s.tmuxName) updatePersistedTitle(id, next);
+  emitChanged();
 }
 
 export function writeSession(id: string, data: string): void {

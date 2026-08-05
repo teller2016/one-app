@@ -39,6 +39,14 @@ export function removePersisted(id: string): void {
   writeUserJson(FILE, all);
 }
 
+/** 제목만 갱신 — 사용자가 붙인 이름은 재시작 복원 후에도 남아야 한다 */
+export function updatePersistedTitle(id: string, title: string): void {
+  const all = read();
+  const meta = all[id];
+  if (!meta || meta.title === title) return;
+  writeUserJson(FILE, { ...all, [id]: { ...meta, title } });
+}
+
 /** 크기만 갱신 — 리사이즈마다 불리므로 변화 없으면 쓰지 않는다 */
 export function updatePersistedSize(id: string, cols: number, rows: number): void {
   const all = read();

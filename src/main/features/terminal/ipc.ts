@@ -18,6 +18,7 @@ import {
   onSessionsChanged,
   onTerminalData,
   onTerminalExit,
+  renameSession,
   resizeSession,
   restoreSessions,
   writeSession,
@@ -52,9 +53,22 @@ export function registerTerminalIpc() {
   ipcMain.handle('terminal:attach', (_e, id: string, cols: number, rows: number) =>
     attachSession(id, cols, rows)
   );
+  // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
+  ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
+    renameSession(id, title);
+    return { ok: true };
+  });
   ipcMain.handle('terminal:kill', (_e, id: string) => {
     killSession(id);
     return { ok: true };
+  });
+  // 세션 위치를 Finder 로 — app:openExternal 은 http(s) 만 허용하므로 별도 채널이다.
+  // 경로를 렌더러에서 받지 않고 세션 id 로만 해석한다(임의 경로 열기 방지).
+  ipcMain.handle('terminal:reveal-cwd', async (_e, id: string) => {
+    const s = listSessions().find((x) => x.id === id);
+    if (!s) return { ok: false };
+    const error = await shell.openPath(s.cwd);
+    return { ok: !error, error: error || undefined };
   });
   ipcMain.handle('terminal:agents', () => listAgents());
   // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다

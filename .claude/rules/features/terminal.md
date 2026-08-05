@@ -30,6 +30,28 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 - ⚠️ **spawn 직후 즉시 `write` 하면 zsh 초기화(ZLE)가 입력 버퍼를 비우며 명령을 버린다**(2026-08 실측) — `launchAgent()` 가 **첫 출력 후 350ms 잠잠해지면**(프롬프트 완성) 보내고 상한 3초를 둔다.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
 
+## 데스크톱 세션 화면 구조 (2026-08-05)
+`TerminalSection` 이 **세션마다 `TerminalView` 를 만들고 보이지 않는 것도 언마운트하지 않는다**(`--hidden` = `visibility:hidden` + `position:absolute; inset:0`). 예전엔 `key={activeId}` 로 xterm 을 매번 파괴해 전환마다 attach 왕복 + TUI 전체 리렌더를 다시 겪고 선택 영역·검색 상태가 사라졌다.
+
+- ⚠️ **숨은 pane 은 PTY 크기를 주장하지 않는다**(`activeRef` 로 `onResize` 전달·`reclaimSize` 차단) — 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣어 **폰(MO)이 보고 있는 세션 크기까지 되돌린다**(크기 공유는 마지막 주장 기준). 보이게 된 순간 `fit`+재주장+포커스를 한다.
+- ⚠️ `display:none` 금지 — 크기가 0 이 되어 다시 보일 때 80x24 를 거치며 TUI 가 두 번 리플로우한다. `inset:0` 이면 숨은 pane 도 활성과 **같은 크기**라 전환 시 리사이즈가 0이다(실측: 세션 4개 전환 왕복에 PTY 301x62 불변).
+- 글자 크기(`fontSize`)는 pane 이 여러 개 살아 있으므로 **TerminalSection 이 한 곳에서** 들고 내려준다(각자 들면 세션마다 어긋난다).
+- 세션 행은 래퍼 `div` + `[선택 button][닫기 button]` 형제다 — 예전엔 닫기가 선택 버튼 **안**의 `span[role=button]` 이라 마크업이 유효하지 않고 키보드로 종료할 수 없었다. 활성 표시는 `aria-current`.
+- 세션 이름은 행 **더블클릭 → 인라인 편집**(`terminal:rename` → sidecar 반영이라 재시작 후에도 남는다). 진입 시 `select()` 로 전체 선택하지 않으면 타이핑이 기존 이름에 덧붙는다.
+- 단축키: `⌘T` 새 세션 · `⌘1..9` 전환 · `⌃Tab`/`⌃⇧Tab` 순환 · `⌘⇧W` 종료 · `⌘F` 검색. **capture 단계에서 `stopPropagation`** 으로 잡는다(bubble 로 잡으면 xterm textarea 가 먼저 처리해 같은 키가 셸에도 간다). ⚠️ `⌘W`(창 닫기)·`⌘+/-`(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다. 입력창(`INPUT`)에 포커스가 있으면 전부 넘긴다.
+
+## xterm addon 구성 (2026-08-05)
+`fit`(기존) + `unicode11` + `webgl` + `web-links` + `search`. 전부 xterm 6.0.0 과 같은 릴리스 배치이고 Vite 가 번들하므로 **devDependencies** 에 둔다(prod 의존성에 넣으면 `copyRuntimeDeps` 가 패키지에 복사한다).
+
+- ⚠️ **`allowProposedApi: true` 없으면 앱이 죽는다** — `unicode11` 이 쓰는 `term.unicode` 가 proposed API 라 addon load 가 throw 하고, 그 예외가 effect 를 타고 올라가 **React 루트가 통째로 언마운트**된다(터미널 섹션에 들어가면 화면이 하얗게 빔 — 2026-08-05 실측).
+- `webgl` 은 `term.open()` **이후에만** 붙는다. `onContextLoss` 에서 `dispose()`(공식 권장 = DOM 렌더러 폴백), 생성 실패는 try/catch 로 조용히 넘긴다. 투명 배경(`allowTransparency`)과 문제없이 공존함을 실측했다(세션 4개까지 canvas 유지, DOM 폴백 0).
+- OSC 8 링크는 `linkHandler`, 평문 URL 은 `web-links` — 둘 다 `window.oneApp.openExternal` 로 보낸다(앱 창에서 열면 워크스페이스가 깨진다). ⚠️ `app:openExternal` 은 http(s) 만 허용하므로 **Finder 열기는 `terminal:reveal-cwd`**(세션 id 만 받아 main 이 cwd 를 해석 — 임의 경로 열기 방지).
+- 검색 하이라이트는 `#RRGGBB` 만 받는다(알파 불가) → 액센트를 패널 배경에 **미리 합성**해 쓴다(`mixHex`). ⚠️ 비활성 22% / 활성 85% 처럼 **크게 벌려야 한다** — xterm 이 현재 일치에 선택 틴트까지 겹쳐 그려서, 비활성 색을 선택 틴트(액센트 35%)와 비슷하게 잡으면 셋이 똑같이 보여 몇 번째를 보고 있는지 알 수 없다. 밝은 경고색(노랑)을 배경으로 쓰면 그 위 밝은 글자가 안 읽힌다.
+- ⚠️ **검색바는 세로 스택이 아니라 오버레이**(absolute)다 — 한 줄을 끼우면 host 높이가 줄어 **PTY 행이 바뀌고**(62→60 실측) 검색을 열고 닫을 때마다 claude 가 전체 리플로우한다.
+
+## ⚠️ tmux 백엔드에선 xterm 스크롤백이 쌓이지 않는다 (2026-08-05 실측)
+tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 스크롤백이 남지 않는다(`scrollHeight == clientHeight`, 슬라이더 0px). 그래서 툴바의 **[맨 아래로] 는 tmux 미설치 폴백 세션에서만 등장**하고, **화면 지우기(`term.clear()`)도 tmux 가 곧 다시 그려 영구 삭제가 아니다**. 스크롤백을 되살리려면 tmux history 시딩(`capture-pane`)이 필요하다 — 미구현.
+
 ## 상태 휴리스틱
 `pty.ts` — 상수는 파일 상단, `ONEAPP_TERM_DEBUG=1` 로 전이 로그.
 

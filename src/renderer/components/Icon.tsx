@@ -50,6 +50,10 @@ export type IconName =
   | "paperclip"
   | "folder"
   | "terminal"
+  | "search"
+  | "minus"
+  | "arrow-down-to-line"
+  | "eraser"
   | "git-branch";
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -265,6 +269,28 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <polyline points="4 17 10 11 4 5" />
       <line x1="12" x2="20" y1="19" y2="19" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </>
+  ),
+  minus: <path d="M5 12h14" />,
+  // 터미널 '맨 아래로' — 바닥선까지 내려간다는 의미가 화살표만 있는 것보다 분명하다
+  "arrow-down-to-line": (
+    <>
+      <path d="M12 17V3" />
+      <path d="m6 11 6 6 6-6" />
+      <path d="M19 21H5" />
+    </>
+  ),
+  eraser: (
+    <>
+      <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+      <path d="M22 21H7" />
+      <path d="m5 11 9 9" />
     </>
   ),
   "git-branch": (

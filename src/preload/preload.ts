@@ -319,8 +319,13 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 세션 attach — 링버퍼 replay 반환 + PTY 크기를 내 크기로 (last-attach-wins)
     attach: (id: string, cols: number, rows: number) =>
       ipcRenderer.invoke("terminal:attach", id, cols, rows),
+    // 세션 이름 변경 (tmux 백엔드면 재시작 후에도 유지)
+    rename: (id: string, title: string) =>
+      ipcRenderer.invoke("terminal:rename", id, title),
     // 세션 종료 (프로세스 kill)
     kill: (id: string) => ipcRenderer.invoke("terminal:kill", id),
+    // 세션 위치(cwd)를 Finder 로 열기 — 경로가 아니라 세션 id 로 지시한다
+    revealCwd: (id: string) => ipcRenderer.invoke("terminal:reveal-cwd", id),
     // 에이전트 후보 목록 (로그인 셸 PATH 기준 설치 감지 포함)
     agents: () => ipcRenderer.invoke("terminal:agents"),
     // 백엔드 정보 — tmux(영속) 가용 여부 (미설치 힌트 표시용)
