@@ -296,8 +296,13 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 ### 중첩 패널 (`.panel-sunken` — 로그·커밋 패널 공용) — **panel-dark** + --r-md. 로그: --font-mono type-small + --text-2(→on-dark-2 자동). 커밋 항목: 제목 type-body 600 / 본문 --font-mono type-small / 메타 type-caption --text-3. 로딩·에러·빈 3상태 정의(에러는 --danger + alert-triangle — 다크 안에선 danger-on-dark 자동)
 
 ### 셸 (macOS 네이티브 시그니처 — 비브런시 + 프로스트)
-- **비브런시 사이드바**: 220px, `BrowserWindow vibrancy: 'sidebar'` 재질이 그대로 비치도록 **배경 transparent**(Finder 류). html/body 도 투명 유지, **불투명 채색은 `.content`(--bg)에서만** — 다른 곳을 불투명하게 칠하면 재질이 가려진다. 항목 hover 는 표면 승격이 아니라 `--overlay-hover`(재질 위 은은한 오버레이), 활성은 **accent-soft + 아이콘 --accent 틴트**. `nativeTheme.themeSource` 를 테마 설정과 연동해 재질·신호등이 앱 테마를 따른다(main.ts·settings ipc).
+- **비브런시 사이드바**: 기본 220px(가변 — 아래 '폭 조절' 참조), `BrowserWindow vibrancy: 'sidebar'` 재질이 그대로 비치도록 **배경 transparent**(Finder 류). html/body 도 투명 유지, **불투명 채색은 `.content`(--bg)에서만** — 다른 곳을 불투명하게 칠하면 재질이 가려진다. 항목 hover 는 표면 승격이 아니라 `--overlay-hover`(재질 위 은은한 오버레이), 활성은 **accent-soft + 아이콘 --accent 틴트**. `nativeTheme.themeSource` 를 테마 설정과 연동해 재질·신호등이 앱 테마를 따른다(main.ts·settings ipc).
 - **프로스트 탑바**(`.topbar`): `.content` 위 **absolute 오버레이**(z-index 10) — `.main` 이 `padding-top: 44px` 로 바 밑까지 차지해 **콘텐츠가 블러 뒤로 스크롤돼 지나간다**. `background: var(--frost)` + `backdrop-filter: blur(20px) saturate(180%)` (macOS 툴바·apple.com 서브내브). 높이 44px 변경 시 .main padding-top 동기화. **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
+- **사이드바 폭 조절 / 축소 모드** (`Sidebar.tsx` + `.sidebar__grip`): 우측 테두리를 끌어 **180~320px** 로 조절하고, **150px 아래로 끌면 72px 축소 모드**로 스냅한다(더블클릭·Enter 로도 토글). 폭·접힘은 `localStorage`(`sidebar:width`·`sidebar:collapsed`)에 남는다.
+  - 실제 폭은 **`--sidebar-w`** 로 노출된다 — 사이드바 폭에 기대는 레이아웃(`.jira-view` 의 `calc(100vw - var(--sidebar-w) - 48px)`)은 반드시 이 변수를 봐야 한다. **px 하드코딩 금지.**
+  - ⚠️ **축소 폭 72px 은 임의값이 아니다** — `titleBarStyle: 'hiddenInset'` 이라 macOS 신호등이 창 좌상단에 고정이고, 더 좁히면 신호등이 콘텐츠 영역을 침범한다.
+  - ⚠️ grip 에 **`-webkit-app-region: no-drag` 필수** — `.sidebar` 가 `drag` 라 이게 없으면 창 드래그가 pointerdown 을 가로채 리사이즈가 시작조차 안 된다.
+  - 축소 시엔 **글자만 감추고 상태를 나르는 점은 남긴다**(StatusDot·메일 안읽음 점·근태 완료 체크). 위젯 루트의 `title` 이 감춰진 글자를 대신한다.
 - **스크롤바**: thumb --border-strong, hover --scrollbar-hover
 - **macOS 신호등 여백**(padding-top 28px)·`hiddenInset` 보존
 - ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질이 가려짐(로드 전 배경도 재질이라 플래시 없음)

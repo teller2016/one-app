@@ -115,7 +115,8 @@ export function VpnWidget() {
   const ovpnName = formOvpn ? formOvpn.split('/').pop() : '';
 
   return (
-    <div className="sbw">
+    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신한다
+    <div className="sbw" title={`VPN — ${statusText}`}>
       {/* 한 줄: 아이콘 · 상태 · 우측 액션 (설정 ⚙ + 연결/해제) */}
       <div className="sbw__row">
         <span className="sbw__icon">

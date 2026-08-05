@@ -325,7 +325,8 @@
   right: 12px;
   bottom: 12px;
   z-index: 30; // 상태 전환 드롭다운(20) 위
-  width: min(1080px, calc(100vw - 220px - 48px)); // 본문·스크린샷이 여유 있게 — 사이드바(220px)는 침범하지 않게
+  // 본문·스크린샷이 여유 있게 — 사이드바는 침범하지 않게 (폭은 드래그로 바뀌므로 변수를 본다)
+  width: min(1080px, calc(100vw - var(--sidebar-w) - 48px));
   display: flex;
   flex-direction: column;
   padding: 14px 16px;

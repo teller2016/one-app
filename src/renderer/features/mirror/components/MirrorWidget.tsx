@@ -57,7 +57,8 @@ export function MirrorWidget() {
   const canStart = !!status?.installed && !!status?.device;
 
   return (
-    <div className="sbw">
+    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신한다
+    <div className="sbw" title={`폰 미러링 — ${statusText}`}>
       {/* 한 줄: 아이콘 · 기기/상태 · 우측 액션 — 기기 없으면 새로고침만, 있으면 모드 버튼 */}
       <div className="sbw__row">
         <span className="sbw__icon">

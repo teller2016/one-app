@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
+import { useSidebarCollapsed } from '../../../components/Sidebar';
 import { MailModal } from './MailModal';
 
 // 폴링 간격 — 비즈박스는 실시간 푸시가 없어 폴링이 유일. 창이 활성일 땐 촘촘히,
@@ -21,6 +22,7 @@ export function MailWidget() {
   const [spinning, setSpinning] = useState(false); // 스피너 — 수동/초기 로드에서만
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
+  const collapsed = useSidebarCollapsed();
 
   // showSpinner=false 면 백그라운드 무음 갱신 (30초 폴링마다 스피너가 깜빡이지 않게)
   const load = useCallback(async (showSpinner: boolean): Promise<void> => {
@@ -95,14 +97,22 @@ export function MailWidget() {
   return (
     <div className="mail-nav">
       <div className="mail-nav__row">
-        {/* 아이콘 타일 — 클릭 시 브라우저로 메일함 열기 */}
+        {/* 아이콘 타일 — 평소엔 브라우저로 메일함, 사이드바가 접혀 있으면 앱 안에서 연다.
+            접힌 상태에선 이 아이콘이 유일한 진입점이라, 화면을 좁게 쓰려고 접어 둔 사람을
+            브라우저로 내보내는 건 앞뒤가 맞지 않는다. */}
         <button
           type="button"
           className="mail-nav__tile"
-          onClick={() => void window.oneApp.mail.openWeb()}
+          onClick={() =>
+            collapsed ? setOpen(true) : void window.oneApp.mail.openWeb()
+          }
           disabled={!configured}
-          title="비즈박스 메일함 열기 (브라우저)"
-          aria-label="비즈박스 메일함 열기"
+          title={
+            collapsed
+              ? '메일 열기'
+              : '비즈박스 메일함 열기 (브라우저)'
+          }
+          aria-label={collapsed ? '메일 열기' : '비즈박스 메일함 열기'}
         >
           <Icon name="mail" size={18} />
           {hasUnread && <span className="mail-nav__dot" aria-hidden="true" />}

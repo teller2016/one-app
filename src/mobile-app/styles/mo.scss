@@ -168,8 +168,9 @@ html.mo {
     max-width: none;
   }
 
-  // 상세 패널: `width: min(1080px, calc(100vw - 220px - 48px))` 가 사이드바 220px 을
-  // 하드코딩해 폰(412px)에서 144px 로 찌부러진다(_jira.scss:328) → 전체화면 시트로.
+  // 상세 패널: `width: min(1080px, calc(100vw - var(--sidebar-w) - 48px))` 는 데스크톱
+  // 사이드바를 피하려는 계산이라, 사이드바가 없는 폰(412px)에서 144px 로 찌부러진다
+  // (_jira.scss) → 전체화면 시트로 덮는다.
   // 슬라이드 애니메이션(translateX)은 그대로 동작한다.
   .jira-view {
     top: 0;

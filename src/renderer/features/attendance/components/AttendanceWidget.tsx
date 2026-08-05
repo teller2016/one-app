@@ -100,8 +100,20 @@ export function AttendanceWidget() {
       </>
     );
 
+  // 사이드바를 접으면 위 요약이 감춰지므로 툴팁이 상태를 대신한다 (근태는 상태점이 없다)
+  const summaryTitle =
+    busy === 'fetch' && !info
+      ? '근태 확인 중'
+      : !info
+        ? '근태 — 조회 전'
+        : nextAction === 'come'
+          ? '근태 — 출근 전'
+          : nextAction === 'leave'
+            ? `근태 — 출근 ${info.comeTime}`
+            : `근태 — ${info.comeTime} → ${info.leaveTime} (완료)`;
+
   return (
-    <div className="sbw">
+    <div className="sbw" title={summaryTitle}>
       {/* 한 줄: 아이콘 · 요약(다음 행동 기준) · 우측 액션 (새로고침 + 출근/퇴근) */}
       <div className="sbw__row">
         <span className="sbw__icon">
