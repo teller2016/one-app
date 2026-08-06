@@ -298,16 +298,18 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 
 ### 셸 (macOS 네이티브 시그니처 — 비브런시 + 프로스트)
 - **비브런시 사이드바**: 기본 220px(가변 — 아래 '폭 조절' 참조), `BrowserWindow vibrancy: 'sidebar'` 재질이 그대로 비치도록 **배경 transparent**(Finder 류). html/body 도 투명 유지, **불투명 채색은 `.content`(--bg)에서만** — 다른 곳을 불투명하게 칠하면 재질이 가려진다. 항목 hover 는 표면 승격이 아니라 `--overlay-hover`(재질 위 은은한 오버레이), 활성은 **accent-soft + 아이콘 --accent 틴트**. `nativeTheme.themeSource` 를 테마 설정과 연동해 재질·신호등이 앱 테마를 따른다(main.ts·settings ipc).
-- **프로스트 탑바**(`.topbar`): `.content` 위 **absolute 오버레이**(z-index 10) — `.main` 이 `padding-top: 44px` 로 바 밑까지 차지해 **콘텐츠가 블러 뒤로 스크롤돼 지나간다**. `background: var(--frost)` + `backdrop-filter: blur(20px) saturate(180%)` (macOS 툴바·apple.com 서브내브). 높이 44px 변경 시 .main padding-top 동기화. **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
-- **사이드바 폭 조절 / 축소 모드** (`Sidebar.tsx` + `.sidebar__grip`): 우측 테두리를 끌어 **180~320px** 로 조절하고, **150px 아래로 끌면 72px 축소 모드**로 스냅한다(더블클릭·Enter 로도 토글). 폭·접힘은 `localStorage`(`sidebar:width`·`sidebar:collapsed`)에 남는다.
+- **프로스트 타이틀바**(`.topbar`): **창 전체 폭을 가로지르는 fixed 바**(z-index 10, 높이 `--titlebar-h: 44px`) — `.main`·`.sidebar` 가 `padding-top: var(--titlebar-h)` 로 바 밑까지 차지해 **콘텐츠가 블러 뒤로 스크롤돼 지나간다**. `background: var(--frost)` + `backdrop-filter: blur(20px) saturate(180%)` (macOS 통합 툴바). **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
+  - ⚠️ **좌측 여백은 `max(var(--titlebar-safe), calc(var(--sidebar-w) + 16px))`** — `--titlebar-safe: 84px` 는 macOS 신호등(`hiddenInset`, 창 좌상단 고정) 예약폭이다. 접으면 신호등 오른쪽에서, 펼치면 콘텐츠 컬럼에 맞춰 컨트롤이 시작한다.
+  - ⚠️ **사이드바 우측 경계선은 `border-right` 가 아니라 `.sidebar::after`**(`top: var(--titlebar-h)`) — 보더로 두면 상단 44px 에서도 선이 프로스트 바 밑으로 비쳐 통짜 스트립이 갈라지고, **신호등이 그 이음선에 걸친 모양이 된다**(2026-08-06 사용자 지적 — 접힌 60px 레일에서 초록 버튼이 경계선 위에 놓였다). grip 도 같은 이유로 `top: var(--titlebar-h)`.
+- **사이드바 폭 조절 / 축소 모드** (`Sidebar.tsx` + `.sidebar__grip`): 우측 테두리를 끌어 **180~320px** 로 조절하고, **150px 아래로 끌면 60px 축소 모드**로 스냅한다(더블클릭·Enter 로도 토글). 폭·접힘은 `localStorage`(`sidebar:width`·`sidebar:collapsed`)에 남는다.
   - 실제 폭은 **`--sidebar-w`** 로 노출된다 — 사이드바 폭에 기대는 레이아웃(`.jira-view` 의 `calc(100vw - var(--sidebar-w) - 48px)`)은 반드시 이 변수를 봐야 한다. **px 하드코딩 금지.**
-  - ⚠️ **축소 폭 72px 은 임의값이 아니다** — `titleBarStyle: 'hiddenInset'` 이라 macOS 신호등이 창 좌상단에 고정이고, 더 좁히면 신호등이 콘텐츠 영역을 침범한다.
+  - 축소 폭 60px = 좌우 패딩(8) + 아이콘 필 44. 신호등은 전체폭 타이틀바가 흡수하므로 이 폭과 무관하다(예전엔 신호등 침범 때문에 72px 하한이 있었다).
   - ⚠️ grip 에 **`-webkit-app-region: no-drag` 필수** — `.sidebar` 가 `drag` 라 이게 없으면 창 드래그가 pointerdown 을 가로채 리사이즈가 시작조차 안 된다.
   - 축소 시엔 **글자만 감추고 상태를 나르는 점은 남긴다**(StatusDot·메일 안읽음 점·근태 완료 체크). 위젯 루트의 `title` 이 감춰진 글자를 대신한다.
   - ⚠️ **축소 상태에서도 조작 경로는 반드시 남긴다** — 사이드바 위젯(VPN·미러링·근태)은 공용 `SidebarWidget` 셸이 아이콘 타일(`.sbwx__mini`)만 남기고, 타일을 누르면 위젯 본체가 **오른쪽 팝오버**(`.sbwx__body--pop`, 232px · usePopover `side: 'right'`)로 펼쳐진다(macOS 메뉴바 위젯). 접은 채로 미러링·VPN 연결·출퇴근·야근 결재까지 다 된다. 메일 위젯은 예외로 타일 자신이 진입점(접혀 있으면 브라우저가 아니라 앱 내 모달).
   - ⚠️ **조작 버튼을 `display:none` 으로 감추지 말 것** — 예전엔 축소 모드에서 `.sbw__actions`·`.sbw__buttons` 를 지웠고, 그래서 접은 채로는 아이콘을 눌러도 아무 일도 일어나지 않았다(2026-08-05 사용자 지적).
 - **스크롤바**: thumb --border-strong, hover --scrollbar-hover
-- **macOS 신호등 여백**(padding-top 28px)·`hiddenInset` 보존
+- **macOS 신호등**: `hiddenInset` 보존 + `trafficLightPosition: { x: 20, y: 16 }` (44px 타이틀바 세로 중앙 정렬 — 기본값은 28px 타이틀바 기준이라 위로 떠 보인다). 렌더러 쪽 여백은 `--titlebar-h`/`--titlebar-safe` 가 담당
 - ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질이 가려짐(로드 전 배경도 재질이라 플래시 없음)
 
 ### Icon (`Icon.tsx`)

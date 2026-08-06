@@ -24,8 +24,8 @@ export interface SidebarSection {
 }
 
 // 축소 폭 60 = 좌우 패딩(8) + 아이콘 필 44 — 72 는 아이콘 하나에 비해 넓었다(2026-08-06)
-// ⚠️ macOS 신호등(titleBarStyle: 'hiddenInset', 창 좌상단 고정)이 사이드바 밖으로 나가지
-//    않아야 한다 — 여기서 더 좁히면 신호등이 콘텐츠 영역을 침범한다.
+// macOS 신호등(창 좌상단 고정)은 전체폭 타이틀바(.topbar)가 흡수하므로 이 폭과 무관하다 —
+// 사이드바 항목은 --titlebar-h 아래에서 시작하고, 탑바 컨트롤은 --titlebar-safe 오른쪽에서 시작한다.
 const COLLAPSED_W = 60;
 const MIN_W = 180;
 const MAX_W = 320;

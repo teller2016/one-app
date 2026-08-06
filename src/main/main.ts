@@ -83,6 +83,9 @@ const createWindow = () => {
     title: "One App",
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: "hiddenInset",
+    // 신호등을 렌더러 탑바(--titlebar-h: 44px) 세로 중앙에 맞춘다 —
+    // 기본 위치는 28px 타이틀바 기준이라 44px 바 안에서 살짝 위로 떠 보인다
+    trafficLightPosition: { x: 20, y: 16 },
     // 비브런시 사이드바 — 창 배경이 반투명 재질(Finder 류). CSS 에서 html/body/.sidebar 를
     // 투명하게 두고 .content 만 --bg 로 불투명하게 칠해 사이드바에만 재질이 비친다.
     // (backgroundColor 를 칠하면 재질이 가려지므로 지정하지 않는다 — 로드 전 배경도 재질이라 플래시 없음)

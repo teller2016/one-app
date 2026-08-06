@@ -10,10 +10,23 @@
 
 .sidebar {
   // 폭은 컴포넌트가 인라인으로 지정한다 (드래그로 바뀌는 값 — Sidebar.tsx)
-  position: relative; // 우측 grip 의 기준
+  position: relative; // 우측 grip·경계선의 기준
   // 비브런시 — 창 재질(vibrancy: 'sidebar')이 그대로 비치도록 투명 (Finder 류)
   background: transparent;
-  border-right: 1px solid var(--border);
+
+  // 우측 경계선 — 타이틀바 아래부터만 그린다.
+  // ⚠️ border-right 로 두면 상단 44px 에서도 선이 프로스트 바 밑으로 비쳐, 신호등이 놓인
+  //    통짜 스트립이 사이드바/콘텐츠로 갈라져 보인다(신호등이 그 이음선에 걸친 모양).
+  &::after {
+    content: '';
+    position: absolute;
+    top: var(--titlebar-h);
+    bottom: 0;
+    right: 0;
+    width: 1px;
+    background: var(--border);
+    pointer-events: none;
+  }
 
   // 라이트 모드에선 비브런시 재질이 회색빛으로 어둡게 비쳐, 밝은 반투명 베일로 띄운다.
   // (다크 모드는 재질 그대로가 자연스러워 투명 유지)
@@ -22,8 +35,8 @@
   }
   display: flex;
   flex-direction: column;
-  // macOS 신호등 버튼 영역 확보 + 창 드래그
-  padding-top: 28px;
+  // 전체폭 타이틀바(.topbar) 아래에서 시작 — 신호등이 사이드바 항목과 겹치지 않는다
+  padding-top: var(--titlebar-h);
   -webkit-app-region: drag;
 
   &__brand {
@@ -52,7 +65,8 @@
   //    pointerdown 을 창 드래그가 가로채 리사이즈가 시작조차 되지 않는다.
   &__grip {
     position: absolute;
-    top: 0;
+    // 타이틀바 아래부터 — 위쪽은 탑바(z-index 10)가 덮어 잡히지 않는 죽은 구간이 된다
+    top: var(--titlebar-h);
     bottom: 0;
     right: -5px;
     width: 11px;
@@ -258,24 +272,29 @@
 
 // 콘텐츠 영역 — 비브런시 창에서 유일하게 불투명한 면 (사이드바만 재질이 비침)
 .content {
-  position: relative; // 프로스트 탑바 오버레이 기준
+  position: relative; // 섹션 내부 절대배치의 기준 (탑바는 창 기준 fixed 라 무관)
   flex: 1;
   min-width: 0;
   background: var(--bg);
 }
 
-// 탑바 — 프로스트 글라스: 콘텐츠가 바 밑으로 스크롤되며 블러로 비친다 (macOS 툴바)
+// 탑바 — 창 전체 폭을 가로지르는 프로스트 글라스 타이틀바.
+// 콘텐츠가 바 밑으로 스크롤되며 블러로 비치고(macOS 툴바), 좌상단 신호등은 이 바 안에
+// 온전히 들어간다 — 사이드바를 얼마나 접든 신호등이 레이아웃 경계에 걸치지 않는다.
 .topbar {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 10;
-  height: 44px;
+  z-index: 10; // 사이드바(z-index auto) 위
+  height: var(--titlebar-h);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 16px;
+  // 좌측 여백은 '신호등 예약폭'과 '사이드바 폭' 중 큰 쪽 —
+  // 접으면 신호등 오른쪽에서, 펼치면 콘텐츠 컬럼에 맞춰 컨트롤이 시작한다
+  padding-left: max(var(--titlebar-safe), calc(var(--sidebar-w) + 16px));
+  padding-right: 16px;
   background: var(--frost);
   backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border);
@@ -303,7 +322,7 @@
 // 메인 영역 — 탑바 밑까지 차지하고, 콘텐츠는 패딩으로 바 아래에서 시작
 .main {
   height: 100%;
-  padding-top: 44px; // .topbar 높이와 동기화
+  padding-top: var(--titlebar-h);
   overflow: auto;
   min-height: 0;
 }

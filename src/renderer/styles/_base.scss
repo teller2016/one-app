@@ -154,6 +154,11 @@
   // 사이드바 실제 폭 — Sidebar.tsx 가 드래그·접기에 따라 덮어쓴다.
   // 여기 값은 첫 페인트용 기본값이고, 폭에 기대는 레이아웃(.jira-view)은 이 변수를 봐야 한다.
   --sidebar-w: 220px;
+  // 상단 타이틀바(프로스트 탑바) 높이 — .main·.sidebar 상단 패딩이 이 값을 따른다
+  --titlebar-h: 44px;
+  // macOS 신호등(hiddenInset) 예약 폭 — 탑바 컨트롤은 이 오른쪽부터 시작한다.
+  // 신호등 3개(x 20 부터 ~72)에 여백을 더한 값으로, 사이드바를 접어도 침범하지 않는다.
+  --titlebar-safe: 84px;
 }
 
 // ===== 다크 모드 오버라이드 (macOS 다크 — renderer/lib/theme.ts 가 data-theme 을 설정) =====
