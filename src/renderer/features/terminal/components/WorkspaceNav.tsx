@@ -96,13 +96,25 @@ export function WorkspaceNav({
     onReorder(ids);
   };
 
-  const dragHandlers = (ws: TerminalWorkspace) => ({
+  // 끌기 시작/끝 — 워크스페이스 행(펼침)·타일(축소)에 붙는다
+  const dragSource = (ws: TerminalWorkspace) => ({
     draggable: editingId !== ws.id,
     onDragStart: (e: ReactDragEvent) => {
       setDragId(ws.id);
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', ws.id);
     },
+    onDragEnd: () => {
+      // drop 이 패널 밖에서 끝나도 표시가 남지 않게
+      setDragId(null);
+      setDrop(null);
+    },
+  });
+
+  // 드롭 존 — 행이 아니라 **그룹 전체**(워크트리 목록 포함)가 받는다.
+  // 행에만 걸면 펼쳐진 워크트리 위에선 드롭이 안 돼 "동작 안 한다"고 느껴진다
+  // (2026-08-06 사용자 지적). 자식에서 발화한 dragover 는 그룹으로 버블된다.
+  const dropTarget = (ws: TerminalWorkspace) => ({
     onDragOver: (e: ReactDragEvent) => {
       if (!dragId || dragId === ws.id) return;
       e.preventDefault(); // 없으면 drop 이 발화하지 않는다
@@ -117,19 +129,11 @@ export function WorkspaceNav({
       e.preventDefault();
       applyDrop();
     },
-    onDragEnd: () => {
-      setDragId(null);
-      setDrop(null);
-    },
-    onContextMenu: (e: ReactMouseEvent) => openMenu(ws, e),
   });
 
-  const dropClass = (ws: TerminalWorkspace) =>
-    drop?.id === ws.id
-      ? drop.after
-        ? ' terminal__ws-row--drop-after'
-        : ' terminal__ws-row--drop-before'
-      : '';
+  /** 드롭 표시 — 그룹 위/아래 액센트 선 (base: ws-group 또는 sq-group) */
+  const dropClass = (ws: TerminalWorkspace, base: string) =>
+    drop?.id === ws.id ? ` ${base}--drop-${drop.after ? 'after' : 'before'}` : '';
 
   const wsSessions = (ws: TerminalWorkspace): TerminalSessionInfo[] => {
     const paths = new Set((worktrees[ws.id] ?? []).map((w) => w.path));
@@ -205,7 +209,13 @@ export function WorkspaceNav({
           const wsActive =
             selection?.kind === 'worktree' && selection.wsId === ws.id;
           return (
-            <div key={ws.id} className="terminal__sq-group">
+            <div
+              key={ws.id}
+              className={
+                'terminal__sq-group' + dropClass(ws, 'terminal__sq-group')
+              }
+              {...dropTarget(ws)}
+            >
               <Tooltip
                 label={`${ws.name} — 세션 ${inWs.length}개${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
               >
@@ -214,13 +224,16 @@ export function WorkspaceNav({
                 <button
                   type="button"
                   className={
-                    'terminal__ws-sq' + (wsActive ? ' terminal__ws-sq--active' : '')
+                    'terminal__ws-sq' +
+                    (wsActive ? ' terminal__ws-sq--active' : '') +
+                    (dragId === ws.id ? ' terminal__ws-sq--dragging' : '')
                   }
                   aria-expanded={isOpen}
                   aria-current={wsActive ? 'true' : undefined}
                   aria-label={`${ws.name} 워크스페이스 — 워크트리 ${isOpen ? '접기' : '펼치기'}`}
                   onClick={() => onToggleExpand(ws.id)}
                   onContextMenu={(e) => openMenu(ws, e)}
+                  {...dragSource(ws)}
                 >
                   <span
                     className={`terminal__ws-tile terminal__ws-tile--c${tileColor(ws)}`}
@@ -325,15 +338,19 @@ export function WorkspaceNav({
         const wsWaiting = inWs.some((s) => s.status === 'waiting');
         const list = worktrees[ws.id];
         return (
-          <div key={ws.id} className="terminal__ws-group">
+          <div
+            key={ws.id}
+            className={'terminal__ws-group' + dropClass(ws, 'terminal__ws-group')}
+            {...dropTarget(ws)}
+          >
             {/* 워크스페이스 행 — 클릭 = 펼침/접힘 · 드래그 = 순서 변경 · 우클릭 = 메뉴 */}
             <div
               className={
                 'terminal__ws-row' +
-                (dragId === ws.id ? ' terminal__ws-row--dragging' : '') +
-                dropClass(ws)
+                (dragId === ws.id ? ' terminal__ws-row--dragging' : '')
               }
-              {...dragHandlers(ws)}
+              onContextMenu={(e) => openMenu(ws, e)}
+              {...dragSource(ws)}
             >
               {editingId === ws.id ? (
                 <span className="terminal__ws-edit">

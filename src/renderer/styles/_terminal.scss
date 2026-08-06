@@ -126,6 +126,15 @@
       margin-top: 6px;
       padding-top: 6px;
     }
+
+    // 드롭 표시 — 그룹 전체가 드롭 존이라 선도 그룹 위/아래에 그린다
+    &--drop-before {
+      box-shadow: 0 -2px 0 0 var(--accent);
+    }
+
+    &--drop-after {
+      box-shadow: 0 2px 0 0 var(--accent);
+    }
   }
 
   &__ws-row {
@@ -139,17 +148,9 @@
       background: var(--overlay-hover);
     }
 
-    // 드래그 순서 변경 — 끌리는 행은 흐리게, 놓일 자리는 액센트 선으로
+    // 드래그 순서 변경 — 끌리는 행은 흐리게 (놓일 자리 표시는 그룹의 --drop-*)
     &--dragging {
       opacity: 0.45;
-    }
-
-    &--drop-before {
-      box-shadow: 0 -2px 0 0 var(--accent);
-    }
-
-    &--drop-after {
-      box-shadow: 0 2px 0 0 var(--accent);
     }
   }
 
@@ -393,6 +394,15 @@
       margin-top: 6px;
       padding-top: 6px;
     }
+
+    // 드롭 표시 — 펼침 모드의 ws-group 과 같은 문법
+    &--drop-before {
+      box-shadow: 0 -2px 0 0 var(--accent);
+    }
+
+    &--drop-after {
+      box-shadow: 0 2px 0 0 var(--accent);
+    }
   }
 
   // 축소 워크트리 타일 — 아이콘만, 활성이면 니어블랙 타일 (Superset 동일).
@@ -483,6 +493,11 @@
     &--active:hover {
       background: var(--overlay-track);
       border-color: transparent;
+    }
+
+    // 드래그 중 — 끌리는 타일은 흐리게 (펼침 행과 동일)
+    &--dragging {
+      opacity: 0.45;
     }
   }
 
