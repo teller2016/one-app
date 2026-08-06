@@ -1719,6 +1719,49 @@ input.input--sm {
     @include type-small;
   }
 
+  // 다중선택(MultiSelect) — 라벨이 트리거보다 길 수 있어 최소 폭을 보장한다
+  // (usePopover 의 matchWidth 인라인 width 는 이 min-width 로 clamp 된다)
+  &__pop--multi {
+    min-width: 180px;
+  }
+
+  // 다중선택 옵션 — 좌측 체크 글리프 자리를 항상 확보해 라벨 시작선을 맞춘다
+  &__option--multi {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+  }
+
+  &__option-check {
+    display: inline-flex;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+
+  &__option-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 체크된 행은 글리프가 상태를 말하므로 배경 없이 강조만 살짝 (--active 는 배타 선택용)
+  &__option--checked {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  // 배타 옵션(전체)과 토글 목록 사이 구분선
+  &__sep {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border);
+  }
+
   // 키보드 하이라이트 — hover 와 같은 톤 (Select 화살표 이동)
   &__option--hi {
     background: var(--overlay-hover);

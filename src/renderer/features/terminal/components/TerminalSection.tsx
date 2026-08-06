@@ -843,7 +843,6 @@ export function TerminalSection() {
       {presetsOpen && (
         <PresetsModal
           workspaces={workspaces}
-          currentWsId={selection?.kind === 'worktree' ? selection.wsId : null}
           onClose={() => setPresetsOpen(false)}
         />
       )}

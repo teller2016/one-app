@@ -1047,7 +1047,8 @@
   }
 }
 
-// 프리셋 편집 모달 — [이름][명령][범위][바 표시][삭제] 행 반복
+// 프리셋 편집 모달 — [이름][명령][노출 레포][바 표시][삭제] 행 반복
+// 레포 스코프는 MultiSelect 드롭다운 하나 — 인라인 체크박스는 행 구분을 망친다(2026-08-06)
 .terminal-presets {
   display: flex;
   flex-direction: column;
@@ -1059,9 +1060,10 @@
     gap: 8px;
   }
 
+  // 이름은 짧은 별칭이라 최소만 — 명령(flex:1)이 길어 폭을 최대한 양보한다.
+  // ⚠️ width 만으론 안 된다 — 공통 .input 이 flex:1 이라 grow 를 꺼야 고정폭이 된다
   &__name {
-    width: 130px;
-    flex-shrink: 0;
+    flex: 0 0 110px;
   }
 
   &__cmd {
@@ -1070,8 +1072,9 @@
     font-family: var(--font-mono);
   }
 
+  // 트리거 라벨(전역·레포 N개)이 짧아 좁혀도 된다 — 긴 레포명은 팝오버에서 다 보인다
   &__scope {
-    width: 150px;
+    width: 120px;
     flex-shrink: 0;
   }
 
