@@ -1,71 +1,24 @@
-// 변경사항 — 워킹트리의 git 상태·파일 diff 조회 + push.
-// "AI 작업 → 변경 확인 → AI 커밋 → 푸시" 루프에서 확인·푸시만 담당한다
-// (커밋은 터미널 세션의 에이전트 몫 — 여기서는 만들지 않는다).
-// headless 실행이라 인증 프롬프트가 뜰 수 없으므로 GIT_TERMINAL_PROMPT=0 으로
-// 즉시 실패시키고, 타임아웃을 이중 안전망으로 둔다.
-import { execFile } from 'node:child_process';
+// 변경사항 — 워킹트리의 git 상태·파일 diff 조회 + 커밋(전체 일괄) + push.
+// "AI 작업 → 변경 확인 → 커밋 → 푸시" 루프의 확인·커밋·푸시 담당
+// (커밋은 2026-08 터미널 개편에서 추가 — 우측 커밋 패널의 [커밋] 버튼).
 import path from 'node:path';
 import type {
   ChangedFile,
   ChangedFileKind,
   ChangesCommit,
+  ChangesCommitResult,
   ChangesDiffFile,
   ChangesDiffResult,
   ChangesPushResult,
   ChangesStatus,
 } from '../../../shared/types';
+import { runGit as run, unquoteGitPath as unquote } from '../../lib/git';
 
-const GIT = '/usr/bin/git';
 const DIFF_MAX_BYTES = 512 * 1024; // diff 표시 상한 — 초과분은 잘라내고 truncated 표시
 const STATUS_TIMEOUT_MS = 10_000;
+const COMMIT_TIMEOUT_MS = 30_000;
 const PUSH_TIMEOUT_MS = 60_000;
 const UNPUSHED_MAX = 20;
-
-type RunResult = { code: number; stdout: string; stderr: string };
-
-const run = (args: string[], cwd: string, timeoutMs: number): Promise<RunResult> =>
-  new Promise((resolve) => {
-    execFile(
-      GIT,
-      // core.quotepath=false — 한글 경로가 옥탈 이스케이프("\354…")로 깨지지 않게
-      ['-C', cwd, '-c', 'core.quotepath=false', ...args],
-      {
-        timeout: timeoutMs,
-        maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      },
-      (err, stdout, stderr) => {
-        const code = err
-          ? typeof (err as { code?: unknown }).code === 'number'
-            ? ((err as { code: number }).code)
-            : 1
-          : 0;
-        resolve({ code, stdout: String(stdout), stderr: String(stderr).trim() });
-      }
-    );
-  });
-
-/** porcelain 경로 dequote — quotepath=false 여도 탭·따옴표 등은 여전히 "…" 로 감싼다 */
-function unquote(p: string): string {
-  if (!p.startsWith('"') || !p.endsWith('"')) return p;
-  const inner = p.slice(1, -1);
-  const bytes: number[] = [];
-  for (let i = 0; i < inner.length; i++) {
-    const c = inner[i];
-    if (c !== '\\') {
-      bytes.push(...Buffer.from(c, 'utf8'));
-      continue;
-    }
-    const n = inner[++i];
-    if (n >= '0' && n <= '7') {
-      bytes.push(parseInt(inner.slice(i, i + 3), 8));
-      i += 2;
-    } else if (n === 't') bytes.push(9);
-    else if (n === 'n') bytes.push(10);
-    else bytes.push(...Buffer.from(n ?? '', 'utf8'));
-  }
-  return Buffer.from(bytes).toString('utf8');
-}
 
 /** porcelain v1 의 XY 코드 → 표시용 종류 (스테이징 여부는 구분하지 않는다) */
 function kindOf(x: string, y: string): ChangedFileKind {
@@ -216,6 +169,33 @@ export async function getChangesDiff(
     truncated = true;
   }
   return { ok: true, diff, binary, truncated };
+}
+
+/** 전체 일괄 커밋 — git add -A 후 commit. 변경이 없으면 실패로 알린다 */
+export async function commitChanges(
+  repoPath: string,
+  message: string
+): Promise<ChangesCommitResult> {
+  const msg = message.trim();
+  if (!msg) return { ok: false, error: '커밋 메시지를 입력하세요.' };
+
+  const add = await run(['add', '-A'], repoPath, COMMIT_TIMEOUT_MS);
+  if (add.code !== 0) {
+    return { ok: false, error: add.stderr || 'git add 실패' };
+  }
+
+  // -m 을 여러 번 주면 문단으로 나뉜다 — 첫 줄/본문을 살리려면 통째로 한 번에
+  const commit = await run(['commit', '-m', msg], repoPath, COMMIT_TIMEOUT_MS);
+  if (commit.code !== 0) {
+    // "nothing to commit" 도 여기로 온다 — stderr 가 비면 stdout 에 사유가 있다
+    return {
+      ok: false,
+      error: commit.stderr || commit.stdout.trim().split('\n').pop() || 'git commit 실패',
+    };
+  }
+
+  const hash = await run(['rev-parse', '--short', 'HEAD'], repoPath, STATUS_TIMEOUT_MS);
+  return { ok: true, hash: hash.code === 0 ? hash.stdout.trim() : undefined };
 }
 
 /** git push — upstream 없으면 -u origin HEAD 로 원격 브랜치를 만들며 푸시 */

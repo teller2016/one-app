@@ -55,7 +55,10 @@ export type IconName =
   | "minus"
   | "arrow-down-to-line"
   | "eraser"
-  | "git-branch";
+  | "git-branch"
+  | "laptop"
+  | "folder-git"
+  | "pencil";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -306,6 +309,25 @@ const PATHS: Record<IconName, ReactNode> = {
       <circle cx="18" cy="6" r="3" />
       <circle cx="6" cy="18" r="3" />
       <path d="M18 9a9 9 0 0 1-9 9" />
+    </>
+  ),
+  laptop: (
+    <>
+      <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16" />
+    </>
+  ),
+  "folder-git": (
+    <>
+      <path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5" />
+      <circle cx="13" cy="12" r="2" />
+      <path d="M18 19c-2.8 0-5-2.2-5-5v8" />
+      <circle cx="20" cy="19" r="2" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+      <path d="m15 5 4 4" />
     </>
   ),
 };

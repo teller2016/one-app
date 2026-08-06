@@ -420,7 +420,10 @@ export function TerminalView({
 
   const duplicate = async () => {
     try {
+      // cwd 도 함께 — 워크트리 세션은 projectId 가 없어서 cwd 가 위치의 진실이다
+      // (main 은 projectId 를 우선하므로 프로젝트 세션의 동작은 그대로다)
       const info = await window.oneApp.terminal.create({
+        cwd: session.cwd,
         projectId: session.projectId,
         agentId: session.agentId,
       });

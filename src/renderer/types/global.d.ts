@@ -66,7 +66,14 @@ import type {
   ChangesDiffFile,
   ChangesStatus,
   ChangesDiffResult,
+  ChangesCommitResult,
   ChangesPushResult,
+  TerminalWorkspace,
+  WorkspaceSaveInput,
+  WorkspaceBranches,
+  WorktreeAddInput,
+  WorktreeActionResult,
+  WorktreeInfo,
   OvertimeDefaults,
   OvertimeProgress,
   OvertimeSubmitInput,
@@ -239,7 +246,28 @@ declare global {
           target: ChangesTarget,
           file: ChangesDiffFile,
         ) => Promise<ChangesDiffResult>;
+        commit: (
+          target: ChangesTarget,
+          message: string,
+        ) => Promise<ChangesCommitResult>;
         push: (target: ChangesTarget) => Promise<ChangesPushResult>;
+      };
+      workspaces: {
+        list: () => Promise<TerminalWorkspace[]>;
+        save: (input: WorkspaceSaveInput) => Promise<TerminalWorkspace[]>;
+        delete: (id: string) => Promise<TerminalWorkspace[]>;
+        reorder: (ids: string[]) => Promise<TerminalWorkspace[]>;
+        reveal: (id: string) => Promise<{ ok: boolean; error?: string }>;
+        pickDir: (title?: string) => Promise<{ path?: string }>;
+        worktrees: (id: string) => Promise<WorktreeInfo[]>;
+        addWorktree: (input: WorktreeAddInput) => Promise<WorktreeActionResult>;
+        removeWorktree: (
+          id: string,
+          worktreePath: string,
+          force?: boolean,
+        ) => Promise<WorktreeActionResult>;
+        branches: (id: string) => Promise<WorkspaceBranches>;
+        onChanged: (cb: (workspaces: TerminalWorkspace[]) => void) => () => void;
       };
       terminal: {
         list: () => Promise<TerminalSessionInfo[]>;

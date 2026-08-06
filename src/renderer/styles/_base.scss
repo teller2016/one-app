@@ -1496,6 +1496,94 @@ input.input--sm {
   }
 }
 
+// ===== 컨텍스트 메뉴 (공용 ContextMenu — 우클릭 지점에 body portal) =====
+.ctx {
+  position: fixed;
+  z-index: 97; // 피커(96) 위, 툴팁(99)·토스트(100) 아래
+  min-width: 180px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  -webkit-app-region: no-drag;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text);
+    @include type-small;
+    text-align: left;
+    cursor: pointer;
+
+    svg {
+      color: var(--text-3);
+      flex-shrink: 0;
+    }
+
+    &:hover {
+      background: var(--overlay-hover);
+    }
+
+    &--danger {
+      color: var(--danger);
+
+      svg {
+        color: var(--danger);
+      }
+    }
+  }
+
+  &__sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border);
+  }
+
+  // 색상 스와치 행 — 차트 팔레트 10색 (워크스페이스 타일 색 지정)
+  &__colors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 7px 10px;
+  }
+
+  &__swatch {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-full);
+    background: currentColor;
+    cursor: pointer;
+    transition: transform var(--dur-1) var(--ease);
+
+    &:hover {
+      transform: scale(1.15);
+    }
+
+    &--on {
+      box-shadow:
+        0 0 0 2px var(--surface-1),
+        0 0 0 4px var(--accent);
+    }
+  }
+}
+
+@for $i from 1 through 10 {
+  .ctx__swatch--c#{$i} {
+    color: var(--chart-#{$i}t);
+  }
+}
+
 // ===== 피커 (공용 DatePicker·TimePicker — 트리거 + 팝오버) =====
 .picker {
   position: relative;

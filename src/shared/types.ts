@@ -830,16 +830,74 @@ export type TerminalServerStatus = {
   error?: string; // 포트 충돌 등 시작 실패 사유
 };
 
-// ── 변경사항 (워킹트리 git 상태·diff·push — 터미널 드로어와 MO '변경' 탭 공용) ──
+// ── 터미널 워크스페이스 (터미널 섹션 전용 저장소 목록 — 프로젝트 레지스트리와 별개) ──
+
+/** 터미널 워크스페이스 — LNB 최상위 항목, git 저장소 하나 (비밀 없음, 평문 JSON) */
+export type TerminalWorkspace = {
+  id: string;
+  name: string; // 표시명 (기본: 폴더명)
+  repoPath: string; // 저장소 루트 절대 경로 (주 워크트리)
+  color?: number; // 타일 색 — 차트 팔레트 인덱스(1..10). 없으면 이름 해시로 자동 배정
+};
+
+export type WorkspaceSaveInput = {
+  id?: string; // 없으면 신규 생성
+  name: string;
+  repoPath: string;
+  color?: number; // 1..10 — 없으면 기존 값 유지
+};
+
+/** 워크스페이스의 워크트리 하나 — `git worktree list` 결과 + 미커밋 변경량 */
+export type WorktreeInfo = {
+  path: string; // 워크트리 루트 절대 경로
+  branch?: string; // 체크아웃 브랜치 (detached HEAD 면 없음)
+  head?: string; // HEAD 축약 해시 (detached 표시용)
+  isMain: boolean; // 원본 저장소(주 워크트리) 여부
+  locked: boolean;
+  missing: boolean; // 디렉터리가 사라진 워크트리 (prunable) — 조작 불가 표시용
+  dirty: boolean; // 미커밋 변경 존재 (untracked 포함)
+  additions: number; // 미커밋 +줄 수 합계 (HEAD 대비 — untracked 는 안 잡힘)
+  deletions: number;
+};
+
+/** 워크트리 생성 옵션 — 위치는 매번 직접 선택(부모 폴더 + 폴더명) */
+export type WorktreeAddInput = {
+  workspaceId: string;
+  parentDir: string; // 워크트리를 만들 부모 폴더 (데스크톱 전용 채널 — 다이얼로그로 선택)
+  dirName: string; // 만들 폴더 이름
+  branch: string; // 체크아웃할(또는 새로 만들) 브랜치
+  createBranch: boolean; // true 면 -b 로 새 브랜치 생성
+  baseRef?: string; // 새 브랜치 시작점 (createBranch 일 때만 — 없으면 HEAD)
+};
+
+export type WorktreeActionResult = {
+  ok: boolean;
+  path?: string; // 생성된 워크트리 경로
+  error?: string;
+};
+
+/** 베이스 브랜치 선택용 목록 — 로컬·원격 구분 (원격은 `origin/…` 그대로) */
+export type WorkspaceBranches = {
+  ok: boolean;
+  current?: string; // 주 워크트리의 현재 브랜치
+  locals: string[];
+  remotes: string[];
+  error?: string;
+};
+
+// ── 변경사항 (워킹트리 git 상태·diff·커밋·push — 터미널 우측 패널과 MO '변경' 탭 공용) ──
 
 /**
  * 조회 대상 — ⚠️ 클라이언트는 경로를 직접 넘길 수 없다(MO 에 열리는 채널이라 임의
- * 디렉터리 차단). projectId(프로젝트 레지스트리) 또는 sessionId(터미널 세션의 cwd)로만
+ * 디렉터리 차단). projectId(프로젝트 레지스트리) / sessionId(터미널 세션의 cwd) /
+ * workspaceId+worktreePath(터미널 워크스페이스 — main 이 실제 워크트리인지 검증)로만
  * 지정하고 main 이 경로를 해석한다.
  */
 export type ChangesTarget = {
   projectId?: string;
   sessionId?: string;
+  workspaceId?: string; // 터미널 워크스페이스 id — worktreePath 없으면 주 워크트리
+  worktreePath?: string; // 워크스페이스의 워크트리 경로 (workspaceId 필수, main 이 목록 대조 검증)
 };
 
 export type ChangedFileKind =
@@ -892,5 +950,12 @@ export type ChangesDiffResult = {
 export type ChangesPushResult = {
   ok: boolean;
   output?: string; // git push 출력 tail (성공·실패 공통 — 사유 확인용)
+  error?: string;
+};
+
+/** 전체 일괄 커밋(git add -A + commit) 결과 */
+export type ChangesCommitResult = {
+  ok: boolean;
+  hash?: string; // 만들어진 커밋 축약 해시
   error?: string;
 };

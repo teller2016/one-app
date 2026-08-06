@@ -1,34 +1,33 @@
-// 새 세션 모달 — 위치(프로젝트 레지스트리) + 에이전트 선택 후 생성.
+// 새 세션 모달 — 위치는 선택된 워크트리로 고정, 에이전트만 고른다.
 // 에이전트를 고르면 셸이 뜬 뒤 해당 CLI 가 자동 실행된다 (미설치 에이전트는 선택지에서 제외).
+import { useEffect, useState } from 'react';
+import type { TerminalAgentId, TerminalAgentInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { FormRow } from '../../../components/FormRow';
 import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
-import { useEffect, useState } from 'react';
-import type {
-  Project,
-  TerminalAgentId,
-  TerminalAgentInfo,
-} from '../../../../shared/types';
 
 export function NewSessionModal({
+  cwd,
+  location,
   onCreated,
   onClose,
 }: {
+  /** 세션 시작 디렉터리 — 선택된 워크트리 경로 */
+  cwd: string;
+  /** 위치 표시용 라벨 (워크트리명 · 브랜치) */
+  location: string;
   onCreated: (id: string) => void;
   onClose: () => void;
 }) {
   const toast = useToast();
-  const [projects, setProjects] = useState<Project[]>([]);
   const [agents, setAgents] = useState<TerminalAgentInfo[]>([]);
-  const [projectId, setProjectId] = useState(''); // '' = 홈 디렉터리
   const [agentId, setAgentId] = useState<TerminalAgentId>('shell');
   const [creating, setCreating] = useState(false);
   const [tmux, setTmux] = useState(true); // 확인 전엔 힌트를 띄우지 않는다
 
   useEffect(() => {
-    void window.oneApp?.projects.list().then(setProjects);
     void window.oneApp?.terminal.agents().then((list) => {
       setAgents(list);
       // 주 사용 사례가 claude 세션 — 설치돼 있으면 기본 선택
@@ -41,10 +40,7 @@ export function NewSessionModal({
   const create = async () => {
     setCreating(true);
     try {
-      const info = await window.oneApp.terminal.create({
-        projectId: projectId || undefined,
-        agentId,
-      });
+      const info = await window.oneApp.terminal.create({ cwd, agentId });
       onCreated(info.id);
       onClose();
     } catch (err) {
@@ -58,16 +54,9 @@ export function NewSessionModal({
     <Modal title="새 세션" onClose={onClose}>
       <div className="terminal-new">
         <FormRow label="위치" column>
-          <Select
-            className="terminal-new__select"
-            aria-label="세션 위치"
-            value={projectId}
-            onChange={setProjectId}
-            options={[
-              { value: '', label: '홈 디렉터리' },
-              ...projects.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
+          <code className="terminal-new__path" title={cwd}>
+            {location}
+          </code>
         </FormRow>
         <FormRow label="에이전트" column>
           <Select

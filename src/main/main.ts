@@ -20,6 +20,7 @@ import { stopServer as stopTerminalServer } from "./features/terminal/server";
 import { createTray } from "./features/tray/tray";
 import { registerVpnIpc } from "./features/vpn/ipc";
 import { registerWeeklyIpc } from "./features/weekly/ipc";
+import { registerWorkspacesIpc } from "./features/workspaces/ipc";
 import { app, BrowserWindow, ipcMain, nativeTheme, shell } from "electron";
 import started from "electron-squirrel-startup";
 import path from "node:path";
@@ -47,6 +48,7 @@ registerOvertimeIpc();
 registerProjectsIpc();
 registerTerminalIpc();
 registerChangesIpc();
+registerWorkspacesIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {

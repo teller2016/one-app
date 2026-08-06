@@ -25,6 +25,9 @@ import type {
   TerminalCreateInput,
   TerminalNotifyLevel,
   TerminalSessionInfo,
+  TerminalWorkspace,
+  WorkspaceSaveInput,
+  WorktreeAddInput,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
   OvertimeProgress,
@@ -307,14 +310,50 @@ contextBridge.exposeInMainWorld("oneApp", {
     getLog: () => ipcRenderer.invoke("nightwatch:log"),
   },
   changes: {
-    // 워킹트리 상태 — 브랜치·ahead/behind·변경 파일 목록 (projectId 또는 sessionId 로 대상 지정)
+    // 워킹트리 상태 — 브랜치·ahead/behind·변경 파일 목록
+    // (projectId / sessionId / workspaceId+worktreePath 로 대상 지정)
     status: (target: ChangesTarget) =>
       ipcRenderer.invoke("changes:status", target),
     // 파일 하나의 unified diff
     diff: (target: ChangesTarget, file: ChangesDiffFile) =>
       ipcRenderer.invoke("changes:diff", target, file),
+    // 전체 일괄 커밋 (git add -A + commit)
+    commit: (target: ChangesTarget, message: string) =>
+      ipcRenderer.invoke("changes:commit", target, message),
     // git push (upstream 없으면 -u origin HEAD 로 원격 브랜치 생성)
     push: (target: ChangesTarget) => ipcRenderer.invoke("changes:push", target),
+  },
+  // 터미널 워크스페이스 — LNB(워크스페이스 → 워크트리 트리) 데이터. 전부 데스크톱 전용
+  workspaces: {
+    list: () => ipcRenderer.invoke("workspaces:list"),
+    // 추가/수정 — 저장 전에 main 이 git 저장소인지 검증한다. 최신 목록 반환
+    save: (input: WorkspaceSaveInput) =>
+      ipcRenderer.invoke("workspaces:save", input),
+    // 삭제 (저장소·워크트리 파일은 건드리지 않음). 최신 목록 반환
+    delete: (id: string) => ipcRenderer.invoke("workspaces:delete", id),
+    // LNB 드래그 순서 저장. 최신 목록 반환
+    reorder: (ids: string[]) => ipcRenderer.invoke("workspaces:reorder", ids),
+    // 저장소 폴더를 Finder 로 열기
+    reveal: (id: string) => ipcRenderer.invoke("workspaces:reveal", id),
+    // 폴더 선택 다이얼로그 — 워크스페이스 등록·워크트리 위치 선택 공용
+    pickDir: (title?: string) => ipcRenderer.invoke("workspaces:pick-dir", title),
+    // 워크트리 목록 + 워크트리별 미커밋 변경량 (+N −M)
+    worktrees: (id: string) => ipcRenderer.invoke("workspaces:worktrees", id),
+    // 워크트리 생성 — 부모 폴더·폴더명·브랜치(신규/기존)
+    addWorktree: (input: WorktreeAddInput) =>
+      ipcRenderer.invoke("workspaces:worktree-add", input),
+    // 워크트리 제거 — dirty 면 force 필요 (호출부가 확인 후 지정)
+    removeWorktree: (id: string, worktreePath: string, force?: boolean) =>
+      ipcRenderer.invoke("workspaces:worktree-remove", id, worktreePath, force),
+    // 브랜치 목록 (로컬 + 원격) — 워크트리 생성 모달의 베이스 선택용
+    branches: (id: string) => ipcRenderer.invoke("workspaces:branches", id),
+    // 목록 변경 브로드캐스트 구독. 해제 함수를 반환한다.
+    onChanged: (cb: (workspaces: TerminalWorkspace[]) => void) => {
+      const listener = (_e: unknown, workspaces: TerminalWorkspace[]) =>
+        cb(workspaces);
+      ipcRenderer.on("workspaces:changed", listener);
+      return () => ipcRenderer.removeListener("workspaces:changed", listener);
+    },
   },
   terminal: {
     // 세션 목록 조회
