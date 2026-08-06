@@ -154,7 +154,7 @@ export function SessionTabs({
           )
         )}
         {canCreate && (
-          <Tooltip label="새 세션 (⌘T)">
+          <Tooltip label="새 세션 — 에이전트 선택 (⌘T: 바로 셸)">
             <button
               type="button"
               className="terminal__tab-add"

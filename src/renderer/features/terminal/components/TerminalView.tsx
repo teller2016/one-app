@@ -379,7 +379,20 @@ export function TerminalView({
     if (!active) return;
     fitRef.current?.fit();
     reclaimRef.current?.();
-    termRef.current?.focus();
+    // ⚠️ 숨어 있는 동안 WebGL 텍스처 아틀라스가 깨진 채 남을 수 있다(글자가 조각나거나
+    // 엉뚱한 위치에 그려짐 — 2026-08-06 사용자 보고, 리사이즈로만 복구되던 증상).
+    // 활성화 때 아틀라스를 버리고 전체를 다시 그려 리사이즈와 같은 복구를 강제한다
+    // (아틀라스는 lazy 재생성이라 비용은 첫 프레임 글리프 다시 굽기 정도).
+    const term = termRef.current;
+    if (term) {
+      try {
+        term.clearTextureAtlas();
+      } catch {
+        // WebGL 폴백(DOM 렌더러) 상태면 no-op — 아래 refresh 만으로 충분
+      }
+      term.refresh(0, term.rows - 1);
+    }
+    term?.focus();
   }, [active]);
 
   // 검색어가 바뀌면 첫 일치로 이동 — incremental 이라 타이핑 중 선택이 자연스럽게 늘어난다

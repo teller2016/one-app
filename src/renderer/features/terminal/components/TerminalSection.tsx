@@ -137,10 +137,18 @@ export function TerminalSection() {
   };
 
   // ── 워크스페이스 목록 — main 저장 + 브로드캐스트 구독 ──
+  // ⚠️ ready 플래그 — 아래 '선택 보정' effect 가 목록 로드 **전**(빈 배열)에 돌면
+  // 저장된 선택을 무효로 판정해 지우고 첫 워크스페이스로 폴백한다. 그래서 다른 섹션에
+  // 다녀올 때마다(재마운트) 선택이 최상단 레포로 초기화됐다(2026-08-06 사용자 보고).
+  const [wsReady, setWsReady] = useState(false);
+  const [sessionsReady, setSessionsReady] = useState(false);
   useEffect(() => {
     const api = window.oneApp?.workspaces;
     if (!api) return;
-    void api.list().then(setWorkspaces);
+    void api.list().then((list) => {
+      setWorkspaces(list);
+      setWsReady(true);
+    });
     return api.onChanged(setWorkspaces);
   }, []);
 
@@ -172,7 +180,10 @@ export function TerminalSection() {
   useEffect(() => {
     const api = terminalApi();
     if (!api) return;
-    void api.list().then(setSessions);
+    void api.list().then((list) => {
+      setSessions(list);
+      setSessionsReady(true); // '기타 세션' 선택 복원 판정도 목록 로드 후에만
+    });
     return api.onSessions((list) => {
       if (list) setSessions(list);
       else void api.list().then(setSessions); // payload 미탑재(구버전 main) 폴백
@@ -247,7 +258,10 @@ export function TerminalSection() {
   }, []);
 
   // ── 선택 보정 — 저장된 선택이 사라졌으면(워크트리 제거 등) 첫 워크스페이스로 폴백 ──
+  // ⚠️ 목록 로드 완료 후에만 판정한다 — 빈 초기 상태에서 돌면 저장된 선택을 무효로
+  // 오판해 지우고, 다른 섹션에 다녀올 때마다 최상단 레포로 초기화됐다(2026-08-06).
   useEffect(() => {
+    if (!wsReady || !sessionsReady) return;
     const valid = (() => {
       if (!selection) return false;
       if (selection.kind === 'other') return otherSessions.length > 0;
@@ -269,10 +283,33 @@ export function TerminalSection() {
     } else if (selection) {
       selectAndSave(null);
     }
-  }, [workspaces, worktrees, otherSessions, selection, selectAndSave]);
+  }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, selection, selectAndSave]);
 
-  // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로 ──
-  const lastActiveRef = useRef(new Map<string, string>());
+  // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로.
+  // 기억은 localStorage 에도 미러 — 섹션을 떠났다 와도(재마운트) 보던 세션이 유지된다
+  const lastActiveRef = useRef(
+    new Map<string, string>(
+      (() => {
+        try {
+          return Object.entries(
+            JSON.parse(localStorage.getItem('terminal:lastActive') ?? '{}') as Record<
+              string,
+              string
+            >
+          );
+        } catch {
+          return [];
+        }
+      })()
+    )
+  );
+  const rememberActive = (key: string, id: string) => {
+    lastActiveRef.current.set(key, id);
+    localStorage.setItem(
+      'terminal:lastActive',
+      JSON.stringify(Object.fromEntries(lastActiveRef.current))
+    );
+  };
   // 방금 만든 세션 — 목록 브로드캐스트가 아직 안 왔으면 보정 효과가 첫 탭으로 되돌리므로,
   // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관)
   const pendingRef = useRef<string | null>(null);
@@ -281,9 +318,10 @@ export function TerminalSection() {
     const pending = pendingRef.current;
     if (pending && sessions.some((s) => s.id === pending)) {
       pendingRef.current = null;
-      lastActiveRef.current.set(selKey, pending);
+      rememberActive(selKey, pending);
       setActiveId(pending);
     }
+    // rememberActive 는 ref+localStorage 만 만지는 안정 함수라 의존성에 두지 않는다
   }, [sessions, selKey]);
 
   useEffect(() => {
@@ -296,7 +334,7 @@ export function TerminalSection() {
   }, [tabSessions, activeId, selKey]);
 
   const selectTab = (id: string) => {
-    lastActiveRef.current.set(selKey, id);
+    rememberActive(selKey, id);
     setActiveId(id);
   };
 
@@ -304,6 +342,17 @@ export function TerminalSection() {
   const activateSession = (id: string) => {
     pendingRef.current = id;
     setActiveId(id);
+  };
+
+  /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
+  const createShell = async () => {
+    if (selection?.kind !== 'worktree') return;
+    try {
+      const info = await terminalApi()?.create({ cwd: selection.path });
+      if (info) activateSession(info.id);
+    } catch (err) {
+      toast(`세션 생성 실패: ${(err as Error).message}`, 'fail');
+    }
   };
 
   /** 프리셋 실행 — 같은 위치의 새 세션에서 명령 자동 실행 (Superset new-tab 동일) */
@@ -470,7 +519,7 @@ export function TerminalSection() {
       if (e.key === 't') {
         if (!canCreate) return;
         claim();
-        setNewSessionOpen(true);
+        void createShell(); // 모달 없이 바로 셸 — 에이전트 선택은 [+] 또는 프리셋 바
       } else if (e.key >= '1' && e.key <= '9') {
         const target = tabSessions[Number(e.key) - 1];
         if (!target) return;
@@ -480,9 +529,9 @@ export function TerminalSection() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-    // closeSession·selectTab 은 매 렌더 새로 만들어지지만 그 안에서 쓰는 confirm·toast 가
-    // 안정적이라 탭 목록·활성 세션만 의존성으로 둔다
-  }, [tabSessions, activeId, activeSession, canCreate]);
+    // closeSession·selectTab·createShell 은 매 렌더 새로 만들어지지만 그 안에서 쓰는
+    // confirm·toast 가 안정적이라 참조 값(선택·탭 목록·활성 세션)만 의존성으로 둔다
+  }, [tabSessions, activeId, activeSession, canCreate, selection]);
 
   // 확인 없이 즉시 종료 (2026-08-06 사용자 요청 — Superset 도 바로 닫는다).
   // tmux 백엔드라 실수로 닫아도 프로세스만 죽고 복구 대상이 없다.
