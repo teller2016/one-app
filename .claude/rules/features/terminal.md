@@ -85,7 +85,24 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 ②③ 의 오버라이드는 xterm 선택자와 **동률 특정도면 나중에 주입되는 xterm.css 가 이기므로** 한 단계 더 좁게 쓴다.
 
 ## 색·글꼴
-데스크톱 터미널 색은 `TerminalView.buildTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 글자는 `--font-mono` 13px/1.35.
+데스크톱 터미널 색은 `TerminalView.buildTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 글자는 `--font-mono`(= 번들한 **JetBrains Mono NL**, `styles.md` 참고) **13px/1.0**.
+
+### ⚠️ `lineHeight` 는 fontSize 가 아니라 **폰트의 자연 줄높이**에 곱해진다
+그래서 폰트를 바꾸면 같은 `lineHeight` 여도 행간이 통째로 달라진다. 13px 기준 실측 자연 줄높이는 **JetBrains Mono 17.5px(1.346배)** vs **Menlo 15px(1.154배)** — 자폭(7.7 vs 7.73)은 거의 같은데 세로만 17% 크다.
+
+- 그래서 폰트 교체와 함께 1.35 → 1.2 로 낮췄을 때 셀 종횡비가 **개선되지 않았다**(1:2.60 → 1:2.67). 사용자가 "왜 이리 길쭉하냐"고 지적해 재측정하고 1.0 으로 다시 낮췄다(2026-08-06).
+- **xterm 은 `lineHeight < 1` 을 거부한다**(`_sanitizeAndValidateOption` 이 throw) — 이 폰트에서 가능한 최소가 1.0 이고 그때 셀이 **1:2.22** 다. 블록 문자 그림의 정사각 픽셀(1:2)은 이 폰트로는 도달할 수 없다(Menlo 는 1.0 에서 1:2.0).
+- 실측값(fontSize 15 기준): `1.0 → 9x20px(1:2.22)` · `1.1 → 9x22(1:2.44)` · `1.2 → 9x24(1:2.67)`.
+- 셀 크기를 잴 때는 `.xterm-screen` 의 `clientWidth/Height ÷ term.cols/rows` 를 쓴다(캔버스 렌더러라 DOM 행이 없다).
+- 폰트 로드 완료(`document.fonts.ready`) 후 `clearTextureAtlas()` + `fit()` 를 한 번 더 돌린다 — 폴백 폰트 폭으로 셀을 재고 굳으면 커서·박스 드로잉이 어긋난다.
+
+### ⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)
+**Claude Code 는 `TMUX` 환경변수가 있으면 트루컬러를 포기하고 256색 팔레트로 폴백한다**(2026-08-06 실측). 그래서 시작 로고가 브랜드 코랄(`#d77757`) 대신 팔레트 174번(`#d78787`)으로 나와 **분홍빛으로 보였다**.
+
+- 실측 근거: 출력 바이트에 `38;2;…`(트루컬러) 가 **0개**이고 `38;5;174` 만 왔다. `FORCE_COLOR=3` 도, `TERM=xterm-256color` 도 소용없었고 **`TMUX` 를 지운 경우에만** 트루컬러가 나왔다(`#d77757` 12회).
+- 그래서 `agents.ts` 의 `agentCommand()` 가 실행 명령을 **`env -u TMUX -u TMUX_PANE <cmd>`** 로 감싼다. 설치 감지(`detectAgents`)는 원시 `command` 를 쓰므로 영향받지 않는다.
+- tmux 는 사용자에게 보이지 않는 영속화 백엔드라 에이전트가 그 안에 있음을 알 이유가 없고, 지워도 세션·pane 동작에는 영향이 없다(실측). **셸 세션(`shell`)은 감싸지 않아 `TMUX` 가 그대로 남는다.**
+- 앱 렌더링(xterm)은 무관하다 — 같은 화면에서 직접 보낸 `\033[38;2;…` 코랄 블록은 정확히 코랄로 그려졌다. 색이 이상해 보이면 **먼저 출력 바이트의 SGR 유형부터 확인할 것.**
 
 ## MO 접속
 툴바 폰 아이콘 → 서버 on/off + 접속 URL·QR + 토큰 재발급. 도달·암호화는 **Tailscale**(맥·폰에 설치 전제, URL 은 100.64.0.0/10 주소 우선 정렬)이 담당하고 앱은 **토큰 인증**만 한다 — `?token=` 1회 → `timingSafeEqual` 검증 → **HttpOnly 쿠키 승격**, WS(`/term`) upgrade 에서 재검증, 30초 ping 으로 죽은 소켓 회수. 토큰은 `safeStorage` 로 `userData/terminal.json`(포트 기본 18317·자동 시작 여부)에 저장하고, 켜둔 상태면 앱 재시작 시 자동으로 다시 켜진다.

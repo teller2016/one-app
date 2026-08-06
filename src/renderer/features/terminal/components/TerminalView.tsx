@@ -154,7 +154,13 @@ export function TerminalView({
     const term = new Terminal({
       fontFamily: cssVar('--font-mono') || 'ui-monospace, Menlo, monospace',
       fontSize: fontSizeRef.current, // 앱 본문(type-body)과 같은 13px 기본 + 툴바로 조절
-      lineHeight: 1.35,
+      // ⚠️ xterm 의 lineHeight 는 **fontSize 가 아니라 폰트의 자연 줄높이에 곱해진다** —
+      // 그 값이 폰트마다 달라서(13px 기준 실측: JetBrains Mono 17.5px = 1.346배,
+      // Menlo 15px = 1.154배) 같은 lineHeight 라도 폰트를 바꾸면 행간이 통째로 달라진다.
+      // TUI 가 블록 문자(█·▀)로 그리는 그림은 셀 종횡비가 그대로 픽셀 종횡비라 세로로 늘어나는데,
+      // xterm 은 lineHeight < 1 을 거부하므로(최소 1) 이 폰트에서 가능한 가장 촘촘한 값이 1.0 이다
+      // (셀 1:2.22 — 실측: 1.0→20px, 1.1→22px, 1.2→24px @ fontSize 15).
+      lineHeight: 1.0,
       cursorBlink: true,
       macOptionIsMeta: true, // Option 을 Meta 로 — CLI 단어 이동(⌥←/→ 등)
       scrollback: 5000,
@@ -197,6 +203,17 @@ export function TerminalView({
       // WebGL 미지원 환경 — 렌더러만 느려지고 동작은 같다
     }
     fit.fit();
+
+    // ⚠️ 번들 폰트(JetBrains Mono NL)가 아직 로드되지 않은 채로 측정하면 xterm 은 **폴백 폰트
+    // 폭으로 셀 크기를 확정**하고 그대로 쓴다 — 글자와 커서·박스 드로잉이 어긋난다.
+    // `font-display: block`(_base.scss)이 폴백 렌더 자체를 막지만 측정 시점이 로드보다
+    // 앞설 수 있어, 로드 완료 후 한 번 다시 잰다. WebGL 렌더러는 글리프를 아틀라스에
+    // 캐시하므로 함께 버려야 옛 폰트로 구운 글리프가 남지 않는다.
+    void document.fonts.ready.then(() => {
+      if (disposed) return;
+      term.clearTextureAtlas();
+      fit.fit();
+    });
 
     const resultSub = search.onDidChangeResults((e) =>
       setHits({ index: e.resultIndex, count: e.resultCount })

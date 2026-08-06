@@ -16,6 +16,15 @@ paths:
 - 새 기능은 `styles/_<기능>.scss` 파일로 분리해 `index.scss` 에 `@use` 추가.
 - 믹스인이 필요하면 파일 최상단에 `@use './base' as *;`.
 
+## 고정폭 폰트는 앱에 번들 (`--font-mono`)
+`src/renderer/assets/fonts/` 의 **JetBrains Mono NL**(No Ligatures, OFL-1.1 — 같은 폴더 `OFL.txt`) 4종(Regular/Bold/Italic/BoldItalic woff2)을 `_base.scss` 상단 `@font-face` 로 싣고 `--font-mono` 의 첫 후보로 둔다.
+
+- **왜 번들인가**: 예전 첫 후보였던 **SF Mono 는 macOS 기본 설치 폰트가 아니다**(실측 — `/System/Library/Fonts` 엔 `Menlo.ttc` 만). 조용히 Menlo 로 폴백돼 맥마다 렌더가 달라졌다.
+- NL(리가처 없음)을 고른 이유 — xterm 은 ligatures addon 없이 리가처를 그리지 않으므로, 리가처가 아예 없는 쪽이 폰트와 화면이 일치한다. 공식 배포에 **NL 은 ttf 만** 있어 woff2 는 `fontTools` 로 변환해 넣었다.
+- `font-display: block` 필수 — 폴백으로 먼저 그리면 xterm 이 그 폭으로 셀을 재고 굳는다(`features/terminal.md` 참고).
+- ⚠️ **`vite.renderer.config.ts` 의 `base: './'` 를 지우지 말 것** — prod 렌더러는 `loadFile`(= `file://`)이라 기본값 `'/'` 이면 CSS 안의 폰트 URL이 `file:///assets/…` 로 해석돼 로드에 실패한다.
+- `mobile-app/styles/mo.scss` 가 `_base.scss` 를 `@use` 하므로 **폰 셸도 같은 폰트를 받는다**(MO 서버 MIME 맵에 `.woff2` 가 이미 있다). `src/mobile` 의 MO 터미널 페이지는 별도 CSS 라 해당 없음.
+
 ## 공통 레이아웃 클래스 (`_base.scss`)
 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **사이드바 위젯 `.sbw`**(VPN·미러링·근태 공용 — `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
 

@@ -1,6 +1,43 @@
 // 디자인 토큰 · 리셋 · 공통 요소 — 기준 문서: DESIGN.md
 // 모든 색·크기 값은 여기 토큰에서만 가져온다 (매직넘버 금지).
 
+// ===== 고정폭 폰트 — JetBrains Mono NL 을 앱에 번들 =====
+// ⚠️ 왜 번들인가: 예전 `--font-mono` 첫 후보였던 **SF Mono 는 macOS 기본 설치 폰트가 아니다**
+// (개발 맥 실측 — /System/Library/Fonts 에 Menlo.ttc 만 있다). 즉 실제로는 조용히 Menlo 로
+// 폴백돼 있었고, 터미널 블록 문자(TUI·로고)와 코드 패널의 렌더가 맥마다 달라진다.
+// NL = No Ligatures 변형 — xterm 은 ligatures addon 없이 리가처를 그리지 않으므로
+// 리가처가 아예 없는 쪽이 폰트와 화면이 일치한다. 라이선스는 OFL-1.1(`assets/fonts/OFL.txt`).
+// ⚠️ `font-display: block` 인 이유 — 폴백 폰트로 먼저 그리면 xterm 이 **그 폭으로 셀을 재고**
+// 커서·박스 드로잉이 어긋난다. 로컬 woff2 라 블록 구간은 사실상 없다.
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../assets/fonts/JetBrainsMonoNL-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../assets/fonts/JetBrainsMonoNL-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../assets/fonts/JetBrainsMonoNL-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../assets/fonts/JetBrainsMonoNL-BoldItalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+
 :root {
   color-scheme: light; // 네이티브 컨트롤(체크박스·피커·스크롤바)도 라이트로
 
@@ -106,7 +143,8 @@
   --fs-title: 15px;
   --fs-h2: 26px; // 애플 타이포 드라마 — 큰 제목 + 타이트 자간
   --fs-metric: 28px;
-  --font-mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  // 번들 폰트가 정본 — 뒤 후보는 폰트 로드 실패 시 폴백용 (위 @font-face 주석 참고)
+  --font-mono: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
   // 디스플레이 = 시스템(SF Pro) — 폰트가 곧 브랜드 (세리프 폐지)
   --font-display: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 

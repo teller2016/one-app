@@ -18,9 +18,21 @@ const AGENTS: AgentDef[] = [
   { id: 'gemini', command: 'gemini' },
 ];
 
-/** 세션 생성 시 자동 실행할 명령 — 'shell' 은 null */
+/**
+ * 세션 생성 시 자동 실행할 명령 — 'shell' 은 null.
+ *
+ * ⚠️ `env -u TMUX -u TMUX_PANE` 로 감싸는 이유 — **Claude Code 는 `TMUX` 환경변수가 있으면
+ * 트루컬러를 포기하고 256색 팔레트로 폴백한다**(2026-08-06 실측). 그러면 시작 로고가 브랜드
+ * 코랄(`#d77757`) 대신 팔레트 174번(`#d78787`)으로 나와 **분홍빛으로 보인다** — 출력 바이트에
+ * `38;2;…`(트루컬러) 가 하나도 없고 `38;5;174` 만 온다. `FORCE_COLOR=3` 으로는 바뀌지 않았고,
+ * `TERM` 을 `xterm-256color` 로 바꿔도 그대로였다. **`TMUX` 를 지운 경우에만** 트루컬러가 나왔다.
+ * 우리 tmux 는 사용자에게 보이지 않는 영속화 백엔드(prefix None·status off)라 에이전트가 그
+ * 안에 있음을 알 이유가 없고, 지워도 tmux 세션·pane 동작에는 영향이 없다(실측).
+ * 감지 경로(`detectAgents`)는 원시 `command` 를 그대로 쓰므로 이 래핑의 영향을 받지 않는다.
+ */
 export function agentCommand(id: TerminalAgentId): string | null {
-  return AGENTS.find((a) => a.id === id)?.command ?? null;
+  const command = AGENTS.find((a) => a.id === id)?.command;
+  return command ? `env -u TMUX -u TMUX_PANE ${command}` : null;
 }
 
 let cached: Promise<TerminalAgentInfo[]> | null = null;
