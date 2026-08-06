@@ -75,7 +75,6 @@ export function SessionTabs({
         {sessions.map((s, i) =>
           editingId === s.id ? (
             <span key={s.id} className="terminal__tab terminal__tab--edit">
-              <StatusDot status={STATUS_DOT[s.status]} />
               <Input
                 small
                 autoFocus
@@ -92,13 +91,13 @@ export function SessionTabs({
               />
             </span>
           ) : (
-            /* 래퍼 span + [선택 button][닫기 button] 형제 — 중첩 인터랙티브 금지 */
+            /* 세그먼트 탭 (Superset 동일) — 제목 좌측, 우측은 활성이면 ×, 아니면 상태점.
+               래퍼 span + [선택 button][닫기 button] 형제 — 중첩 인터랙티브 금지 */
             <span
               key={s.id}
               className={[
                 'terminal__tab',
                 s.id === activeId ? 'terminal__tab--active' : '',
-                s.status === 'waiting' ? 'terminal__tab--waiting' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -117,19 +116,40 @@ export function SessionTabs({
                   setEditingId(s.id);
                 }}
               >
-                <StatusDot status={STATUS_DOT[s.status]} />
                 <span className="terminal__tab-title">{s.title}</span>
               </button>
-              <Tooltip label="세션 종료 (⌘⇧W)">
-                <button
-                  type="button"
-                  className="terminal__tab-close"
-                  aria-label={`'${s.title}' 세션 종료`}
-                  onClick={() => onClose(s)}
-                >
-                  <Icon name="x" size={13} />
-                </button>
-              </Tooltip>
+              {s.id === activeId ? (
+                <Tooltip label="세션 종료 (⌘⇧W)">
+                  <button
+                    type="button"
+                    className="terminal__tab-close"
+                    aria-label={`'${s.title}' 세션 종료`}
+                    onClick={() => onClose(s)}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                </Tooltip>
+              ) : (
+                /* 비활성 탭 — 평소엔 상태점(작업 중·입력 대기만), hover 하면 × 로 바뀐다
+                   (활성으로 전환하지 않고도 종료 가능 — 2026-08-06 사용자 요청) */
+                <span className="terminal__tab-side">
+                  {s.status !== 'idle' && (
+                    <span className="terminal__tab-dot" aria-hidden="true">
+                      <StatusDot status={STATUS_DOT[s.status]} />
+                    </span>
+                  )}
+                  <Tooltip label="세션 종료">
+                    <button
+                      type="button"
+                      className="terminal__tab-close terminal__tab-close--hover"
+                      aria-label={`'${s.title}' 세션 종료`}
+                      onClick={() => onClose(s)}
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  </Tooltip>
+                </span>
+              )}
             </span>
           )
         )}
@@ -141,7 +161,7 @@ export function SessionTabs({
               aria-label="새 세션"
               onClick={onNew}
             >
-              <Icon name="plus" size={15} />
+              <Icon name="plus" size={14} />
             </button>
           </Tooltip>
         )}

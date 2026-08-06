@@ -2,7 +2,11 @@
 // 폴더 선택 다이얼로그가 끼고(맥에만 뜸), 워크트리 생성·제거는 임의 경로 인자를
 // 받으므로 폰에 열지 않는다 — 폰이 쓰는 것은 changes:* (workspaceId 로만 지정) 뿐.
 import { dialog, ipcMain, shell } from 'electron';
-import type { WorkspaceSaveInput, WorktreeAddInput } from '../../../shared/types';
+import type {
+  TerminalPreset,
+  WorkspaceSaveInput,
+  WorktreeAddInput,
+} from '../../../shared/types';
 import { runGit } from '../../lib/git';
 import {
   addWorktree,
@@ -13,8 +17,10 @@ import {
 import {
   deleteWorkspace,
   getWorkspace,
+  listPresets,
   listWorkspaces,
   reorderWorkspaces,
+  savePresets,
   saveWorkspace,
 } from './store';
 
@@ -91,5 +97,11 @@ export function registerWorkspacesIpc() {
 
   ipcMain.handle('workspaces:branches', (_e, id: string) =>
     listBranches(requireWorkspace(id).repoPath)
+  );
+
+  // 프리셋 — 프리셋 바(⚙ 옆 칩) 목록. 편집 모달이 전체를 통째로 저장한다
+  ipcMain.handle('workspaces:presets:get', () => listPresets());
+  ipcMain.handle('workspaces:presets:save', (_e, presets: TerminalPreset[]) =>
+    savePresets(Array.isArray(presets) ? presets : [])
   );
 }

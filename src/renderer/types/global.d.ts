@@ -68,6 +68,7 @@ import type {
   ChangesDiffResult,
   ChangesCommitResult,
   ChangesPushResult,
+  TerminalPreset,
   TerminalWorkspace,
   WorkspaceSaveInput,
   WorkspaceBranches,
@@ -267,6 +268,11 @@ declare global {
           force?: boolean,
         ) => Promise<WorktreeActionResult>;
         branches: (id: string) => Promise<WorkspaceBranches>;
+        presets: {
+          get: () => Promise<TerminalPreset[]>;
+          save: (presets: TerminalPreset[]) => Promise<TerminalPreset[]>;
+          onChanged: (cb: (presets: TerminalPreset[]) => void) => () => void;
+        };
         onChanged: (cb: (workspaces: TerminalWorkspace[]) => void) => () => void;
       };
       terminal: {

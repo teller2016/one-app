@@ -381,7 +381,8 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
     id,
     proc,
     tmuxName,
-    title: usedProject?.name ?? (path.basename(cwd) || cwd),
+    // 프리셋 세션은 프리셋 이름이 제목 (Superset 의 탭 이름과 동일)
+    title: opts.title?.trim() || (usedProject?.name ?? (path.basename(cwd) || cwd)),
     cwd,
     cols,
     rows,
@@ -410,7 +411,13 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
     });
   }
 
-  const command = agentCommand(agentId);
+  // 프리셋 명령이 있으면 에이전트 기본 명령 대신 사용 — TMUX 를 지우는 이유는
+  // agents.ts 의 agentCommand 주석 참고 (claude 트루컬러). env 는 앞의 VAR=값
+  // 지정(JAVA_HOME=… ./gradlew 류)도 그대로 처리하므로 임의 명령에 안전하다.
+  const preset = opts.command?.trim();
+  const command = preset
+    ? `env -u TMUX -u TMUX_PANE ${preset}`
+    : agentCommand(agentId);
   if (command) launchAgent(session, command);
 
   wireSession(session);

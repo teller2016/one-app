@@ -1,10 +1,15 @@
-// 터미널 워크스페이스 저장 — 비밀 없음, 평문 JSON(userData/terminal-workspaces.json).
+// 터미널 워크스페이스·프리셋 저장 — 비밀 없음, 평문 JSON(userData/terminal-workspaces.json).
 // 터미널 섹션 LNB(워크스페이스 → 워크트리 트리) 전용 목록으로,
 // 프로젝트 레지스트리(projects.json)와는 의도적으로 분리한다(사용자 결정 2026-08-06).
+// 프리셋은 Superset 의 terminal_presets 와 같은 모델(전역 목록 + workspaceIds 스코프).
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import type { TerminalWorkspace, WorkspaceSaveInput } from '../../../shared/types';
+import type {
+  TerminalPreset,
+  TerminalWorkspace,
+  WorkspaceSaveInput,
+} from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { readUserJson, writeUserJson } from '../../lib/store';
 
@@ -47,13 +52,42 @@ function sanitize(raw: unknown): TerminalWorkspace[] {
   return out;
 }
 
+/** 프리셋 행 보정 — 이름·명령 없는 행 제거, 스코프·노출 필드 검증 */
+function sanitizePresets(raw: unknown): TerminalPreset[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TerminalPreset[] = [];
+  for (const row of raw as Partial<TerminalPreset>[]) {
+    const name = typeof row?.name === 'string' ? row.name.trim() : '';
+    const command = typeof row?.command === 'string' ? row.command.trim() : '';
+    if (!name || !command) continue;
+    out.push({
+      id: typeof row.id === 'string' && row.id ? row.id : crypto.randomUUID(),
+      name,
+      command,
+      workspaceIds: Array.isArray(row.workspaceIds)
+        ? row.workspaceIds.filter((v): v is string => typeof v === 'string')
+        : undefined,
+      pinned: typeof row.pinned === 'boolean' ? row.pinned : undefined,
+    });
+  }
+  return out;
+}
+
+// 한 파일에 두 목록 — 어느 한쪽을 쓸 때 다른 쪽이 지워지지 않게 항상 함께 읽어 쓴다
+function readFile(): { workspaces: TerminalWorkspace[]; presets: TerminalPreset[] } {
+  const parsed = readUserJson<{ workspaces?: unknown; presets?: unknown }>(FILE, {});
+  return {
+    workspaces: sanitize(parsed.workspaces),
+    presets: sanitizePresets(parsed.presets),
+  };
+}
+
 function readStored(): TerminalWorkspace[] {
-  const parsed = readUserJson<{ workspaces?: unknown }>(FILE, {});
-  return sanitize(parsed.workspaces);
+  return readFile().workspaces;
 }
 
 const writeStored = (workspaces: TerminalWorkspace[]) => {
-  writeUserJson(FILE, { workspaces });
+  writeUserJson(FILE, { workspaces, presets: readFile().presets });
   // 여러 창(메인·MO 앱 셸)이 같은 목록을 보므로 변경을 push 로 알린다
   broadcast('workspaces:changed', workspaces);
 };
@@ -97,6 +131,19 @@ export function deleteWorkspace(id: string): TerminalWorkspace[] {
   const workspaces = readStored().filter((w) => w.id !== id);
   writeStored(workspaces);
   return workspaces;
+}
+
+// ── 프리셋 CRUD — 편집 모달이 전체 목록을 통째로 저장한다 ──
+
+export function listPresets(): TerminalPreset[] {
+  return readFile().presets;
+}
+
+export function savePresets(presets: TerminalPreset[]): TerminalPreset[] {
+  const next = sanitizePresets(presets);
+  writeUserJson(FILE, { workspaces: readStored(), presets: next });
+  broadcast('workspaces:presets-changed', next);
+  return next;
 }
 
 /** LNB 드래그 순서 반영 — ids 순서대로 재배열, 빠진 항목은 기존 순서대로 뒤에 */

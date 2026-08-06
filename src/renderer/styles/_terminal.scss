@@ -9,14 +9,9 @@
   // 세션 행·타일에 이미 좌우 패딩이 있어 붙어 보이지 않고, 사이는 grip 실폭 3px 만 남는다.
   gap: 0;
   height: 100%;
-  // 워크스페이스형 화면이라 다른 섹션보다 조밀하게 — 24/28 은 비어 보였다
-  // (2026-08-06 사용자 요청: 펼침·접힘 둘 다 여백 축소)
-  padding: 12px 14px 12px;
-
-  // 세션 패널을 접으면 좌측 여백도 함께 줄인다 (아래 side--collapsed 와 세트)
-  &--side-collapsed {
-    padding-left: 6px;
-  }
+  // 풀블리드 — Superset 처럼 탭·터미널이 가장자리까지 (2026-08-06 사용자 요청,
+  // 12/14 여백도 제거). 안쪽 여백은 각 영역(__side·__bar 등)이 직접 갖는다.
+  padding: 0;
 
   // ── 좌측 세션 패널 ──
   // 폭은 TerminalSection 이 인라인으로 준다(드래그·축소 — localStorage 기억).
@@ -30,16 +25,18 @@
     min-height: 0;
     // xterm 이 gap 없이 붙어 있으므로 경계는 선이 맡는다 (grip hover 선이 이 위를 덮는다)
     border-right: 1px solid var(--border);
-    // 행 hover 배경·텍스트가 그 선에 닿지 않게 (2026-08-06 사용자 지적)
-    padding-right: 6px;
+    // 섹션 패딩이 없어(풀블리드) 패널이 자기 여백을 갖는다 — 우측 6 은
+    // 행 hover 배경이 경계선에 닿지 않게 (2026-08-06 사용자 지적)
+    padding: 8px 6px 8px 10px;
   }
 
   // 축소 — 이니셜 타일만 남는다. 헤더 액션은 감추지 않고 세로로 쌓는다
   // (⚠️ renderer-ui.md: 접힌 채로 아무 것도 누를 수 없게 만들지 말 것)
   &__side--collapsed {
     align-items: center;
-    // ⚠️ 축소 폭(SIDE_COLLAPSED_W 48)은 타일 34 를 감싸는 값이라 우측 패딩을 남기면
-    //    타일이 왼쪽으로 밀려 균형이 깨진다 — center 정렬로 이미 좌우 6.5px 씩 떠 있다.
+    // ⚠️ 축소 폭(SIDE_COLLAPSED_W 48)은 타일 34 를 감싸는 값이라 좌우 패딩을 남기면
+    //    타일이 밀려 균형이 깨진다 — center 정렬로 이미 좌우 6.5px 씩 떠 있다.
+    padding-left: 0;
     padding-right: 0;
 
     .terminal__side-head {
@@ -533,57 +530,54 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0; // 풀블리드 — 탭·프리셋 바·터미널이 붙는다 (Superset 동일)
     overflow: hidden;
   }
 
-  // ── 상단 세션 탭바 — [탭…][+] ➝ 우측 [변경사항][MO] ──
+  // ── 상단 세션 탭바 (Superset 세그먼트 스타일) — [탭|탭|탭][+] ➝ 우측 [변경사항][MO] ──
+  // 탭은 사이 구분선으로 이어진 넓은 세그먼트 — 활성은 밝은 제목 + ×, 비활성은 흐린
+  // 제목 + (작업 중·입력 대기일 때만) 상태점.
   &__tabs {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 32px;
+    min-height: 34px;
     flex-shrink: 0;
+    padding-right: 8px; // 풀블리드라 우측 액션이 창 모서리에 붙지 않게
+    border-bottom: 1px solid var(--border);
   }
 
   &__tabs-list {
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: center;
-    gap: 4px;
+    align-items: stretch;
     overflow-x: auto;
     scrollbar-width: none; // 탭 초과분은 휠/트랙패드 가로 스크롤 — 바는 감춘다
   }
 
-  // 탭 — [상태점][제목][닫기]. 활성 탭은 아래 터미널 패널과 같은 니어블랙 타일
   &__tab {
     display: inline-flex;
     align-items: center;
-    flex-shrink: 0;
-    padding-right: 5px;
-    border: 1px solid transparent;
-    border-radius: var(--r-md);
-    transition:
-      background var(--dur-1) var(--ease),
-      border-color var(--dur-1) var(--ease);
+    // 고정폭 기반 — 늘어나지 않고(이미지 #8), 좁아지면 min 까지 줄고 넘치면 스크롤
+    flex: 0 1 150px;
+    min-width: 90px;
+    padding-right: 6px;
+    transition: background var(--dur-1) var(--ease);
+
+    // 세그먼트 사이 구분선 — 마지막 탭 뒤([+] 앞)에는 긋지 않는다
+    & + & {
+      border-left: 1px solid var(--border);
+    }
 
     &:hover {
-      background: var(--overlay-hover);
-    }
-
-    &--active {
-      @include panel-dark;
-      border-color: var(--border-dark);
-    }
-
-    &--waiting .terminal__tab-title {
-      color: var(--ok);
+      background: var(--overlay-faint);
     }
 
     &--edit {
       gap: 8px;
       padding: 0 10px;
+      flex: 0 0 auto;
 
       .input {
         width: 160px;
@@ -592,24 +586,55 @@
   }
 
   &__tab-hit {
+    flex: 1;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
     min-width: 0;
-    padding: 6px 4px 6px 10px;
+    padding: 7px 4px 7px 12px;
     border: 0;
     background: none;
     color: inherit;
+    text-align: left;
     cursor: pointer;
   }
 
   &__tab-title {
     @include type-small;
-    color: var(--text);
-    max-width: 180px;
+    color: var(--text-3); // 비활성 — 흐린 제목 (Superset 동일)
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__tab--active &__tab-title {
+    color: var(--text);
+  }
+
+  // 비활성 탭 우측 슬롯 — 평소엔 상태점, 탭에 hover 하면 × 종료 버튼으로 바뀐다
+  // (활성 탭으로 전환하지 않고도 닫을 수 있게 — 2026-08-06 사용자 요청)
+  &__tab-side {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  &__tab-dot {
+    display: inline-flex;
+  }
+
+  &__tab-close--hover {
+    display: none;
+  }
+
+  &__tab:hover &__tab-dot {
+    display: none;
+  }
+
+  &__tab:hover &__tab-close--hover {
+    display: inline-flex;
   }
 
   &__tab-close {
@@ -634,15 +659,18 @@
     }
   }
 
+  // [+] — 테두리 있는 라운드 사각 버튼 (Superset 동일), 탭 목록과 살짝 띄운다
   &__tab-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
-    border: 0;
-    border-radius: var(--r-md);
+    align-self: center;
+    margin-left: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
     background: none;
     color: var(--text-2);
     cursor: pointer;
@@ -676,7 +704,7 @@
     overflow: hidden;
   }
 
-  // 세션 화면 = [툴바][xterm 패널] 세로 스택 (+ 검색바는 위에 떠 있는 오버레이)
+  // 세션 화면 = [프리셋 바][xterm 패널] 세로 스택 (+ 검색바는 위에 떠 있는 오버레이)
   &__pane {
     position: relative; // 검색 오버레이의 기준
     flex: 1;
@@ -684,7 +712,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0; // 풀블리드 — 바와 터미널이 붙는다
 
     // 보이지 않는 세션 — 마운트는 유지한다(스크롤백·선택·검색 상태 보존).
     // ⚠️ display:none 을 쓰면 안 된다 — xterm 크기가 0 이 되면서 fit 이 최소값을 잡고,
@@ -699,30 +727,69 @@
     }
   }
 
-  // 툴바 — 좌측 제목·에이전트, 우측 아이콘 액션. 높이를 최소로 유지해 터미널을 덜 먹는다
+  // 툴바 = 프리셋 바 (Superset 동일) — 좌측 [⚙ | 프리셋 칩…], 우측 아이콘 액션.
+  // 높이를 최소로 유지해 터미널을 덜 먹는다
   &__bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    min-height: 24px;
+    min-height: 22px;
+    padding: 2px 8px 2px 6px; // 풀블리드라 자체 여백 — 최소한만
   }
 
-  &__bar-title {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+  &__bar-presets {
+    flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    @include type-small;
-    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none; // 칩이 넘치면 가로 스크롤 — 바는 감춘다
   }
 
-  &__bar-agent {
+  // ⚙ 와 칩 사이 세로 구분선
+  &__bar-sep {
+    width: 1px;
+    height: 14px;
+    flex-shrink: 0;
+    margin: 0 4px;
+    background: var(--border);
+  }
+
+  // 프리셋 칩 — [아이콘 이름]. 클릭 = 같은 위치의 새 세션에서 실행. 바가 낮아
+  // 칩도 캡션 크기로 조밀하게 (2026-08-06 사용자 요청)
+  &__preset {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+
+    svg {
+      color: var(--text-3);
+    }
+
+    &:hover {
+      background: var(--overlay-hover);
+      color: var(--text);
+    }
+  }
+
+  // type-caption 은 uppercase 변형이라 못 쓴다 — 크기 토큰만 가져온다
+  &__preset-name {
     font-size: var(--fs-caption);
-    color: var(--text-3);
+    line-height: 1.4;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   &__bar-actions {
@@ -778,10 +845,12 @@
   &__host {
     flex: 1;
     min-height: 0;
-    border: 1px solid;
+    // 각지게 + 테두리 없이 풀블리드 (이미지 #8, 2026-08-06 사용자 요청) —
+    // 다크 패널이 가장자리까지 차서 경계는 배경 대비가 대신한다
+    border: 0;
     @include panel-dark;
-    border-radius: var(--r-md);
-    padding: 12px 6px 12px 14px; // 우측은 스크롤바 자리라 좁게
+    border-radius: 0;
+    padding: 8px 6px 8px 12px; // 우측은 스크롤바 자리라 좁게
     overflow: hidden;
 
     .xterm {
@@ -975,5 +1044,38 @@
     font-family: var(--font-mono);
     @include type-small;
     color: var(--text-2);
+  }
+}
+
+// 프리셋 편집 모달 — [이름][명령][범위][바 표시][삭제] 행 반복
+.terminal-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__name {
+    width: 130px;
+    flex-shrink: 0;
+  }
+
+  &__cmd {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+  }
+
+  &__scope {
+    width: 150px;
+    flex-shrink: 0;
+  }
+
+  &__actions {
+    justify-content: space-between;
   }
 }

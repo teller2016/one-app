@@ -807,6 +807,8 @@ export type TerminalCreateInput = {
   cwd?: string; // 없으면 홈 디렉터리
   projectId?: string; // 있으면 프로젝트 레지스트리에서 cwd 해석 (cwd 보다 우선)
   agentId?: TerminalAgentId; // 기본 'shell'
+  command?: string; // 셸이 뜬 뒤 자동 실행할 명령 — 지정 시 agentId 의 기본 명령 대신 사용 (프리셋)
+  title?: string; // 세션 표시명 — 없으면 프로젝트명/폴더명 (프리셋은 프리셋 이름)
   cols?: number;
   rows?: number;
 };
@@ -874,6 +876,18 @@ export type WorktreeActionResult = {
   ok: boolean;
   path?: string; // 생성된 워크트리 경로
   error?: string;
+};
+
+/**
+ * 터미널 프리셋 — 프리셋 바(⚙ 옆 칩)에서 클릭 한 번으로 새 세션에 실행할 명령.
+ * Superset 의 terminal_presets 와 같은 모델: 전역 목록 + 워크스페이스 스코프.
+ */
+export type TerminalPreset = {
+  id: string;
+  name: string; // 칩 표시명 (예: claude, FEMC, Run Dev)
+  command: string; // 셸에 입력할 명령
+  workspaceIds?: string[]; // 이 워크스페이스들에서만 노출 — 없으면 전역
+  pinned?: boolean; // false 면 프리셋 바에서 숨김 (기본 노출 — Superset pinnedToBar)
 };
 
 /** 베이스 브랜치 선택용 목록 — 로컬·원격 구분 (원격은 `origin/…` 그대로) */

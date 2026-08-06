@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type {
   ChangesTarget,
+  TerminalPreset,
   TerminalSessionInfo,
   TerminalWorkspace,
   WorktreeInfo,
@@ -18,10 +19,15 @@ import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesView } from '../../changes';
-import { worktreeName } from '../lib/workspace';
+import {
+  agentIdFromCommand,
+  presetsForWorkspace,
+  worktreeName,
+} from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
 import { MoAccessModal } from './MoAccessModal';
 import { NewSessionModal } from './NewSessionModal';
+import { PresetsModal } from './PresetsModal';
 import { NewWorkspaceModal } from './NewWorkspaceModal';
 import { NewWorktreeModal } from './NewWorktreeModal';
 import { SessionTabs } from './SessionTabs';
@@ -115,6 +121,7 @@ export function TerminalSection() {
   const [newWsOpen, setNewWsOpen] = useState(false);
   const [worktreeFor, setWorktreeFor] = useState<TerminalWorkspace | null>(null);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   const [moOpen, setMoOpen] = useState(false);
   const [moRunning, setMoRunning] = useState(false);
   // 변경사항 드로어 — 열림 여부는 세션과 무관한 화면 취향이라 localStorage 로 기억
@@ -171,6 +178,28 @@ export function TerminalSection() {
       else void api.list().then(setSessions); // payload 미탑재(구버전 main) 폴백
     });
   }, []);
+
+  // ── 프리셋 — 프리셋 바(⚙ 옆 칩) 목록. ?. 가드는 구 preload(재시작 전) 대비 ──
+  const [presets, setPresets] = useState<TerminalPreset[]>([]);
+  useEffect(() => {
+    const api = window.oneApp?.workspaces?.presets;
+    if (!api) return;
+    void api.get().then(setPresets);
+    return api.onChanged(setPresets);
+  }, []);
+
+  /** 세션 cwd 가 속한 워크스페이스 — 프리셋 스코프 판정용 (기타 세션이면 null) */
+  const workspaceIdOf = useCallback(
+    (cwd: string): string | null => {
+      for (const ws of workspaces) {
+        const list = worktrees[ws.id];
+        if (list ? list.some((w) => w.path === cwd) : ws.repoPath === cwd)
+          return ws.id;
+      }
+      return null;
+    },
+    [workspaces, worktrees]
+  );
 
   // MO 서버 실행 여부 — 아이콘에 상태 점 표시
   useEffect(() => {
@@ -275,6 +304,22 @@ export function TerminalSection() {
   const activateSession = (id: string) => {
     pendingRef.current = id;
     setActiveId(id);
+  };
+
+  /** 프리셋 실행 — 같은 위치의 새 세션에서 명령 자동 실행 (Superset new-tab 동일) */
+  const runPreset = async (session: TerminalSessionInfo, preset: TerminalPreset) => {
+    try {
+      const info = await terminalApi()?.create({
+        cwd: session.cwd,
+        // claude 프리셋 등은 에이전트로 태깅 — 입력대기 알림·상태 휴리스틱이 살아난다
+        agentId: agentIdFromCommand(preset.command),
+        command: preset.command,
+        title: preset.name,
+      });
+      if (info) activateSession(info.id);
+    } catch (err) {
+      toast(`프리셋 실행 실패: ${(err as Error).message}`, 'fail');
+    }
   };
 
   const activeSession = tabSessions.find((s) => s.id === activeId) ?? null;
@@ -439,14 +484,9 @@ export function TerminalSection() {
     // 안정적이라 탭 목록·활성 세션만 의존성으로 둔다
   }, [tabSessions, activeId, activeSession, canCreate]);
 
+  // 확인 없이 즉시 종료 (2026-08-06 사용자 요청 — Superset 도 바로 닫는다).
+  // tmux 백엔드라 실수로 닫아도 프로세스만 죽고 복구 대상이 없다.
   const closeSession = async (s: TerminalSessionInfo) => {
-    const ok = await confirm({
-      title: '세션 종료',
-      message: `'${s.title}' 세션의 프로세스가 종료됩니다.`,
-      confirmLabel: '종료',
-      danger: true,
-    });
-    if (!ok) return;
     try {
       await terminalApi()?.kill(s.id);
     } catch (err) {
@@ -660,7 +700,9 @@ export function TerminalSection() {
               active={s.id === activeId}
               fontSize={fontSize}
               onFontSize={changeFontSize}
-              onCreated={activateSession}
+              presets={presetsForWorkspace(presets, workspaceIdOf(s.cwd))}
+              onRunPreset={(p) => void runPreset(s, p)}
+              onEditPresets={() => setPresetsOpen(true)}
             />
           ))}
           {!activeSession && (
@@ -747,6 +789,13 @@ export function TerminalSection() {
           }
           onCreated={activateSession}
           onClose={() => setNewSessionOpen(false)}
+        />
+      )}
+      {presetsOpen && (
+        <PresetsModal
+          workspaces={workspaces}
+          currentWsId={selection?.kind === 'worktree' ? selection.wsId : null}
+          onClose={() => setPresetsOpen(false)}
         />
       )}
       {moOpen && <MoAccessModal onClose={() => setMoOpen(false)} />}

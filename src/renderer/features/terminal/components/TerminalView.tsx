@@ -16,8 +16,11 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
-import type { TerminalSessionInfo } from '../../../../shared/types';
-import { TERMINAL_AGENT_NAMES } from '../../../../shared/types';
+import type {
+  TerminalPreset,
+  TerminalSessionInfo,
+} from '../../../../shared/types';
+import { presetIcon } from '../lib/workspace';
 
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -112,15 +115,20 @@ export function TerminalView({
   active,
   fontSize,
   onFontSize,
-  onCreated,
+  presets,
+  onRunPreset,
+  onEditPresets,
 }: {
   session: TerminalSessionInfo;
   /** 지금 보이는 세션인지 — 숨은 pane 은 크기를 주장하지 않는다(아래 activeRef 참고) */
   active: boolean;
   fontSize: number;
   onFontSize: (n: number) => void;
-  /** 세션 복제 후 그 세션으로 전환하기 위한 콜백 */
-  onCreated?: (id: string) => void;
+  /** 프리셋 바 칩 — 이 세션의 워크스페이스에 해당하는 것만 (Superset 동일) */
+  presets: TerminalPreset[];
+  /** 칩 클릭 = 같은 위치의 새 세션에서 명령 실행 (Superset executionMode: new-tab) */
+  onRunPreset: (preset: TerminalPreset) => void;
+  onEditPresets: () => void;
 }) {
   const id = session.id;
   const toast = useToast();
@@ -418,21 +426,6 @@ export function TerminalView({
     return () => window.removeEventListener('keydown', onKey);
   }, [active, openSearch]);
 
-  const duplicate = async () => {
-    try {
-      // cwd 도 함께 — 워크트리 세션은 projectId 가 없어서 cwd 가 위치의 진실이다
-      // (main 은 projectId 를 우선하므로 프로젝트 세션의 동작은 그대로다)
-      const info = await window.oneApp.terminal.create({
-        cwd: session.cwd,
-        projectId: session.projectId,
-        agentId: session.agentId,
-      });
-      onCreated?.(info.id);
-    } catch (err) {
-      toast(`세션 복제 실패: ${(err as Error).message}`, 'fail');
-    }
-  };
-
   const reveal = async () => {
     const res = await window.oneApp.terminal.revealCwd(id);
     if (!res.ok) toast('위치를 열지 못했습니다.', 'fail');
@@ -441,11 +434,34 @@ export function TerminalView({
   return (
     <div className={`terminal__pane${active ? '' : ' terminal__pane--hidden'}`}>
       <div className="terminal__bar">
-        <span className="terminal__bar-title" title={session.cwd}>
-          {session.title}
-          <span className="terminal__bar-agent">
-            {TERMINAL_AGENT_NAMES[session.agentId]}
-          </span>
+        {/* 프리셋 바 (Superset 동일) — [⚙ | 칩…]. 칩 클릭 = 같은 위치의 새 세션에서 실행.
+            세션 제목은 상단 탭이 이미 보여주므로 여기 중복 표기하지 않는다. */}
+        <span className="terminal__bar-presets" title={session.cwd}>
+          <Tooltip label="프리셋 편집 — 클릭 한 번으로 실행할 명령 관리">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="프리셋 편집"
+              onClick={onEditPresets}
+            >
+              <Icon name="settings" size={14} />
+            </button>
+          </Tooltip>
+          {presets.length > 0 && (
+            <span className="terminal__bar-sep" aria-hidden="true" />
+          )}
+          {presets.map((p) => (
+            <Tooltip key={p.id} label={`${p.command} — 새 세션에서 실행`}>
+              <button
+                type="button"
+                className="terminal__preset"
+                onClick={() => onRunPreset(p)}
+              >
+                <Icon name={presetIcon(p)} size={13} />
+                <span className="terminal__preset-name">{p.name}</span>
+              </button>
+            </Tooltip>
+          ))}
         </span>
         {/* 아이콘만으로는 무슨 기능인지 알 수 없어 전부 Tooltip 으로 감싼다.
             네이티브 title 은 지연이 길고 어두운 툴바에서 눈에 안 띈다(2026-08-05 사용자 지적).
@@ -507,27 +523,6 @@ export function TerminalView({
               </button>
             </Tooltip>
           )}
-          {/* tmux 백엔드에선 tmux 가 자기 화면 모델로 곧 다시 그리므로 영구 삭제가 아니다 */}
-          <Tooltip label="화면 지우기">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="화면 지우기"
-              onClick={() => termRef.current?.clear()}
-            >
-              <Icon name="eraser" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip label="같은 위치·에이전트로 세션 복제">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="세션 복제"
-              onClick={() => void duplicate()}
-            >
-              <Icon name="copy" size={14} />
-            </button>
-          </Tooltip>
           <Tooltip label="세션 위치를 Finder 에서 열기">
             <button
               type="button"

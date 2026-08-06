@@ -24,6 +24,7 @@ import type {
   ChangesDiffFile,
   TerminalCreateInput,
   TerminalNotifyLevel,
+  TerminalPreset,
   TerminalSessionInfo,
   TerminalWorkspace,
   WorkspaceSaveInput,
@@ -347,6 +348,19 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("workspaces:worktree-remove", id, worktreePath, force),
     // 브랜치 목록 (로컬 + 원격) — 워크트리 생성 모달의 베이스 선택용
     branches: (id: string) => ipcRenderer.invoke("workspaces:branches", id),
+    // 프리셋 (프리셋 바 칩 — 전역 + 워크스페이스 스코프)
+    presets: {
+      get: () => ipcRenderer.invoke("workspaces:presets:get"),
+      // 편집 모달이 전체 목록을 통째로 저장. 최신 목록 반환
+      save: (presets: TerminalPreset[]) =>
+        ipcRenderer.invoke("workspaces:presets:save", presets),
+      onChanged: (cb: (presets: TerminalPreset[]) => void) => {
+        const listener = (_e: unknown, presets: TerminalPreset[]) => cb(presets);
+        ipcRenderer.on("workspaces:presets-changed", listener);
+        return () =>
+          ipcRenderer.removeListener("workspaces:presets-changed", listener);
+      },
+    },
     // 목록 변경 브로드캐스트 구독. 해제 함수를 반환한다.
     onChanged: (cb: (workspaces: TerminalWorkspace[]) => void) => {
       const listener = (_e: unknown, workspaces: TerminalWorkspace[]) =>

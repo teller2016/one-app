@@ -235,18 +235,21 @@
       gap: 0;
     }
 
-    // 라벨 자리가 없으니 뱃지는 아이콘 우상단으로 올라간다
+    // 라벨 자리가 없으니 뱃지는 아이콘 우상단으로 올라간다.
+    // ⚠️ 아이콘(20px)을 가리지 않게 모서리에 걸치는 정도로만 겹칠 것 — 축소 폭 60 에서
+    //    `top:1 / right:8 / 16.5px` 였을 때 아이콘 폭의 60% 를 덮어 무슨 섹션인지 못 읽었다
+    //    (2026-08-06 스크린샷 지적). 내부 폭 44 기준 아이콘은 12~32px 에 놓인다.
     .sidebar__item-badge {
       position: absolute;
-      top: 1px;
-      right: 8px;
+      top: -3px;
+      right: 1px;
       margin: 0;
-      min-width: 16px;
-      padding: 0 4px;
+      min-width: 14px;
+      padding: 0 3px;
       border-radius: var(--r-full);
       background: var(--surface-2);
       text-align: center;
-      line-height: 1.5;
+      line-height: 1.3;
 
       &--accent {
         background: var(--accent-btn);
