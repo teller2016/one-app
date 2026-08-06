@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PrBranch } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { RefreshButton } from '../../../components/RefreshButton';
-import { Select } from '../../../components/Select';
 
 const rel = (ts?: number) => {
   if (!ts) return '';
@@ -19,13 +18,13 @@ type BranchState = { loading: boolean; list?: PrBranch[]; error?: string };
 /** 빠른 PR 대상 — 프로젝트 레지스트리의 Gitea 프로젝트에서 파생 (PrSection 이 계산) */
 export type QuickPrRepo = {
   repo: string; // "owner/repo"
-  base: string; // PR 대상 기본 브랜치 (프로젝트 defaultBranch, 빈 값은 develop 폴백)
+  base: string; // 프로젝트 defaultBranch (빈 값은 develop 폴백) — 모달의 초기 대상·타이핑 확인 기준
   name: string; // 프로젝트 표시명
 };
 
 /**
- * 빠른 PR — 프로젝트 레지스트리의 Gitea 프로젝트별 최근 push 브랜치를 자동으로 찾아
- * [PR 만들기]로 생성 모달을 연다 (push → PR → 머지 루프의 진입점).
+ * 빠른 PR — 프로젝트 레지스트리의 Gitea 프로젝트별로 가장 최근 push 브랜치를 보여주고
+ * [PR 만들기]로 생성 모달을 연다 (원본·대상 브랜치 선택은 모달에서 한다).
  * 저장소 관리는 프로젝트 탭에서 한다 — 여기엔 추가/삭제 UI 가 없다.
  */
 export function QuickPr({
@@ -33,10 +32,10 @@ export function QuickPr({
   onCreate,
 }: {
   repos: QuickPrRepo[];
-  onCreate: (repo: string, head: string, base: string) => void;
+  /** 모달 열기 — 조회해 둔 최근 브랜치 목록을 그대로 넘겨 재조회를 막는다 */
+  onCreate: (repo: string, base: string, branches: PrBranch[]) => void;
 }) {
   const [branches, setBranches] = useState<Record<string, BranchState>>({});
-  const [selected, setSelected] = useState<Record<string, string>>({});
   const loadedRef = useRef<Set<string>>(new Set());
 
   const loadBranches = useCallback(async (repo: string) => {
@@ -50,12 +49,6 @@ export function QuickPr({
         error: res.ok ? undefined : res.error ?? '브랜치 조회 실패',
       },
     }));
-    // 최신 브랜치를 기본 선택
-    if (res.ok && res.branches?.length) {
-      setSelected((prev) =>
-        prev[repo] ? prev : { ...prev, [repo]: (res.branches as PrBranch[])[0].name },
-      );
-    }
   }, []);
 
   // 레지스트리에서 새로 파생된 저장소의 브랜치 로드
@@ -72,7 +65,7 @@ export function QuickPr({
       <div className="prs__quick-head">
         <span className="form-label">빠른 PR</span>
         <span className="hint">
-          push 한 브랜치를 골라 기본 브랜치로 PR 을 만들고 바로 머지까지.
+          push 한 브랜치로 PR 을 만들고 바로 머지까지 — 브랜치는 다음 화면에서 고릅니다.
         </span>
       </div>
 
@@ -86,6 +79,7 @@ export function QuickPr({
       {repos.map((r) => {
         const st = branches[r.repo];
         const list = st?.list ?? [];
+        const latest = list[0];
         return (
           <div key={r.repo} className="prs__quick-row">
             <span className="prs__repo" title={r.repo}>
@@ -95,23 +89,15 @@ export function QuickPr({
               <span className="hint">브랜치 확인 중...</span>
             ) : st?.error ? (
               <span className="prs__quick-error">{st.error}</span>
-            ) : list.length === 0 ? (
+            ) : !latest ? (
               <span className="hint">PR 가능한 브랜치가 없습니다.</span>
             ) : (
-              <Select
-                small
-                className="prs__branch-select"
-                aria-label="브랜치 선택"
-                value={selected[r.repo] ?? list[0].name}
-                onChange={(name) =>
-                  setSelected((prev) => ({ ...prev, [r.repo]: name }))
-                }
-                options={list.map((b) => ({
-                  value: b.name,
-                  label:
-                    b.name + (b.committedAt ? ` · ${rel(b.committedAt)}` : ''),
-                }))}
-              />
+              <span className="prs__quick-latest">
+                <span className="prs__quick-branch">{latest.name}</span>
+                {latest.committedAt && (
+                  <span className="prs__quick-when">{rel(latest.committedAt)}</span>
+                )}
+              </span>
             )}
             {/* 액션 클러스터 — 오른쪽 끝 정렬 (PR 목록 행의 머지 버튼과 동일 패턴) */}
             <div className="prs__quick-actions">
@@ -124,10 +110,8 @@ export function QuickPr({
               <Button
                 size="sm"
                 variant="primary"
-                disabled={!selected[r.repo] && list.length === 0}
-                onClick={() =>
-                  onCreate(r.repo, selected[r.repo] ?? list[0]?.name, r.base)
-                }
+                disabled={!latest}
+                onClick={() => onCreate(r.repo, r.base, list)}
               >
                 PR 만들기
               </Button>

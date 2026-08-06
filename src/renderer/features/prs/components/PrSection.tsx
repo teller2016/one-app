@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PrItem, PrListResult, PrsConfig, Project } from '../../../../shared/types';
+import type {
+  PrBranch,
+  PrItem,
+  PrListResult,
+  PrsConfig,
+  Project,
+} from '../../../../shared/types';
 import { ownerRepoFromUrl } from '../../../../shared/types';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Icon } from '../../../components/Icon';
@@ -38,13 +44,18 @@ const orgOf = (pr: PrItem) => pr.repo.split('/')[0];
 export function PrSection() {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<PrListResult | null>(null);
-  const [config, setConfig] = useState<PrsConfig>({ excludedOrgs: [] });
+  const [config, setConfig] = useState<PrsConfig>({
+    excludedOrgs: [],
+    recentBases: {},
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [hasToken, setHasToken] = useState(false);
   const [createTarget, setCreateTarget] = useState<{
     repo: string;
     head: string;
     base: string;
+    projectDefault: string;
+    branches: PrBranch[]; // 목록에서 조회해 둔 최근 push 브랜치 (모달 head 후보)
   } | null>(null);
   const [mergeTarget, setMergeTarget] = useState<{
     repo: string;
@@ -158,10 +169,19 @@ export function PrSection() {
             </Banner>
           )}
 
-          {/* 빠른 PR — push 한 브랜치 → 기본 브랜치 PR 생성 (프로젝트 레지스트리에서 파생) */}
+          {/* 빠른 PR — 저장소별 [PR 만들기] 로 모달 진입 (브랜치 선택은 모달에서) */}
           <QuickPr
             repos={quickRepos}
-            onCreate={(repo, head, base) => setCreateTarget({ repo, head, base })}
+            onCreate={(repo, base, branches) =>
+              // 초기 대상은 이 저장소에서 마지막으로 고른 값(MRU) → 없으면 프로젝트 기본
+              setCreateTarget({
+                repo,
+                head: branches[0]?.name ?? '',
+                base: config.recentBases[repo] || base,
+                projectDefault: base,
+                branches,
+              })
+            }
           />
 
           {/* 조직(프로젝트) 필터 칩 — 클릭으로 목록·알림에서 제외/포함 */}
@@ -270,10 +290,17 @@ export function PrSection() {
           repo={createTarget.repo}
           head={createTarget.head}
           base={createTarget.base}
+          recentBranches={createTarget.branches}
+          projectDefault={createTarget.projectDefault}
           onClose={() => setCreateTarget(null)}
-          onCreated={(number, title) => {
+          onCreated={(number, title, base) => {
             setCreateTarget(null);
-            toast(`PR #${number} 생성됨`);
+            toast(`PR #${number} → ${base} 생성됨`);
+            // 고른 base 를 저장소별로 기억 (다음 PR 의 기본 선택값)
+            saveConfig({
+              ...config,
+              recentBases: { ...config.recentBases, [createTarget.repo]: base },
+            });
             void load();
             setMergeTarget({ repo: createTarget.repo, number, title });
           }}

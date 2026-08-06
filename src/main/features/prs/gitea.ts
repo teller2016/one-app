@@ -3,11 +3,13 @@
 import type {
   PrItem,
   DeployCommit,
+  PrBaseBranch,
   PrBranch,
   PrChangedFile,
   PrCreateInput,
   PrMergeMethod,
 } from '../../../shared/types';
+import { mainBranchRank } from '../../../shared/types';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 import { fetchWithTimeout as fetch } from '../../lib/http';
 
@@ -104,19 +106,51 @@ export async function enrichApprovals(
 
 // ── 빠른 PR (생성·머지) ──────────────────────────────────────
 
-const BASE_BRANCHES = new Set(['develop', 'master', 'main']);
+type GiteaBranch = {
+  name?: string;
+  protected?: boolean;
+  commit?: { timestamp?: string; message?: string };
+};
 
-/** 최근 커밋순 브랜치 목록 (base 브랜치 제외, 상위 8개) — 방금 push 한 브랜치 찾기용 */
-export async function fetchRecentBranches(
+// ⚠️ Gitea 는 페이지당 최대 50개만 준다(limit 을 더 크게 줘도 무시 — 실측).
+// 브랜치가 수백 개인 저장소가 있어 전수 페이징은 하지 않는다.
+const BRANCH_PAGE_SIZE = 50;
+
+/** base 후보로 존재 여부를 단건 확인할 관례 이름 (프리픽스형 release/*·hotfix/* 는 검색으로 커버) */
+const PROBE_NAMES = ['main', 'master', 'develop', 'development', 'staging', 'qa'];
+
+/** 저장소 기본 브랜치 캐시 — 거의 바뀌지 않으므로 프로세스 수명 동안 10분 보관 */
+const defaultBranchCache = new Map<string, { value: string; at: number }>();
+const DEFAULT_BRANCH_TTL = 600_000;
+
+// base 후보 캐시 — 관례 이름 프로빙은 대부분 404(=낭비)라 모달을 다시 열 때 재사용한다.
+// TTL 을 짧게 둬 새 릴리스 브랜치가 곧 반영되게 한다.
+type BaseCandidates = { branches: PrBaseBranch[]; defaultBranch?: string };
+const baseCandidateCache = new Map<string, { value: BaseCandidates; at: number }>();
+const BASE_CANDIDATE_TTL = 60_000;
+
+// 전체 브랜치 이름 캐시 — 모달을 열 때마다 받으므로(검색용 프리페치) 여닫이 반복에 대비한다
+const allBranchCache = new Map<string, { value: string[]; at: number }>();
+
+const toPrBranch = (b: GiteaBranch): PrBranch => ({
+  name: b.name as string,
+  committedAt: b.commit?.timestamp ? Date.parse(b.commit.timestamp) : undefined,
+  lastMessage: (b.commit?.message ?? '').split('\n')[0],
+});
+
+/** 브랜치 목록 한 페이지 (Gitea 는 커밋 최신순으로 준다) */
+async function fetchBranchPage(
   giteaUrl: string,
   token: string | null,
   repo: string,
-): Promise<PrBranch[]> {
+  page = 1,
+): Promise<GiteaBranch[]> {
   let res: Response;
   try {
-    res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/branches?limit=100`, {
-      headers: authHeaders(token),
-    });
+    res = await fetch(
+      `${giteaUrl}/api/v1/repos/${repo}/branches?limit=${BRANCH_PAGE_SIZE}&page=${page}`,
+      { headers: authHeaders(token) },
+    );
   } catch {
     throw new Error('Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.');
   }
@@ -125,19 +159,156 @@ export async function fetchRecentBranches(
     throw new Error('Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.');
   if (!res.ok) throw new Error(`Gitea 응답 오류 (HTTP ${res.status})`);
 
-  const data = (await res.json()) as {
-    name?: string;
-    commit?: { timestamp?: string; message?: string };
-  }[];
-  return (Array.isArray(data) ? data : [])
-    .filter((b) => b.name && !BASE_BRANCHES.has(b.name))
-    .map((b) => ({
-      name: b.name as string,
-      committedAt: b.commit?.timestamp ? Date.parse(b.commit.timestamp) : undefined,
-      lastMessage: (b.commit?.message ?? '').split('\n')[0],
-    }))
+  const data = (await res.json()) as GiteaBranch[];
+  return Array.isArray(data) ? data : [];
+}
+
+/** 저장소가 선언한 기본 브랜치 — 실패는 조용히 undefined (부가 신호일 뿐) */
+async function fetchDefaultBranch(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<string | undefined> {
+  const hit = defaultBranchCache.get(repo);
+  if (hit && Date.now() - hit.at < DEFAULT_BRANCH_TTL) return hit.value;
+  try {
+    const res = await fetch(`${giteaUrl}/api/v1/repos/${repo}`, {
+      headers: authHeaders(token),
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { default_branch?: string };
+    const value = data.default_branch;
+    if (value) defaultBranchCache.set(repo, { value, at: Date.now() });
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 브랜치 단건 존재 확인 — 없으면(404) null */
+async function fetchBranch(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+  name: string,
+): Promise<GiteaBranch | null> {
+  try {
+    const res = await fetch(
+      `${giteaUrl}/api/v1/repos/${repo}/branches/${encodeURIComponent(name)}`,
+      { headers: authHeaders(token) },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as GiteaBranch;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 최근 커밋순 브랜치 목록 (상위 8개) — 방금 push 한 브랜치 찾기용.
+ * 주요 브랜치(기본·보호·관례 이름)는 head 후보에서 제외한다.
+ */
+export async function fetchRecentBranches(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<PrBranch[]> {
+  const [page, defaultBranch] = await Promise.all([
+    fetchBranchPage(giteaUrl, token, repo, 1),
+    fetchDefaultBranch(giteaUrl, token, repo),
+  ]);
+  return page
+    .filter(
+      (b) =>
+        b.name &&
+        b.name !== defaultBranch &&
+        !b.protected &&
+        mainBranchRank(b.name) === null,
+    )
+    .map(toPrBranch)
     .sort((a, b) => (b.committedAt ?? 0) - (a.committedAt ?? 0))
     .slice(0, 8);
+}
+
+/**
+ * PR 대상(base) 후보 — 저장소 기본 브랜치 + 보호 브랜치 + 관례 주요 브랜치.
+ * 최근 50개 페이지에서 걸러내고, 그 안에 없던 관례 이름·기본 브랜치는 단건 조회로 확인한다
+ * (브랜치가 수백 개라 전수 페이징 대신 프로빙 — 보호 설정이 없는 저장소도 main 을 찾는다).
+ */
+export async function fetchBaseCandidates(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<BaseCandidates> {
+  const hit = baseCandidateCache.get(repo);
+  if (hit && Date.now() - hit.at < BASE_CANDIDATE_TTL) return hit.value;
+
+  const [page, defaultBranch] = await Promise.all([
+    fetchBranchPage(giteaUrl, token, repo, 1),
+    fetchDefaultBranch(giteaUrl, token, repo),
+  ]);
+
+  const found = new Map<string, PrBaseBranch>();
+  const add = (b: GiteaBranch) => {
+    if (!b.name || found.has(b.name)) return;
+    found.set(b.name, {
+      ...toPrBranch(b),
+      isDefault: b.name === defaultBranch,
+      protected: !!b.protected,
+    });
+  };
+  for (const b of page) {
+    if (!b.name) continue;
+    const isMain =
+      b.name === defaultBranch || b.protected || mainBranchRank(b.name) !== null;
+    if (isMain) add(b);
+  }
+
+  // 최근 50개에 안 잡힌 관례 이름·기본 브랜치는 단건 조회 (없으면 null → 무시)
+  const missing = [...new Set([...(defaultBranch ? [defaultBranch] : []), ...PROBE_NAMES])]
+    .filter((n) => !found.has(n));
+  const probed = await Promise.all(
+    missing.map((n) => fetchBranch(giteaUrl, token, repo, n)),
+  );
+  for (const b of probed) if (b) add(b);
+
+  const value: BaseCandidates = { branches: [...found.values()], defaultBranch };
+  baseCandidateCache.set(repo, { value, at: Date.now() });
+  return value;
+}
+
+/**
+ * 저장소의 전체 브랜치 이름 (base 검색용).
+ * ⚠️ `/branches` 는 페이지당 50개라 수백 개면 십수 번 요청해야 한다 —
+ * `git/refs/heads` 는 한 번에 전부 준다(커밋 시각은 없고 이름 사전순).
+ */
+export async function fetchAllBranchNames(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<string[]> {
+  const hit = allBranchCache.get(repo);
+  if (hit && Date.now() - hit.at < BASE_CANDIDATE_TTL) return hit.value;
+
+  let res: Response;
+  try {
+    res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/git/refs/heads`, {
+      headers: authHeaders(token),
+    });
+  } catch {
+    throw new Error('Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.');
+  }
+  if (res.status === 404) throw new Error(`저장소를 찾을 수 없습니다: ${repo}`);
+  if (res.status === 401 || res.status === 403)
+    throw new Error('Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.');
+  if (!res.ok) throw new Error(`브랜치 목록 조회 실패 (HTTP ${res.status})`);
+
+  const data = (await res.json()) as { ref?: string }[];
+  const names = (Array.isArray(data) ? data : []).flatMap((r) =>
+    r.ref?.startsWith('refs/heads/') ? [r.ref.slice('refs/heads/'.length)] : [],
+  );
+  allBranchCache.set(repo, { value: names, at: Date.now() });
+  return names;
 }
 
 /** base 대비 head 가 가진 커밋 목록 (PR 제목/본문 자동 생성용, 최신순) */

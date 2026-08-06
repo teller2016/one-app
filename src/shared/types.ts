@@ -297,7 +297,22 @@ export type PrListResult = {
 /** PR 탭 설정 — 조직 제외 필터. 빠른 PR 저장소는 프로젝트 레지스트리에서 파생 */
 export type PrsConfig = {
   excludedOrgs: string[];
+  /** 저장소(owner/repo) → 마지막으로 PR 대상(base)으로 고른 브랜치 — 다음 PR 의 기본 선택값 */
+  recentBases: Record<string, string>;
 };
+
+/**
+ * 주요(장수) 브랜치 관례 순위 — 작을수록 상단, 해당 없으면 null.
+ * base 후보 정렬과 head 후보 제외에 같은 기준을 쓴다(보호 설정이 없는 저장소 대비).
+ */
+export function mainBranchRank(name: string): number | null {
+  const exact = ["main", "master", "develop", "development", "staging", "qa"];
+  const i = exact.indexOf(name);
+  if (i >= 0) return i;
+  if (/^release([/-]|$)/.test(name)) return 10;
+  if (/^hotfix([/-]|$)/.test(name)) return 11;
+  return null;
+}
 
 /** 원격 브랜치 요약 (빠른 PR 후보) */
 export type PrBranch = {
@@ -309,6 +324,29 @@ export type PrBranch = {
 export type PrBranchesResult = {
   ok: boolean;
   branches?: PrBranch[];
+  error?: string;
+};
+
+/** PR 대상(base) 후보 브랜치 — 저장소 기본 + 보호 + 관례 주요 브랜치만 */
+export type PrBaseBranch = {
+  name: string;
+  isDefault?: boolean; // Gitea 저장소가 선언한 default_branch
+  protected?: boolean; // 보호 브랜치 — 선택 시 타이핑 확인을 요구한다
+  committedAt?: number;
+  lastMessage?: string;
+};
+
+export type PrBaseBranchesResult = {
+  ok: boolean;
+  branches?: PrBaseBranch[];
+  defaultBranch?: string; // Gitea default_branch (조회 실패 시 undefined)
+  error?: string;
+};
+
+/** 저장소의 전체 브랜치 이름 (base 검색용 — 이름 사전순) */
+export type PrAllBranchesResult = {
+  ok: boolean;
+  names?: string[];
   error?: string;
 };
 

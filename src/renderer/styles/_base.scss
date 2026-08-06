@@ -1571,6 +1571,55 @@ input.input--sm {
     text-overflow: ellipsis;
   }
 
+  // 검색형 셀렉트 — 옵션이 수백 개인 목록. 트리거가 좁아도 읽을 수 있게 최소 폭을 준다
+  // (usePopover 의 matchWidth 인라인 width 는 min-width 로 clamp 된다)
+  &__pop--search {
+    min-width: 280px;
+    max-height: 380px; // 검색창이 한 줄 먹으므로 기본 리스트(216px)보다 넉넉하게
+  }
+
+  // 팝오버 상단 고정 검색창 — 스크롤해도 남는다 (.picker__list 의 padding 4px 보정)
+  &__search {
+    position: sticky;
+    top: -4px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -4px -4px 4px;
+    padding: 7px 9px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-3);
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: none;
+      color: var(--text);
+      font-family: var(--font-mono);
+      @include type-small;
+
+      &:focus {
+        outline: none;
+      }
+
+      &::placeholder {
+        color: var(--text-3);
+        font-family: inherit;
+      }
+    }
+  }
+
+  // 결과 없음 · 잘린 개수 안내
+  &__empty {
+    margin: 0;
+    padding: 7px 8px;
+    color: var(--text-3);
+    @include type-small;
+  }
+
   // 소형 변형 (설정 리마인더·small Select 등)
   &__pop--sm .picker__option {
     padding: 5px 8px;

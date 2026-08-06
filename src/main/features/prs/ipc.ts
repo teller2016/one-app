@@ -3,6 +3,8 @@ import {
   fetchOpenPrs,
   enrichApprovals,
   fetchRecentBranches,
+  fetchBaseCandidates,
+  fetchAllBranchNames,
   fetchBranchCommits,
   createPr,
   fetchMergeInfo,
@@ -14,6 +16,8 @@ import type {
   PrsConfig,
   PrListResult,
   PrBranchesResult,
+  PrBaseBranchesResult,
+  PrAllBranchesResult,
   PrCommitsResult,
   PrCreateInput,
   PrCreateResult,
@@ -25,6 +29,12 @@ import type {
 const NO_GITEA = 'Gitea 주소가 설정되지 않았습니다. [환경설정 → 연동]을 확인하세요.';
 const NO_TOKEN =
   'PR 생성/머지에는 Gitea 토큰이 필요합니다. [환경설정 → 연동]에 토큰을 저장하세요.';
+const BAD_REPO = '저장소 이름이 올바르지 않습니다.';
+
+// handleShared 로 등록한 채널은 폰(MO)에서도 호출되므로 owner/repo 형식을 검증한다
+// (API 경로에 그대로 들어가는 값 — '..' 같은 세그먼트로 다른 엔드포인트를 때릴 수 없게)
+const isValidRepo = (repo: unknown): repo is string =>
+  typeof repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes('..');
 
 /** PR 대시보드 IPC 핸들러 등록 */
 export function registerPrsIpc() {
@@ -54,8 +64,44 @@ export function registerPrsIpc() {
     async (repo: string): Promise<PrBranchesResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
       try {
         return { ok: true, branches: await fetchRecentBranches(gitea.url, gitea.token, repo) };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // PR 대상(base) 후보 — 기본·보호·관례 주요 브랜치만 (가볍게)
+  handleShared(
+    'prs:base-branches',
+    async (repo: string): Promise<PrBaseBranchesResult> => {
+      const gitea = getGiteaConfig();
+      if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
+      try {
+        const { branches, defaultBranch } = await fetchBaseCandidates(
+          gitea.url,
+          gitea.token,
+          repo,
+        );
+        return { ok: true, branches, defaultBranch };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 전체 브랜치 이름 (base 검색 — 사용자가 [다른 브랜치 찾기]를 눌렀을 때만)
+  handleShared(
+    'prs:all-branches',
+    async (repo: string): Promise<PrAllBranchesResult> => {
+      const gitea = getGiteaConfig();
+      if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
+      try {
+        return { ok: true, names: await fetchAllBranchNames(gitea.url, gitea.token, repo) };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }
@@ -68,6 +114,7 @@ export function registerPrsIpc() {
     async (repo: string, base: string, head: string): Promise<PrCommitsResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
       try {
         const { commits, files, stats } = await fetchBranchCommits(
           gitea.url,
@@ -90,6 +137,7 @@ export function registerPrsIpc() {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!gitea.token) return { ok: false, error: NO_TOKEN };
+      if (!isValidRepo(input?.repo)) return { ok: false, error: BAD_REPO };
       try {
         const { number, url } = await createPr(gitea.url, gitea.token, input);
         return { ok: true, number, url };
@@ -105,6 +153,7 @@ export function registerPrsIpc() {
     async (repo: string, number: number): Promise<PrMergeInfoResult> => {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
       try {
         const info = await fetchMergeInfo(gitea.url, gitea.token, repo, number);
         return { ok: true, ...info };
@@ -125,6 +174,7 @@ export function registerPrsIpc() {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!gitea.token) return { ok: false, error: NO_TOKEN };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
       try {
         await mergePr(gitea.url, gitea.token, repo, number, method);
         return { ok: true };

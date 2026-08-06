@@ -8,16 +8,28 @@ const cleanList = (v: unknown): string[] =>
     ? [...new Set(v.filter((s): s is string => typeof s === 'string' && !!s))]
     : [];
 
+/** 저장소별 최근 base — "owner/repo": "브랜치" 형태의 문자열 쌍만 남긴다 */
+const cleanRecentBases = (v: unknown): Record<string, string> => {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, string> = {};
+  for (const [repo, base] of Object.entries(v as Record<string, unknown>)) {
+    if (repo && typeof base === 'string' && base) out[repo] = base;
+  }
+  return out;
+};
+
 export function getPrsConfig(): PrsConfig {
   const parsed = readUserJson<Partial<PrsConfig>>('prs.json', {});
   return {
     excludedOrgs: cleanList(parsed.excludedOrgs),
+    recentBases: cleanRecentBases(parsed.recentBases),
   };
 }
 
 export function savePrsConfig(config: PrsConfig): PrsConfig {
   const clean: PrsConfig = {
     excludedOrgs: cleanList(config?.excludedOrgs),
+    recentBases: cleanRecentBases(config?.recentBases),
   };
   writeUserJson('prs.json', clean);
   return clean;

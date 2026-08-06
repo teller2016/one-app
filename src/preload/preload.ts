@@ -252,6 +252,12 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("prs:config:set", config),
     // 저장소의 최근 브랜치 목록 (빠른 PR 후보)
     getBranches: (repo: string) => ipcRenderer.invoke("prs:branches", repo),
+    // PR 대상(base) 후보 — 기본·보호·관례 주요 브랜치
+    getBaseBranches: (repo: string) =>
+      ipcRenderer.invoke("prs:base-branches", repo),
+    // 전체 브랜치 이름 (base 검색용)
+    getAllBranches: (repo: string) =>
+      ipcRenderer.invoke("prs:all-branches", repo),
     // base 대비 head 커밋 목록 (PR 제목/본문 자동 생성용)
     getBranchCommits: (repo: string, base: string, head: string) =>
       ipcRenderer.invoke("prs:branch-commits", repo, base, head),

@@ -31,6 +31,7 @@ export type IconName =
   | "chevrons-down"
   | "equal"
   | "arrow-up-right"
+  | "arrow-right"
   | "git-pull-request"
   | "layout-grid"
   | "link"
@@ -157,6 +158,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M7 7h10v10" />
       <path d="M7 17 17 7" />
+    </>
+  ),
+  "arrow-right": (
+    <>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
     </>
   ),
   x: (

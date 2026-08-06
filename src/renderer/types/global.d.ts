@@ -31,6 +31,8 @@ import type {
   PrListResult,
   PrsConfig,
   PrBranchesResult,
+  PrBaseBranchesResult,
+  PrAllBranchesResult,
   PrCommitsResult,
   PrCreateInput,
   PrCreateResult,
@@ -191,6 +193,8 @@ declare global {
         getConfig: () => Promise<PrsConfig>;
         setConfig: (config: PrsConfig) => Promise<PrsConfig>;
         getBranches: (repo: string) => Promise<PrBranchesResult>;
+        getBaseBranches: (repo: string) => Promise<PrBaseBranchesResult>;
+        getAllBranches: (repo: string) => Promise<PrAllBranchesResult>;
         getBranchCommits: (
           repo: string,
           base: string,

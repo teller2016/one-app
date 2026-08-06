@@ -215,18 +215,32 @@ html.mo {
     row-gap: 6px;
   }
 
-  // 빠른 PR 한 줄: [저장소칩][브랜치 셀렉트][액션 3개] 가 나란히 있어 폰에서 셀렉트가
-  // 100px 대로 눌려 브랜치명을 못 읽는다 → 셀렉트를 아래 줄 전폭으로 내린다
+  // 빠른 PR 한 줄: [저장소칩][최근 브랜치][액션 2개] 가 나란히 있어 폰에서 브랜치명이
+  // 100px 대로 눌려 못 읽는다 → 브랜치 표시를 아래 줄 전폭으로 내린다
   // (저장소 칩과 액션은 첫 줄에 남는다)
   .prs__quick-row {
     flex-wrap: wrap;
     row-gap: 8px;
   }
 
-  .prs__branch-select {
+  .prs__quick-latest {
     flex: 1 1 100%;
-    max-width: none;
     order: 1;
+  }
+
+  // PR 생성 모달의 [원본 → 대상] 한 줄은 폰 폭에 두 셀렉트가 안 들어간다 → 세로로 쌓고
+  // 방향 화살표는 숨긴다(라벨 '원본'·'대상' 으로 충분)
+  .prs__route {
+    flex-wrap: wrap;
+
+    .form-row {
+      flex: 1 1 100%;
+      margin-bottom: 10px;
+    }
+
+    &-arrow {
+      display: none;
+    }
   }
 
   // PR 제목이 저장소 칩·번호와 한 줄에 눌려 잘린다 → 제목을 전폭으로

@@ -160,27 +160,115 @@
   }
 }
 
-// 브랜치 선택 — 룩은 공용 Select(small), 여기선 배치만
-.prs__branch-select {
-  flex: 1;
+// 목록 행의 최근 push 브랜치 표시 (선택은 모달에서 — 여기선 읽기 전용)
+.prs__quick-latest {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
-  max-width: 360px;
+  flex: 1;
 }
 
-// PR 생성 모달
-.prs__create-route {
-  margin: 0 0 10px;
-  @include type-body;
+.prs__quick-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  @include type-small;
   color: var(--text-2);
+}
 
-  code {
-    color: var(--accent);
-    font-family: var(--font-mono);
-  }
+.prs__quick-when {
+  flex-shrink: 0;
+  color: var(--text-3);
+  @include type-caption;
 }
 
 .prs__create-count {
   margin: 0 0 10px;
+}
+
+// 원본 → 대상 브랜치 한 줄 (검색형 Select 2개 + 화살표)
+.prs__route {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+
+  .form-row {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 14px;
+
+    &__label {
+      min-width: 32px; // 짧은 라벨(원본·대상) — 셀렉트에 폭을 넘긴다
+    }
+  }
+
+  &-arrow {
+    display: inline-flex;
+    align-items: center;
+    height: var(--control-h);
+    margin-bottom: 14px;
+    color: var(--text-3);
+  }
+}
+
+.prs__branch-pick {
+  flex: 1;
+  min-width: 0;
+}
+
+// 옵션 내부 — 팝오버는 body portal 이라 조상 스코프로 걸면 안 먹는다(자체 클래스로 스타일)
+.prs__base-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  &--more {
+    color: var(--accent);
+  }
+}
+
+.prs__base-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.prs__base-tag {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  @include type-caption;
+}
+
+// 원본 후보의 마지막 커밋 시각 (최근 push 브랜치에만 있다)
+.prs__base-when {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text-3);
+  @include type-caption;
+}
+
+// 주요 브랜치로 PR 을 만들 때의 타이핑 확인 (배포 PROD 확인과 같은 패턴)
+.prs__base-confirm {
+  margin-bottom: 4px;
+
+  code {
+    color: var(--danger);
+    font-family: var(--font-mono);
+  }
+
+  .form-label {
+    margin-top: 4px;
+  }
 }
 
 .prs__create-body {

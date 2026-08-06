@@ -46,7 +46,24 @@ paths:
 
 push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션.
 
-**빠른 PR**: **프로젝트 레지스트리의 Gitea 프로젝트**(`remoteKind==='gitea'` + owner/repo 파싱 가능)별로 최근 push 브랜치를 자동 표시(branches API, 커밋시간 정렬 — 저장소 관리는 프로젝트 탭, 여기엔 추가/삭제 UI 없음) → [PR 만들기] 모달에서 **프로젝트 defaultBranch(빈 값 develop)** 대비 커밋 확인 + 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿) 자동 생성 → 생성 성공 시 **머지 모달로 자동 연결**.
+**빠른 PR**: **프로젝트 레지스트리의 Gitea 프로젝트**(`remoteKind==='gitea'` + owner/repo 파싱 가능)별로 가장 최근 push 브랜치를 표시하고 [PR 만들기]로 모달을 연다(저장소 관리는 프로젝트 탭, 여기엔 추가/삭제 UI 없음). **브랜치 선택은 목록 행이 아니라 모달에서 한다** — 행에는 셀렉트가 없다(2026-08-06 사용자 요청: 고르는 지점을 한 곳으로).
+
+**모달**에서 `원본(head) → 대상(base)` 를 한 줄로 고르고(둘 다 검색형 Select, `Modal wide`), 그 사이 커밋·변경 파일을 확인한 뒤 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿)을 자동 생성 → 생성 성공 시 **머지 모달로 자동 연결**. 브랜치를 바꾸면 미리보기가 재조회되고, 사용자가 손댄 제목·본문은 덮어쓰지 않는다(dirty ref). 서로를 후보에서 제외하므로 head=base 는 고를 수 없다.
+
+**브랜치 후보** — 모달을 열 때 두 채널을 함께 부른다: `prs:base-branches`(주요 브랜치 = 저장소 `default_branch` + 보호 + `mainBranchRank()` 관례 이름)와 `prs:all-branches`(전체 이름, 검색용 프리페치). 정렬은 `renderer/features/prs/lib/baseBranches.ts` 한 곳 — **프로젝트 설정 defaultBranch → Gitea default_branch → 최근 사용(MRU) → 관례 이름표 → 보호 → 커밋 최신순**. head 는 최근 push 8개(시각 표시)를 위로, 나머지 전체를 이름순으로 붙인다. 팝오버는 `limit={50}` 이라 초과분은 개수만 알리고 검색으로 좁히게 한다.
+
+- 고른 base 는 **저장소별로 `userData/prs.json`(`PrsConfig.recentBases`)에 영구 저장** → 다음 PR 의 기본 선택값.
+- 프로젝트 기본 브랜치가 **아닌 주요 브랜치**(보호 또는 관례 이름 — 예: `main`)를 base 로 고르면 **브랜치명 타이핑 확인**을 요구한다(배포 PROD 확인과 같은 패턴). 임의 feature 브랜치는 확인 없음.
+
+⚠️ **Gitea 브랜치 API 실측**(2026-08-06, 사내 서버):
+- `/branches` 는 **페이지당 최대 50개**(`limit` 을 더 크게 줘도 무시) · `X-Total-Count` 로 총수 · **커밋 최신순**. 실제 저장소는 브랜치가 **700개 내외**라 전수 페이징은 금지.
+- 전체 목록이 필요하면 **`/git/refs/heads`(1요청, 이름 사전순, 커밋 시각 없음)** — 700개 ≈ 277KB 인데 사내망에서 **69ms**(실측)라 모달 오픈 시 프리페치하고 60초 캐시한다.
+- 응답의 `protected` 는 저장소마다 설정이 달라 **단독 신호로 못 쓴다**(store·admin 은 `['develop','main']`, api 는 `[]`) → 관례 이름표를 함께 본다.
+- `/branch_protections` 는 **repo admin 토큰이 필요(401)** 하므로 사용하지 않는다.
+- 최근 50개에 없는 관례 이름(`main`·`master`·`develop`·`development`·`staging`·`qa`)과 기본 브랜치는 **`/branches/{name}` 단건 프로빙**으로 확인한다(404 = 없음). 대부분 404 라 결과를 60초 캐시하고, `default_branch` 는 10분 캐시한다.
+- head(원본) 후보에서 주요 브랜치를 빼는 기준도 같은 `mainBranchRank()` + `default_branch` 다 — 예전 `BASE_BRANCHES` 하드코딩(develop/master/main)을 대체했다.
+
+⚠️ `prs:*` 채널은 `handleShared`(폰에서도 호출 가능)라 `repo` 인자를 **`owner/repo` 형식으로 검증**한다(API 경로에 그대로 들어가는 값).
 
 **머지**: 목록 행 [머지] → `mergeable`(컨플릭트) 사전 확인 + 방식(merge/squash/rebase) 선택 → `/pulls/{n}/merge`.
 
