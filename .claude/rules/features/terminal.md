@@ -37,7 +37,7 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 - ⚠️ `display:none` 금지 — 크기가 0 이 되어 다시 보일 때 80x24 를 거치며 TUI 가 두 번 리플로우한다. `inset:0` 이면 숨은 pane 도 활성과 **같은 크기**라 전환 시 리사이즈가 0이다(실측: 세션 4개 전환 왕복에 PTY 301x62 불변).
 - 글자 크기(`fontSize`)는 pane 이 여러 개 살아 있으므로 **TerminalSection 이 한 곳에서** 들고 내려준다(각자 들면 세션마다 어긋난다).
 ### 세션 패널은 드래그 리사이즈 + 완전 축소
-`.terminal__side` 폭은 `TerminalSection` 이 인라인으로 준다(SCSS 값은 첫 페인트용). 우측 `terminal__side-grip` 을 끌어 조절하고 **`SIDE_SNAP_W`(140) 아래로 끌면 축소**(56px), grip 더블클릭·Enter·Space 로도 토글한다 — 앱 사이드바(`Sidebar.tsx`)와 같은 규칙이라 그쪽을 고치면 여기도 함께 볼 것. 저장은 `localStorage`(`terminal:sideWidth`·`terminal:sideCollapsed`)에 **놓는 순간 1회**.
+`.terminal__side` 폭은 `TerminalSection` 이 인라인으로 준다(SCSS 값은 첫 페인트용). 우측 `terminal__side-grip` 을 끌어 조절하고 **`SIDE_SNAP_W`(140) 아래로 끌면 축소**(48px), grip 더블클릭·Enter·Space 로도 토글한다 — 앱 사이드바(`Sidebar.tsx`)와 같은 규칙이라 그쪽을 고치면 여기도 함께 볼 것. 저장은 `localStorage`(`terminal:sideWidth`·`terminal:sideCollapsed`)에 **놓는 순간 1회**.
 
 - ⚠️ **접힌 채로 끝나면 '펼쳤을 때 폭'을 드래그 시작 시점 값으로 되돌린다** — 안 하면 넓혀 둔 사람이 한 번 접었다 펴는 순간 최소폭(180)을 얻는다(왼쪽으로 끄는 도중 MIN_W 구간을 지나며 폭이 갱신되기 때문).
 - 폭은 `Math.round` 로 저장한다 — devicePixelRatio 탓에 포인터 좌표가 소수로 와서 `334.5` 같은 값이 남는다.
@@ -45,6 +45,7 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 - 전체 이름·에이전트·상태·`⌘N`·종료 단축키는 **툴팁**이 맡는다(`aria-label` 은 별도로 붙인다 — 툴팁은 시각 보조일 뿐).
 - ⚠️ 축소 타일에는 **닫기(×)를 넣지 않았다** — 44px 타일 안에 22px 버튼(아이콘 버튼 하한선, `renderer-ui.md`)을 겹치면 선택 자체가 어려워진다. 종료는 `⌘⇧W` + 툴팁 안내, 이름 변경은 펼친 뒤 더블클릭.
 - **헤더 액션([+]·변경사항·MO)은 축소해도 감추지 않고 세로로 쌓는다** — `renderer-ui.md` 의 "접힌 채로 아무 것도 누를 수 없게 만들지 말 것" 과 같은 방향.
+- ⚠️ **접었는데 왼쪽이 비어 보이면 패널 폭이 아니라 바깥 여백을 볼 것** — 처음엔 사이드바 끝(72)부터 터미널 시작까지 111px 를 썼는데 실제 콘텐츠는 44px 타일뿐이었다(2026-08-06 사용자 지적·실측). 세 곳을 함께 줄여 151px→79px 로 만들었다: ①축소 시 `.terminal--side-collapsed` 가 `padding-left` 를 28→12 ②패널 56→48 ③**`gap` 12→8** — grip 이 flex 아이템이라 `[패널|grip|터미널]` 사이에 gap 이 **두 번** 붙어 손잡이 한 줄이 27px 를 먹고 있었다.
 
 - 세션 행은 래퍼 `div` + `[선택 button][닫기 button]` 형제다 — 예전엔 닫기가 선택 버튼 **안**의 `span[role=button]` 이라 마크업이 유효하지 않고 키보드로 종료할 수 없었다. 활성 표시는 `aria-current`.
 - 세션 이름은 행 **더블클릭 → 인라인 편집**(`terminal:rename` → sidecar 반영이라 재시작 후에도 남는다). 진입 시 `select()` 로 전체 선택하지 않으면 타이핑이 기존 이름에 덧붙는다.

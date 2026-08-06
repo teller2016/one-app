@@ -50,9 +50,10 @@ const CHANGES_DEFAULT_W = 320;
 
 // 세션 패널 너비 — 우측 모서리 드래그로 조절하고 SNAP 아래로 끌면 아이콘 타일만 남는다.
 // (앱 사이드바 Sidebar.tsx 와 같은 규칙 — 저장은 놓는 순간 1회)
-// ⚠️ 축소 폭은 여기선 56 이다. 사이드바의 72 는 macOS 신호등을 피하려는 값이라
-// 창 안쪽 패널인 여기엔 해당하지 않고, 44px 타일 + 좌우 여백이면 충분하다.
-const SIDE_COLLAPSED_W = 56;
+// ⚠️ 축소 폭은 여기선 48 이다. 사이드바의 72 는 macOS 신호등을 피하려는 값이라
+// 창 안쪽 패널인 여기엔 해당하지 않고, 44px 타일 + 좌우 2px 면 충분하다
+// (56 은 좌우 여백이 6px 씩이라 넓어 보였다 — 2026-08-06 사용자 지적).
+const SIDE_COLLAPSED_W = 48;
 const SIDE_MIN_W = 180;
 const SIDE_MAX_W = 400;
 const SIDE_DEFAULT_W = 240;
@@ -341,7 +342,11 @@ export function TerminalSection() {
   }
 
   return (
-    <div className="terminal">
+    // 축소 시엔 섹션 좌측 여백도 줄인다 — 아이콘 폭(48)보다 패딩(28)이 도드라져
+    // 접었는데도 왼쪽이 비어 보였다(2026-08-06 사용자 지적)
+    <div
+      className={'terminal' + (sideCollapsed ? ' terminal--side-collapsed' : '')}
+    >
       <aside
         className={
           'terminal__side' + (sideCollapsed ? ' terminal__side--collapsed' : '')

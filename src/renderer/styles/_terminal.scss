@@ -3,9 +3,16 @@
 // 터미널 — 좌측 세션 목록(에이전트·상태) + 우측 xterm 다크 패널 (Superset 스타일)
 .terminal {
   display: flex;
-  gap: 12px;
+  // grip 이 flex 아이템이라 gap 이 [패널|grip|터미널] 사이에 두 번 붙는다 — 12 이면
+  // 손잡이 한 줄에 27px 를 쓰게 되어 8 로 낮췄다(2026-08-06 실측)
+  gap: 8px;
   height: 100%;
   padding: 24px 28px 20px;
+
+  // 세션 패널을 접으면 좌측 여백도 함께 줄인다 (아래 side--collapsed 와 세트)
+  &--side-collapsed {
+    padding-left: 12px;
+  }
 
   // ── 좌측 세션 패널 ──
   // 폭은 TerminalSection 이 인라인으로 준다(드래그·축소 — localStorage 기억).
