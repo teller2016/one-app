@@ -8,6 +8,8 @@
   padding: 24px 28px 20px;
 
   // ── 좌측 세션 패널 ──
+  // 폭은 TerminalSection 이 인라인으로 준다(드래그·축소 — localStorage 기억).
+  // 여기 값은 인라인이 붙기 전 첫 페인트용 기본값이다.
   &__side {
     display: flex;
     flex-direction: column;
@@ -15,6 +17,54 @@
     width: 240px;
     flex-shrink: 0;
     min-height: 0;
+  }
+
+  // 축소 — 이니셜 타일만 남는다. 헤더 액션은 감추지 않고 세로로 쌓는다
+  // (⚠️ renderer-ui.md: 접힌 채로 아무 것도 누를 수 없게 만들지 말 것)
+  &__side--collapsed {
+    align-items: center;
+
+    .terminal__side-head {
+      justify-content: center;
+    }
+
+    .terminal__side-actions {
+      flex-direction: column;
+      gap: 2px;
+    }
+  }
+
+  // 패널 손잡이 — 끌어서 폭 조절, 더블클릭·Enter 로 접기/펴기.
+  // 히트 영역은 11px 로 넉넉히 두고 시각적 선은 2px 만 hover 에 드러낸다(changes-grip 과 같은 규칙)
+  &__side-grip {
+    position: relative;
+    width: 11px;
+    margin: 0 -4px; // 좌우 gap 을 잡아먹지 않게 — 시각 폭은 2px 선뿐이다
+    flex-shrink: 0;
+    cursor: col-resize;
+    z-index: 1;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 4px;
+      width: 2px;
+      border-radius: var(--r-full);
+      background: transparent;
+      transition: background var(--dur-1) var(--ease);
+    }
+
+    &:hover::after,
+    &:active::after,
+    &:focus-visible::after {
+      background: var(--border);
+    }
+
+    &:focus-visible {
+      outline: none; // 포커스는 위 ::after 선으로 보인다
+    }
   }
 
   &__side-head {
@@ -86,6 +136,41 @@
     color: inherit;
     text-align: left;
     cursor: pointer;
+  }
+
+  // 축소 타일 — [상태점][이니셜 2자]. 세션 제목이 보통 프로젝트명이라
+  // 앞 글자만으로도 구분되고, 전체 이름·에이전트·⌘N 은 툴팁이 맡는다.
+  &__session-tile {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  &__session-initials {
+    @include type-small;
+    color: var(--text-2);
+    text-transform: lowercase;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+
+  &__session--active &__session-initials {
+    color: var(--text); // panel-dark 안에서 on-dark 로 해석
+  }
+
+  // 축소 행은 타일이 곧 행이라 여백·hover 배경을 타일이 직접 갖는다
+  &__side--collapsed &__session {
+    padding-right: 0;
   }
 
   // 이름 편집 행 — 상태점은 그대로 두고 제목 자리에만 입력창

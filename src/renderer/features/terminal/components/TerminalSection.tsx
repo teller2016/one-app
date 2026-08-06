@@ -48,6 +48,29 @@ const CHANGES_MIN_W = 240;
 const CHANGES_MAX_W = 640;
 const CHANGES_DEFAULT_W = 320;
 
+// 세션 패널 너비 — 우측 모서리 드래그로 조절하고 SNAP 아래로 끌면 아이콘 타일만 남는다.
+// (앱 사이드바 Sidebar.tsx 와 같은 규칙 — 저장은 놓는 순간 1회)
+// ⚠️ 축소 폭은 여기선 56 이다. 사이드바의 72 는 macOS 신호등을 피하려는 값이라
+// 창 안쪽 패널인 여기엔 해당하지 않고, 44px 타일 + 좌우 여백이면 충분하다.
+const SIDE_COLLAPSED_W = 56;
+const SIDE_MIN_W = 180;
+const SIDE_MAX_W = 400;
+const SIDE_DEFAULT_W = 240;
+/** 드래그로 이 폭 아래까지 끌면 축소 모드로 넘어간다 */
+const SIDE_SNAP_W = 140;
+
+/**
+ * 축소 타일에 넣을 이니셜 — 세션 제목이 보통 프로젝트명이라 앞 글자만으로 잘 구분된다.
+ * CJK 는 글자가 넓어(2셀 폭) 1자, 나머지는 2자를 쓴다.
+ */
+const initials = (title: string) => {
+  const t = title.trim();
+  if (!t) return '?';
+  // CJK 범위는 유니코드 이스케이프로 — 리터럴 전각 공백(U+3000)이 소스에 있으면
+  // eslint 의 no-irregular-whitespace 가 막는다
+  return /[\u3000-\u9fff\uac00-\ud7af]/.test(t[0]) ? t.slice(0, 1) : t.slice(0, 2);
+};
+
 // 터미널 글자 크기 — 세션 pane 이 여러 개 살아 있으므로 값은 여기 한 곳에서만 들고
 // 모든 pane 에 내려준다 (화면 취향이라 localStorage 로 충분 — 보존 대상 아님)
 function savedFontSize(): number {
@@ -62,6 +85,13 @@ function savedChangesWidth(): number {
   return Number.isFinite(saved) && saved >= CHANGES_MIN_W && saved <= CHANGES_MAX_W
     ? saved
     : CHANGES_DEFAULT_W;
+}
+
+function savedSideWidth(): number {
+  const saved = Number(localStorage.getItem('terminal:sideWidth'));
+  return Number.isFinite(saved) && saved >= SIDE_MIN_W && saved <= SIDE_MAX_W
+    ? saved
+    : SIDE_DEFAULT_W;
 }
 
 export function TerminalSection() {
@@ -117,6 +147,68 @@ export function TerminalSection() {
   // 드로어 너비 드래그 — 이동 중엔 상태만 갱신하고 저장은 놓는 순간 1회
   const [changesWidth, setChangesWidth] = useState(savedChangesWidth);
   const changesWidthRef = useRef(changesWidth);
+
+  // 세션 패널 너비·축소 — 앱 사이드바(Sidebar.tsx)와 같은 규칙
+  const [sideWidth, setSideWidth] = useState(savedSideWidth);
+  const [sideCollapsed, setSideCollapsed] = useState(
+    () => localStorage.getItem('terminal:sideCollapsed') === '1'
+  );
+  const sideWidthRef = useRef(sideWidth);
+  const sideCollapsedRef = useRef(sideCollapsed);
+  const sideApplied = sideCollapsed ? SIDE_COLLAPSED_W : sideWidth;
+
+  const onSideGripDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sideCollapsedRef.current ? SIDE_COLLAPSED_W : sideWidthRef.current;
+    // 접으려고 왼쪽으로 끌면 도중에 MIN_W 구간을 지나며 폭이 최소값으로 갱신된다.
+    // 그대로 두면 넓혀 뒀던 사람이 한 번 접었다 펴는 순간 최소폭을 얻는다 →
+    // 접힌 채로 끝나면 '펼쳤을 때 폭'은 드래그 시작 시점 값으로 되돌린다.
+    const keepW = sideWidthRef.current;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const move = (ev: PointerEvent) => {
+      const raw = startW + (ev.clientX - startX);
+      if (raw < SIDE_SNAP_W) {
+        sideCollapsedRef.current = true;
+        setSideCollapsed(true);
+        return;
+      }
+      sideCollapsedRef.current = false;
+      setSideCollapsed(false);
+      // 반올림 — devicePixelRatio 때문에 포인터 좌표가 소수로 오고, 그대로 두면
+      // localStorage 에 '334.5' 같은 값이 남는다
+      const w = Math.round(Math.min(SIDE_MAX_W, Math.max(SIDE_MIN_W, raw)));
+      sideWidthRef.current = w;
+      setSideWidth(w);
+    };
+    const up = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (sideCollapsedRef.current) {
+        sideWidthRef.current = keepW;
+        setSideWidth(keepW);
+      }
+      localStorage.setItem('terminal:sideWidth', String(sideWidthRef.current));
+      localStorage.setItem(
+        'terminal:sideCollapsed',
+        sideCollapsedRef.current ? '1' : '0'
+      );
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  /** 키보드·더블클릭으로도 접거나 펼 수 있어야 한다 — grip 은 포커스를 받는 separator 다 */
+  const toggleSide = () => {
+    const next = !sideCollapsedRef.current;
+    sideCollapsedRef.current = next;
+    setSideCollapsed(next);
+    localStorage.setItem('terminal:sideCollapsed', next ? '1' : '0');
+  };
 
   const onChangesGripDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -250,9 +342,14 @@ export function TerminalSection() {
 
   return (
     <div className="terminal">
-      <aside className="terminal__side">
+      <aside
+        className={
+          'terminal__side' + (sideCollapsed ? ' terminal__side--collapsed' : '')
+        }
+        style={{ width: sideApplied }}
+      >
         <div className="terminal__side-head">
-          <span className="terminal__side-title">세션</span>
+          {!sideCollapsed && <span className="terminal__side-title">세션</span>}
           <div className="terminal__side-actions">
             <Tooltip label="새 세션 (⌘T)">
               <button
@@ -295,7 +392,7 @@ export function TerminalSection() {
         {/* 행은 래퍼 div + 형제 버튼 2개 — 예전엔 닫기가 선택 버튼 '안'에 있어
             중첩 인터랙티브였고(키보드로 종료 불가) 마크업도 유효하지 않았다 */}
         <div className="terminal__list">
-          {sessions.map((s) => (
+          {sessions.map((s, i) => (
             <div
               key={s.id}
               className={[
@@ -306,7 +403,32 @@ export function TerminalSection() {
                 .filter(Boolean)
                 .join(' ')}
             >
-              {editingId === s.id ? (
+              {sideCollapsed ? (
+                /* 축소 — 이름 이니셜 타일 + 상태점. 제목·에이전트·단축키는 툴팁이 대신한다.
+                   ⚠️ 종료([×])는 여기서 뺐다 — 44px 타일 안에 22px 버튼(아이콘 버튼 하한선,
+                   renderer-ui.md)을 겹치면 선택을 누르기 어려워진다. 대신 ⌘⇧W 가 있고
+                   툴팁으로 안내한다. 이름 변경도 펼친 뒤 더블클릭이다. */
+                <Tooltip
+                  label={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
+                    STATUS_LABELS[s.status]
+                  }${i < 9 ? ` (⌘${i + 1})` : ''} · 종료 ⌘⇧W`}
+                >
+                  <button
+                    type="button"
+                    className="terminal__session-tile"
+                    aria-current={s.id === activeId ? 'true' : undefined}
+                    aria-label={`${s.title} 세션 — ${
+                      TERMINAL_AGENT_NAMES[s.agentId]
+                    } · ${STATUS_LABELS[s.status]}`}
+                    onClick={() => setActiveId(s.id)}
+                  >
+                    <StatusDot status={STATUS_DOT[s.status]} />
+                    <span className="terminal__session-initials" aria-hidden="true">
+                      {initials(s.title)}
+                    </span>
+                  </button>
+                </Tooltip>
+              ) : editingId === s.id ? (
                 <span className="terminal__session-edit">
                   <StatusDot status={STATUS_DOT[s.status]} />
                   <Input
@@ -363,6 +485,24 @@ export function TerminalSection() {
           )}
         </div>
       </aside>
+
+      {/* 세션 패널 손잡이 — 끌어서 폭 조절, 더블클릭·Enter·Space 로 접기/펴기.
+          (앱 사이드바의 sidebar__grip 과 같은 규칙) */}
+      <div
+        className="terminal__side-grip"
+        role="separator"
+        aria-orientation="vertical"
+        tabIndex={0}
+        aria-label={sideCollapsed ? '세션 패널 펼치기' : '세션 패널 접기'}
+        onPointerDown={onSideGripDown}
+        onDoubleClick={toggleSide}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleSide();
+          }
+        }}
+      />
 
       {/* ⚠️ 세션마다 pane 을 만들고 **보이지 않는 것도 언마운트하지 않는다** — 예전엔
           key={activeId} 로 xterm 을 매번 파괴해서, 전환할 때마다 선택 영역·검색 상태가
