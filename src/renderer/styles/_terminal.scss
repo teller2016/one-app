@@ -4,9 +4,10 @@
 // + 우측 변경사항 드로어 (Superset 스타일)
 .terminal {
   display: flex;
-  // grip 이 flex 아이템이라 gap 이 [패널|grip|터미널] 사이에 두 번 붙는다 — 12 이면
-  // 손잡이 한 줄에 27px 를 쓰게 되어 8 로 낮췄다(2026-08-06 실측)
-  gap: 8px;
+  // grip 이 flex 아이템이라 gap 이 [패널|grip|터미널] 사이에 두 번 붙는다 — 12 는 손잡이
+  // 한 줄에 27px 를 썼고, 8 도 xterm 왼쪽이 떠 보여 0 으로 없앴다(2026-08-06 사용자 요청).
+  // 세션 행·타일에 이미 좌우 패딩이 있어 붙어 보이지 않고, 사이는 grip 실폭 3px 만 남는다.
+  gap: 0;
   height: 100%;
   // 워크스페이스형 화면이라 다른 섹션보다 조밀하게 — 24/28 은 비어 보였다
   // (2026-08-06 사용자 요청: 펼침·접힘 둘 다 여백 축소)
@@ -27,12 +28,19 @@
     width: 240px;
     flex-shrink: 0;
     min-height: 0;
+    // xterm 이 gap 없이 붙어 있으므로 경계는 선이 맡는다 (grip hover 선이 이 위를 덮는다)
+    border-right: 1px solid var(--border);
+    // 행 hover 배경·텍스트가 그 선에 닿지 않게 (2026-08-06 사용자 지적)
+    padding-right: 6px;
   }
 
   // 축소 — 이니셜 타일만 남는다. 헤더 액션은 감추지 않고 세로로 쌓는다
   // (⚠️ renderer-ui.md: 접힌 채로 아무 것도 누를 수 없게 만들지 말 것)
   &__side--collapsed {
     align-items: center;
+    // ⚠️ 축소 폭(SIDE_COLLAPSED_W 48)은 타일 34 를 감싸는 값이라 우측 패딩을 남기면
+    //    타일이 왼쪽으로 밀려 균형이 깨진다 — center 정렬로 이미 좌우 6.5px 씩 떠 있다.
+    padding-right: 0;
 
     .terminal__side-head {
       justify-content: center;
@@ -49,7 +57,7 @@
   &__side-grip {
     position: relative;
     width: 11px;
-    margin: 0 -4px; // 좌우 gap 을 잡아먹지 않게 — 시각 폭은 2px 선뿐이다
+    margin: 0 -4px; // 레이아웃 실폭 3px — 패널과 xterm 사이에 여백을 만들지 않는다
     flex-shrink: 0;
     cursor: col-resize;
     z-index: 1;
@@ -386,13 +394,25 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    align-self: stretch; // 구분선이 패널 폭 전체에 걸치게
+    align-self: stretch; // 드롭 표시가 패널 폭 전체에 걸치게
     gap: 3px;
 
+    // 구분선은 border 가 아니라 pseudo — border-top 은 패널 벽에서 벽까지 이어져
+    // 타일보다 넓은 선이 답답해 보였다(2026-08-06 사용자 지적). 좌우 6px 인셋으로 타일 폭에 맞춘다.
     & + & {
-      border-top: 1px solid var(--border);
+      position: relative;
       margin-top: 6px;
       padding-top: 6px;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 6px;
+        right: 6px;
+        height: 1px;
+        background: var(--border);
+      }
     }
 
     // 드롭 표시 — 펼침 모드의 ws-group 과 같은 문법
@@ -818,9 +838,12 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    // .terminal 의 gap 을 0 으로 없앴으므로(xterm 좌측 붙이기) 여기만 스스로 간격을 만든다
+    // — 아래 grip 의 left: -8px 이 놓일 자리이기도 하다.
+    margin-left: 8px;
   }
 
-  // 리사이즈 grip — .terminal 의 gap(12px) 위에 걸치는 히트 영역, 호버 시 세로선 표시
+  // 리사이즈 grip — .terminal__changes 의 margin(8px) 위에 걸치는 히트 영역, 호버 시 세로선 표시
   &__changes-grip {
     position: absolute;
     top: 0;

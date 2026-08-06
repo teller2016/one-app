@@ -48,8 +48,9 @@ const CHANGES_DEFAULT_W = 320;
 
 // 워크스페이스 패널 너비 — 우측 모서리 드래그로 조절하고 SNAP 아래로 끌면 아이콘 타일만 남는다.
 // (앱 사이드바 Sidebar.tsx 와 같은 규칙 — 저장은 놓는 순간 1회)
-// 축소 폭 40 = 타일(34) + 좌우 3px — 48 은 좌우가 비어 보였다(2026-08-06 사용자 지적)
-const SIDE_COLLAPSED_W = 40;
+// 축소 폭 48 = border(1) + 타일(34) 중앙 정렬 → 좌우 6.5px
+// (40 은 타일이 벽에 붙어 답답했다 — 2026-08-06 사용자 지적. 구분선도 6px 인셋과 세트)
+const SIDE_COLLAPSED_W = 48;
 const SIDE_MIN_W = 180;
 const SIDE_MAX_W = 400;
 const SIDE_DEFAULT_W = 240;
