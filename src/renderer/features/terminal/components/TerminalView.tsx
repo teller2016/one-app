@@ -244,6 +244,27 @@ export function TerminalView({
         term.resize(ev.cols, ev.rows);
     });
     const dataSub = term.onData((data) => window.oneApp.terminal.write(id, data));
+    // Shift+Enter = 줄바꿈 (superset 동일 동작) — 터미널은 원래 Enter 의 수정키를 구분하지
+    // 못해 Shift 를 눌러도 그냥 \r(제출)이 간다. ESC+CR(\x1b\r)로 바꿔 보내면 claude 등
+    // ink 기반 TUI 가 meta+return = 줄바꿈으로 해석한다 — macOptionIsMeta 로 이미 동작하던
+    // Option+Enter 와 같은 경로의 별칭이다.
+    // ⚠️ 대체 화면(TUI)에서만 개입한다 — 일반 화면(zsh 프롬프트)에서는 ESC+CR 이 개행이
+    // 되지 않고 그 줄이 그대로 실행됐다(2026-08-06 실측). 셸은 기본 Enter 동작 유지.
+    term.attachCustomKeyEventHandler((ev) => {
+      if (
+        ev.key === 'Enter' &&
+        ev.shiftKey &&
+        !ev.metaKey &&
+        !ev.ctrlKey &&
+        !ev.altKey &&
+        !ev.isComposing && // 한글 조합 확정용 Enter 는 IME 에 맡긴다
+        term.buffer.active.type === 'alternate'
+      ) {
+        if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x1b\r');
+        return false; // keydown 외 keypress·keyup 도 막아야 xterm 이 \r 를 덧보내지 않는다
+      }
+      return true;
+    });
     // PTY 크기 전달은 디바운스 — 창 드래그 중엔 매 프레임 크기가 바뀌고, 그때마다
     // SIGWINCH 를 보내면 claude 같은 TUI 가 전체 리렌더를 반복해 화면이 요동친다.
     // 마지막 값만 보내면 드래그가 끝난 크기로 한 번 맞춰진다(last-claim-wins 유지).
