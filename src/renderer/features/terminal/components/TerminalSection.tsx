@@ -485,7 +485,9 @@ export function TerminalSection() {
               )}
             </div>
           ))}
-          {sessions.length === 0 && (
+          {/* 축소 상태에선 빈 상태 문구를 감춘다 — 48px 폭에서 한두 글자씩 줄바꿈돼
+              읽히지도 않고, 오른쪽 본문에 같은 문구의 EmptyState 가 이미 떠 있다 */}
+          {sessions.length === 0 && !sideCollapsed && (
             <p className="terminal__list-empty">열린 세션이 없습니다</p>
           )}
         </div>
