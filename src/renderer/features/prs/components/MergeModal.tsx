@@ -3,6 +3,7 @@ import type { PrMergeMethod } from '../../../../shared/types';
 import { Modal } from '../../../components/Modal';
 import { Button } from '../../../components/Button';
 import { Banner } from '../../../components/Banner';
+import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 
 const METHOD_OPTIONS: { value: PrMergeMethod; label: string }[] = [
@@ -26,6 +27,7 @@ export function MergeModal({
   onMerged: () => void;
 }) {
   const [mergeable, setMergeable] = useState<boolean | null>(null);
+  const [route, setRoute] = useState<{ head?: string; base?: string } | null>(null);
   const [infoError, setInfoError] = useState('');
   const [method, setMethod] = useState<PrMergeMethod>('merge');
   const [merging, setMerging] = useState(false);
@@ -36,7 +38,10 @@ export function MergeModal({
     window.oneApp.prs.getMergeInfo(repo, number).then((res) => {
       if (!alive) return;
       if (!res.ok) setInfoError(res.error ?? '상태 확인 실패');
-      else setMergeable(!!res.mergeable);
+      else {
+        setMergeable(!!res.mergeable);
+        setRoute({ head: res.head, base: res.base });
+      }
     });
     return () => {
       alive = false;
@@ -58,6 +63,19 @@ export function MergeModal({
   return (
     <Modal title={`머지 — ${repo.split('/').pop()} #${number}`} onClose={onClose}>
       <p className="prs__merge-title">{title}</p>
+
+      {/* 머지 방향 — 어느 브랜치로 들어가는지 머지 직전에 다시 확인 */}
+      {route?.base && (
+        <p className="prs__merge-route">
+          {route.head && (
+            <>
+              <code>{route.head}</code>
+              <Icon name="arrow-right" size={12} />
+            </>
+          )}
+          <code className="prs__merge-route-base">{route.base}</code>
+        </p>
+      )}
 
       {mergeable === null && !infoError && (
         <p className="hint">머지 가능 여부를 확인하는 중...</p>

@@ -275,10 +275,56 @@
   min-height: 120px;
 }
 
+// 목록 행의 머지 방향 (head → base) — 어디로 들어가는 PR 인지
+.prs__branches {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 300px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  @include type-caption;
+  // ⚠️ type-caption 의 대문자 변환·자간을 끈다 — 브랜치명은 대소문자가 구분되는 식별자다
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.prs__branch-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prs__branch-base {
+  flex-shrink: 0;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
 // 머지 모달
 .prs__merge-title {
   margin: 0 0 12px;
   @include type-emph;
+}
+
+.prs__merge-route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  color: var(--text-3);
+
+  code {
+    font-family: var(--font-mono);
+    @include type-small;
+  }
+
+  &-base {
+    color: var(--accent);
+    font-weight: 600;
+  }
 }
 
 .prs__merge-method {

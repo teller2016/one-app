@@ -250,6 +250,21 @@ export function PrSection() {
                         <span className="prs__number">#{pr.number}</span>
                       </div>
                       <div className="prs__meta">
+                        {/* 머지 방향 — 어디에서 어디로 들어가는 PR 인지 */}
+                        {pr.base && (
+                          <span
+                            className="prs__branches"
+                            title={`${pr.head ?? '?'} → ${pr.base}`}
+                          >
+                            {pr.head && (
+                              <>
+                                <span className="prs__branch-head">{pr.head}</span>
+                                <Icon name="arrow-right" size={11} />
+                              </>
+                            )}
+                            <span className="prs__branch-base">{pr.base}</span>
+                          </span>
+                        )}
                         {pr.approvals != null && pr.approvals > 0 ? (
                           <Badge variant="ok">승인 {pr.approvals}</Badge>
                         ) : (

@@ -68,6 +68,48 @@ export async function fetchOpenPrs(
   });
 }
 
+/**
+ * PR 별 머지 방향(head → base) 보강 — 전역 이슈 검색 API 는 브랜치를 주지 않는다(`ref` 는 빈 값).
+ * PR 마다 `/pulls/{n}` 을 부르는 대신 **저장소별 PR 목록 1요청**으로 한꺼번에 채운다
+ * (저장소 수 ≪ PR 수). 실패·누락은 조용히 생략 — 표시용 부가 정보다.
+ */
+export async function enrichBranches(
+  giteaUrl: string,
+  token: string | null,
+  prs: PrItem[],
+): Promise<PrItem[]> {
+  const repos = [...new Set(prs.map((p) => p.repo))];
+  const byRepo = new Map<string, Map<number, { head?: string; base?: string }>>();
+  await Promise.all(
+    repos.map(async (repo) => {
+      try {
+        const res = await fetch(
+          `${giteaUrl}/api/v1/repos/${repo}/pulls?state=open&limit=${BRANCH_PAGE_SIZE}`,
+          { headers: authHeaders(token) },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          number?: number;
+          head?: { ref?: string };
+          base?: { ref?: string };
+        }[];
+        const map = new Map<number, { head?: string; base?: string }>();
+        for (const p of Array.isArray(data) ? data : []) {
+          if (p.number != null)
+            map.set(p.number, { head: p.head?.ref, base: p.base?.ref });
+        }
+        byRepo.set(repo, map);
+      } catch {
+        // 무시 — 브랜치 표시만 빠진다
+      }
+    }),
+  );
+  return prs.map((pr) => {
+    const hit = byRepo.get(pr.repo)?.get(pr.number);
+    return hit ? { ...pr, head: hit.head, base: hit.base } : pr;
+  });
+}
+
 /** PR 별 승인 리뷰어 수 보강 — 리뷰어별 최신 리뷰가 APPROVED 인 수 (실패는 조용히 생략) */
 export async function enrichApprovals(
   giteaUrl: string,
@@ -411,7 +453,7 @@ export async function fetchMergeInfo(
   token: string | null,
   repo: string,
   number: number,
-): Promise<{ mergeable: boolean; title: string }> {
+): Promise<{ mergeable: boolean; title: string; head?: string; base?: string }> {
   let res: Response;
   try {
     res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}`, {
@@ -422,8 +464,18 @@ export async function fetchMergeInfo(
   }
   if (res.status === 404) throw new Error('PR 을 찾을 수 없습니다.');
   if (!res.ok) throw new Error(`PR 조회 실패 (HTTP ${res.status})`);
-  const data = (await res.json()) as { mergeable?: boolean; title?: string };
-  return { mergeable: !!data.mergeable, title: data.title ?? '' };
+  const data = (await res.json()) as {
+    mergeable?: boolean;
+    title?: string;
+    head?: { ref?: string };
+    base?: { ref?: string };
+  };
+  return {
+    mergeable: !!data.mergeable,
+    title: data.title ?? '',
+    head: data.head?.ref,
+    base: data.base?.ref,
+  };
 }
 
 /** PR 머지 (토큰 필수) — method: merge/squash/rebase */

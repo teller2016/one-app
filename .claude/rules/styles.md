@@ -10,6 +10,8 @@ paths:
 ## 기준은 `DESIGN.md`
 색·크기·모션은 반드시 `_base.scss` 토큰(`var(--*)`)과 타이포 믹스인(`type-*`)에서 가져온다 — **hex·px 매직넘버 금지**. 토큰 값·무드의 정본은 프로젝트 루트 `DESIGN.md` 이므로, 새 토큰을 만들거나 기존 값을 바꿔야 하면 먼저 `DESIGN.md` 를 읽을 것.
 
+⚠️ **`type-caption` 은 `text-transform: uppercase` + 자간 0.05em 을 포함한다** — 라벨용이라 그렇다. 브랜치명·경로·파일명처럼 **대소문자가 구분되는 식별자**에 쓰면 조용히 대문자로 바뀌어 오해를 부른다(2026-08-06 PR 목록에서 발견). 그 경우 `text-transform: none; letter-spacing: normal;` 로 함께 끄거나 `type-small` 을 쓸 것.
+
 ## 작성 방식
 - **SCSS** (`sass-embedded`, Vite 기본 지원 — `vite.renderer.config.ts` 에서 modern-compiler API 사용).
 - BEM 클래스를 `&__`/`&--` 네스팅으로 작성.

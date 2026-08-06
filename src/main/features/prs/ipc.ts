@@ -2,6 +2,7 @@ import { handleShared } from '../../lib/moIpc';
 import {
   fetchOpenPrs,
   enrichApprovals,
+  enrichBranches,
   fetchRecentBranches,
   fetchBaseCandidates,
   fetchAllBranchNames,
@@ -51,7 +52,16 @@ export function registerPrsIpc() {
     if (!gitea) return { ok: true, configured: false };
     try {
       const prs = await fetchOpenPrs(gitea.url, gitea.token);
-      const enriched = await enrichApprovals(gitea.url, gitea.token, prs);
+      // 승인 수(PR별 요청)와 머지 방향(저장소별 요청)은 서로 독립이라 함께 돌린다
+      const [approved, branched] = await Promise.all([
+        enrichApprovals(gitea.url, gitea.token, prs),
+        enrichBranches(gitea.url, gitea.token, prs),
+      ]);
+      const dirs = new Map(branched.map((p) => [`${p.repo}#${p.number}`, p]));
+      const enriched = approved.map((p) => {
+        const d = dirs.get(`${p.repo}#${p.number}`);
+        return d ? { ...p, head: d.head, base: d.base } : p;
+      });
       return { ok: true, configured: true, prs: enriched };
     } catch (err) {
       return { ok: false, configured: true, error: (err as Error).message };

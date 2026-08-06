@@ -285,6 +285,8 @@ export type PrItem = {
   updatedAt?: number;
   url: string; // 브라우저로 열 PR 페이지
   approvals?: number; // 승인(APPROVED) 리뷰어 수 — 조회 실패 시 undefined
+  head?: string; // 원본 브랜치 — 조회 실패 시 undefined (전역 검색 API 가 안 준다)
+  base?: string; // 대상 브랜치 (어디로 머지되는지)
 };
 
 export type PrListResult = {
@@ -380,11 +382,13 @@ export type PrCreateResult = {
   error?: string;
 };
 
-/** 머지 전 상태 — mergeable(컨플릭트 없음) 여부 */
+/** 머지 전 상태 — mergeable(컨플릭트 없음) 여부 + 머지 방향 */
 export type PrMergeInfoResult = {
   ok: boolean;
   mergeable?: boolean;
   title?: string;
+  head?: string; // 원본 브랜치
+  base?: string; // 대상 브랜치
   error?: string;
 };
 

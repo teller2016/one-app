@@ -67,7 +67,9 @@ push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션.
 
 **머지**: 목록 행 [머지] → `mergeable`(컨플릭트) 사전 확인 + 방식(merge/squash/rebase) 선택 → `/pulls/{n}/merge`.
 
-생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지, **조직(owner)별 그룹핑** + 조직 칩 제외 필터(`store.ts`, `userData/prs.json`), 2분 자동 새로고침.
+생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지 + **머지 방향(`head → base`)**, **조직(owner)별 그룹핑** + 조직 칩 제외 필터(`store.ts`, `userData/prs.json`), 2분 자동 새로고침.
+
+⚠️ **전역 이슈 검색 API 는 브랜치를 주지 않는다**(`base`·`head` 는 `null`, `ref` 는 빈 문자열 — 2026-08-06 실측). 그래서 `enrichBranches` 가 **저장소별 `/pulls?state=open` 1요청**으로 한꺼번에 채운다(PR 마다 `/pulls/{n}` 을 부르면 PR 수만큼 요청 — 저장소 수 ≪ PR 수). 승인 수 보강과는 서로 독립이라 `Promise.all` 로 함께 돌린다. 머지 모달도 `prs:merge-info`(`/pulls/{n}`)가 이미 주는 값이라 추가 요청 없이 방향을 띄운다.
 
 ## Jira (내 이슈)
 `renderer/features/jira` + `main/features/jira`
