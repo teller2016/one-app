@@ -68,10 +68,14 @@ export async function fetchOpenPrs(
   });
 }
 
+/** 저장소별 /pulls 에서 보강하는 표시용 부가 정보 */
+type PrDirection = { head?: string; base?: string; mergeable?: boolean };
+
 /**
- * PR 별 머지 방향(head → base) 보강 — 전역 이슈 검색 API 는 브랜치를 주지 않는다(`ref` 는 빈 값).
- * PR 마다 `/pulls/{n}` 을 부르는 대신 **저장소별 PR 목록 1요청**으로 한꺼번에 채운다
- * (저장소 수 ≪ PR 수). 실패·누락은 조용히 생략 — 표시용 부가 정보다.
+ * PR 별 머지 방향(head → base)·머지 가능 여부 보강 — 전역 이슈 검색 API 는 브랜치를
+ * 주지 않는다(`ref` 는 빈 값). PR 마다 `/pulls/{n}` 을 부르는 대신 **저장소별 PR 목록
+ * 1요청**으로 한꺼번에 채운다(저장소 수 ≪ PR 수). 같은 응답에 `mergeable` 이 있어
+ * 목록의 충돌 표시도 추가 요청 없이 얻는다. 실패·누락은 조용히 생략 — 표시용 부가 정보다.
  */
 export async function enrichBranches(
   giteaUrl: string,
@@ -79,7 +83,7 @@ export async function enrichBranches(
   prs: PrItem[],
 ): Promise<PrItem[]> {
   const repos = [...new Set(prs.map((p) => p.repo))];
-  const byRepo = new Map<string, Map<number, { head?: string; base?: string }>>();
+  const byRepo = new Map<string, Map<number, PrDirection>>();
   await Promise.all(
     repos.map(async (repo) => {
       try {
@@ -92,21 +96,26 @@ export async function enrichBranches(
           number?: number;
           head?: { ref?: string };
           base?: { ref?: string };
+          mergeable?: boolean;
         }[];
-        const map = new Map<number, { head?: string; base?: string }>();
+        const map = new Map<number, PrDirection>();
         for (const p of Array.isArray(data) ? data : []) {
           if (p.number != null)
-            map.set(p.number, { head: p.head?.ref, base: p.base?.ref });
+            map.set(p.number, {
+              head: p.head?.ref,
+              base: p.base?.ref,
+              mergeable: typeof p.mergeable === 'boolean' ? p.mergeable : undefined,
+            });
         }
         byRepo.set(repo, map);
       } catch {
-        // 무시 — 브랜치 표시만 빠진다
+        // 무시 — 브랜치·충돌 표시만 빠진다
       }
     }),
   );
   return prs.map((pr) => {
     const hit = byRepo.get(pr.repo)?.get(pr.number);
-    return hit ? { ...pr, head: hit.head, base: hit.base } : pr;
+    return hit ? { ...pr, ...hit } : pr;
   });
 }
 

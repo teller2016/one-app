@@ -60,7 +60,7 @@ export function registerPrsIpc() {
       const dirs = new Map(branched.map((p) => [`${p.repo}#${p.number}`, p]));
       const enriched = approved.map((p) => {
         const d = dirs.get(`${p.repo}#${p.number}`);
-        return d ? { ...p, head: d.head, base: d.base } : p;
+        return d ? { ...p, head: d.head, base: d.base, mergeable: d.mergeable } : p;
       });
       return { ok: true, configured: true, prs: enriched };
     } catch (err) {
