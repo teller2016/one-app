@@ -51,10 +51,14 @@
 
   // 패널 손잡이 — 끌어서 폭 조절, 더블클릭·Enter 로 접기/펴기.
   // 히트 영역은 11px 로 넉넉히 두고 시각적 선은 2px 만 hover 에 드러낸다(changes-grip 과 같은 규칙)
+  // ⚠️ 레이아웃 실폭 **0** (width 10 + margin -5) — grip 은 투명이라 실폭이 남으면
+  // 그 자리에 밝은 앱 배경이 비쳐 패널과 터미널 사이에 띠가 생긴다(2026-08-07 사용자 지적:
+  // 실폭 3px 이었을 때 x=104~115 구간이 그렇게 보였다). 0 이면 host(다크)가 패널에 딱 붙고
+  // 손잡이는 그 경계 위에 겹쳐 떠 있다.
   &__side-grip {
     position: relative;
-    width: 11px;
-    margin: 0 -4px; // 레이아웃 실폭 3px — 패널과 xterm 사이에 여백을 만들지 않는다
+    width: 10px;
+    margin: 0 -5px;
     flex-shrink: 0;
     cursor: col-resize;
     z-index: 1;
@@ -910,6 +914,9 @@
     // .terminal 의 gap 을 0 으로 없앴으므로(xterm 좌측 붙이기) 여기만 스스로 간격을 만든다
     // — 아래 grip 의 left: -8px 이 놓일 자리이기도 하다.
     margin-left: 8px;
+    // 헤더(브랜치·푸시)가 창 상단·우측 모서리에 딱 붙어 답답했다(2026-08-07 사용자 지적).
+    // 좌측은 grip 자리라 두고 위/오른쪽만 숨통을 튼다.
+    padding: 8px 8px 0 0;
   }
 
   // 리사이즈 grip — .terminal__changes 의 margin(8px) 위에 걸치는 히트 영역, 호버 시 세로선 표시

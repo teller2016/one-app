@@ -85,10 +85,12 @@
   // ===== 시맨틱 (애플 시스템 컬러 계열 — 글자는 접근성 다크 변형, soft@s1 위 전부 4.5:1+) =====
   --ok: #217f38;
   --ok-soft: rgba(52, 199, 89, 0.14);
+  --ok-soft-strong: rgba(52, 199, 89, 0.3); // diff 워드 하이라이트 — 행 틴트 위에 겹침
   --warning: #8a6100;
   --warning-soft: rgba(255, 204, 0, 0.18);
   --danger: #d70015;
   --danger-soft: rgba(255, 59, 48, 0.12);
+  --danger-soft-strong: rgba(255, 59, 48, 0.28);
   --ot: #c93400; // 초과근무(OT) 전용
   --ot-soft: rgba(255, 149, 0, 0.16);
   --idle: #6c6c71;
@@ -122,6 +124,7 @@
   --chart-10o: #6c6c70;
 
   // ===== 라운드 · 그림자 · 모션 (애플 라디우스 문법 — 필=액션) =====
+  --r-xs: 4px; // 인라인 마크(diff 워드 하이라이트 등) — 글줄 안에 앉는 최소 곡률
   --r-sm: 8px; // 칩·아이콘 버튼·세그 칩
   --r-md: 11px; // 입력·중첩 패널
   --r-lg: 18px; // 카드·모달
@@ -204,10 +207,12 @@
   // 시맨틱 (애플 시스템 다크 — soft@s1 위 전부 4.5:1+)
   --ok: #30d158;
   --ok-soft: rgba(48, 209, 88, 0.16);
+  --ok-soft-strong: rgba(48, 209, 88, 0.34);
   --warning: #ffd60a;
   --warning-soft: rgba(255, 214, 10, 0.16);
   --danger: #ff817a;
   --danger-soft: rgba(255, 105, 97, 0.16);
+  --danger-soft-strong: rgba(255, 105, 97, 0.32);
   --ot: #ff9f0a;
   --ot-soft: rgba(255, 159, 10, 0.16);
   --idle: #a8a8ae;

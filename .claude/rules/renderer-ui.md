@@ -41,6 +41,7 @@ paths:
 
 ## 공통 훅 재사용 (중복 정의 금지)
 - 주기 폴링·시계 틱은 `lib/usePolling.ts`(`usePolling`·`useTick`)
+  - ⚠️ **`usePolling` 에 인라인 화살표(`() => void refresh()`)를 넘기지 말 것** — 매 렌더마다 콜백 identity 가 바뀌어 effect 가 인터벌을 재시작하며 `immediate` 즉시 실행을 반복하고, 응답의 setState 가 다시 렌더를 일으켜 **IPC 왕복 주기(수십 ms)로 폴링이 폭주**한다(2026-08-06 변경사항 diff CPU 폭주 실측 원인). 반드시 `useCallback` 으로 안정화한 콜백을 그대로 넘긴다.
 - 클립보드 복사+토스트는 `lib/useCopy.ts` (⚠️ 폰은 평문 http = insecure context 라 `navigator.clipboard` 가 없어 `execCommand` 폴백이 들어 있다)
 - 드롭다운·팝오버 배치는 `lib/usePopover.ts`
 - 테마 전환은 `lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지, `useThemeMode` 훅)

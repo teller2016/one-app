@@ -22,6 +22,8 @@ import type {
   MailListQuery,
   ChangesTarget,
   ChangesDiffFile,
+  ChangesDiffScope,
+  ChangesMode,
   TerminalCreateInput,
   TerminalNotifyLevel,
   TerminalPreset,
@@ -313,11 +315,17 @@ contextBridge.exposeInMainWorld("oneApp", {
   changes: {
     // 워킹트리 상태 — 브랜치·ahead/behind·변경 파일 목록
     // (projectId / sessionId / workspaceId+worktreePath 로 대상 지정)
-    status: (target: ChangesTarget) =>
-      ipcRenderer.invoke("changes:status", target),
-    // 파일 하나의 unified diff
-    diff: (target: ChangesTarget, file: ChangesDiffFile) =>
-      ipcRenderer.invoke("changes:diff", target, file),
+    // mode='branch' 면 베이스 브랜치(main) 분기점 대비 목록
+    status: (target: ChangesTarget, mode?: ChangesMode) =>
+      ipcRenderer.invoke("changes:status", target, mode),
+    // 파일 하나의 unified diff — scope 로 분기점 대비·특정 커밋의 변경 지정
+    diff: (target: ChangesTarget, file: ChangesDiffFile, scope?: ChangesDiffScope) =>
+      ipcRenderer.invoke("changes:diff", target, file, scope),
+    // 최근 커밋 목록 (미푸시 여부 포함)
+    log: (target: ChangesTarget) => ipcRenderer.invoke("changes:log", target),
+    // 커밋 한 건의 변경 파일 목록
+    commitFiles: (target: ChangesTarget, hash: string) =>
+      ipcRenderer.invoke("changes:commit-files", target, hash),
     // 전체 일괄 커밋 (git add -A + commit)
     commit: (target: ChangesTarget, message: string) =>
       ipcRenderer.invoke("changes:commit", target, message),

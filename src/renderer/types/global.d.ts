@@ -64,8 +64,12 @@ import type {
   MailUnreadCountResult,
   ChangesTarget,
   ChangesDiffFile,
+  ChangesDiffScope,
+  ChangesMode,
   ChangesStatus,
   ChangesDiffResult,
+  ChangesLogResult,
+  ChangesCommitFilesResult,
   ChangesCommitResult,
   ChangesPushResult,
   TerminalPreset,
@@ -242,11 +246,17 @@ declare global {
         getLog: () => Promise<NightwatchTextResult>;
       };
       changes: {
-        status: (target: ChangesTarget) => Promise<ChangesStatus>;
+        status: (target: ChangesTarget, mode?: ChangesMode) => Promise<ChangesStatus>;
         diff: (
           target: ChangesTarget,
           file: ChangesDiffFile,
+          scope?: ChangesDiffScope,
         ) => Promise<ChangesDiffResult>;
+        log: (target: ChangesTarget) => Promise<ChangesLogResult>;
+        commitFiles: (
+          target: ChangesTarget,
+          hash: string,
+        ) => Promise<ChangesCommitFilesResult>;
         commit: (
           target: ChangesTarget,
           message: string,

@@ -63,6 +63,9 @@ const SPEC: Spec = {
   changes: {
     status: { ch: 'changes:status' },
     diff: { ch: 'changes:diff' },
+    log: { ch: 'changes:log' },
+    commitFiles: { ch: 'changes:commit-files' },
+    commit: { ch: 'changes:commit' },
     push: { ch: 'changes:push' },
   },
 };

@@ -934,6 +934,9 @@ export type ChangedFile = {
 /** upstream 에 아직 안 올라간 커밋 (푸시 확인용 요약) */
 export type ChangesCommit = { hash: string; subject: string };
 
+/** 변경 비교 모드 — work: 워킹트리(HEAD 대비) · branch: 베이스 브랜치(main) 분기점 대비 */
+export type ChangesMode = 'work' | 'branch';
+
 export type ChangesStatus = {
   ok: boolean;
   repo: boolean; // git 저장소인가 (아니면 나머지 필드 없음)
@@ -941,7 +944,8 @@ export type ChangesStatus = {
   upstream?: string; // 없으면 아직 push 안 한 새 브랜치 (푸시는 -u 로)
   ahead?: number; // upstream 대비 안 푸시된 커밋 수
   behind?: number;
-  files?: ChangedFile[];
+  baseBranch?: string; // 비교 가능한 베이스 브랜치(main/master) — 지금 그 브랜치에 있으면 없음
+  files?: ChangedFile[]; // work: HEAD 대비 · branch: 분기점 대비(커밋된 것 + 워킹트리)
   unpushed?: ChangesCommit[]; // 최근 20개
   error?: string;
 };
@@ -951,6 +955,34 @@ export type ChangesDiffFile = {
   path: string;
   origPath?: string;
   untracked?: boolean;
+};
+
+/** diff 기준 — 생략하면 워킹트리(HEAD 대비) */
+export type ChangesDiffScope = {
+  mode?: ChangesMode; // 'branch' 면 베이스 브랜치 분기점(merge-base) 대비
+  commit?: string; // 있으면 그 커밋 한 건의 변경 (mode 는 무시)
+  full?: boolean; // true 면 전체 파일 context — 사이드-바이-사이드 '변경 전/후 파일' 뷰용
+};
+
+/** 커밋 목록 한 건 (changes:log — 커밋 섹션) */
+export type ChangesLogEntry = {
+  hash: string;
+  subject: string;
+  date: number; // author date epoch 초 — 상대 시간 표시용
+  unpushed: boolean; // upstream 에 아직 없는 커밋 (upstream 없으면 전부 true)
+};
+
+export type ChangesLogResult = {
+  ok: boolean;
+  commits?: ChangesLogEntry[];
+  error?: string;
+};
+
+/** 커밋 한 건의 변경 파일 목록 (changes:commit-files) */
+export type ChangesCommitFilesResult = {
+  ok: boolean;
+  files?: ChangedFile[];
+  error?: string;
 };
 
 export type ChangesDiffResult = {

@@ -6,9 +6,14 @@ import type {
   ChangedFile,
   ChangedFileKind,
   ChangesCommit,
+  ChangesCommitFilesResult,
   ChangesCommitResult,
   ChangesDiffFile,
   ChangesDiffResult,
+  ChangesDiffScope,
+  ChangesLogEntry,
+  ChangesLogResult,
+  ChangesMode,
   ChangesPushResult,
   ChangesStatus,
 } from '../../../shared/types';
@@ -19,6 +24,7 @@ const STATUS_TIMEOUT_MS = 10_000;
 const COMMIT_TIMEOUT_MS = 30_000;
 const PUSH_TIMEOUT_MS = 60_000;
 const UNPUSHED_MAX = 20;
+const LOG_MAX = 30; // 커밋 목록 표시 개수
 
 /** porcelain v1 의 XY 코드 → 표시용 종류 (스테이징 여부는 구분하지 않는다) */
 function kindOf(x: string, y: string): ChangedFileKind {
@@ -52,8 +58,77 @@ function parseBranchHeader(line: string): {
   return out;
 }
 
+/** name-status 의 상태 글자 → 표시용 종류 (R100 처럼 유사도 점수가 붙는다) */
+function kindOfLetter(s: string): ChangedFileKind {
+  const c = s[0];
+  if (c === 'A' || c === 'C') return 'added'; // copy 는 새 파일이 생긴 것과 같다
+  if (c === 'D') return 'deleted';
+  if (c === 'R') return 'renamed';
+  if (c === 'U') return 'conflict';
+  return 'modified';
+}
+
+/**
+ * 비교 베이스 브랜치 — main/master 중 존재하는 로컬 브랜치.
+ * 현재 브랜치가 그것이면 null (자기 자신과의 비교는 의미가 없다).
+ */
+async function resolveBaseBranch(
+  repoPath: string,
+  current?: string
+): Promise<string | null> {
+  for (const name of ['main', 'master']) {
+    if (name === current) return null;
+    const r = await run(
+      ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`],
+      repoPath,
+      STATUS_TIMEOUT_MS
+    );
+    if (r.code === 0) return name;
+  }
+  return null;
+}
+
+/** 베이스 브랜치와의 분기점(merge-base) 해시 — 실패 시 null */
+async function mergeBaseOf(repoPath: string, base: string): Promise<string | null> {
+  const r = await run(['merge-base', base, 'HEAD'], repoPath, STATUS_TIMEOUT_MS);
+  return r.code === 0 ? r.stdout.trim() : null;
+}
+
+/**
+ * 분기점 대비 변경 파일 목록 — 커밋된 것 + 워킹트리 변경을 한 번에.
+ * (untracked 는 diff 에 안 잡히므로 호출부가 porcelain 결과에서 합친다)
+ */
+async function branchFiles(
+  repoPath: string,
+  mergeBase: string
+): Promise<ChangedFile[] | null> {
+  const ns = await run(
+    ['diff', '--no-color', '--name-status', '-M', mergeBase],
+    repoPath,
+    STATUS_TIMEOUT_MS
+  );
+  if (ns.code !== 0) return null;
+  const files: ChangedFile[] = [];
+  for (const line of ns.stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split('\t');
+    const st = parts[0];
+    const isRename = st[0] === 'R' || st[0] === 'C';
+    files.push({
+      path: unquote(isRename ? (parts[2] ?? '') : (parts[1] ?? '')),
+      origPath: isRename ? unquote(parts[1] ?? '') : undefined,
+      kind: kindOfLetter(st),
+      untracked: false,
+    });
+  }
+  return files;
+}
+
 /** 워킹트리 상태 — 브랜치·ahead/behind·변경 파일 목록(+numstat)·미푸시 커밋 */
-export async function getChangesStatus(repoPath: string): Promise<ChangesStatus> {
+export async function getChangesStatus(
+  repoPath: string,
+  mode: ChangesMode = 'work'
+): Promise<ChangesStatus> {
   const inside = await run(['rev-parse', '--is-inside-work-tree'], repoPath, STATUS_TIMEOUT_MS);
   if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
     return { ok: true, repo: false };
@@ -95,8 +170,34 @@ export async function getChangesStatus(repoPath: string): Promise<ChangesStatus>
     });
   }
 
-  // 파일별 +/- 줄 수 — HEAD 대비(스테이징 포함). untracked·rename 은 안 잡혀도 무방
-  const num = await run(['diff', 'HEAD', '--numstat'], repoPath, STATUS_TIMEOUT_MS);
+  // 베이스 브랜치(main/master) — branch 모드 전환 가능 여부를 UI 가 이 값으로 판단한다
+  const baseBranch = await resolveBaseBranch(repoPath, result.branch);
+  if (baseBranch) result.baseBranch = baseBranch;
+
+  // branch 모드 — 파일 목록을 분기점(merge-base) 대비로 교체.
+  // untracked 는 diff 에 안 잡히므로 porcelain 에서 찾은 것을 뒤에 보탠다.
+  let numstatRef = 'HEAD';
+  if (mode === 'branch') {
+    if (!baseBranch) {
+      return {
+        ok: false,
+        repo: true,
+        error: '베이스 브랜치(main/master)가 없거나 지금 그 브랜치에 있습니다.',
+      };
+    }
+    const mb = await mergeBaseOf(repoPath, baseBranch);
+    if (!mb) {
+      return { ok: false, repo: true, error: `${baseBranch} 와의 분기점을 찾을 수 없습니다.` };
+    }
+    const bf = await branchFiles(repoPath, mb);
+    if (!bf) return { ok: false, repo: true, error: 'git diff 실패' };
+    result.files = [...bf, ...files.filter((f) => f.untracked)];
+    numstatRef = mb;
+  }
+  const outFiles = result.files as ChangedFile[];
+
+  // 파일별 +/- 줄 수 — work 는 HEAD, branch 는 분기점 대비. untracked·rename 은 안 잡혀도 무방
+  const num = await run(['diff', numstatRef, '--numstat'], repoPath, STATUS_TIMEOUT_MS);
   if (num.code === 0) {
     const counts = new Map<string, { a: number; d: number }>();
     for (const line of num.stdout.split('\n')) {
@@ -104,7 +205,7 @@ export async function getChangesStatus(repoPath: string): Promise<ChangesStatus>
       if (!m || m[1] === '-') continue; // '-' 는 바이너리
       counts.set(unquote(m[3]), { a: Number(m[1]), d: Number(m[2]) });
     }
-    for (const f of files) {
+    for (const f of outFiles) {
       const c = counts.get(f.path);
       if (c) {
         f.additions = c.a;
@@ -134,10 +235,15 @@ export async function getChangesStatus(repoPath: string): Promise<ChangesStatus>
   return result;
 }
 
-/** 파일 하나의 unified diff — 추적 파일은 HEAD 대비, untracked 는 --no-index 로 전체 추가 */
+/**
+ * 파일 하나의 unified diff.
+ * 기본: 추적 파일은 HEAD 대비, untracked 는 --no-index 로 전체 추가.
+ * scope.mode='branch': 분기점(merge-base) 대비 · scope.commit: 그 커밋 한 건의 변경.
+ */
 export async function getChangesDiff(
   repoPath: string,
-  file: ChangesDiffFile
+  file: ChangesDiffFile,
+  scope?: ChangesDiffScope
 ): Promise<ChangesDiffResult> {
   // 경로 탈출 차단 — untracked 는 절대 경로로 diff 하므로 저장소 안인지 확인 필수
   const abs = path.resolve(repoPath, file.path);
@@ -145,16 +251,43 @@ export async function getChangesDiff(
     return { ok: false, error: '저장소 밖 경로입니다.' };
   }
 
-  const args = file.untracked
-    ? ['diff', '--no-color', '--no-index', '--', '/dev/null', abs]
-    : [
-        'diff',
-        '--no-color',
-        'HEAD',
-        '--',
-        file.path,
-        ...(file.origPath ? [file.origPath] : []),
-      ];
+  // full: 전체 파일을 context 로 포함 — 분할 뷰가 '변경 전 파일 | 변경 후 파일'이 된다.
+  // (untracked 는 --no-index /dev/null 이라 원래 전체가 온다)
+  const ctx = scope?.full ? ['-U1000000'] : [];
+  let args: string[];
+  if (scope?.commit) {
+    // 커밋 한 건의 변경 — --format= 으로 커밋 헤더를 억제해 diff 만 받는다
+    args = [
+      'show',
+      '--no-color',
+      '--format=',
+      '-M',
+      ...ctx,
+      scope.commit,
+      '--',
+      file.path,
+      ...(file.origPath ? [file.origPath] : []),
+    ];
+  } else if (file.untracked) {
+    args = ['diff', '--no-color', '--no-index', '--', '/dev/null', abs];
+  } else {
+    let ref = 'HEAD';
+    if (scope?.mode === 'branch') {
+      const base = await resolveBaseBranch(repoPath);
+      const mb = base ? await mergeBaseOf(repoPath, base) : null;
+      if (!mb) return { ok: false, error: '베이스 브랜치 분기점을 찾을 수 없습니다.' };
+      ref = mb;
+    }
+    args = [
+      'diff',
+      '--no-color',
+      ...ctx,
+      ref,
+      '--',
+      file.path,
+      ...(file.origPath ? [file.origPath] : []),
+    ];
+  }
   const r = await run(args, repoPath, STATUS_TIMEOUT_MS);
   // --no-index 는 두 파일이 다르면 exit 1 — 실패가 아니다
   if (r.code !== 0 && !(file.untracked && r.code === 1)) {
@@ -169,6 +302,92 @@ export async function getChangesDiff(
     truncated = true;
   }
   return { ok: true, diff, binary, truncated };
+}
+
+/** 최근 커밋 목록 — 미푸시 여부 포함 (커밋 섹션용) */
+export async function getCommitLog(repoPath: string): Promise<ChangesLogResult> {
+  const r = await run(
+    ['log', '--no-color', '--pretty=format:%h\t%ct\t%s', '-n', String(LOG_MAX)],
+    repoPath,
+    STATUS_TIMEOUT_MS
+  );
+  // 커밋이 하나도 없는 저장소는 log 자체가 실패한다 — 빈 목록으로
+  if (r.code !== 0) return { ok: true, commits: [] };
+
+  // 미푸시 집합 — upstream 이 없으면(새 브랜치) 전부 미푸시
+  const up = await run(
+    ['log', '--pretty=format:%h', '@{u}..HEAD', '-n', String(LOG_MAX)],
+    repoPath,
+    STATUS_TIMEOUT_MS
+  );
+  const noUpstream = up.code !== 0;
+  const unpushed = new Set(noUpstream ? [] : up.stdout.split('\n').filter(Boolean));
+
+  const commits = r.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line): ChangesLogEntry | null => {
+      const [hash, ct, ...rest] = line.split('\t');
+      if (!hash || !ct) return null;
+      return {
+        hash,
+        subject: rest.join('\t'),
+        date: Number(ct),
+        unpushed: noUpstream || unpushed.has(hash),
+      };
+    })
+    .filter((c): c is ChangesLogEntry => !!c);
+  return { ok: true, commits };
+}
+
+/** 커밋 한 건의 변경 파일 목록 (+/- 줄 수 포함) — 커밋 섹션에서 클릭했을 때 */
+export async function getCommitFiles(
+  repoPath: string,
+  hash: string
+): Promise<ChangesCommitFilesResult> {
+  const ns = await run(
+    ['show', '--no-color', '--format=', '--name-status', '-M', hash],
+    repoPath,
+    STATUS_TIMEOUT_MS
+  );
+  if (ns.code !== 0) return { ok: false, error: ns.stderr || 'git show 실패' };
+
+  const files: ChangedFile[] = [];
+  for (const line of ns.stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split('\t');
+    const st = parts[0];
+    const isRename = st[0] === 'R' || st[0] === 'C';
+    files.push({
+      path: unquote(isRename ? (parts[2] ?? '') : (parts[1] ?? '')),
+      origPath: isRename ? unquote(parts[1] ?? '') : undefined,
+      kind: kindOfLetter(st),
+      untracked: false,
+    });
+  }
+
+  // +/- 줄 수 — rename 은 경로 표기가 달라 안 잡혀도 무방 (work 모드와 같은 원칙)
+  const num = await run(
+    ['show', '--no-color', '--format=', '--numstat', hash],
+    repoPath,
+    STATUS_TIMEOUT_MS
+  );
+  if (num.code === 0) {
+    const counts = new Map<string, { a: number; d: number }>();
+    for (const line of num.stdout.split('\n')) {
+      const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
+      if (!m || m[1] === '-') continue;
+      counts.set(unquote(m[3]), { a: Number(m[1]), d: Number(m[2]) });
+    }
+    for (const f of files) {
+      const c = counts.get(f.path);
+      if (c) {
+        f.additions = c.a;
+        f.deletions = c.d;
+      }
+    }
+  }
+  return { ok: true, files };
 }
 
 /** 전체 일괄 커밋 — git add -A 후 commit. 변경이 없으면 실패로 알린다 */

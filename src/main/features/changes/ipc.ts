@@ -4,6 +4,8 @@
 // worktreePath 는 git 의 실제 워크트리 목록과 대조해 임의 경로를 차단한다.
 import type {
   ChangesDiffFile,
+  ChangesDiffScope,
+  ChangesMode,
   ChangesTarget,
 } from '../../../shared/types';
 import { handleShared } from '../../lib/moIpc';
@@ -15,8 +17,24 @@ import {
   commitChanges,
   getChangesDiff,
   getChangesStatus,
+  getCommitFiles,
+  getCommitLog,
   pushChanges,
 } from './git';
+
+// 커밋 해시 형식 — 폰에 열리는 채널이라 git 인자로 들어가는 값은 화이트리스트 검증 필수
+const HASH_RE = /^[0-9a-f]{4,40}$/i;
+
+/** diff scope 를 화이트리스트로 재구성 — 임의 문자열이 git 인자가 되지 않게 */
+function sanitizeScope(scope: ChangesDiffScope | undefined): ChangesDiffScope | undefined {
+  if (!scope || typeof scope !== 'object') return undefined;
+  const out: ChangesDiffScope = {};
+  if (scope.mode === 'branch') out.mode = 'branch';
+  if (typeof scope.commit === 'string' && HASH_RE.test(scope.commit))
+    out.commit = scope.commit;
+  if (scope.full === true) out.full = true;
+  return out.mode || out.commit || out.full ? out : undefined;
+}
 
 async function resolveTarget(target: ChangesTarget | undefined): Promise<string> {
   if (target?.workspaceId) {
@@ -42,12 +60,23 @@ async function resolveTarget(target: ChangesTarget | undefined): Promise<string>
 
 /** 변경사항 IPC 핸들러 등록 */
 export function registerChangesIpc() {
-  handleShared('changes:status', async (target: ChangesTarget) =>
-    getChangesStatus(await resolveTarget(target))
+  handleShared('changes:status', async (target: ChangesTarget, mode?: ChangesMode) =>
+    getChangesStatus(await resolveTarget(target), mode === 'branch' ? 'branch' : 'work')
   );
-  handleShared('changes:diff', async (target: ChangesTarget, file: ChangesDiffFile) =>
-    getChangesDiff(await resolveTarget(target), file)
+  handleShared(
+    'changes:diff',
+    async (target: ChangesTarget, file: ChangesDiffFile, scope?: ChangesDiffScope) =>
+      getChangesDiff(await resolveTarget(target), file, sanitizeScope(scope))
   );
+  handleShared('changes:log', async (target: ChangesTarget) =>
+    getCommitLog(await resolveTarget(target))
+  );
+  handleShared('changes:commit-files', async (target: ChangesTarget, hash: string) => {
+    if (typeof hash !== 'string' || !HASH_RE.test(hash)) {
+      return { ok: false, error: '잘못된 커밋 해시입니다.' };
+    }
+    return getCommitFiles(await resolveTarget(target), hash);
+  });
   handleShared('changes:commit', async (target: ChangesTarget, message: string) =>
     commitChanges(await resolveTarget(target), String(message ?? ''))
   );

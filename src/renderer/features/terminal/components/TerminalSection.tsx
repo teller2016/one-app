@@ -18,7 +18,7 @@ import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { usePolling } from '../../../lib/usePolling';
-import { ChangesView } from '../../changes';
+import { ChangesOverlay, ChangesView } from '../../changes';
 import {
   agentIdFromCommand,
   presetsForWorkspace,
@@ -128,6 +128,7 @@ export function TerminalSection() {
   const [changesOpen, setChangesOpen] = useState(
     () => localStorage.getItem('terminal:changesOpen') === '1'
   );
+  const [changesFullOpen, setChangesFullOpen] = useState(false);
   const available = !!terminalApi();
 
   const [fontSize, setFontSize] = useState(savedFontSize);
@@ -803,8 +804,19 @@ export function TerminalSection() {
           <ChangesView
             key={selection?.kind === 'other' ? `s:${activeId}` : selKey}
             target={changesTarget}
+            onExpand={() => setChangesFullOpen(true)}
+            // 오버레이가 떠 있는 동안 드로어 폴링 중지 — 같은 대상 이중 git 조회 방지
+            polling={!changesFullOpen}
           />
         </aside>
+      )}
+
+      {/* 변경사항 전체 화면 — 드로어 ⤢ 버튼으로 진입 (사이드-바이-사이드 diff) */}
+      {changesFullOpen && changesTarget && (
+        <ChangesOverlay
+          target={changesTarget}
+          onClose={() => setChangesFullOpen(false)}
+        />
       )}
 
       {newWsOpen && (

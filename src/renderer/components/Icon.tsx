@@ -59,7 +59,10 @@ export type IconName =
   | "laptop"
   | "folder-git"
   | "pencil"
-  | "asterisk";
+  | "asterisk"
+  | "maximize"
+  | "git-commit"
+  | "arrow-up-to-line";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -336,6 +339,28 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 6v12" />
       <path d="M17.196 9 6.804 15" />
       <path d="m6.804 9 10.392 6" />
+    </>
+  ),
+  maximize: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+      <path d="M9 21H3v-6" />
+    </>
+  ),
+  "git-commit": (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <line x1="3" x2="9" y1="12" y2="12" />
+      <line x1="15" x2="21" y1="12" y2="12" />
+    </>
+  ),
+  "arrow-up-to-line": (
+    <>
+      <path d="M5 3h14" />
+      <path d="m18 13-6-6-6 6" />
+      <path d="M12 7v14" />
     </>
   ),
 };
