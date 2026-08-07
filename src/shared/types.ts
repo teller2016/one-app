@@ -287,6 +287,7 @@ export type PrItem = {
   approvals?: number; // 승인(APPROVED) 리뷰어 수 — 조회 실패 시 undefined
   head?: string; // 원본 브랜치 — 조회 실패 시 undefined (전역 검색 API 가 안 준다)
   base?: string; // 대상 브랜치 (어디로 머지되는지)
+  mergeable?: boolean; // 컨플릭트 없이 머지 가능한지 — 저장소별 /pulls 에서 보강 (실패 시 undefined)
 };
 
 export type PrListResult = {

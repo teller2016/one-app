@@ -14,53 +14,53 @@ import { Select } from '../../../components/Select';
 import { Textarea } from '../../../components/Textarea';
 import { FormRow } from '../../../components/FormRow';
 import { baseTagOf, needsBaseConfirm, sortBaseOptions } from '../lib/baseBranches';
+import { rel } from '../lib/relTime';
 
 /** 브랜치명에서 Jira 이슈 키 추출 — 예: bugfix/BBJ-2924 → BBJ-2924 */
 const issueKeyOf = (branch: string) =>
   branch.match(/[A-Z][A-Z0-9]{1,9}[-_]\d+/)?.[0]?.replace('_', '-') ?? null;
 
-/** "5분 전" 형태 상대 시간 */
-const rel = (ts?: number) => {
-  if (!ts) return '';
-  const min = Math.floor((Date.now() - ts) / 60000);
-  if (min < 1) return '방금 전';
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  return `${Math.floor(hr / 24)}일 전`;
-};
-
 /** 한 번에 렌더할 최대 옵션 수 — 저장소당 브랜치가 수백 개다 (초과분은 검색으로) */
 const OPTION_LIMIT = 50;
 
+/** 생성 성공 결과 — 부모가 목록 갱신 전에 상세를 먼저 띄울 수 있게 방향까지 넘긴다 */
+export type CreatedPr = {
+  repo: string;
+  number: number;
+  title: string;
+  head: string;
+  base: string;
+  url?: string;
+};
+
 /**
- * PR 생성 모달 — 원본(head)·대상(base) 브랜치를 고르고, 그 사이 커밋을 보여주고
- * 제목/본문을 자동 채운 뒤 생성한다. 두 셀렉트 모두 검색형(전체 브랜치 대상).
+ * 새 PR 모달 — 저장소는 보고 있던 탭으로 고정(저장소별 완전 분리), 원본(head)·대상(base)
+ * 브랜치를 고르고 그 사이 커밋을 보여주고 제목/본문을 자동 채운 뒤 생성한다.
+ * 브랜치 셀렉트는 둘 다 검색형(전체 브랜치 대상).
  */
 export function CreatePrModal({
   repo,
-  head: initialHead,
-  base: initialBase,
-  recentBranches,
+  repoName,
   projectDefault,
+  recentBase,
   onClose,
   onCreated,
 }: {
+  /** 대상 저장소 "owner/repo" — 현재 저장소 탭 (모달에서 바꿀 수 없다) */
   repo: string;
-  /** 초기 원본 브랜치 — 가장 최근 push 된 브랜치 */
-  head: string;
-  /** 초기 대상 브랜치 — 최근 사용값(MRU) 또는 프로젝트 기본 브랜치 */
-  base: string;
-  /** 최근 push 브랜치 (목록에서 이미 조회한 것 — head 후보 상단) */
-  recentBranches: PrBranch[];
-  /** 프로젝트 레지스트리에 설정된 기본 브랜치 — 정렬 1순위이자 타이핑 확인 면제 기준 */
-  projectDefault?: string;
+  /** 프로젝트 표시명 — 모달 제목용 */
+  repoName: string;
+  /** 프로젝트 defaultBranch (빈 값은 develop 폴백) — 초기 대상·타이핑 확인 기준 */
+  projectDefault: string;
+  /** 이 저장소에서 마지막으로 고른 base (MRU) — 초기 대상 선택값 */
+  recentBase?: string;
   onClose: () => void;
-  /** 생성 성공 — 번호를 넘겨 머지 모달로 이어가고, 고른 base 를 기억한다 */
-  onCreated: (number: number, title: string, base: string) => void;
+  onCreated: (created: CreatedPr) => void;
 }) {
-  const [head, setHead] = useState(initialHead);
-  const [base, setBase] = useState(initialBase);
+  const [recent, setRecent] = useState<PrBranch[] | null>(null); // 최근 push 브랜치 (head 후보 상단)
+  const [branchError, setBranchError] = useState('');
+  const [head, setHead] = useState('');
+  const [base, setBase] = useState('');
   const [candidates, setCandidates] = useState<PrBaseBranch[] | null>(null);
   const [allNames, setAllNames] = useState<string[]>([]); // 검색용 전체 목록
   const [title, setTitle] = useState('');
@@ -76,9 +76,28 @@ export function CreatePrModal({
   const titleDirty = useRef(false);
   const bodyDirty = useRef(false);
 
-  // base 후보(주요 브랜치) + 검색용 전체 목록을 함께 로드 — 열자마자 검색 가능하게
+  const effectiveDefault = projectDefault || 'develop';
+  const mruBase = recentBase || '';
+
+  // 진입 시 브랜치 후보 3종(최근 push · 주요 · 전체) 로드
   useEffect(() => {
+    if (!repo) return;
     let alive = true;
+    setRecent(null);
+    setBranchError('');
+    setCandidates(null);
+    setAllNames([]);
+    setCommits(null);
+    setTyped('');
+    setHead('');
+    setBase(mruBase || effectiveDefault);
+    void window.oneApp.prs.getBranches(repo).then((res) => {
+      if (!alive) return;
+      const list = res.ok ? res.branches ?? [] : [];
+      setRecent(list);
+      setBranchError(res.ok ? '' : res.error ?? '브랜치 조회 실패');
+      setHead(list[0]?.name ?? '');
+    });
     void window.oneApp.prs.getBaseBranches(repo).then((res) => {
       // 후보 조회가 실패해도 PR 생성은 막지 않는다 (초기 base 로 진행)
       if (alive) setCandidates(res.ok ? res.branches ?? [] : []);
@@ -89,10 +108,12 @@ export function CreatePrModal({
     return () => {
       alive = false;
     };
+    // deps 는 repo 만 — mruBase·effectiveDefault 는 모달이 열려 있는 동안 불변
   }, [repo]);
 
-  // base 대비 head 커밋 로드 → 제목/본문 자동 생성 (브랜치 변경 시 재조회)
+  // base 대비 head 커밋 로드 → 제목/본문 자동 생성 (저장소·브랜치 변경 시 재조회)
   useEffect(() => {
+    if (!repo || !head || !base) return;
     let alive = true;
     setCommits(null);
     setLoadError('');
@@ -121,12 +142,13 @@ export function CreatePrModal({
 
   // 원본(head) 후보 — 최근 push 8개를 위로, 나머지 전체 브랜치는 이름순. base 는 제외
   const headOptions = useMemo(() => {
-    const recentAt = new Map(recentBranches.map((b) => [b.name, b.committedAt]));
+    const recentList = recent ?? [];
+    const recentAt = new Map(recentList.map((b) => [b.name, b.committedAt]));
     const names = [
-      ...recentBranches.map((b) => b.name),
+      ...recentList.map((b) => b.name),
       ...allNames.filter((n) => !recentAt.has(n)),
     ];
-    if (!names.includes(head)) names.unshift(head);
+    if (head && !names.includes(head)) names.unshift(head);
     return names
       .filter((n) => n !== base)
       .map((name) => ({
@@ -141,7 +163,7 @@ export function CreatePrModal({
           </span>
         ),
       }));
-  }, [recentBranches, allNames, head, base]);
+  }, [recent, allNames, head, base]);
 
   // 대상(base) 후보 — 주요 브랜치를 상단에 정렬하고 나머지 전체를 뒤에 붙인다. head 는 제외
   const baseOptions = useMemo(() => {
@@ -149,10 +171,10 @@ export function CreatePrModal({
       (candidates ?? []).map((b) => [b.name, b]),
     );
     for (const name of allNames) if (!known.has(name)) known.set(name, { name });
-    if (!known.has(base)) known.set(base, { name: base });
+    if (base && !known.has(base)) known.set(base, { name: base });
     return sortBaseOptions([...known.values()], {
-      projectDefault,
-      recent: initialBase,
+      projectDefault: effectiveDefault,
+      recent: mruBase,
     })
       .filter((b) => b.name !== head)
       .map((b) => {
@@ -168,14 +190,15 @@ export function CreatePrModal({
           ),
         };
       });
-  }, [candidates, allNames, base, head, projectDefault, initialBase]);
+  }, [candidates, allNames, base, head, effectiveDefault, mruBase]);
 
   const selected = (candidates ?? []).find((b) => b.name === base);
-  const mustConfirm = needsBaseConfirm(base, projectDefault, selected);
+  const mustConfirm = needsBaseConfirm(base, effectiveDefault, selected);
   const confirmOk = !mustConfirm || typed.trim() === base;
+  const noHead = recent !== null && !head; // push 된 브랜치가 없는 저장소
 
   const create = async () => {
-    if (!title.trim() || !confirmOk) return;
+    if (!title.trim() || !confirmOk || !head) return;
     setCreating(true);
     setCreateError('');
     const res = await window.oneApp.prs.create({
@@ -190,12 +213,19 @@ export function CreatePrModal({
       setCreateError(res.error ?? 'PR 생성에 실패했습니다.');
       return;
     }
-    onCreated(res.number, title.trim(), base);
+    onCreated({
+      repo,
+      number: res.number,
+      title: title.trim(),
+      head,
+      base,
+      url: res.url,
+    });
   };
 
   return (
-    <Modal wide title={`PR 생성 — ${repo.split('/').pop()}`} onClose={onClose}>
-      {/* 원본 → 대상 한 줄. 두 셀렉트 모두 팝오버에서 바로 검색된다 */}
+    <Modal wide title={`새 PR — ${repoName}`} onClose={onClose}>
+      {/* 원본 → 대상 한 줄. 두 셀렉트 모두 팝오버에서 바로 검색된다 (저장소는 탭에서 확정) */}
       <div className="prs__route">
         <FormRow label="원본">
           <Select
@@ -204,7 +234,7 @@ export function CreatePrModal({
             className="prs__branch-pick"
             aria-label="원본 브랜치 선택"
             searchPlaceholder="브랜치 검색"
-            disabled={creating}
+            disabled={creating || recent === null}
             value={head}
             onChange={setHead}
             options={headOptions}
@@ -231,6 +261,8 @@ export function CreatePrModal({
         </FormRow>
       </div>
 
+      {branchError && <Banner variant="danger">{branchError}</Banner>}
+
       {/* 주요 브랜치(main 등)로 PR 을 만들 때는 브랜치명 타이핑 확인 — 오PR 방지.
           커밋 목록이 길어도 눈에 들어오도록 브랜치 선택 바로 아래에 둔다 */}
       {mustConfirm && (
@@ -251,7 +283,13 @@ export function CreatePrModal({
         </div>
       )}
 
-      {commits === null ? (
+      {recent === null ? (
+        <p className="hint">브랜치를 확인하는 중...</p>
+      ) : noHead ? (
+        <Banner>
+          <b>PR 가능한 브랜치가 없습니다</b> — push 를 먼저 했는지 확인하세요.
+        </Banner>
+      ) : commits === null ? (
         <p className="hint">{base} 대비 커밋을 확인하는 중...</p>
       ) : loadError ? (
         <Banner variant="danger">{loadError}</Banner>
@@ -275,11 +313,11 @@ export function CreatePrModal({
           {files.length > 0 && (
             <ul className="prs__create-files">
               {files.map((f) => (
-                <li key={f.path} className={`prs__create-file prs__create-file--${f.status}`}>
-                  <span className="prs__create-file-status">
+                <li key={f.path} className={`prs__file prs__file--${f.status}`}>
+                  <span className="prs__file-status">
                     {f.status === 'added' ? 'A' : f.status === 'removed' || f.status === 'deleted' ? 'D' : f.status === 'renamed' ? 'R' : 'M'}
                   </span>
-                  <span className="prs__create-file-path">{f.path}</span>
+                  <span className="prs__file-path">{f.path}</span>
                 </li>
               ))}
             </ul>
@@ -319,7 +357,11 @@ export function CreatePrModal({
           onClick={() => void create()}
           loading={creating}
           disabled={
-            !title.trim() || commits === null || commits.length === 0 || !confirmOk
+            !title.trim() ||
+            !head ||
+            commits === null ||
+            commits.length === 0 ||
+            !confirmOk
           }
         >
           PR 생성

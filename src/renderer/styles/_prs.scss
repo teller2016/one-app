@@ -1,12 +1,40 @@
-// PR 대시보드 — 열린 PR 목록 (룩은 공용 클래스, 여기는 배치)
+// PR 섹션 — 마스터-디테일 (좌: 목록 · 우: 상세 패널). 룩은 공용 클래스, 여기는 배치
 @use './base' as *;
 
 .prs {
+  max-width: var(--w-wide); // 2컬럼 마스터-디테일 — 기본 .section 폭을 확장 (주간보고와 동일)
+
   &__head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  // 헤더 우측 툴바 — 검색 · [새 PR] · 새로고침
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-top: 4px; // 큰 섹션 제목의 첫 줄과 광학 정렬
+  }
+
+  &__search {
+    width: 200px;
+  }
+
+  // 저장소 탭 (최상단 — 저장소별 완전 분리의 진입점) + 현재 저장소의 Gitea PR 경로 링크
+  &__tabs {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  &__tabs-link {
+    flex-shrink: 0;
   }
 
   // 조직(프로젝트) 필터 칩 줄
@@ -22,168 +50,297 @@
     color: var(--text-3);
   }
 
-  // 조직별 그룹
-  &__group {
-    margin-bottom: 16px;
-  }
+  // ── 마스터-디테일 골격 ──────────────────────────────────────
+  &__body {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
 
-  &__group-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  &__group-name {
-    @include type-emph;
-  }
-
-  &__group-count {
-    padding: 1px 8px;
-    border-radius: var(--r-full);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    @include type-caption;
-    color: var(--text-2);
-  }
-
-  &__list {
-    @include card-surface;
-    padding: 4px 16px;
-  }
-
-  &__row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 0;
-
-    + .prs__row {
-      border-top: 1px solid var(--border);
+    // 좁은 창 — 한 컬럼 스택 (목록 위 · 상세 아래). 1080 = 축소 사이드바 + 2컬럼 최소폭
+    @media (max-width: 1080px) {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
-  &__main {
+  // 좌측 목록 — 상세가 길어도 목록은 화면에 남는다 (주간보고 roster 와 같은 제약)
+  &__list {
+    @include card-surface;
+    padding: 6px;
+    position: sticky;
+    top: 56px; // 프로스트 탑바(44px) + 여백
+    max-height: calc(100vh - 168px);
+    overflow-y: auto;
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: 1px solid transparent; // 선택 보더 자리 — 레이아웃 흔들림 방지
+    border-radius: var(--r-md);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+
+    & + & {
+      margin-top: 2px;
+    }
+
+    &:hover {
+      background: var(--overlay-hover);
+    }
+
+    &:focus-visible {
+      @include focus-ring;
+    }
+
+    // 선택 — 액센트 보더 + soft 배경 (DESIGN §4 selected 카드 문법)
+    &--sel,
+    &--sel:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+  }
+
+  &__item-top {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
-    min-width: 0;
   }
 
-  &__repo {
-    flex-shrink: 0;
-    padding: 2px 8px;
-    border-radius: var(--r-full);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+  &__item-repo {
     @include type-caption;
     color: var(--text-2);
+    // 저장소명은 대소문자가 구분되는 식별자 — caption 의 대문자 변환을 끈다
+    text-transform: none;
+    letter-spacing: normal;
   }
 
-  // 제목 링크 — 길면 말줄임
-  &__title {
+  &__item-when {
+    @include type-caption;
+    color: var(--text-3);
+  }
+
+  &__item-title {
+    @include type-body;
+    font-weight: 600;
     min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    @include type-body;
-    font-weight: 600;
   }
 
-  &__number {
+  &__item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  // 기본 브랜치가 아닌 대상(main 등)으로 가는 PR — 목록에서도 주의색으로
+  &__item-off {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 1px 8px;
+    border-radius: var(--r-full);
+    background: var(--warning-soft);
+    color: var(--warning);
+    font-family: var(--font-mono);
+    // 브랜치명은 대소문자가 구분되는 식별자 — 대문자 변환 금지
+    @include type-small;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__item-num {
+    margin-left: auto;
     flex-shrink: 0;
     @include type-small;
     color: var(--text-3);
     font-family: var(--font-mono);
   }
 
-  &__meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  // ── 우측 상세 패널 ──────────────────────────────────────────
+  &__detail {
+    @include card-surface;
+    min-width: 0;
+    padding: 20px 24px;
   }
 
-  &__sub {
-    @include type-caption;
+  &__detail-title {
+    margin: 0 0 6px;
+    @include type-title;
+    overflow-wrap: anywhere;
+  }
+
+  &__detail-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+    @include type-small;
     color: var(--text-3);
+  }
+
+  &__detail-num {
+    font-family: var(--font-mono);
+  }
+
+  &__detail-flags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  &__detail-sep {
+    border-top: 1px solid var(--border);
+    margin: 14px 0;
+  }
+
+  &__detail-stats {
+    margin: 0 0 10px;
+  }
+
+  // 커밋 + 변경 파일 — 다크 코드 패널 (내부 토큰 자동 치환)
+  &__detail-panel {
+    border: 1px solid;
+    @include panel-dark;
+    border-radius: var(--r-md);
+    padding: 10px 14px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  &__detail-commits {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    @include type-small;
+
+    li {
+      padding: 2px 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__detail-file-list {
+    margin: 8px 0 0;
+    padding: 8px 0 0;
+    list-style: none;
+    border-top: 1px solid var(--border); // panel-dark 스코프 안 — border-dark 로 해석
+  }
+
+  &__detail-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
   }
 }
 
-// 빠른 PR (push 브랜치 → PR 생성)
-.prs__quick {
-  @include card-surface;
-  padding: 12px 16px 14px;
-  margin-bottom: 16px;
+// 변경 파일 행 — 상세 패널과 새 PR 모달이 공용
+.prs__file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  @include type-small;
+  font-family: var(--font-mono);
 
-  &-head {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 8px;
-
-    .form-label {
-      margin: 0;
-    }
-  }
-
-  &-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 0;
-
-    + .prs__quick-row {
-      border-top: 1px solid var(--border);
-    }
-  }
-
-  // 행 오른쪽 끝의 액션 묶음 (새로고침·PR 만들기·제거) — 왼쪽 쏠림 방지
-  &-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
+  &-status {
     flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-3);
   }
 
-  &-error {
-    @include type-small;
+  &--added &-status {
+    color: var(--ok);
+  }
+
+  &--removed &-status,
+  &--deleted &-status {
     color: var(--danger);
   }
 
-  &-add {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-    // 입력이 남는 폭을 채워 [저장소 추가] 버튼이 카드 오른쪽 끝에 붙는다
+  &-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-2);
+    direction: rtl; // 긴 경로는 앞부분을 생략하고 파일명이 보이게
+    text-align: left;
   }
 }
 
-// 목록 행의 최근 push 브랜치 표시 (선택은 모달에서 — 여기선 읽기 전용)
-.prs__quick-latest {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+// 머지 방향 (head → base) — 상세 패널 표시용. 어디로 들어가는 PR 인지 한눈에
+.prs__branches {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
-  flex: 1;
+  max-width: 360px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  // 브랜치명은 대소문자가 구분되는 식별자라 type-caption(대문자 변환)을 쓰지 않는다
+  @include type-small;
 }
 
-.prs__quick-branch {
+// 화살표는 대상 칩과 같은 톤으로 — 방향이 색으로도 읽힌다
+.prs__branch-arrow {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.prs__branch-head {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  @include type-small;
-  color: var(--text-2);
 }
 
-.prs__quick-when {
+// 대상 브랜치는 칩으로 — 가장 먼저 눈에 들어와야 하는 정보
+.prs__branch-base {
   flex-shrink: 0;
-  color: var(--text-3);
-  @include type-caption;
+  padding: 2px 9px;
+  border-radius: var(--r-full);
+  background: var(--idle-soft);
+  color: var(--text);
+  font-weight: 600;
 }
+
+// 프로젝트 기본 브랜치가 아닌 대상(main 등) — 주의색으로 확실히 구분
+.prs__branches--off {
+  .prs__branch-base {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+
+  .prs__branch-arrow {
+    color: var(--warning);
+  }
+}
+
+// ── 새 PR 모달 ────────────────────────────────────────────────
 
 .prs__create-count {
   margin: 0 0 10px;
@@ -225,10 +382,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-
-  &--more {
-    color: var(--accent);
-  }
+  flex: 1;
 }
 
 .prs__base-name {
@@ -272,78 +426,10 @@
 }
 
 .prs__create-body {
-  min-height: 120px;
+  min-height: 220px; // 커밋 불릿 여러 줄이 스크롤 없이 보이게 (2026-08-06 사용자 요청으로 확대)
 }
 
-// 목록 행의 머지 방향 (head → base) — 어디로 들어가는 PR 인지
-.prs__branches {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 300px;
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  @include type-caption;
-  // ⚠️ type-caption 의 대문자 변환·자간을 끈다 — 브랜치명은 대소문자가 구분되는 식별자다
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.prs__branch-head {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prs__branch-base {
-  flex-shrink: 0;
-  color: var(--text-2);
-  font-weight: 600;
-}
-
-// 머지 모달
-.prs__merge-title {
-  margin: 0 0 12px;
-  @include type-emph;
-}
-
-.prs__merge-route {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 12px;
-  color: var(--text-3);
-
-  code {
-    font-family: var(--font-mono);
-    @include type-small;
-  }
-
-  &-base {
-    color: var(--accent);
-    font-weight: 600;
-  }
-}
-
-.prs__merge-method {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 12px 0;
-
-  .form-label {
-    margin: 0;
-  }
-}
-
-// 목록 행 머지 버튼 — 오른쪽 끝
-.prs__merge-btn {
-  margin-left: auto;
-}
-
-// PR 생성 모달 — 변경 파일 요약
+// PR 변경 요약의 증감 수 (모달·상세 공용)
 .prs__stat-add {
   color: var(--ok);
   font-weight: 600;
@@ -354,49 +440,14 @@
   font-weight: 600;
 }
 
+// 새 PR 모달 — 변경 파일 목록 (다크 코드 패널)
 .prs__create-files {
   margin: 0 0 12px;
   padding: 6px 12px;
   list-style: none;
   border: 1px solid;
-  @include panel-dark; // 변경 파일 목록 — 다크 코드 패널 (내부 토큰 자동 치환)
+  @include panel-dark;
   border-radius: var(--r-md);
   max-height: 160px;
   overflow-y: auto;
-}
-
-.prs__create-file {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  @include type-small;
-  font-family: var(--font-mono);
-
-  &-status {
-    flex-shrink: 0;
-    width: 14px;
-    text-align: center;
-    font-weight: 700;
-    color: var(--text-3);
-  }
-
-  &--added &-status {
-    color: var(--ok);
-  }
-
-  &--removed &-status,
-  &--deleted &-status {
-    color: var(--danger);
-  }
-
-  &-path {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-2);
-    direction: rtl; // 긴 경로는 앞부분을 생략하고 파일명이 보이게
-    text-align: left;
-  }
 }
