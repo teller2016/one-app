@@ -85,6 +85,9 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 ## attach 프로토콜
 세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다.
 
+### 데스크톱 terminal:data 게이트 (2026-08-07)
+`terminal:ipc.ts` 가 **pane 이 attach 한 세션 id 만** `terminal:data` 를 broadcast 한다 — `TerminalView` cleanup 이 `terminal:detach`(fire-and-forget) 를 보내고, 렌더러 리로드·창 파괴는 sender 의 `destroyed`/`did-navigate` 에서 전체 clear 로 회수한다. 터미널 섹션을 떠나 있는 동안의 출력은 IPC 로 오지 않지만 **링버퍼·tmux 에 남아 재attach replay 로 복원**되므로 유실이 아니다. preload 의 `onData`/`onResized` 는 **멀티플렉서**(ipcRenderer 리스너 채널당 1개 + 콜백 Set)라 pane 수만큼 리스너가 늘지 않는다 — 새 고빈도 구독 채널을 추가할 때도 `makeMux` 를 쓸 것. MO(WS)는 이 게이트와 무관하게 `server.ts` 의 `attachedId` 필터를 그대로 쓴다.
+
 ## 크기 공유 — last-claim-wins
 보고 있는 쪽이 주장한다 — 새로 붙은 쪽 크기로 PTY 를 맞추고 `resized` 로 전 클라이언트에 알려 `term.resize()` 로 동기화한다. 여기에 **재주장 규칙**을 더한다: 데스크톱은 **창 포커스** 시(`window 'focus'` → `fit.proposeDimensions()` 와 다르면 재주장), MO 는 **보이는 상태(`visibilityState==='visible'`)에서 `resized` 를 받았을 때** 자기 크기를 되찾는다. 없으면 폰이 줄여 둔 크기로 데스크톱에 빈 공간이 남고(반대로 데스크톱이 키우면 폰은 오른쪽이 잘려 못 읽는다).
 

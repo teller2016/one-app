@@ -219,9 +219,10 @@ export function JiraSection() {
   const [detailOpen, setDetailOpen] = useState(false);
   const toast = useToast();
 
-  const load = useCallback(async () => {
+  // force — 수동 새로고침은 main 의 TTL 캐시를 우회해 항상 최신을 본다
+  const load = useCallback(async (force = false) => {
     setLoading(true);
-    const res = await window.oneApp.jira.list();
+    const res = await window.oneApp.jira.list(force);
     setConfigured(res.configured);
     if (res.ok && res.issues) {
       setIssues(res.issues);
@@ -339,7 +340,7 @@ export function JiraSection() {
         <RefreshButton
           size={14}
           spinning={loading}
-          onClick={() => void load()}
+          onClick={() => void load(true)}
           title="이슈 목록 새로고침"
         />
       </div>

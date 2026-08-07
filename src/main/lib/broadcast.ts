@@ -16,7 +16,20 @@ export function onBroadcast(cb: BroadcastListener): () => void {
 
 export function broadcast(channel: string, ...args: unknown[]): void {
   for (const w of BrowserWindow.getAllWindows()) {
-    w.webContents.send(channel, ...args);
+    // 창 파괴 직후 레이스 방어 — 고빈도 채널(terminal:data)은 pty flush 루프 안에서
+    // 호출되므로, 여기서 예외가 새면 남은 창·MO 브리지 전파까지 통째로 끊긴다
+    if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
+    try {
+      w.webContents.send(channel, ...args);
+    } catch {
+      // destroyed 체크 후에도 남는 종료 타이밍 예외 — 무시
+    }
   }
-  for (const cb of listeners) cb(channel, args);
+  for (const cb of listeners) {
+    try {
+      cb(channel, args);
+    } catch (err) {
+      console.error('[broadcast] 리스너 오류:', err);
+    }
+  }
 }

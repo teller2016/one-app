@@ -39,8 +39,37 @@ const JQL =
   'assignee = currentUser() AND (resolution = Unresolved OR statusCategory != Done) ORDER BY updated DESC';
 const FIELDS = 'summary,status,issuetype,project,parent,priority,updated';
 
-/** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) */
-export async function fetchMyIssues(): Promise<JiraListResult> {
+// 목록 캐시 — 사이드바 뱃지·홈 카드·Jira 섹션·Nightwatch 후보가 같은 JQL 을 각자
+// 폴링하므로 짧은 TTL 로 실제 네트워크 호출을 공유한다(2026-08-07 성능 감사: 4곳 중복).
+// 수동 새로고침·상태 전환 직후는 force 로 우회하고, 실패 응답은 캐시하지 않는다.
+const LIST_TTL_MS = 60_000;
+let listCache: { at: number; result: JiraListResult } | null = null;
+let listInFlight: Promise<JiraListResult> | null = null;
+
+/** 상태 전환 등 변이 후 캐시 무효화 — 다음 조회가 즉시 최신을 본다 */
+function invalidateListCache(): void {
+  listCache = null;
+}
+
+/** 내게 할당된 미해결 이슈 목록 — TTL 캐시 + 동시 요청 공유 래퍼 */
+export async function fetchMyIssues(force = false): Promise<JiraListResult> {
+  if (!force && listCache && Date.now() - listCache.at < LIST_TTL_MS) {
+    return listCache.result;
+  }
+  if (listInFlight) return listInFlight;
+  listInFlight = fetchMyIssuesRemote()
+    .then((result) => {
+      if (result.ok) listCache = { at: Date.now(), result };
+      return result;
+    })
+    .finally(() => {
+      listInFlight = null;
+    });
+  return listInFlight;
+}
+
+/** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) — 실제 REST 호출 */
+async function fetchMyIssuesRemote(): Promise<JiraListResult> {
   const cfg = getJiraApiConfig();
   if (!cfg) {
     return {
@@ -361,6 +390,7 @@ export async function transitionIssue(
     if (!res.ok) {
       return { ok: false, error: `전환 실패 (HTTP ${res.status})` };
     }
+    invalidateListCache(); // 상태가 바뀌었으니 캐시된 목록은 낡았다
     return { ok: true };
   } catch (err) {
     return {

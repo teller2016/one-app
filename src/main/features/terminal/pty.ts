@@ -318,7 +318,7 @@ function wireSession(s: Session) {
       // 세션이 살아있으면 조용히 재접속해 목록에서 사라지지 않게 한다.
       const name = s.tmuxName;
       void hasTmuxSession(name).then((alive) => {
-        if (alive && sessions.get(s.id) === s) reattach(s);
+        if (alive && sessions.get(s.id) === s) scheduleReattach(s);
         else finalizeExit(s, exitCode);
       });
       return;
@@ -327,9 +327,41 @@ function wireSession(s: Session) {
   });
 }
 
+// reattach 백오프 — attach 클라이언트가 붙자마자 죽는 병리 상태(conf 오류·fd 고갈 등)에서
+// exit→has-session→spawn 이 지연 0으로 무한 반복되지 않게 재시도 간격을 지수로 늘린다
+// (2026-08-07 성능 감사). 정상 detach 복구는 첫 회(지연 0)라 체감 지연이 없고,
+// 마지막 시도 후 30초 넘게 살아 있었으면 정상으로 보고 카운터를 리셋한다.
+const REATTACH_BASE_MS = 500;
+const REATTACH_MAX_MS = 10_000;
+const REATTACH_RESET_MS = 30_000;
+const reattachState = new Map<string, { count: number; lastAt: number }>();
+
+function scheduleReattach(s: Session) {
+  const prev = reattachState.get(s.id);
+  const now = Date.now();
+  const count = prev && now - prev.lastAt < REATTACH_RESET_MS ? prev.count + 1 : 0;
+  reattachState.set(s.id, { count, lastAt: now });
+  if (count === 0) {
+    reattach(s);
+    return;
+  }
+  const delay = Math.min(REATTACH_BASE_MS * 2 ** (count - 1), REATTACH_MAX_MS);
+  setTimeout(() => {
+    if (disposing || sessions.get(s.id) !== s) return;
+    reattach(s);
+  }, delay);
+}
+
 /** 세션 종말 처리 — 목록 제거·sidecar 정리·exit 전파 (중복 호출 안전) */
 function finalizeExit(s: Session, exitCode: number) {
   if (sessions.get(s.id) !== s) return; // disposeAll 등으로 이미 정리됨
+  // killSession 실패 경로 등 flush 를 안 거치고 오는 경우 — 죽은 세션의 배칭 타이머가
+  // 한 번 더 발화해 유령 데이터를 내보내지 않게 여기서도 정리한다
+  if (s.flushTimer) {
+    clearTimeout(s.flushTimer);
+    s.flushTimer = null;
+  }
+  reattachState.delete(s.id);
   sessions.delete(s.id);
   if (s.tmuxName) removePersisted(s.id); // tmux 세션이 실제로 죽었을 때만 온다
   stopStatusTimerIfEmpty();

@@ -175,7 +175,12 @@ export function TerminalSection() {
   useEffect(() => {
     void refreshWorktrees();
   }, [workspaces, refreshWorktrees]);
-  usePolling(() => void refreshWorktrees(), WORKTREE_POLL_MS, { immediate: false });
+  // ⚠️ 인라인 화살표 금지(renderer-ui 규칙) — identity 가 매 렌더 바뀌면 인터벌이
+  // 계속 리셋돼 10초 폴링이 한 번도 발화하지 않았다(2026-08-07 성능 감사에서 발견).
+  const pollWorktrees = useCallback(() => {
+    void refreshWorktrees();
+  }, [refreshWorktrees]);
+  usePolling(pollWorktrees, WORKTREE_POLL_MS, { immediate: false });
 
   // ── 세션 목록·상태 — main 이 payload 로 push, 재조회는 최초 1회뿐 ──
   useEffect(() => {

@@ -41,7 +41,8 @@ paths:
 
 ## 공통 훅 재사용 (중복 정의 금지)
 - 주기 폴링·시계 틱은 `lib/usePolling.ts`(`usePolling`·`useTick`)
-  - ⚠️ **`usePolling` 에 인라인 화살표(`() => void refresh()`)를 넘기지 말 것** — 매 렌더마다 콜백 identity 가 바뀌어 effect 가 인터벌을 재시작하며 `immediate` 즉시 실행을 반복하고, 응답의 setState 가 다시 렌더를 일으켜 **IPC 왕복 주기(수십 ms)로 폴링이 폭주**한다(2026-08-06 변경사항 diff CPU 폭주 실측 원인). 반드시 `useCallback` 으로 안정화한 콜백을 그대로 넘긴다.
+  - ⚠️ **`usePolling` 에 인라인 화살표(`() => void refresh()`)를 넘기지 말 것** — 매 렌더마다 콜백 identity 가 바뀌어 effect 가 인터벌을 재시작하며 `immediate` 즉시 실행을 반복하고, 응답의 setState 가 다시 렌더를 일으켜 **IPC 왕복 주기(수십 ms)로 폴링이 폭주**한다(2026-08-06 변경사항 diff CPU 폭주 실측 원인). 반드시 `useCallback` 으로 안정화한 콜백을 그대로 넘긴다. (`immediate: false` 여도 안전하지 않다 — 인터벌이 계속 리셋돼 **폴링이 한 번도 발화하지 않는** 반대 증상이 된다. 2026-08-07 터미널 워크트리 폴링 실측.)
+  - 두 훅 모두 **창 활성(보임+포커스) 인지**가 내장돼 있다(2026-08-07) — 비활성이면 `usePolling` 은 주기가 6배로 늘고 `useTick` 은 멈추며, 복귀 시 즉시 1회 따라잡는다. 호출부에서 visibility 처리를 중복 구현하지 말 것.
 - 클립보드 복사+토스트는 `lib/useCopy.ts` (⚠️ 폰은 평문 http = insecure context 라 `navigator.clipboard` 가 없어 `execCommand` 폴백이 들어 있다)
 - 드롭다운·팝오버 배치는 `lib/usePopover.ts`
 - 테마 전환은 `lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지, `useThemeMode` 훅)

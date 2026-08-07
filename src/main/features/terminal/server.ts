@@ -45,13 +45,19 @@ let server: http.Server | https.Server | null = null;
 // HTTPS 로 떴을 때의 도메인 — 인증서가 그 이름으로만 유효하므로 접속 URL 도 이 이름을 쓴다
 let tlsDomain: string | null = null;
 let wss: WebSocketServer | null = null;
+let rpcWss: WebSocketServer | null = null; // stopServer 에서 함께 닫는다 (누수 방지)
 let pingTimer: NodeJS.Timeout | null = null;
 let certTimer: NodeJS.Timeout | null = null;
 let offPty: Array<() => void> = []; // pty 구독 해제 목록
 let lastError = '';
 
 // 소켓별 상태 — attach 된 세션에만 출력을 전달한다
-const socketState = new Map<WebSocket, { attachedId: string | null; alive: boolean }>();
+// kind — /term(터미널 페이지)과 /rpc(폰 앱 셸)를 한 맵에서 ping 으로 함께 관리하되,
+// 터미널 전용 방송(세션 목록 등)이 앱 셸 소켓으로 새지 않게 구분한다(2026-08-07 감사).
+const socketState = new Map<
+  WebSocket,
+  { attachedId: string | null; alive: boolean; kind: 'term' | 'rpc' }
+>();
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((cb) => cb());
@@ -174,7 +180,11 @@ function sendToAttached(id: string, msg: TermServerMsg) {
 }
 
 function broadcastAll(msg: TermServerMsg) {
-  for (const ws of socketState.keys()) send(ws, msg);
+  // 터미널 프로토콜 메시지는 /term 소켓에게만 — 앱 셸(/rpc)은 처리 분기가 없어
+  // 버리기만 하므로 보내면 셀룰러 데이터·배터리 순손실이다
+  for (const [ws, state] of socketState) {
+    if (state.kind === 'term') send(ws, msg);
+  }
 }
 
 function handleMessage(ws: WebSocket, msg: TermClientMsg) {
@@ -334,7 +344,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
   // 폰 앱 셸의 RPC — 데스크톱과 같은 IPC 핸들러를 호출한다 (rpc.ts)
   startRpcBridge();
   rpcServer.on('connection', (ws: WebSocket) => {
-    socketState.set(ws, { attachedId: null, alive: true }); // ping 루프 공용
+    socketState.set(ws, { attachedId: null, alive: true, kind: 'rpc' }); // ping 루프 공용
     ws.on('pong', () => {
       const st = socketState.get(ws);
       if (st) st.alive = true;
@@ -344,7 +354,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
   });
 
   wsServer.on('connection', (ws: WebSocket) => {
-    socketState.set(ws, { attachedId: null, alive: true });
+    socketState.set(ws, { attachedId: null, alive: true, kind: 'term' });
     ws.on('pong', () => {
       const st = socketState.get(ws);
       if (st) st.alive = true;
@@ -394,26 +404,37 @@ export async function startServer(): Promise<TerminalServerStatus> {
   }, PING_INTERVAL_MS);
 
   await new Promise<void>((resolve) => {
-    srv.once('error', (err: NodeJS.ErrnoException) => {
+    const onListenError = (err: NodeJS.ErrnoException) => {
       lastError =
         err.code === 'EADDRINUSE'
           ? `포트 ${getPort()} 가 이미 사용 중입니다.`
           : err.message;
       server = null;
       wss = null;
+      rpcWss = null;
       if (pingTimer) clearInterval(pingTimer);
       if (certTimer) clearInterval(certTimer);
       offPty.forEach((off) => off());
       offPty = [];
       stopRpcBridge();
+      wsServer.close();
+      rpcServer.close();
+      resolve();
+    };
+    srv.once('error', onListenError);
+    srv.listen(getPort(), '0.0.0.0', () => {
+      // listen 성공 후엔 위 정리 핸들러를 떼어낸다 — 남겨두면 런타임 에러 한 번에
+      // server=null 이 되면서 실제 소켓은 계속 listen 하는 유령 상태가 된다
+      srv.removeListener('error', onListenError);
+      srv.on('error', (err) => console.error('[terminal-server]', err));
       resolve();
     });
-    srv.listen(getPort(), '0.0.0.0', () => resolve());
   });
 
   if (!lastError) {
     server = srv;
     wss = wsServer;
+    rpcWss = rpcServer;
   }
   emit();
   return getServerStatus();
@@ -432,6 +453,8 @@ export async function stopServer(): Promise<void> {
   socketState.clear();
   wss?.close();
   wss = null;
+  rpcWss?.close();
+  rpcWss = null;
   const srv = server;
   server = null;
   await new Promise<void>((resolve) => srv.close(() => resolve()));

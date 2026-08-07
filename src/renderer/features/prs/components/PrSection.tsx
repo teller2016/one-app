@@ -106,7 +106,7 @@ export function PrSection() {
     void window.oneApp.prs.setConfig(next);
   };
 
-  // 조직 제외 토글 — 저장은 메인(userData)에, 알림 폴러도 같은 값을 쓴다
+  // 조직 제외 토글 — 저장은 메인(userData)에
   const toggleOrg = (org: string) => {
     const set = new Set(config.excludedOrgs);
     if (set.has(org)) set.delete(org);

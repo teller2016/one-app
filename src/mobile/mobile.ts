@@ -210,7 +210,18 @@ function handleMessage(msg: TermServerMsg) {
   }
 }
 
+// 재연결 예약 핸들 — visibilitychange 재연결과 onclose 백오프가 경합해 소켓이
+// 이중 생성되면, 먼저 열린 쪽은 `ws !== sock` 가드에 걸려 영영 닫히지 않는
+// 유령 소켓이 된다(2026-08-07 성능 감사). connect 진입 시 예약을 지우고,
+// 이미 소켓이 있으면(연결 중 포함) 새로 만들지 않는다.
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
 function connect() {
+  if (ws) return;
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   setStatus('연결 중…', false);
   // 스킴은 페이지를 따라간다 — https 페이지에서 ws:// 는 브라우저가 mixed content 로 막는다
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -233,7 +244,10 @@ function connect() {
     ws = null;
     attachedId = null; // 재접속 시 재attach
     setStatus('연결 끊김 — 재연결 중…', false);
-    setTimeout(connect, reconnectDelay);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 5000); // 1→2→4→5초 백오프
   };
   sock.onerror = () => sock.close();

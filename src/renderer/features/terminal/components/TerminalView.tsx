@@ -350,6 +350,8 @@ export function TerminalView({
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
       window.removeEventListener('focus', reclaimSize);
+      // detach — 안 보는 세션의 출력 방송을 멈춘다 (?. 는 구 preload 재시작 전 대비)
+      window.oneApp.terminal.detach?.(id);
       offData();
       offResized();
       dataSub.dispose();

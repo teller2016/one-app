@@ -1,5 +1,6 @@
 // scrcpy 실행·상태 추적 — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
-// 앱이 종료되면 자식인 scrcpy 창도 함께 정리된다 (VPN 과 달리 독립 유지가 필요 없음).
+// ⚠️ spawn 자식은 부모(앱) 종료만으로 죽지 않는다(POSIX 재부모화) — 앱 종료 시
+// main.ts 의 before-quit 이 disposeMirror() 로 명시적으로 정리한다(2026-08-07).
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -167,4 +168,11 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
 export function stopMirror(): MirrorActionResult {
   child?.kill('SIGTERM');
   return { ok: true }; // 실제 정리는 exit 핸들러가 담당 (상태 push 포함)
+}
+
+/** 앱 종료 시 scrcpy 회수 — 없으면 미러링을 켠 채 앱을 꺼도 scrcpy 가 고아로 남는다 */
+export function disposeMirror(): void {
+  child?.kill('SIGTERM');
+  child = null;
+  runningMode = null;
 }

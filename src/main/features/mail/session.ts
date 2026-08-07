@@ -7,6 +7,7 @@ import { fetchWithTimeout as fetch } from '../../lib/http';
 import {
   getGroupwareSession,
   invalidateGroupwareSession,
+  peekGroupwareSession,
 } from '../groupware/session';
 
 export type MailSession = {
@@ -20,6 +21,14 @@ export type MailSession = {
 let cached: MailSession | null = null;
 // 부트스트랩이 겹치면 하나의 establish 를 공유한다
 let inFlight: Promise<MailSession> | null = null;
+
+// 수립 실패 지수 백오프 — VPN 끊김 등으로 로그인이 실패하면 다음 시도를 점점 늦춘다.
+// 없으면 위젯 30초 폴링이 실패할 때마다 Chrome 기동→30초 타임아웃을 무한 반복했다
+// (2026-08-07 성능 감사). 백오프 중에는 Chrome 을 띄우지 않고 즉시 실패를 돌려준다.
+let failCount = 0;
+let retryAt = 0;
+const BACKOFF_BASE_MS = 60_000;
+const BACKOFF_MAX_MS = 15 * 60_000;
 
 /** 메일 API 호출 공통 헤더 */
 function headers(cookie: string, form: boolean): Record<string, string> {
@@ -72,17 +81,33 @@ async function establish(force: boolean): Promise<MailSession> {
 /**
  * 유효한 메일 세션 확보 — 공용 세션이 그대로면 캐시(부트스트랩 결과)를 재사용하고,
  * 공용 세션이 새로 수립됐으면 그 쿠키로 부트스트랩을 다시 한다.
+ *
+ * 캐시 검증은 peek(TTL 무시)로 한다 — 폴링이 30초~3분마다 서버를 건드려 서버 세션은
+ * 계속 살아 있으므로, 클라이언트 TTL 만료만으로 선제 재로그인하지 않는다. 서버에서
+ * 실제로 만료되면 로그인 페이지 응답 → AuthError → force 경로가 재수립한다.
  */
 export async function getSession(force = false): Promise<MailSession> {
   if (!force && cached) {
-    const gw = await getGroupwareSession();
-    if (gw.establishedAt === cached.establishedAt) return cached;
+    const gw = peekGroupwareSession();
+    if (gw && gw.establishedAt === cached.establishedAt) return cached;
   }
   if (inFlight) return inFlight;
+  if (Date.now() < retryAt) {
+    throw new Error('메일 세션 연결 실패 — 잠시 후 자동으로 다시 시도합니다.');
+  }
   inFlight = establish(force)
     .then((s) => {
       cached = s;
+      failCount = 0;
+      retryAt = 0;
       return s;
+    })
+    .catch((err: unknown) => {
+      failCount += 1;
+      retryAt =
+        Date.now() +
+        Math.min(BACKOFF_BASE_MS * 2 ** (failCount - 1), BACKOFF_MAX_MS);
+      throw err;
     })
     .finally(() => {
       inFlight = null;

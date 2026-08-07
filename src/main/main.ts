@@ -6,12 +6,16 @@ import { registerDeployIpc } from "./features/deploy/ipc";
 import { registerJiraIpc } from "./features/jira/ipc";
 import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
+import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
 import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
 import { registerOvertimeIpc } from "./features/overtime/ipc";
 import { registerProjectsIpc } from "./features/projects/ipc";
 import { registerPrsIpc } from "./features/prs/ipc";
-import { registerScheduleIpc } from "./features/schedule/ipc";
+import {
+  registerScheduleIpc,
+  disposeScheduleBrowser,
+} from "./features/schedule/ipc";
 import { registerSettingsIpc } from "./features/settings/ipc";
 import { getThemePref } from "./features/settings/store";
 import { registerTerminalIpc } from "./features/terminal/ipc";
@@ -163,10 +167,14 @@ app.on("ready", () => {
 });
 
 // 앱 종료 시 PTY 클라이언트·MO 서버 정리 — tmux 백엔드 세션은 서버에 남아
-// 다음 시작에 복원되고, 직접 spawn 폴백 세션만 여기서 함께 죽는다
+// 다음 시작에 복원되고, 직접 spawn 폴백 세션만 여기서 함께 죽는다.
+// scrcpy·일정 매크로 Chrome 은 spawn 자식이라 명시적으로 회수해야 한다
+// (부모 종료만으로 죽지 않음 — 2026-08-07 성능 감사).
 app.on("before-quit", () => {
   disposeTerminals();
   void stopTerminalServer();
+  disposeMirror();
+  disposeScheduleBrowser();
 });
 
 // 모든 창이 닫히면 종료 (macOS 제외)

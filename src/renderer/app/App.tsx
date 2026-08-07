@@ -18,6 +18,7 @@ import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
 
@@ -180,9 +181,11 @@ export function App() {
   const [jiraUnread, setJiraUnread] = useState(0);
   const [jiraOpenKeys, setJiraOpenKeys] = useState<string[] | null>(null);
 
-  // 사이드바 Jira 뱃지 — 미해결 이슈 수를 2분마다 갱신 (미설정·오류 시 조용히 0)
-  useEffect(() => {
-    const refresh = async () => {
+  // 사이드바 Jira 뱃지 — 미해결 이슈 수를 2분마다 갱신 (미설정·오류 시 조용히 0).
+  // usePolling 경유 — 창이 백그라운드면 주기가 늘어나고, main 의 TTL 캐시로
+  // 홈 카드·Jira 섹션과 실제 네트워크 호출을 공유한다(2026-08-07 성능 감사).
+  const refreshJiraBadge = useCallback(() => {
+    void (async () => {
       try {
         const res = await window.oneApp?.jira.list();
         const keys =
@@ -199,11 +202,9 @@ export function App() {
         setJiraCount(0);
         setJiraUnread(0);
       }
-    };
-    void refresh();
-    const timer = setInterval(() => void refresh(), 120_000);
-    return () => clearInterval(timer);
+    })();
   }, []);
+  usePolling(refreshJiraBadge, 120_000);
 
   // Jira 탭을 열면 현재 목록 전체를 '확인함'으로 — 강조 뱃지가 회색 숫자로 복귀
   useEffect(() => {

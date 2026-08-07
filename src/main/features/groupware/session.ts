@@ -150,6 +150,17 @@ export function invalidateGroupwareSession(): void {
   cached = null;
 }
 
+/**
+ * 캐시된 세션을 TTL 검사 없이 들여다본다 — 재로그인(Chrome 기동)을 유발하지 않는다.
+ * 폴링류 소비자(메일)가 "공용 세션이 갈렸는지" 신원만 비교할 때 쓴다. 유효성 판정은
+ * 실제 응답(로그인 페이지 감지 → invalidate → AuthError 재수립)이 담당한다.
+ * 폴링이 서버를 계속 건드려 서버 세션은 살아 있는데 클라이언트 TTL(20분)만 만료되어
+ * 불필요한 재로그인을 반복하던 낭비를 없앤다(2026-08-07 성능 감사).
+ */
+export function peekGroupwareSession(): GroupwareSession | null {
+  return cached;
+}
+
 /** 페이지 이동 대기 조건 — 뒤에서 원하는 요소를 직접 기다린다면 domcontentloaded 가 빠르다 */
 export type GotoWait = 'domcontentloaded' | 'load' | 'networkidle2';
 

@@ -119,9 +119,9 @@ export function HomeSection({
           });
         })
         .catch(() => setJira({ error: "조회 실패" })),
-      // PR — 접근 가능한 전체 저장소의 열린 PR 수
+      // PR — 접근 가능한 전체 저장소의 열린 PR 수 (개수만 쓰므로 light — 리뷰 N+1 생략)
       window.oneApp.prs
-        .fetch()
+        .fetch({ light: true })
         .then((res) =>
           setPr(
             !res.configured

@@ -38,6 +38,27 @@ import type {
 } from "../shared/types";
 import { contextBridge, ipcRenderer } from "electron";
 
+// 고빈도 채널 멀티플렉서 — 세션 pane 수만큼 구독되는 채널(terminal:data 등)에
+// ipcRenderer 리스너를 채널당 1개만 걸고 콜백 Set 으로 fan-out 한다.
+// 없으면 세션 N개일 때 chunk 1건당 IPC 콜백이 N회 돌고, 11개부터는
+// MaxListenersExceededWarning 이 뜬다(2026-08-07 성능 감사).
+function makeMux<T>(channel: string) {
+  const subs = new Set<(ev: T) => void>();
+  let bound = false;
+  return (cb: (ev: T) => void): (() => void) => {
+    subs.add(cb);
+    if (!bound) {
+      bound = true;
+      ipcRenderer.on(channel, (_e, ev: T) => {
+        for (const fn of subs) fn(ev);
+      });
+    }
+    return () => {
+      subs.delete(cb);
+    };
+  };
+}
+
 contextBridge.exposeInMainWorld("oneApp", {
   schedule: {
     // 매크로 실행 (앱 내부에서 puppeteer 직접 실행)
@@ -136,7 +157,8 @@ contextBridge.exposeInMainWorld("oneApp", {
   },
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)
-    list: () => ipcRenderer.invoke("jira:list"),
+    // force=true 는 수동 새로고침·전환 직후 — main 의 TTL 캐시를 우회한다
+    list: (force?: boolean) => ipcRenderer.invoke("jira:list", force),
     // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
     getDetail: (key: string) => ipcRenderer.invoke("jira:detail", key),
     // 이 이슈에서 지금 가능한 상태 전환 목록 (이슈별·프로젝트별로 다름)
@@ -251,7 +273,8 @@ contextBridge.exposeInMainWorld("oneApp", {
   },
   prs: {
     // 열린 PR 목록 조회 (Gitea — 주소 미설정이면 configured:false)
-    fetch: () => ipcRenderer.invoke("prs:fetch"),
+    // light=true 는 개수만 필요한 홈 카드용 — PR별 리뷰 조회(N+1)를 생략한다
+    fetch: (opts?: { light?: boolean }) => ipcRenderer.invoke("prs:fetch", opts),
     // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장
     getConfig: () => ipcRenderer.invoke("prs:config:get"),
     setConfig: (config: PrsConfig) =>
@@ -386,6 +409,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 세션 attach — 링버퍼 replay 반환 + PTY 크기를 내 크기로 (last-attach-wins)
     attach: (id: string, cols: number, rows: number) =>
       ipcRenderer.invoke("terminal:attach", id, cols, rows),
+    // 세션 detach — pane 언마운트 시 호출해 안 보는 세션의 출력 방송을 멈춘다
+    detach: (id: string) => ipcRenderer.send("terminal:detach", id),
     // 세션 이름 변경 (tmux 백엔드면 재시작 후에도 유지)
     rename: (id: string, title: string) =>
       ipcRenderer.invoke("terminal:rename", id, title),
@@ -408,15 +433,9 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.send("terminal:resize", id, cols, rows),
-    // 세션 출력 구독 (16ms 배칭, seq 는 attach replay 와의 중복 제거 기준). 해제 함수를 반환한다.
-    onData: (cb: (ev: { id: string; data: string; seq: number }) => void) => {
-      const listener = (
-        _e: unknown,
-        ev: { id: string; data: string; seq: number }
-      ) => cb(ev);
-      ipcRenderer.on("terminal:data", listener);
-      return () => ipcRenderer.removeListener("terminal:data", listener);
-    },
+    // 세션 출력 구독 (16ms 배칭, seq 는 attach replay 와의 중복 제거 기준).
+    // 멀티플렉서 경유 — pane 수만큼 ipcRenderer 리스너가 늘지 않는다. 해제 함수를 반환한다.
+    onData: makeMux<{ id: string; data: string; seq: number }>("terminal:data"),
     // 세션 종료 이벤트 구독. 해제 함수를 반환한다.
     onExit: (cb: (ev: { id: string; exitCode: number }) => void) => {
       const listener = (_e: unknown, ev: { id: string; exitCode: number }) =>
@@ -435,16 +454,9 @@ contextBridge.exposeInMainWorld("oneApp", {
       return () => ipcRenderer.removeListener("terminal:sessions", listener);
     },
     // PTY 크기 변경 구독 — 다른 클라이언트(MO)가 리사이즈하면 내 xterm 도 따라간다
-    onResized: (
-      cb: (ev: { id: string; cols: number; rows: number }) => void
-    ) => {
-      const listener = (
-        _e: unknown,
-        ev: { id: string; cols: number; rows: number }
-      ) => cb(ev);
-      ipcRenderer.on("terminal:resized", listener);
-      return () => ipcRenderer.removeListener("terminal:resized", listener);
-    },
+    onResized: makeMux<{ id: string; cols: number; rows: number }>(
+      "terminal:resized"
+    ),
     // MO(모바일) 접속 서버 — 상태·토글(저장 겸)·토큰 재발급
     server: {
       status: () => ipcRenderer.invoke("terminal:server:status"),

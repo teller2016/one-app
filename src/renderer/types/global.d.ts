@@ -153,7 +153,8 @@ declare global {
         openWeb: () => Promise<{ ok: boolean }>;
       };
       jira: {
-        list: () => Promise<JiraListResult>;
+        // force=true 는 수동 새로고침·전환 직후 — main 의 TTL 캐시 우회
+        list: (force?: boolean) => Promise<JiraListResult>;
         getDetail: (key: string) => Promise<JiraDetailResult>;
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
@@ -201,7 +202,8 @@ declare global {
         onChanged: (cb: (projects: Project[]) => void) => () => void;
       };
       prs: {
-        fetch: () => Promise<PrListResult>;
+        // light=true 는 개수만 필요한 홈 카드용 — 리뷰/브랜치 보강 생략
+        fetch: (opts?: { light?: boolean }) => Promise<PrListResult>;
         getConfig: () => Promise<PrsConfig>;
         setConfig: (config: PrsConfig) => Promise<PrsConfig>;
         getBranches: (repo: string) => Promise<PrBranchesResult>;
@@ -293,6 +295,8 @@ declare global {
           cols: number,
           rows: number,
         ) => Promise<TerminalAttachResult>;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        detach?: (id: string) => void;
         rename: (id: string, title: string) => Promise<{ ok: boolean }>;
         revealCwd: (
           id: string,

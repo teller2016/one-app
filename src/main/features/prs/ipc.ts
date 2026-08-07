@@ -39,7 +39,7 @@ const isValidRepo = (repo: unknown): repo is string =>
 
 /** PR 대시보드 IPC 핸들러 등록 */
 export function registerPrsIpc() {
-  // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장 — 폴러도 이 값을 읽는다
+  // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장
   handleShared('prs:config:get', (): PrsConfig => getPrsConfig());
   handleShared(
     'prs:config:set',
@@ -47,11 +47,14 @@ export function registerPrsIpc() {
   );
 
   // 열린 PR 목록 조회 (+ 승인 수 보강)
-  handleShared('prs:fetch', async (): Promise<PrListResult> => {
+  // light=true 는 개수만 쓰는 홈 카드용 — PR별 리뷰 조회(N+1)·브랜치 보강을 생략해
+  // 요청을 1건으로 줄인다(2026-08-07 성능 감사: 카드 하나에 60여 요청).
+  handleShared('prs:fetch', async (opts?: { light?: boolean }): Promise<PrListResult> => {
     const gitea = getGiteaConfig();
     if (!gitea) return { ok: true, configured: false };
     try {
       const prs = await fetchOpenPrs(gitea.url, gitea.token);
+      if (opts?.light) return { ok: true, configured: true, prs };
       // 승인 수(PR별 요청)와 머지 방향(저장소별 요청)은 서로 독립이라 함께 돌린다
       const [approved, branched] = await Promise.all([
         enrichApprovals(gitea.url, gitea.token, prs),

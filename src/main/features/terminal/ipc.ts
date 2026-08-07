@@ -46,13 +46,31 @@ function updateDockBadge(sessions: TerminalSessionInfo[]) {
 
 /** 터미널 관련 IPC 핸들러 등록 */
 export function registerTerminalIpc() {
+  // 데스크톱 attach 추적 — pane 이 떠 있는 세션에만 terminal:data 를 방송한다.
+  // 없으면 다른 섹션(Jira 등)에 있어 리스너가 0개여도 세션당 최대 62 msg/s 를
+  // 계속 직렬화·전송했다(2026-08-07 성능 감사). MO(WS)는 server.ts 가 소켓별
+  // attachedId 로 자체 필터하므로 이 게이트와 무관하다.
+  const desktopAttached = new Set<string>();
+  const trackedSenders = new WeakSet<Electron.WebContents>();
+
   ipcMain.handle('terminal:list', () => listSessions());
   ipcMain.handle('terminal:create', (_e, opts: TerminalCreateInput) =>
     createSession(opts ?? {})
   );
-  ipcMain.handle('terminal:attach', (_e, id: string, cols: number, rows: number) =>
-    attachSession(id, cols, rows)
-  );
+  ipcMain.handle('terminal:attach', (e, id: string, cols: number, rows: number) => {
+    desktopAttached.add(id);
+    // 렌더러 리로드·창 파괴 시 detach 가 안 오므로 sender 수명에 묶어 정리한다
+    if (!trackedSenders.has(e.sender)) {
+      trackedSenders.add(e.sender);
+      const clear = () => desktopAttached.clear();
+      e.sender.once('destroyed', clear);
+      e.sender.on('did-navigate', clear);
+    }
+    return attachSession(id, cols, rows);
+  });
+  ipcMain.on('terminal:detach', (_e, id: string) => {
+    desktopAttached.delete(id);
+  });
   // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
   ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
     renameSession(id, title);
@@ -100,9 +118,15 @@ export function registerTerminalIpc() {
     return getServerStatus(); // 새 토큰이 반영된 URL 목록
   });
 
-  // 세션 이벤트를 모든 창에 push (모바일 WS 는 server.ts 가 별도 구독)
-  onTerminalData((id, data, seq) => broadcast('terminal:data', { id, data, seq }));
-  onTerminalExit((id, exitCode) => broadcast('terminal:exit', { id, exitCode }));
+  // 세션 이벤트를 모든 창에 push (모바일 WS 는 server.ts 가 별도 구독).
+  // 출력은 데스크톱 pane 이 attach 한 세션만 — 안 보는 출력은 보내지 않는다.
+  onTerminalData((id, data, seq) => {
+    if (desktopAttached.has(id)) broadcast('terminal:data', { id, data, seq });
+  });
+  onTerminalExit((id, exitCode) => {
+    desktopAttached.delete(id);
+    broadcast('terminal:exit', { id, exitCode });
+  });
   // 목록·상태 변경 — payload 를 실어 렌더러의 재조회를 없애고, 독 뱃지도 함께 갱신
   onSessionsChanged(() => {
     const sessions = listSessions();

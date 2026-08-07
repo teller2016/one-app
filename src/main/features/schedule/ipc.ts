@@ -41,6 +41,22 @@ function normalizeWorklog(raw: unknown): ScheduleWorklog {
   };
 }
 
+/**
+ * 앱 종료 시 남은 자동화 브라우저 정리 — 완료 후 확인용으로 열어 두는 GUI Chrome
+ * (closeBrowserOnFinish=false)이 고아로 남지 않게 한다. close() 는 비동기라 종료
+ * 시점에 완주를 보장할 수 없으므로 프로세스 kill 로 마무리한다(2026-08-07).
+ */
+export function disposeScheduleBrowser(): void {
+  if (!currentBrowser) return;
+  try {
+    currentBrowser.process()?.kill();
+  } catch {
+    // 이미 닫혔으면 무시
+  }
+  currentBrowser = null;
+  running = false;
+}
+
 /** 일정 등록 관련 IPC 핸들러 등록 (앱 내부에서 puppeteer 직접 실행) */
 export function registerScheduleIpc() {
   ipcMain.handle('schedule:run', async (event, payload: ScheduleRunPayload) => {

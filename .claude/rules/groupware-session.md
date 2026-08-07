@@ -15,6 +15,7 @@ paths:
 
 ## 사용법
 - `getGroupwareSession()` → 쿠키 확보(TTL 20분 캐시, 동시 요청은 하나의 로그인을 공유).
+- `peekGroupwareSession()` → **TTL 검사 없이** 캐시만 본다(재로그인 유발 없음). 폴링류 소비자(메일)가 "세션이 갈렸는지" 신원 비교에 쓴다 — 폴링이 서버를 계속 건드려 서버 세션은 살아 있으므로 TTL 만료만으로 선제 재로그인하면 20분마다 Chrome 이 떴다(2026-08-07 감사). 유효성은 실제 응답(로그인 페이지 → invalidate)으로 판정한다. 메일 세션 수립 실패에는 지수 백오프(1→2→…→15분)가 걸려 있다.
 - HTTP 호출은 `session.header`(메일).
 - 브라우저가 필요한 기능은 **`gotoWithSession(page, url, waitUntil?)`** — 쿠키를 주입해 **로그인 화면을 건너뛰고** 목표 URL 로 직행하고, 세션이 서버에서 만료돼 튕기면 **1회 재로그인 후 재시도**한다.
 - 인증 실패를 감지하면 `invalidateGroupwareSession()`.
