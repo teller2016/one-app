@@ -17,6 +17,7 @@ import type {
   ChangesDiffResult,
   ChangesPushResult,
   ChangesStatus,
+  ChangesTarget,
   TerminalPreset,
   TerminalSessionInfo,
 } from '../shared/types';
@@ -66,10 +67,12 @@ const selectEl = document.getElementById('sessionSelect') as HTMLSelectElement;
 const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
 const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
 const changesBtn = document.getElementById('changesBtn') as HTMLButtonElement;
-const diffView = document.getElementById('diffView') as HTMLElement;
-const diffBack = document.getElementById('diffBack') as HTMLButtonElement;
-const diffPath = document.getElementById('diffPath') as HTMLElement;
-const diffBody = document.getElementById('diffBody') as HTMLElement;
+const chgView = document.getElementById('chgView') as HTMLElement;
+const chgClose = document.getElementById('chgClose') as HTMLButtonElement;
+const chgBranch = document.getElementById('chgBranch') as HTMLElement;
+const chgAhead = document.getElementById('chgAhead') as HTMLElement;
+const chgPush = document.getElementById('chgPush') as HTMLButtonElement;
+const chgBody = document.getElementById('chgBody') as HTMLElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
 const kbBtn = document.getElementById('kbBtn') as HTMLButtonElement;
@@ -346,9 +349,9 @@ function renderSessions() {
     selectEl.appendChild(opt);
   }
   if (attachedId) selectEl.value = attachedId;
-  // 종료·변경사항은 붙어 있는 세션이 있을 때만 — 둘 다 그 세션이 대상이다
+  // 종료는 붙어 있는 세션이 있을 때만 — 없으면 누를 대상이 없다.
+  // (변경사항 ± 은 작업 영역만 골라 둬도 볼 수 있어 항상 띄운다 — index.html 주석 참고)
   closeBtn.hidden = !attached;
-  changesBtn.hidden = !attached;
 }
 
 // 현재 세션 종료 — 되돌릴 수 없으므로 한 번 더 묻는다(폰은 오터치가 잦다).
@@ -768,14 +771,23 @@ navBtn.addEventListener('click', () => {
   renderScopeSheet();
 });
 
-// ── 변경사항 (데스크톱 터미널의 변경사항 드로어의 폰 판) ──
-// 작업 중에는 터미널을 벗어나지 않고 바로 보는 게 편하므로, 앱 셸의 '변경' 탭과 별개로
-// 여기서도 본다(2026-08-08 사용자 요청). 대상은 **보고 있는 세션**이라 작업 영역을
-// 고르지 않아도 그 세션의 워크트리가 그대로 잡힌다(ChangesTarget.sessionId).
+// ── 변경사항 전체화면 (데스크톱 터미널 변경사항 드로어의 폰 판) ──
+// ± 를 누르면 **바로 이 화면**이다 — 중간 목록 시트를 거치지 않는다(2026-08-08 사용자 요청).
+// 파일 행을 탭하면 그 자리에서 diff 가 펼쳐져 스크롤 한 번으로 전체를 훑을 수 있다.
+//
+// ⚠️ 데이터는 `/term` 이 아니라 `/rpc` 로 가져온다 — changes IPC 는 전 채널이 handleShared 라
+// 이미 폰에 열려 있고(그게 MO 화이트리스트 선언이다 — mo-app.md) 그 통로가 rpc 다.
 // 폴링은 하지 않는다 — 버튼을 누를 때만 조회한다(폰 배터리).
 
-/** 지금 보고 있는 세션 기준 대상 — 세션이 없으면 볼 것도 없다 */
-const changesTarget = () => (attachedId ? { sessionId: attachedId } : null);
+/**
+ * 대상 — **지금 작업 중인 영역**. 작업 영역(≡)을 골라 뒀으면 그 워크트리, 아니면 보고 있는
+ * 세션의 위치다. 둘 다 없으면 볼 것이 없다.
+ */
+function changesTarget(): ChangesTarget | null {
+  if (scope) return { workspaceId: scope.wsId, worktreePath: scope.path };
+  if (attachedId) return { sessionId: attachedId };
+  return null;
+}
 
 const KIND_GLYPH: Record<ChangedFile['kind'], string> = {
   added: 'A',
@@ -785,148 +797,149 @@ const KIND_GLYPH: Record<ChangedFile['kind'], string> = {
   conflict: '!',
 };
 
+function chgEmpty(text: string) {
+  chgBody.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'chg-empty';
+  div.textContent = text;
+  chgBody.appendChild(div);
+}
+
+function closeChanges() {
+  chgView.hidden = true;
+  chgBody.innerHTML = ''; // 큰 diff 를 들고 있지 않게
+}
+
 async function openChanges() {
   const target = changesTarget();
-  if (!target) return;
-  openSheet('changes', '변경사항');
-  sheetEmpty('불러오는 중…');
+  if (!target) {
+    // 누를 대상이 없으면 조용히 넘어가지 말 것 — 사용자는 "버튼이 안 먹는다"로 느낀다
+    notice('세션을 열거나 ≡ 에서 작업 영역을 고르세요');
+    return;
+  }
+  chgBranch.textContent = scope ? `${scope.wsName} · ${scope.name}` : '';
+  chgAhead.textContent = '';
+  chgPush.hidden = true;
+  chgEmpty('불러오는 중…');
+  chgView.hidden = false;
   try {
     const st = (await rpcCall('changes:status', [target, 'work'])) as ChangesStatus;
-    if (sheetMode === 'changes') renderChanges(st);
+    if (chgView.hidden) return; // 그 사이 닫았으면 그리지 않는다
+    renderChanges(st);
   } catch (err) {
-    if (sheetMode === 'changes') {
-      cwdList.innerHTML = '';
-      sheetEmpty(`변경사항을 불러오지 못했습니다 — ${(err as Error).message}`);
-    }
+    if (!chgView.hidden) chgEmpty(`불러오지 못했습니다 — ${(err as Error).message}`);
   }
 }
 
 function renderChanges(st: ChangesStatus) {
-  cwdTitle.textContent = '변경사항';
-  cwdList.innerHTML = '';
   if (!st.ok || !st.repo) {
-    sheetEmpty(st.error ?? 'git 저장소가 아닙니다.');
+    chgEmpty(st.error ?? 'git 저장소가 아닙니다.');
     return;
   }
+  chgBranch.textContent = st.branch ?? '(detached)';
 
-  // 브랜치 + 안 푸시한 커밋 + [푸시]
-  const head = document.createElement('div');
-  head.className = 'chg-head';
-  const br = document.createElement('span');
-  br.className = 'chg-branch';
-  br.textContent = st.branch ?? '(detached)';
-  head.appendChild(br);
+  // 안 푸시한 커밋 — upstream 이 없으면 아직 한 번도 push 안 한 브랜치(푸시는 -u 로, main 이 처리)
   const ahead = st.ahead ?? 0;
-  if (ahead > 0 || !st.upstream) {
-    const a = document.createElement('span');
-    a.className = 'chg-ahead';
-    // upstream 이 없으면 아직 한 번도 push 안 한 브랜치 — 푸시는 -u 로 붙는다(main 이 처리)
-    a.textContent = st.upstream ? `↑${ahead}` : '새 브랜치';
-    head.appendChild(a);
-    const push = document.createElement('button');
-    push.type = 'button';
-    push.className = 'chg-push';
-    push.textContent = '푸시';
-    push.addEventListener('click', () => void doPush(push, st));
-    head.appendChild(push);
-  }
-  cwdList.appendChild(head);
+  const canPush = ahead > 0 || !st.upstream;
+  chgAhead.textContent = !st.upstream ? '새 브랜치' : ahead > 0 ? `↑${ahead}` : '';
+  chgPush.hidden = !canPush;
+  chgPush.disabled = false;
+  chgPush.textContent = '푸시';
 
   const files = st.files ?? [];
+  chgBody.innerHTML = '';
   if (!files.length) {
-    sheetEmpty('변경된 파일이 없습니다.');
+    chgEmpty('변경된 파일이 없습니다.');
     return;
   }
-  for (const f of files) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chg-file';
-
-    const kind = document.createElement('span');
-    kind.className = 'chg-kind';
-    kind.dataset.kind = f.kind;
-    kind.textContent = KIND_GLYPH[f.kind] ?? '?';
-    btn.appendChild(kind);
-
-    const path = document.createElement('span');
-    path.className = 'chg-path';
-    // direction: rtl 이라 경로 앞이 잘린다 — 좌우 기호가 뒤집히지 않게 격리 문자로 감싼다
-    path.textContent = `⁦${f.path}⁩`;
-    btn.appendChild(path);
-
-    if (f.additions != null || f.deletions != null) {
-      const num = document.createElement('span');
-      num.className = 'chg-num';
-      const add = document.createElement('span');
-      add.className = 'chg-add';
-      add.textContent = `+${f.additions ?? 0}`;
-      num.appendChild(add);
-      const del = document.createElement('span');
-      del.className = 'chg-del';
-      del.textContent = `−${f.deletions ?? 0}`;
-      num.appendChild(del);
-      btn.appendChild(num);
-    }
-
-    btn.addEventListener('click', () => void openDiff(f));
-    cwdList.appendChild(btn);
-  }
+  for (const f of files) chgFileRow(f, files.length === 1);
 }
 
-async function doPush(btn: HTMLButtonElement, st: ChangesStatus) {
-  const target = changesTarget();
-  if (!target) return;
-  if (!confirm(`'${st.branch ?? ''}' 를 푸시할까요?`)) return;
-  btn.disabled = true;
-  btn.textContent = '푸시 중…';
-  try {
-    const res = (await rpcCall('changes:push', [target])) as ChangesPushResult;
-    if (res.ok) {
-      notice('푸시 완료');
-      closeSheet();
-    } else {
-      // 실패 사유는 git 출력 tail 에 들어 있다 — 그대로 보여주는 게 가장 정확하다
-      notice(res.error ?? res.output ?? '푸시 실패');
-      btn.disabled = false;
-      btn.textContent = '푸시';
-    }
-  } catch (err) {
-    notice(`푸시 실패 — ${(err as Error).message}`);
-    btn.disabled = false;
-    btn.textContent = '푸시';
+/** 파일 한 줄 + 그 아래 접힌 diff. 파일이 하나뿐이면 처음부터 펼쳐 바로 읽히게 한다 */
+function chgFileRow(f: ChangedFile, autoOpen: boolean) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chg-file';
+
+  const caret = document.createElement('span');
+  caret.className = 'chg-caret';
+  caret.textContent = '▸';
+  btn.appendChild(caret);
+
+  const kind = document.createElement('span');
+  kind.className = 'chg-kind';
+  kind.dataset.kind = f.kind;
+  kind.textContent = KIND_GLYPH[f.kind] ?? '?';
+  btn.appendChild(kind);
+
+  const path = document.createElement('span');
+  path.className = 'chg-path';
+  // direction: rtl 이라 경로 앞이 잘린다 — 좌우 기호가 뒤집히지 않게 격리 문자로 감싼다
+  path.textContent = `⁦${f.path}⁩`;
+  btn.appendChild(path);
+
+  if (f.additions != null || f.deletions != null) {
+    const num = document.createElement('span');
+    num.className = 'chg-num';
+    const add = document.createElement('span');
+    add.className = 'chg-add';
+    add.textContent = `+${f.additions ?? 0}`;
+    num.appendChild(add);
+    const del = document.createElement('span');
+    del.className = 'chg-del';
+    del.textContent = `−${f.deletions ?? 0}`;
+    num.appendChild(del);
+    btn.appendChild(num);
   }
+
+  const pre = document.createElement('pre');
+  pre.className = 'chg-diff';
+  pre.hidden = true;
+
+  let loaded = false;
+  const toggle = () => {
+    const open = pre.hidden;
+    pre.hidden = !open;
+    caret.textContent = open ? '▾' : '▸';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && !loaded) {
+      loaded = true;
+      void loadDiff(f, pre);
+    }
+  };
+  btn.addEventListener('click', toggle);
+
+  chgBody.appendChild(btn);
+  chgBody.appendChild(pre);
+  if (autoOpen) toggle();
 }
 
-/** diff 전체화면 — 코드는 가로가 생명이라 폰에서는 화면을 통째로 쓴다 */
-async function openDiff(f: ChangedFile) {
+async function loadDiff(f: ChangedFile, pre: HTMLElement) {
   const target = changesTarget();
   if (!target) return;
-  diffPath.textContent = `⁦${f.path}⁩`;
-  diffBody.textContent = '불러오는 중…';
-  diffView.hidden = false;
+  pre.textContent = '불러오는 중…';
   try {
     const res = (await rpcCall('changes:diff', [
       target,
       { path: f.path, origPath: f.origPath, untracked: f.untracked },
     ])) as ChangesDiffResult;
-    if (diffView.hidden) return; // 그 사이 닫았으면 그리지 않는다
     if (!res.ok) {
-      diffBody.textContent = res.error ?? 'diff 를 불러오지 못했습니다.';
+      pre.textContent = res.error ?? 'diff 를 불러오지 못했습니다.';
       return;
     }
     if (res.binary) {
-      diffBody.textContent = '(바이너리 파일)';
+      pre.textContent = '(바이너리 파일)';
       return;
     }
-    paintDiff(res.diff ?? '', res.truncated === true);
+    paintDiff(pre, res.diff ?? '', res.truncated === true);
   } catch (err) {
-    diffBody.textContent = `불러오지 못했습니다 — ${(err as Error).message}`;
+    pre.textContent = `불러오지 못했습니다 — ${(err as Error).message}`;
   }
 }
 
 /** unified diff 색칠 — 줄 단위로 +/-/@@ 만 구분한다(폰에서 과한 하이라이트는 오히려 안 읽힌다) */
-function paintDiff(diff: string, truncated: boolean) {
-  diffBody.textContent = '';
+function paintDiff(pre: HTMLElement, diff: string, truncated: boolean) {
+  pre.textContent = '';
   const frag = document.createDocumentFragment();
   for (const line of diff.split('\n')) {
     const span = document.createElement('span');
@@ -944,14 +957,36 @@ function paintDiff(diff: string, truncated: boolean) {
     more.textContent = '\n(표시 상한을 넘어 잘렸습니다 — 데스크톱에서 전체를 보세요)\n';
     frag.appendChild(more);
   }
-  diffBody.appendChild(frag);
+  pre.appendChild(frag);
 }
 
-diffBack.addEventListener('click', () => {
-  diffView.hidden = true;
-  diffBody.textContent = ''; // 큰 diff 를 들고 있지 않게
-});
+chgPush.addEventListener('click', () => void doPush());
 
+async function doPush() {
+  const target = changesTarget();
+  if (!target) return;
+  if (!confirm(`'${chgBranch.textContent ?? ''}' 를 푸시할까요?`)) return;
+  chgPush.disabled = true;
+  chgPush.textContent = '푸시 중…';
+  try {
+    const res = (await rpcCall('changes:push', [target])) as ChangesPushResult;
+    if (res.ok) {
+      notice('푸시 완료');
+      void openChanges(); // ahead 가 0 이 됐으니 다시 그린다
+    } else {
+      // 실패 사유는 git 출력 tail 에 들어 있다 — 그대로 보여주는 게 가장 정확하다
+      notice(res.error ?? res.output ?? '푸시 실패');
+      chgPush.disabled = false;
+      chgPush.textContent = '푸시';
+    }
+  } catch (err) {
+    notice(`푸시 실패 — ${(err as Error).message}`);
+    chgPush.disabled = false;
+    chgPush.textContent = '푸시';
+  }
+}
+
+chgClose.addEventListener('click', closeChanges);
 changesBtn.addEventListener('click', () => void openChanges());
 
 // ── 새 세션 = 위치 → 무엇으로 (셸 + 프리셋) ──
