@@ -628,11 +628,41 @@ function sheetButton(
   cwdList.appendChild(btn);
 }
 
-function sheetGroup(label: string) {
-  const div = document.createElement('div');
-  div.className = 'sheet-group';
-  div.textContent = label;
-  cwdList.appendChild(div);
+/**
+ * 워크스페이스 헤더 — 눌러서 워크트리 목록을 접고 편다.
+ * 레포가 여럿이면 워크트리까지 전부 펼쳐진 목록은 훑기가 어렵다(2026-08-08 사용자 지적).
+ * 접혀 있어도 **세션 수**는 보여줘 어디가 살아 있는지 알 수 있게 한다.
+ */
+function sheetGroup(
+  label: string,
+  open: boolean,
+  count: number,
+  onToggle: () => void
+) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'sheet-group';
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+  const caret = document.createElement('span');
+  caret.className = 'sheet-caret';
+  caret.textContent = open ? '▾' : '▸';
+  btn.appendChild(caret);
+
+  const name = document.createElement('span');
+  name.className = 'sheet-group-name';
+  name.textContent = label;
+  btn.appendChild(name);
+
+  if (count) {
+    const cnt = document.createElement('span');
+    cnt.className = 'sheet-count';
+    cnt.textContent = `세션 ${count}`;
+    btn.appendChild(cnt);
+  }
+
+  btn.addEventListener('click', onToggle);
+  cwdList.appendChild(btn);
 }
 
 function sheetEmpty(label: string) {
@@ -643,6 +673,26 @@ function sheetEmpty(label: string) {
 }
 
 // ── 작업 영역 (데스크톱 LNB 의 폰 판) ──
+
+/** 펼쳐 둔 워크스페이스 — 레포가 여럿이라 기본은 접힌 상태다(데스크톱 LNB 의 expanded 와 같은 개념) */
+const WS_EXPANDED_KEY = 'mo:wsExpanded';
+const expandedWs = new Set<string>(loadExpandedWs());
+
+function loadExpandedWs(): string[] {
+  try {
+    const raw = localStorage.getItem(WS_EXPANDED_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function toggleWs(id: string) {
+  if (expandedWs.has(id)) expandedWs.delete(id);
+  else expandedWs.add(id);
+  localStorage.setItem(WS_EXPANDED_KEY, JSON.stringify([...expandedWs]));
+  renderScopeSheet();
+}
 
 function pickScope(ws: TermWorkspaceNode, wt: TermWorktreeNode) {
   setScope({
@@ -673,7 +723,12 @@ function renderScopeSheet() {
     return;
   }
   for (const ws of workspaceTree) {
-    sheetGroup(ws.name);
+    // 지금 고른 영역이 속한 레포는 자동으로 펼친다 — 시트를 다시 열었을 때 어디였는지 보이게
+    const open = expandedWs.has(ws.id) || scope?.wsId === ws.id;
+    const paths = new Set(ws.worktrees.map((w) => w.path));
+    const wsCount = sessions.filter((s) => paths.has(s.cwd)).length;
+    sheetGroup(ws.name, open, wsCount, () => toggleWs(ws.id));
+    if (!open) continue;
     if (!ws.worktrees.length) {
       sheetEmpty('워크트리가 없습니다');
       continue;

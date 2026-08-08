@@ -373,16 +373,52 @@ body {
   white-space: nowrap;
 }
 
-/* 워크스페이스 이름 — 시트 안 그룹 구분 (버튼이 아니라 라벨) */
-#cwdList .sheet-group {
-  padding: 10px 6px 5px;
-  font-size: 11px;
-  color: var(--muted);
+/* 워크스페이스 헤더 — 눌러서 워크트리 목록을 접고 편다.
+   ⚠️ `#cwdList button` 의 카드 스타일(테두리·배경·큰 패딩)을 덮어야 하므로
+   클래스를 함께 써서 특정도를 한 단계 올린다. */
+#cwdList button.sheet-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 7px 6px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--muted);
 }
 
-#cwdList .sheet-group:first-child {
-  padding-top: 2px;
+#cwdList button.sheet-group:first-child {
+  margin-top: 0;
+}
+
+#cwdList button.sheet-group:active {
+  background: var(--bg);
+}
+
+/* 접힘/펼침 표시 — 폭을 고정해 이름 시작점이 흔들리지 않게 */
+#cwdList .sheet-caret {
+  width: 10px;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+#cwdList .sheet-group-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+/* 헤더 안 세션 수는 float 이 아니라 flex 배치라 위치가 안정적이다 */
+#cwdList button.sheet-group .sheet-count {
+  float: none;
+  flex-shrink: 0;
 }
 
 /* 워크트리 행은 한 단 들여 트리로 읽히게 */
