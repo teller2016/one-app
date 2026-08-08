@@ -322,6 +322,7 @@ export type PrBranch = {
   name: string;
   committedAt?: number; // 마지막 커밋 시각 (epoch ms)
   lastMessage?: string; // 마지막 커밋 제목
+  author?: string; // 마지막 커밋 작성자(계정명 우선) — Gitea 버전에 따라 없을 수 있다
 };
 
 export type PrBranchesResult = {

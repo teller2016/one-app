@@ -160,7 +160,12 @@ export async function enrichApprovals(
 type GiteaBranch = {
   name?: string;
   protected?: boolean;
-  commit?: { timestamp?: string; message?: string };
+  // author 는 Gitea PayloadCommit 의 필드 — 서버 버전에 따라 없을 수 있어 전부 optional 이다
+  commit?: {
+    timestamp?: string;
+    message?: string;
+    author?: { name?: string; username?: string };
+  };
 };
 
 // ⚠️ Gitea 는 페이지당 최대 50개만 준다(limit 을 더 크게 줘도 무시 — 실측).
@@ -187,6 +192,9 @@ const toPrBranch = (b: GiteaBranch): PrBranch => ({
   name: b.name as string,
   committedAt: b.commit?.timestamp ? Date.parse(b.commit.timestamp) : undefined,
   lastMessage: (b.commit?.message ?? '').split('\n')[0],
+  // 누가 밀어 둔 브랜치인지 — head 선택에서 시각만으로는 남의 브랜치를 구분할 수 없다.
+  // username(계정) 이 있으면 그쪽을 쓴다(PR 목록의 author 와 같은 값이라 눈에 익다).
+  author: b.commit?.author?.username || b.commit?.author?.name || undefined,
 });
 
 /** 브랜치 목록 한 페이지 (Gitea 는 커밋 최신순으로 준다) */

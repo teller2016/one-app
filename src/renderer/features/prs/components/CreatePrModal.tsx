@@ -144,6 +144,8 @@ export function CreatePrModal({
   const headOptions = useMemo(() => {
     const recentList = recent ?? [];
     const recentAt = new Map(recentList.map((b) => [b.name, b.committedAt]));
+    // 누가 밀어 둔 브랜치인지 — 시각만으로는 내 것과 남의 것을 구분할 수 없다
+    const recentBy = new Map(recentList.map((b) => [b.name, b.author]));
     const names = [
       ...recentList.map((b) => b.name),
       ...allNames.filter((n) => !recentAt.has(n)),
@@ -151,18 +153,23 @@ export function CreatePrModal({
     if (head && !names.includes(head)) names.unshift(head);
     return names
       .filter((n) => n !== base)
-      .map((name) => ({
-        value: name,
-        search: name,
-        label: (
-          <span className="prs__base-option">
-            <span className="prs__base-name">{name}</span>
-            {recentAt.get(name) != null && (
-              <span className="prs__base-when">{rel(recentAt.get(name))}</span>
-            )}
-          </span>
-        ),
-      }));
+      .map((name) => {
+        const author = recentBy.get(name);
+        return {
+          value: name,
+          // 작성자로도 찾을 수 있게 — 검색은 이름+작성자를 함께 훑는다
+          search: author ? `${name} ${author}` : name,
+          label: (
+            <span className="prs__base-option">
+              <span className="prs__base-name">{name}</span>
+              {author && <span className="prs__base-by">{author}</span>}
+              {recentAt.get(name) != null && (
+                <span className="prs__base-when">{rel(recentAt.get(name))}</span>
+              )}
+            </span>
+          ),
+        };
+      });
   }, [recent, allNames, head, base]);
 
   // 대상(base) 후보 — 주요 브랜치를 상단에 정렬하고 나머지 전체를 뒤에 붙인다. head 는 제외

@@ -1,5 +1,4 @@
 import type { PrItem } from '../../../../shared/types';
-import { Badge } from '../../../components/Badge';
 import { Icon } from '../../../components/Icon';
 import { rel } from '../lib/relTime';
 
@@ -35,8 +34,10 @@ export function PrList({
             aria-pressed={key === selectedKey}
             onClick={() => onSelect(key)}
           >
+            {/* 저장소명은 싣지 않는다 — 위 저장소 탭으로 이미 좁혀져 있어 모든 행이
+                같은 값이라 자리만 먹었다. 그 자리에 정작 아쉬웠던 작성자를 넣는다 */}
             <span className="prs__item-top">
-              <span className="prs__item-repo">{pr.repo.split('/').pop()}</span>
+              <span className="prs__item-author">{pr.author}</span>
               {pr.createdAt ? (
                 <span className="prs__item-when">{rel(pr.createdAt)}</span>
               ) : null}
@@ -44,17 +45,20 @@ export function PrList({
             <span className="prs__item-title" title={pr.title}>
               {pr.title}
             </span>
+            {/* 상태 뱃지(승인·리뷰 대기·충돌)는 싣지 않는다 — 목록은 훑는 화면이고
+                정본은 어차피 상세 패널이다(2026-08-08 사용자 요청). 대상 브랜치 칩은
+                '어디로 들어가는지'라 성격이 달라 남긴다. */}
             <span className="prs__item-meta">
-              {pr.approvals != null && pr.approvals > 0 ? (
-                <Badge variant="ok">승인 {pr.approvals}</Badge>
-              ) : (
-                <Badge variant="idle">리뷰 대기</Badge>
-              )}
-              {pr.mergeable === false && <Badge variant="fail">충돌</Badge>}
-              {off && (
+              {pr.base && (
                 <span
-                  className="prs__item-off"
-                  title={`프로젝트 기본 브랜치가 아닌 ${pr.base} 로 들어가는 PR`}
+                  className={
+                    'prs__item-base' + (off ? ' prs__item-base--off' : '')
+                  }
+                  title={
+                    off
+                      ? `프로젝트 기본 브랜치가 아닌 ${pr.base} 로 들어가는 PR`
+                      : `${pr.base} 로 들어가는 PR`
+                  }
                 >
                   <Icon name="arrow-right" size={12} />
                   {pr.base}

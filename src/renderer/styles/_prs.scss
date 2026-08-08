@@ -115,12 +115,17 @@
     gap: 8px;
   }
 
-  &__item-repo {
+  // 작성자 — 저장소 탭으로 저장소는 이미 정해져 있어, 첫 줄에서 실제로 필요한 정보는 이쪽이다
+  &__item-author {
     @include type-caption;
-    color: var(--text-2);
-    // 저장소명은 대소문자가 구분되는 식별자 — caption 의 대문자 변환을 끈다
+    // 계정명은 대소문자가 구분되는 식별자 — caption 의 대문자 변환을 끈다
     text-transform: none;
     letter-spacing: normal;
+    color: var(--text-2);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__item-when {
@@ -145,22 +150,29 @@
     min-width: 0;
   }
 
-  // 기본 브랜치가 아닌 대상(main 등)으로 가는 PR — 목록에서도 주의색으로
-  &__item-off {
+  // 머지 대상 브랜치 — **항상** 보여준다(어디로 들어가는 PR 인지가 목록에서 가장
+  // 먼저 궁금한 정보다). 상세 패널의 prs__branch-base 와 같은 톤.
+  &__item-base {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     min-width: 0;
     padding: 1px 8px;
     border-radius: var(--r-full);
-    background: var(--warning-soft);
-    color: var(--warning);
+    background: var(--idle-soft);
+    color: var(--text-2);
     font-family: var(--font-mono);
     // 브랜치명은 대소문자가 구분되는 식별자 — 대문자 변환 금지
     @include type-small;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    // 프로젝트 기본 브랜치가 아닌 대상(main 등) — 주의색으로 확실히 구분
+    &--off {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
   }
 
   &__item-num {
@@ -391,6 +403,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
+  // 뒤따르는 작성자·시각을 오른쪽 끝으로 민다 — 둘 중 하나가 없어도 배치가 흔들리지 않게
+  // 여기서 밀어야 한다(각자 auto 마진을 쓰면 없는 경우에 왼쪽으로 붙는다)
+  margin-right: auto;
 }
 
 .prs__base-tag {
@@ -402,13 +417,22 @@
   @include type-caption;
 }
 
+// 브랜치를 밀어 둔 사람 — 시각 바로 왼쪽에 붙는다 (오른쪽 끝 묶음: [작성자][n일 전])
+.prs__base-by {
+  flex-shrink: 0;
+  @include type-caption;
+  // ⚠️ color 는 믹스인 **뒤에** — type-caption 이 color 를 포함해서 앞에 쓰면 덮인다
+  color: var(--text-2);
+  // 계정명은 대소문자가 구분되는 식별자 — caption 의 대문자 변환을 끈다
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 // 원본 후보의 마지막 커밋 시각 (최근 push 브랜치에만 있다)
 .prs__base-when {
   flex-shrink: 0;
-  margin-left: auto;
-  padding-left: 8px;
-  color: var(--text-3);
   @include type-caption;
+  color: var(--text-3); // ⚠️ 믹스인 뒤에 — 앞에 두면 type-caption 의 색이 이긴다
 }
 
 // 주요 브랜치로 PR 을 만들 때의 타이핑 확인 (배포 PROD 확인과 같은 패턴)
