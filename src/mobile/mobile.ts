@@ -60,9 +60,12 @@ const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
 const presetBtn = document.getElementById('presetBtn') as HTMLButtonElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
+const kbBtn = document.getElementById('kbBtn') as HTMLButtonElement;
+const waitBtn = document.getElementById('waitBtn') as HTMLButtonElement;
+const keybarEl = document.getElementById('keybar') as HTMLElement;
 const ctrlBtn = document.getElementById('ctrlBtn') as HTMLButtonElement;
-const fontDownBtn = document.getElementById('fontDown') as HTMLButtonElement;
-const fontUpBtn = document.getElementById('fontUp') as HTMLButtonElement;
+const pasteBtn = document.getElementById('pasteBtn') as HTMLButtonElement;
+const fontHud = document.getElementById('fontHud') as HTMLElement;
 const bottomBtn = document.getElementById('toBottom') as HTMLButtonElement;
 const cwdSheet = document.getElementById('cwdSheet') as HTMLElement;
 const cwdBackdrop = document.getElementById('cwdBackdrop') as HTMLElement;
@@ -78,7 +81,7 @@ if (new URLSearchParams(location.search).has('token')) {
 
 // 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다.
 // 기본값은 최소 크기 — claude 같은 넓은 TUI 를 폰에서 통째로 보는 게 첫 화면의 목적이고,
-// 키우는 건 A＋ 로 바로 되지만 잘려 있으면 무엇을 키워야 할지조차 안 보인다.
+// 키우는 건 핀치로 바로 되지만 잘려 있으면 무엇을 키워야 할지조차 안 보인다.
 const FONT_KEY = 'mo:fontSize';
 const FONT_MIN = 6;
 const FONT_MAX = 22;
@@ -200,6 +203,86 @@ function setStatus(text: string, ok: boolean) {
   selectEl.disabled = !ok;
 }
 
+/** 안내를 잠깐 띄웠다가 원래 연결 상태로 되돌린다 (토스트가 없는 화면이라 상태줄을 빌린다) */
+let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+function notice(text: string) {
+  if (noticeTimer !== null) clearTimeout(noticeTimer);
+  statusEl.textContent = text;
+  statusEl.classList.remove('ok');
+  noticeTimer = setTimeout(() => {
+    noticeTimer = null;
+    setStatus(ws?.readyState === WebSocket.OPEN ? '연결됨' : '연결 끊김', ws?.readyState === WebSocket.OPEN);
+  }, 2200);
+}
+
+// ── 키바 — 소프트 키보드가 떠 있을 때만 펼친다 ──
+// safe-area 까지 합쳐 87px(UI 크롬의 42%)를 상시로 먹고 있었는데, esc·tab·방향키는
+// 소프트 키보드가 떠 있을 때만 쓸모가 있다(2026-08-08 실측).
+//
+// ⚠️ 판정을 `term.textarea` 의 focus/blur 로 하면 **키보드를 내려도 키바가 남는다**
+//    (2026-08-08 사용자 지적) — 안드로이드 뒤로가기·iOS 키보드 내리기로 닫으면
+//    포커스는 그대로라 blur 가 오지 않는다. 그래서 **보이는 뷰포트 높이가 얼마나
+//    줄었는지**로 본다: 키보드는 두 OS 모두 뷰포트를 크게 줄이고, 닫히면 되돌린다.
+const KEYBAR_PIN_KEY = 'mo:keybarPinned';
+// 주소창 표시/숨김(≈50px)과 구분되는 문턱 — 소프트 키보드는 이보다 훨씬 크게 줄인다
+const KEYBOARD_MIN_DELTA = 120;
+let keybarPinned = localStorage.getItem(KEYBAR_PIN_KEY) === '1';
+/** 키보드가 없을 때의 뷰포트 높이 — 관측된 최대값으로 따라간다(회전 시 리셋) */
+let baseViewportH = 0;
+
+/** 지금 실제로 보이는 높이 — 레이아웃까지 줄이는 안드로이드는 innerHeight 가 더 작다 */
+function viewportH(): number {
+  const vv = window.visualViewport?.height;
+  return Math.min(vv ?? Infinity, window.innerHeight || Infinity);
+}
+
+function keyboardOpen(): boolean {
+  const h = viewportH();
+  if (!Number.isFinite(h)) return false;
+  if (h > baseViewportH) baseViewportH = h; // 가장 넓었던 상태 = 키보드 없음
+  return baseViewportH - h > KEYBOARD_MIN_DELTA;
+}
+
+function syncKeybar() {
+  const show = keybarPinned || keyboardOpen();
+  kbBtn.classList.toggle('on', keybarPinned);
+  if (keybarEl.hidden === !show) return; // 변화 없으면 fit 을 돌리지 않는다
+  keybarEl.hidden = !show;
+  syncViewport(); // 높이가 바뀌었으니 PTY 행도 따라간다
+}
+
+kbBtn.addEventListener('pointerdown', (e) => e.preventDefault()); // 포커스 유지
+kbBtn.addEventListener('click', () => {
+  keybarPinned = !keybarPinned;
+  localStorage.setItem(KEYBAR_PIN_KEY, keybarPinned ? '1' : '0');
+  syncKeybar();
+  term.focus();
+});
+
+// ── 입력 대기 세션 바로가기 ──
+// 폰은 '자리를 비웠을 때 이어받는' 화면이라, 어떤 세션이 나를 기다리는지가 가장 중요한 정보다.
+// 예전엔 select 를 열어야 글리프(●)가 보였다.
+function renderWaiting() {
+  const waiting = sessions.filter((s) => s.status === 'waiting');
+  waitBtn.hidden = waiting.length === 0;
+  if (!waiting.length) return;
+  waitBtn.textContent = `● ${waiting.length}`;
+  waitBtn.setAttribute(
+    'aria-label',
+    `입력 대기 ${waiting.length}개 — 다음 대기 세션으로 이동`
+  );
+}
+
+waitBtn.addEventListener('click', () => {
+  const waiting = sessions.filter((s) => s.status === 'waiting');
+  if (!waiting.length) return;
+  // 이미 보고 있는 대기 세션 다음 것으로 — 여러 개면 눌러서 순회한다
+  const cur = waiting.findIndex((s) => s.id === attachedId);
+  const next = waiting[(cur + 1) % waiting.length];
+  if (next.id !== attachedId) attach(next.id);
+  term.focus();
+});
+
 // 상태 글리프 — <option> 은 스타일이 안 먹어 텍스트 글리프가 유일한 표현 수단
 const STATUS_GLYPHS: Record<TerminalSessionInfo['status'], string> = {
   waiting: '●', // 입력 대기 — 주의 필요
@@ -251,6 +334,7 @@ function handleMessage(msg: TermServerMsg) {
         attachedId = null;
       }
       renderSessions();
+      renderWaiting();
       if (!attachedId) {
         // 마지막에 보던 세션은 작업 영역과 무관하게 이어본다(폰은 '이어서 쓰는' 화면이다).
         // 없으면 지금 영역의 첫 세션으로.
@@ -408,12 +492,45 @@ document.querySelectorAll<HTMLButtonElement>('#keybar button').forEach((btn) => 
     if (key === 'ctrl') {
       ctrlArmed = !ctrlArmed;
       updateCtrlUi();
+    } else if (key === 'paste') {
+      void paste();
     } else if (KEY_SEQ[key]) {
       sendMsg({ type: 'input', data: KEY_SEQ[key] });
     }
     term.focus();
   });
 });
+
+/**
+ * 클립보드 붙여넣기 — 폰에서 xterm 에 텍스트를 넣을 사실상 유일한 경로다
+ * (터미널 위 길게 누르기로는 붙여넣기 메뉴가 나오지 않는다).
+ * ⚠️ `navigator.clipboard` 는 secure context 에서만 존재한다 — MO 는 Tailscale
+ *    인증서로 HTTPS 면 정상이고, 인증서가 없어 http 로 뜬 경우엔 여기서 걸린다.
+ */
+async function paste() {
+  if (!navigator.clipboard?.readText) {
+    notice('붙여넣기 불가 — HTTPS 접속에서만 됩니다');
+    return;
+  }
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) {
+      notice('클립보드가 비어 있습니다');
+      return;
+    }
+    sendMsg({ type: 'input', data: text });
+  } catch {
+    // iOS 는 사용자 제스처 안에서도 권한 거부가 날 수 있다
+    notice('클립보드를 읽지 못했습니다');
+  }
+}
+
+// 인증서가 없어 http 로 뜬 경우엔 클립보드 API 자체가 없다 — 눌러도 안 되는 버튼으로
+// 키바 한 칸을 먹느니 감춘다(나머지 9개가 그만큼 넓어진다)
+if (!navigator.clipboard?.readText) pasteBtn.hidden = true;
+
+// 키바 표시는 뷰포트 높이(=키보드 유무)가 정하므로 여기서 포커스를 보지 않는다 —
+// 아래 syncViewport 쪽 리스너가 resize 때마다 syncKeybar 를 부른다.
 
 selectEl.addEventListener('change', () => {
   if (selectEl.value && selectEl.value !== attachedId) attach(selectEl.value);
@@ -625,9 +742,23 @@ let dragY = 0;
 let dragging = false;
 let dragged = false; // 살짝 눌렀다 뗀 건 탭(포커스=키보드)으로 남긴다
 
+// 두 손가락 핀치 = 글자 크기 (A－/A＋ 버튼을 대신한다 — 툴바 두 칸을 돌려받았다).
+// 시작 시점의 손가락 간격·글자 크기를 기준으로 비율을 곱한다.
+let pinchStart = 0;
+let pinchStartFont = 0;
+
+const touchDist = (t: TouchList) =>
+  Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
 termEl.addEventListener(
   'touchstart',
   (e) => {
+    if (e.touches.length === 2) {
+      dragging = false; // 스크롤 드래그와 겹치지 않게
+      pinchStart = touchDist(e.touches);
+      pinchStartFont = term.options.fontSize ?? FONT_MIN;
+      return;
+    }
     if (e.touches.length !== 1) return;
     dragY = e.touches[0].clientY;
     dragging = true;
@@ -639,6 +770,14 @@ termEl.addEventListener(
 termEl.addEventListener(
   'touchmove',
   (e) => {
+    if (e.touches.length === 2 && pinchStart > 0) {
+      e.preventDefault();
+      const ratio = touchDist(e.touches) / pinchStart;
+      const next = Math.round(pinchStartFont * ratio);
+      if (next !== term.options.fontSize) setFontSize(next);
+      showFontHud();
+      return;
+    }
     if (!dragging || e.touches.length !== 1) return;
     const t = e.touches[0];
     const dy = dragY - t.clientY; // 손가락을 내리면 음수 = 위(과거) 내용
@@ -661,7 +800,12 @@ termEl.addEventListener(
   { passive: false }
 );
 
-termEl.addEventListener('touchend', () => {
+termEl.addEventListener('touchend', (e) => {
+  // 핀치 중이었으면 탭으로 오해해 키보드를 열지 않는다 (두 손가락을 뗄 때 touches 가 준다)
+  if (pinchStart > 0) {
+    if (e.touches.length === 0) pinchStart = 0;
+    return;
+  }
   dragging = false;
   if (!dragged) term.focus(); // 탭 = 키보드 열기
 });
@@ -679,20 +823,29 @@ bottomBtn.addEventListener('click', () => {
   term.focus();
 });
 
-// ── 글자 크기 ──
+// ── 글자 크기 (두 손가락 핀치) ──
 function setFontSize(next: number) {
   const size = Math.min(FONT_MAX, Math.max(FONT_MIN, next));
   term.options.fontSize = size;
   localStorage.setItem(FONT_KEY, String(size));
-  fontDownBtn.disabled = size <= FONT_MIN;
-  fontUpBtn.disabled = size >= FONT_MAX;
   fit.fit(); // 열·행이 바뀌므로 PTY 도 따라온다(onResize)
 }
-fontDownBtn.addEventListener('pointerdown', (e) => e.preventDefault());
-fontUpBtn.addEventListener('pointerdown', (e) => e.preventDefault());
-fontDownBtn.addEventListener('click', () => setFontSize((term.options.fontSize ?? 15) - 1));
-fontUpBtn.addEventListener('click', () => setFontSize((term.options.fontSize ?? 15) + 1));
-setFontSize(term.options.fontSize ?? 15);
+
+// 조절 중에만 현재 크기를 띄운다 — 버튼이 없어져 값을 알 다른 방법이 없다
+let hudTimer: ReturnType<typeof setTimeout> | null = null;
+function showFontHud() {
+  const size = term.options.fontSize ?? FONT_MIN;
+  const limit = size <= FONT_MIN ? ' (최소)' : size >= FONT_MAX ? ' (최대)' : '';
+  fontHud.textContent = `${size}px${limit}`;
+  fontHud.hidden = false;
+  if (hudTimer !== null) clearTimeout(hudTimer);
+  hudTimer = setTimeout(() => {
+    hudTimer = null;
+    fontHud.hidden = true;
+  }, 700);
+}
+
+setFontSize(term.options.fontSize ?? FONT_MIN);
 
 // ── 뷰포트 — 소프트 키보드가 뜨면 실제 보이는 높이에 맞춰 레이아웃·PTY 를 줄인다 ──
 // (iOS Safari·안드로이드 Chrome 모두 visual viewport 만 줄이는 게 기본이라 JS 로 맞춘다.
@@ -700,14 +853,23 @@ setFontSize(term.options.fontSize ?? 15);
 
 function syncViewport() {
   // 레이아웃 뷰포트가 이미 줄어든 경우(resizes-content)는 둘 중 작은 값이 실제 가용 높이
-  const vv = window.visualViewport?.height;
-  const h = Math.min(vv ?? Infinity, window.innerHeight || Infinity);
+  const h = viewportH();
   if (Number.isFinite(h)) document.body.style.height = `${Math.round(h)}px`;
   fit.fit();
 }
-window.visualViewport?.addEventListener('resize', syncViewport);
-window.addEventListener('orientationchange', () => setTimeout(syncViewport, 300));
-window.addEventListener('resize', syncViewport);
+
+/** 높이가 바뀌면 = 키보드가 뜨거나 닫혔을 수 있다 — 키바를 먼저 맞추고 레이아웃을 잡는다 */
+function onViewportChange() {
+  syncKeybar(); // 표시가 바뀌면 내부에서 syncViewport 까지 부른다
+  syncViewport();
+}
+window.visualViewport?.addEventListener('resize', onViewportChange);
+window.addEventListener('orientationchange', () => {
+  // 회전하면 기준 높이 자체가 달라진다 — 다시 관측하게 리셋
+  baseViewportH = 0;
+  setTimeout(onViewportChange, 300);
+});
+window.addEventListener('resize', onViewportChange);
 
 // 탭 슬립(잠금·앱 전환) 복귀 시 즉시 재연결
 document.addEventListener('visibilitychange', () => {
@@ -718,4 +880,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 renderScope(); // 저장된 작업 영역을 첫 페인트부터 반영 (세션 목록은 sessions 수신 때 그린다)
+baseViewportH = viewportH(); // 첫 관측이 '키보드 없는 높이' 기준이 된다
+syncKeybar(); // 고정 설정을 반영 — 기본(비고정)이면 키보드가 뜰 때까지 접혀 있다
 connect();

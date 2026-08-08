@@ -30,6 +30,7 @@
   --border: #3d3d40;
   --muted: #9a9aa0;
   --accent: #2997ff;
+  --ok: #34c759;
   /* 터미널·경로·브랜치 등 고정폭이 필요한 곳 공용 (데스크톱 --font-mono 와 같은 구성) */
   --font-term: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
 }
@@ -73,7 +74,8 @@ body {
 #navBtn,
 #newBtn,
 #presetBtn,
-.fontctl button {
+#kbBtn,
+#waitBtn {
   height: 26px;
   border-radius: 6px;
 }
@@ -88,9 +90,10 @@ body {
   font-size: 12px;
 }
 
-/* 작업 영역·프리셋 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
+/* 작업 영역·프리셋·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
 #navBtn,
-#presetBtn {
+#presetBtn,
+#kbBtn {
   width: 26px;
   padding: 0;
   background: var(--bg);
@@ -101,10 +104,34 @@ body {
   flex-shrink: 0;
 }
 
-/* 작업 영역이 잡혀 있으면 버튼으로 티를 낸다 — 세션 목록이 걸러진 이유가 보이게 */
-#navBtn.on {
+/* 이모지 글리프는 컬러 이모지 폰트에 맡긴다 (본문 폰트에 없으면 두부로 뜬다) */
+#kbBtn {
+  font-family: 'Apple Color Emoji', 'Noto Color Emoji', -apple-system, sans-serif;
+  font-size: 12px;
+}
+
+/* 켜진 토글(작업 영역 선택됨 · 키바 고정) — 세션 목록이 걸러진 이유가 보이게 */
+#navBtn.on,
+#kbBtn.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* 입력 대기 바로가기 — 초록으로 눈에 띄게(세션 글리프 ● 와 같은 의미) */
+#waitBtn {
+  padding: 0 7px;
+  background: none;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#waitBtn[hidden] {
+  display: none;
 }
 
 #newBtn {
@@ -183,27 +210,7 @@ body {
   height: 7px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: #34c759;
-}
-
-.fontctl {
-  display: flex;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.fontctl button {
-  width: 26px;
-  padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.fontctl button:disabled {
-  opacity: 0.35;
+  background: var(--ok);
 }
 
 #term {
@@ -236,6 +243,28 @@ body {
 }
 
 #toBottom[hidden] {
+  display: none;
+}
+
+/* 핀치로 글자 크기를 바꾸는 동안만 뜨는 표시 — A－/A＋ 버튼을 없앤 대신
+   현재 값을 알 수 있어야 한다(어디까지 줄였는지 모르면 되돌릴 수가 없다) */
+#fontHud {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  padding: 8px 14px;
+  background: rgb(0 0 0 / 72%);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--font-term);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+#fontHud[hidden] {
   display: none;
 }
 
@@ -351,9 +380,16 @@ body {
   flex-shrink: 0;
 }
 
+/* 입력하지 않을 때는 접어 터미널에 돌려준다 — safe-area 까지 합쳐 87px(크롬의 42%)로
+   가장 큰 덩어리였고, esc·방향키는 키보드가 떠 있을 때만 쓸모가 있다(2026-08-08 실측).
+   ⌨ 버튼으로 고정하면 이 클래스가 안 붙는다. */
+#keybar[hidden] {
+  display: none;
+}
+
 #keybar button {
   flex: 1;
-  min-width: 0; /* 9개 버튼이 좁은 화면에도 전부 보이게 균등 축소 */
+  min-width: 0; /* 버튼이 좁은 화면에도 전부 보이게 균등 축소 */
   height: 40px;
   padding: 0;
   background: var(--bg);
@@ -363,6 +399,17 @@ body {
   font-size: 13px;
   font-family: var(--font-term);
   white-space: nowrap;
+}
+
+/* 붙여넣기는 이모지라 고정폭 폰트에서 깨져 보인다 — 시스템 이모지 폰트에 맡긴다 */
+#pasteBtn {
+  font-family: 'Apple Color Emoji', 'Noto Color Emoji', -apple-system, sans-serif;
+  font-size: 15px;
+}
+
+/* flex 아이템이라 hidden 만으로는 안 사라진다 (display:flex 상속이 아니라 flex 배치 대상) */
+#keybar button[hidden] {
+  display: none;
 }
 
 #keybar button:active {

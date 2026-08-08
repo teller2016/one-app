@@ -52,22 +52,26 @@
     <script type="module" src="/mobile.ts"></script>
   </head>
   <body>
-    <!-- 좁은 화면이라 조작은 전부 버튼 하나 + 바텀시트로 — 작업 영역(≡)·프리셋(⚡) -->
+    <!-- 좁은 화면이라 조작은 전부 버튼 하나 + 바텀시트로 — 작업 영역(≡)·프리셋(⚡).
+         글자 크기는 버튼 대신 두 손가락 핀치가 맡는다(툴바 두 칸 회수). -->
     <header id="topbar">
       <button id="navBtn" type="button" aria-label="작업 영역 선택">≡</button>
       <select id="sessionSelect" aria-label="세션 선택"></select>
       <button id="newBtn" type="button" aria-label="새 세션">＋</button>
       <button id="presetBtn" type="button" aria-label="프리셋 실행">⚡</button>
-      <span class="fontctl">
-        <button id="fontDown" type="button" aria-label="글자 작게">A－</button>
-        <button id="fontUp" type="button" aria-label="글자 크게">A＋</button>
-      </span>
+      <!-- U+2328 은 텍스트 표현이 기본이라 글리프가 없으면 두부(□)로 뜬다 — VS16(️)을
+           붙여 이모지 표현으로 강제한다(실측: 붙이기 전 Chromium 에서 깨짐) -->
+      <button id="kbBtn" type="button" aria-label="키바 고정">⌨️</button>
+      <!-- 입력 대기 세션 바로가기 — 대기가 있을 때만 나타난다 -->
+      <button id="waitBtn" type="button" hidden aria-label="입력 대기 세션으로 이동"></button>
       <span id="status">연결 중…</span>
     </header>
     <!-- 선택된 작업 영역 — 세션이 그 위치 것만 걸러지고 새 세션·프리셋도 여기서 열린다 -->
     <div id="scope" hidden></div>
     <main id="term">
       <button id="toBottom" type="button" hidden aria-label="맨 아래로">↓ 맨 아래로</button>
+      <!-- 핀치 중에만 잠깐 뜨는 글자 크기 표시 (버튼이 없어졌으므로 현재 값을 알 방법) -->
+      <div id="fontHud" hidden aria-hidden="true"></div>
     </main>
     <!-- 공용 바텀시트 — 작업 영역 트리 · 새 세션 위치/에이전트 · 프리셋이 돌려 쓴다 -->
     <div id="cwdSheet" hidden>
@@ -77,6 +81,9 @@
         <div id="cwdList"></div>
       </div>
     </div>
+    <!-- 키바는 입력할 때만 필요하다 — 기본은 터미널에 포커스가 있을 때만 펼쳐지고,
+         ⌨ 버튼으로 고정할 수 있다(mobile.ts). 붙여넣기는 폰에서 xterm 에 클립보드를
+         넣을 유일한 경로라 여기 둔다. -->
     <footer id="keybar">
       <button type="button" data-key="esc">esc</button>
       <button type="button" data-key="tab">tab</button>
@@ -87,6 +94,7 @@
       <button type="button" data-key="left">←</button>
       <button type="button" data-key="right">→</button>
       <button type="button" data-key="enter">⏎</button>
+      <button type="button" data-key="paste" id="pasteBtn" aria-label="붙여넣기">📋</button>
     </footer>
   </body>
 </html>
