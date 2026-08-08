@@ -486,11 +486,28 @@ function connect() {
 
 // ── 입력 ──
 
+/**
+ * xterm 이 **터미널 능력 질의(DA)에 자동 응답**하는 시퀀스 — DA1 `ESC[?1;2c` · DA2 `ESC[>0;276;0c`.
+ *
+ * ⚠️ attach 할 때 tmux 가 클라이언트 능력을 물어보는데, 폰은 WS 왕복이 있어 응답이 늦게
+ * 돌아온다. 그러면 tmux 가 그 응답을 자기 것으로 못 알아보고 **pane 으로 흘려보내** 셸이나
+ * claude 의 입력이 된다 — 세션을 열 때마다 화면에 `^[[?1;2c^[[>0;276;0c` 가 찍혔다
+ * (2026-08-08 사용자 지적). 데스크톱은 IPC 라 왕복이 빨라 tmux 가 제때 받아 문제가 없다.
+ *
+ * 이건 **사용자가 키보드로 칠 수 없는 입력**이므로 여기서 걸러도 잃는 것이 없다. 응답을
+ * 못 받은 tmux 는 타임아웃 후 기본값을 쓰고, 색·기능은 어차피 conf 의 `terminal-features`
+ * 가 명시한다. 키바의 esc(`\x1b` 한 글자)는 이 패턴에 걸리지 않는다.
+ */
+// (ESC 를 정규식 리터럴에 직접 쓰면 no-control-regex 에 걸려 문자열로 조립한다)
+const DA_REPLY_RE = new RegExp(`${String.fromCharCode(27)}\\[[?>][0-9;]*c`, 'g');
+
 function updateCtrlUi() {
   ctrlBtn.classList.toggle('armed', ctrlArmed);
 }
 
-term.onData((data) => {
+term.onData((raw) => {
+  const data = raw.replace(DA_REPLY_RE, '');
+  if (!data) return; // 능력 응답뿐이었으면 아무것도 보내지 않는다
   if (ctrlArmed && data.length === 1) {
     ctrlArmed = false;
     updateCtrlUi();
