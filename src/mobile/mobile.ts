@@ -75,8 +75,8 @@ const chgPush = document.getElementById('chgPush') as HTMLButtonElement;
 const chgBody = document.getElementById('chgBody') as HTMLElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
-const kbBtn = document.getElementById('kbBtn') as HTMLButtonElement;
 const waitBtn = document.getElementById('waitBtn') as HTMLButtonElement;
+const waitCount = document.getElementById('waitCount') as HTMLElement;
 const keybarEl = document.getElementById('keybar') as HTMLElement;
 const ctrlBtn = document.getElementById('ctrlBtn') as HTMLButtonElement;
 const pasteBtn = document.getElementById('pasteBtn') as HTMLButtonElement;
@@ -253,10 +253,8 @@ function notice(text: string) {
 //    (2026-08-08 사용자 지적) — 안드로이드 뒤로가기·iOS 키보드 내리기로 닫으면
 //    포커스는 그대로라 blur 가 오지 않는다. 그래서 **보이는 뷰포트 높이가 얼마나
 //    줄었는지**로 본다: 키보드는 두 OS 모두 뷰포트를 크게 줄이고, 닫히면 되돌린다.
-const KEYBAR_PIN_KEY = 'mo:keybarPinned';
 // 주소창 표시/숨김(≈50px)과 구분되는 문턱 — 소프트 키보드는 이보다 훨씬 크게 줄인다
 const KEYBOARD_MIN_DELTA = 120;
-let keybarPinned = localStorage.getItem(KEYBAR_PIN_KEY) === '1';
 /** 키보드가 없을 때의 뷰포트 높이 — 관측된 최대값으로 따라간다(회전 시 리셋) */
 let baseViewportH = 0;
 
@@ -273,43 +271,71 @@ function keyboardOpen(): boolean {
   return baseViewportH - h > KEYBOARD_MIN_DELTA;
 }
 
+// 고정 토글(⌨)은 없앴다 — 키보드가 뜨면 키바도 따라 오므로 별도 버튼이 할 일이 없었고,
+// 툴바만 복잡해졌다(2026-08-08 사용자 요청).
 function syncKeybar() {
-  const show = keybarPinned || keyboardOpen();
-  kbBtn.classList.toggle('on', keybarPinned);
+  const show = keyboardOpen();
   if (keybarEl.hidden === !show) return; // 변화 없으면 fit 을 돌리지 않는다
   keybarEl.hidden = !show;
   syncViewport(); // 높이가 바뀌었으니 PTY 행도 따라간다
 }
 
-kbBtn.addEventListener('pointerdown', (e) => e.preventDefault()); // 포커스 유지
-kbBtn.addEventListener('click', () => {
-  keybarPinned = !keybarPinned;
-  localStorage.setItem(KEYBAR_PIN_KEY, keybarPinned ? '1' : '0');
-  syncKeybar();
-  term.focus();
-});
-
 // ── 입력 대기 세션 바로가기 ──
 // 폰은 '자리를 비웠을 때 이어받는' 화면이라, 어떤 세션이 나를 기다리는지가 가장 중요한 정보다.
 // 예전엔 select 를 열어야 글리프(●)가 보였다.
+//
+// ⚠️ **상태를 그대로 반영하면 버튼이 깜빡인다**(2026-08-08 사용자 지적) — claude 는 입력
+// 대기 화면에서도 주기적으로 화면을 다시 그리고, 그 출력이 오는 순간 세션이 waiting→busy
+// 로 내려갔다가 2.5 초 침묵 뒤 다시 waiting 이 된다(`pty.ts` noteOutput/statusTick,
+// 실측 로그: `waiting→busy (output) bytes=1717` ↔ `busy→waiting (silence)`).
+// 상태 판정 자체는 데스크톱 알림·뱃지가 함께 쓰므로 건드리지 않고, **표시만 안정화**한다:
+// 생기면 즉시 띄우고, 사라지면 유예를 둔 뒤 그때도 없으면 숨긴다.
+const WAIT_HIDE_GRACE_MS = 3000;
+let waitHideTimer: ReturnType<typeof setTimeout> | null = null;
+/** 마지막으로 관측한 대기 세션 — 유예 중(진동 구간)에 눌러도 이동이 되게 */
+let lastWaitingIds: string[] = [];
+
 function renderWaiting() {
   const waiting = sessions.filter((s) => s.status === 'waiting');
-  waitBtn.hidden = waiting.length === 0;
-  if (!waiting.length) return;
-  waitBtn.textContent = `● ${waiting.length}`;
-  waitBtn.setAttribute(
-    'aria-label',
-    `입력 대기 ${waiting.length}개 — 다음 대기 세션으로 이동`
-  );
+
+  if (waiting.length) {
+    if (waitHideTimer !== null) {
+      clearTimeout(waitHideTimer); // 숨기려던 참이었다면 취소
+      waitHideTimer = null;
+    }
+    lastWaitingIds = waiting.map((s) => s.id);
+    waitBtn.hidden = false;
+    // ⚠️ textContent 로 덮으면 안의 SVG 가 날아간다 — 숫자는 겹치는 배지 span 에만 넣는다
+    waitCount.textContent = String(waiting.length);
+    waitBtn.setAttribute(
+      'aria-label',
+      `입력 대기 ${waiting.length}개 — 다음 대기 세션으로 이동`
+    );
+    return;
+  }
+
+  // 0 이 됐다 — 진동일 수 있으니 바로 숨기지 않는다
+  if (waitBtn.hidden || waitHideTimer !== null) return;
+  waitHideTimer = setTimeout(() => {
+    waitHideTimer = null;
+    if (sessions.some((s) => s.status === 'waiting')) return; // 그새 다시 대기
+    waitBtn.hidden = true;
+    lastWaitingIds = [];
+  }, WAIT_HIDE_GRACE_MS);
 }
 
 waitBtn.addEventListener('click', () => {
-  const waiting = sessions.filter((s) => s.status === 'waiting');
-  if (!waiting.length) return;
+  // 유예 중이면 지금 목록이 비어 있을 수 있다 — 마지막으로 본 대기 세션으로 간다.
+  // (이게 없으면 버튼이 보이는데 눌러도 아무 일이 없는 순간이 생긴다)
+  const now = sessions.filter((s) => s.status === 'waiting').map((s) => s.id);
+  const pool = now.length
+    ? now
+    : lastWaitingIds.filter((id) => sessions.some((s) => s.id === id));
+  if (!pool.length) return;
   // 이미 보고 있는 대기 세션 다음 것으로 — 여러 개면 눌러서 순회한다
-  const cur = waiting.findIndex((s) => s.id === attachedId);
-  const next = waiting[(cur + 1) % waiting.length];
-  if (next.id !== attachedId) attach(next.id);
+  const cur = pool.indexOf(attachedId ?? '');
+  const next = pool[(cur + 1) % pool.length];
+  if (next !== attachedId) attach(next);
   term.focus();
 });
 

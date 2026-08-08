@@ -70,18 +70,47 @@ body {
   flex-shrink: 0;
 }
 
-/* 컨트롤 높이 — 터미널을 넓게 쓰려고 낮게 잡되, 손가락으로 누를 수는 있어야 한다.
-   26 → 30 (2026-08-08 사용자 요청) — 글리프 버튼들이 ＋ 옆에서 작아 보였고,
-   터치 타깃도 그만큼 커진다. 툴바 세로는 4px 만 늘어난다. */
-#sessionSelect,
-#navBtn,
-#newBtn,
-#kbBtn,
-#waitBtn,
-#closeBtn,
-#changesBtn {
+/* ── 툴바 컨트롤 ──
+   ⚠️ 크기·모양은 **여기 한 곳에서만** 정한다. 예전엔 버튼마다 width·font-size 를 따로
+   적어 두고 글리프까지 문자(≡ ＋ ± ✕)로 써서, 같은 박스인데도 제각각으로 보였다
+   (전각 ＋ 는 글리프 폭이 반각의 두 배 — 2026-08-08 사용자 지적). 지금은 아이콘이
+   전부 Lucide SVG 라 viewBox·stroke 가 같아 시각 무게가 정확히 맞는다. */
+#topbar button,
+#sessionSelect {
   height: 30px;
   border-radius: 7px;
+}
+
+/* 아이콘 버튼 — 정사각 30×30, 안에 16px SVG 하나 */
+#topbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 30px;
+  padding: 0;
+  flex-shrink: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+#topbar button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#topbar button[hidden] {
+  display: none;
+}
+
+#topbar button:disabled {
+  opacity: 0.45;
 }
 
 #sessionSelect {
@@ -94,104 +123,42 @@ body {
   font-size: 12px;
 }
 
-/* 작업 영역·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label.
-   ⚠️ 박스(30×30)는 ＋ 와 같지만 **글리프 폭은 문자가 정한다** — ＋ 는 전각(U+FF0B)이라
-   13px 인데 ≡·± 는 반각이라 7px 대다(실측). 폭은 맞출 수 없으므로 크기(15px)와
-   굵기(700)로 시각 무게만 맞춘다 — 이 값들을 따로 건드리면 다시 제각각으로 보인다. */
-#navBtn,
-#kbBtn {
-  width: 30px;
-  padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  flex-shrink: 0;
+#sessionSelect:disabled {
+  opacity: 0.45;
 }
 
-/* 이모지 글리프는 컬러 이모지 폰트에 맡긴다 (본문 폰트에 없으면 두부로 뜬다) */
-#kbBtn {
-  font-family: 'Apple Color Emoji', 'Noto Color Emoji', -apple-system, sans-serif;
-  font-size: 12px;
+/* 새 세션만 채운 액센트 — 이 화면에서 가장 자주 누르는 버튼이다 */
+#newBtn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 
-/* 켜진 토글(작업 영역 선택됨 · 키바 고정) — 세션 목록이 걸러진 이유가 보이게 */
-#navBtn.on,
-#kbBtn.on {
+/* 작업 영역이 잡혀 있으면 버튼으로 티를 낸다 — 세션 목록이 걸러진 이유가 보이게 */
+#navBtn.on {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-/* 변경사항 — 보고 있는 세션 위치의 git 상태 (± = 변경량) */
-#changesBtn {
-  width: 30px;
-  padding: 0;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  /* ＋ 와 같은 시각 무게로 — ± 는 반각이라 폭이 절반이므로 크기·굵기로 보완한다 */
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-#changesBtn[hidden] {
-  display: none;
-}
-
-/* 현재 세션 종료 — 되돌릴 수 없는 동작이라 위험색으로 구분한다(누르면 확인을 한 번 더 받는다) */
+/* 세션 종료 — 되돌릴 수 없는 동작이라 색으로 구분한다(누르면 확인을 한 번 더 받는다) */
 #closeBtn {
-  width: 30px;
-  padding: 0;
-  background: var(--bg);
   color: var(--danger);
-  border: 1px solid var(--border);
-  /* 다른 글리프 버튼과 같은 크기·굵기 — 색만 위험색으로 구분한다 */
-  font-size: 15px;
+}
+
+/* 입력 대기 — 초록. 숫자는 아이콘 위에 겹쳐 **버튼 폭을 늘리지 않는다** */
+#waitBtn {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+#waitCount {
+  position: absolute;
+  top: -1px;
+  right: 1px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
-  flex-shrink: 0;
-}
-
-#closeBtn[hidden] {
-  display: none;
-}
-
-/* 입력 대기 바로가기 — 초록으로 눈에 띄게(세션 글리프 ● 와 같은 의미) */
-#waitBtn {
-  padding: 0 7px;
-  background: none;
-  color: var(--ok);
-  border: 1px solid var(--ok);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-#waitBtn[hidden] {
-  display: none;
-}
-
-#newBtn {
-  width: 30px;
-  padding: 0;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  font-size: 15px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-#newBtn:disabled,
-#navBtn:disabled,
-#sessionSelect:disabled {
-  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 선택된 작업 영역 표시줄 — 워크트리 이름·브랜치와 해제(×) */
@@ -495,7 +462,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* 툴바와 같은 아이콘 규격 — 여기만 배경 없이 얹는다 */
 #chgClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   flex-shrink: 0;
@@ -503,8 +474,16 @@ body {
   background: none;
   color: var(--fg);
   border: 0;
-  font-size: 16px;
-  line-height: 1;
+}
+
+#chgClose svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 #chgBranch {
