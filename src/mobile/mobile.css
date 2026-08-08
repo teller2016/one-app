@@ -70,7 +70,9 @@ body {
   flex-shrink: 0;
 }
 
-/* 컨트롤 높이 — 터미널 화면을 최대한 넓게 쓰려고 낮게 잡는다 */
+/* 컨트롤 높이 — 터미널을 넓게 쓰려고 낮게 잡되, 손가락으로 누를 수는 있어야 한다.
+   26 → 30 (2026-08-08 사용자 요청) — 글리프 버튼들이 ＋ 옆에서 작아 보였고,
+   터치 타깃도 그만큼 커진다. 툴바 세로는 4px 만 늘어난다. */
 #sessionSelect,
 #navBtn,
 #newBtn,
@@ -78,8 +80,8 @@ body {
 #waitBtn,
 #closeBtn,
 #changesBtn {
-  height: 26px;
-  border-radius: 6px;
+  height: 30px;
+  border-radius: 7px;
 }
 
 #sessionSelect {
@@ -92,15 +94,19 @@ body {
   font-size: 12px;
 }
 
-/* 작업 영역·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
+/* 작업 영역·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label.
+   ⚠️ 박스(30×30)는 ＋ 와 같지만 **글리프 폭은 문자가 정한다** — ＋ 는 전각(U+FF0B)이라
+   13px 인데 ≡·± 는 반각이라 7px 대다(실측). 폭은 맞출 수 없으므로 크기(15px)와
+   굵기(700)로 시각 무게만 맞춘다 — 이 값들을 따로 건드리면 다시 제각각으로 보인다. */
 #navBtn,
 #kbBtn {
-  width: 26px;
+  width: 30px;
   padding: 0;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -120,12 +126,14 @@ body {
 
 /* 변경사항 — 보고 있는 세션 위치의 git 상태 (± = 변경량) */
 #changesBtn {
-  width: 26px;
+  width: 30px;
   padding: 0;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
-  font-size: 13px;
+  /* ＋ 와 같은 시각 무게로 — ± 는 반각이라 폭이 절반이므로 크기·굵기로 보완한다 */
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -136,12 +144,14 @@ body {
 
 /* 현재 세션 종료 — 되돌릴 수 없는 동작이라 위험색으로 구분한다(누르면 확인을 한 번 더 받는다) */
 #closeBtn {
-  width: 26px;
+  width: 30px;
   padding: 0;
   background: var(--bg);
   color: var(--danger);
   border: 1px solid var(--border);
-  font-size: 12px;
+  /* 다른 글리프 버튼과 같은 크기·굵기 — 색만 위험색으로 구분한다 */
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -168,7 +178,7 @@ body {
 }
 
 #newBtn {
-  width: 26px;
+  width: 30px;
   padding: 0;
   background: var(--accent);
   color: #fff;
