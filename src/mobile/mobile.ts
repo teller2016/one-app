@@ -609,7 +609,39 @@ type SheetMode = 'scope' | 'cwd' | 'start' | 'changes' | null;
 let sheetMode: SheetMode = null;
 let pendingCwd: string | undefined;
 
+// ── 안드로이드 뒤로가기로 오버레이 닫기 ──
+// 폰에서 시트·전체화면이 떠 있을 때 뒤로가기를 누르면 **그 화면만 닫혀야** 하는데,
+// 아무 처리가 없으면 페이지를 벗어나 앱 셸로 나가 버린다(2026-08-08 사용자 지적).
+//
+// 열 때 히스토리 항목을 하나 쌓고, **닫기는 언제나 `history.back()` 한 경로로 모은다** —
+// 실제 DOM 을 숨기는 일은 `popstate` 에서만 한다. 그래야 뒤로가기로 닫든 UI 로 닫든
+// 히스토리와 화면 상태가 어긋나지 않는다(닫을 때 back 을 빼먹으면 유령 항목이 쌓여
+// 뒤로가기를 두 번 눌러야 나가게 된다).
+function pushOverlayState() {
+  history.pushState({ moOverlay: true }, '');
+}
+
+/** 실제로 화면을 숨기는 일 — popstate 에서만 부른다 */
+function hideTopOverlay(): boolean {
+  if (!chgView.hidden) {
+    chgView.hidden = true;
+    chgBody.innerHTML = ''; // 큰 diff 를 들고 있지 않게
+    return true;
+  }
+  if (!cwdSheet.hidden) {
+    sheetMode = null;
+    cwdSheet.hidden = true;
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener('popstate', () => {
+  hideTopOverlay();
+});
+
 function openSheet(mode: SheetMode, title: string) {
+  if (cwdSheet.hidden) pushOverlayState(); // 이미 열린 시트를 갈아끼울 때는 쌓지 않는다
   sheetMode = mode;
   cwdTitle.textContent = title;
   cwdList.innerHTML = '';
@@ -617,8 +649,10 @@ function openSheet(mode: SheetMode, title: string) {
 }
 
 function closeSheet() {
+  if (cwdSheet.hidden) return;
+  // back 은 비동기라 그 사이 도착한 응답이 시트를 다시 그릴 수 있다 — 모드는 즉시 비운다
   sheetMode = null;
-  cwdSheet.hidden = true;
+  history.back(); // popstate 가 실제로 닫는다
 }
 
 function sheetButton(
@@ -806,8 +840,8 @@ function chgEmpty(text: string) {
 }
 
 function closeChanges() {
-  chgView.hidden = true;
-  chgBody.innerHTML = ''; // 큰 diff 를 들고 있지 않게
+  if (chgView.hidden) return;
+  history.back(); // popstate 가 실제로 닫는다 (뒤로가기와 같은 경로 — 위 hideTopOverlay 참고)
 }
 
 async function openChanges() {
@@ -821,6 +855,7 @@ async function openChanges() {
   chgAhead.textContent = '';
   chgPush.hidden = true;
   chgEmpty('불러오는 중…');
+  if (chgView.hidden) pushOverlayState(); // 뒤로가기로 닫을 수 있게
   chgView.hidden = false;
   try {
     const st = (await rpcCall('changes:status', [target, 'work'])) as ChangesStatus;
