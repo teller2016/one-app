@@ -110,7 +110,15 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    // 넘치면 휠·트랙패드로 스크롤하되 **바는 감춘다**(세션 탭바·에이전트 칩과 같은 규칙,
+    // 2026-08-08 사용자 요청) — 좁은 LNB 에서 10px 회색 바가 트리 옆에 끼어들면
+    // 워크트리 행의 ±변경량과 겹쳐 보인다. 축소 모드(타일)도 같은 클래스를 쓴다.
     overflow-y: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none; // 전역 ::-webkit-scrollbar 보다 좁은 선택자라 이긴다
+    }
   }
 
   &__list-empty {
@@ -125,7 +133,9 @@
   &__ws-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    // ⚠️ gap 은 0 — 행↔워크트리 목록 사이 2px 은 __wt-list-inner 의 padding-top 이 갖는다.
+    // gap 으로 두면 목록이 접혀(높이 0) 있어도 그 2px 이 남아 행 아래가 붕 뜬다.
+    gap: 0;
 
     // 워크스페이스 그룹 사이 구분선 (Superset 동일).
     // 간격을 1px 까지 줄였다가 되돌렸다 — 좁으면 활성 타일 배경이 선에 닿아 답답하다.
@@ -143,6 +153,60 @@
 
     &--drop-after {
       box-shadow: 0 2px 0 0 var(--accent);
+    }
+  }
+
+  // 워크트리 목록 컨테이너 — 워크스페이스(레포) 접기/펼치기 애니메이션.
+  // **grid 0fr ↔ 1fr** 로 실제 높이를 보간한다: max-height 방식은 넉넉한 상한을 잡아야 해
+  // 워크트리 개수에 따라 체감 속도가 달라지고(적으면 빈 구간을 지나며 늦게 시작한다)
+  // 열 때/닫을 때 가속이 어긋난다. 0fr 은 콘텐츠 높이를 그대로 접는다.
+  // ⚠️ 목록은 접혀도 DOM 에 남는다(조건부 렌더면 트랜지션할 대상이 없다) — 대신
+  //    visibility 로 포커스·hover 대상에서 빼고, 그 전환만 트랜지션 끝(dur-2)으로 미룬다.
+  //    미루지 않으면 접기 시작과 동시에 사라져 애니메이션이 보이지 않는다.
+  &__wt-list {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      grid-template-rows var(--dur-2) var(--ease),
+      opacity var(--dur-2) var(--ease),
+      visibility 0s linear var(--dur-2);
+
+    &--open {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      visibility: visible;
+      // 펼칠 때는 즉시 보여야 하므로 visibility 지연을 없앤다
+      transition:
+        grid-template-rows var(--dur-2) var(--ease),
+        opacity var(--dur-2) var(--ease),
+        visibility 0s;
+    }
+  }
+
+  // grid 행이 0fr 일 때 내용을 잘라내는 층 — 애니메이션의 핵심(없으면 접혀도 삐져나온다)
+  &__wt-list-inner {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 2px; // 행과의 간격 — 접히면 이것도 함께 클립된다
+
+    // 축소 모드 — 타일이라 간격이 조금 넓고 가운데 정렬
+    .terminal__wt-list--sq & {
+      align-items: center;
+      gap: 3px;
+      padding-top: 3px;
+    }
+  }
+
+  // 펼침 표시 — 아이콘 교체 대신 회전(목록이 늘어나는 것과 같은 dur-2 박자)
+  &__ws-chevron {
+    transition: transform var(--dur-2) var(--ease);
+
+    &--open {
+      transform: rotate(90deg);
     }
   }
 
@@ -396,7 +460,8 @@
     flex-direction: column;
     align-items: center;
     align-self: stretch; // 드롭 표시가 패널 폭 전체에 걸치게
-    gap: 3px;
+    // ⚠️ ws-group 과 같은 이유로 gap 0 — 타일↔목록 3px 은 __wt-list-inner 가 갖는다
+    gap: 0;
 
     // 구분선은 border 가 아니라 pseudo — border-top 은 패널 벽에서 벽까지 이어져
     // 타일보다 넓은 선이 답답해 보였다(2026-08-06 사용자 지적). 좌우 6px 인셋으로 타일 폭에 맞춘다.

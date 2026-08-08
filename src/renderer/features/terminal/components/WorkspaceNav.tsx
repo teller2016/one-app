@@ -255,55 +255,65 @@ export function WorkspaceNav({
                   )}
                 </button>
               </Tooltip>
-              {isOpen &&
-                (worktrees[ws.id] ?? []).map((wt) => {
-                  const active = sameSelection(selection, {
-                    kind: 'worktree',
-                    wsId: ws.id,
-                    path: wt.path,
-                  });
-                  const count = sessions.filter((s) => s.cwd === wt.path).length;
-                  const wtWaiting = sessions.some(
-                    (s) => s.cwd === wt.path && s.status === 'waiting'
-                  );
-                  return (
-                    <Tooltip
-                      key={wt.path}
-                      label={`${worktreeName(wt)} · ${wt.branch ?? wt.head ?? ''}${
-                        count > 0 ? ` · 세션 ${count}개` : ''
-                      }${wtWaiting ? ' · 입력 대기' : ''}`}
-                    >
-                      <button
-                        type="button"
-                        className={
-                          'terminal__wt-sq' +
-                          (active ? ' terminal__wt-sq--active' : '')
-                        }
-                        aria-current={active ? 'true' : undefined}
-                        aria-label={`${ws.name} — ${worktreeName(wt)} 워크트리${
-                          count > 0 ? ` (세션 ${count}개)` : ''
-                        }`}
-                        disabled={wt.missing}
-                        onClick={() =>
-                          onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
-                        }
+              {/* 접힘/펼침을 높이 애니메이션으로 — 조건부 렌더가 아니라 항상 두고
+                  CSS(grid 0fr↔1fr)가 접는다. 접힌 동안은 visibility 로 포커스에서도 빠진다 */}
+              <div
+                className={
+                  'terminal__wt-list terminal__wt-list--sq' +
+                  (isOpen ? ' terminal__wt-list--open' : '')
+                }
+              >
+                <div className="terminal__wt-list-inner">
+                  {(worktrees[ws.id] ?? []).map((wt) => {
+                    const active = sameSelection(selection, {
+                      kind: 'worktree',
+                      wsId: ws.id,
+                      path: wt.path,
+                    });
+                    const count = sessions.filter((s) => s.cwd === wt.path).length;
+                    const wtWaiting = sessions.some(
+                      (s) => s.cwd === wt.path && s.status === 'waiting'
+                    );
+                    return (
+                      <Tooltip
+                        key={wt.path}
+                        label={`${worktreeName(wt)} · ${wt.branch ?? wt.head ?? ''}${
+                          count > 0 ? ` · 세션 ${count}개` : ''
+                        }${wtWaiting ? ' · 입력 대기' : ''}`}
                       >
-                        <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={15} />
-                        {count > 0 && (
-                          <span
-                            className={
-                              'terminal__wt-sq-count' +
-                              (wtWaiting ? ' terminal__wt-sq-count--waiting' : '')
-                            }
-                            aria-hidden="true"
-                          >
-                            {count}
-                          </span>
-                        )}
-                      </button>
-                    </Tooltip>
-                  );
-                })}
+                        <button
+                          type="button"
+                          className={
+                            'terminal__wt-sq' +
+                            (active ? ' terminal__wt-sq--active' : '')
+                          }
+                          aria-current={active ? 'true' : undefined}
+                          aria-label={`${ws.name} — ${worktreeName(wt)} 워크트리${
+                            count > 0 ? ` (세션 ${count}개)` : ''
+                          }`}
+                          disabled={wt.missing}
+                          onClick={() =>
+                            onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
+                          }
+                        >
+                          <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={15} />
+                          {count > 0 && (
+                            <span
+                              className={
+                                'terminal__wt-sq-count' +
+                                (wtWaiting ? ' terminal__wt-sq-count--waiting' : '')
+                              }
+                              aria-hidden="true"
+                            >
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -420,9 +430,14 @@ export function WorkspaceNav({
                       aria-label={isOpen ? '워크트리 목록 접기' : '워크트리 목록 펼치기'}
                       onClick={() => onToggleExpand(ws.id)}
                     >
+                      {/* 아이콘 교체가 아니라 회전 — 목록이 늘었다 줄어드는 것과 같은 박자로 돈다 */}
                       <Icon
-                        name={isOpen ? 'chevron-down' : 'chevron-right'}
+                        name="chevron-right"
                         size={14}
+                        className={
+                          'terminal__ws-chevron' +
+                          (isOpen ? ' terminal__ws-chevron--open' : '')
+                        }
                       />
                     </button>
                   </span>
@@ -430,76 +445,86 @@ export function WorkspaceNav({
               )}
             </div>
 
-            {isOpen &&
-              (list ?? []).map((wt) => {
-                const active = sameSelection(selection, {
-                  kind: 'worktree',
-                  wsId: ws.id,
-                  path: wt.path,
-                });
-                const count = sessions.filter((s) => s.cwd === wt.path).length;
-                const waiting = sessions.some(
-                  (s) => s.cwd === wt.path && s.status === 'waiting'
-                );
-                return (
-                  <div
-                    key={wt.path}
-                    className={[
-                      'terminal__wt-row',
-                      active ? 'terminal__wt-row--active' : '',
-                      wt.missing ? 'terminal__wt-row--missing' : '',
-                      waiting ? 'terminal__wt-row--waiting' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                  >
-                    <button
-                      type="button"
-                      className="terminal__wt-hit"
-                      aria-current={active ? 'true' : undefined}
-                      title={`${wt.path}${wt.missing ? '\n(폴더가 없습니다 — git worktree prune 대상)' : ''}`}
-                      disabled={wt.missing}
-                      onClick={() =>
-                        onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
-                      }
+            {/* 접힘/펼침을 높이 애니메이션으로 — 조건부 렌더가 아니라 항상 두고
+                CSS(grid 0fr↔1fr)가 접는다. 접힌 동안은 visibility 로 포커스에서도 빠진다.
+                워크트리 목록은 이미 전 워크스페이스분이 로드돼 있어 추가 조회가 없다 */}
+            <div
+              className={
+                'terminal__wt-list' + (isOpen ? ' terminal__wt-list--open' : '')
+              }
+            >
+              <div className="terminal__wt-list-inner">
+                {(list ?? []).map((wt) => {
+                  const active = sameSelection(selection, {
+                    kind: 'worktree',
+                    wsId: ws.id,
+                    path: wt.path,
+                  });
+                  const count = sessions.filter((s) => s.cwd === wt.path).length;
+                  const waiting = sessions.some(
+                    (s) => s.cwd === wt.path && s.status === 'waiting'
+                  );
+                  return (
+                    <div
+                      key={wt.path}
+                      className={[
+                        'terminal__wt-row',
+                        active ? 'terminal__wt-row--active' : '',
+                        wt.missing ? 'terminal__wt-row--missing' : '',
+                        waiting ? 'terminal__wt-row--waiting' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                     >
-                      <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={14} />
-                      <span className="terminal__wt-body">
-                        <span className="terminal__wt-name">
-                          {worktreeName(wt)}
-                          {count > 0 && (
-                            <span className="terminal__ws-count"> ({count})</span>
-                          )}
+                      <button
+                        type="button"
+                        className="terminal__wt-hit"
+                        aria-current={active ? 'true' : undefined}
+                        title={`${wt.path}${wt.missing ? '\n(폴더가 없습니다 — git worktree prune 대상)' : ''}`}
+                        disabled={wt.missing}
+                        onClick={() =>
+                          onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
+                        }
+                      >
+                        <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={14} />
+                        <span className="terminal__wt-body">
+                          <span className="terminal__wt-name">
+                            {worktreeName(wt)}
+                            {count > 0 && (
+                              <span className="terminal__ws-count"> ({count})</span>
+                            )}
+                          </span>
+                          <span className="terminal__wt-branch">
+                            {wt.branch ?? (wt.head ? `detached @ ${wt.head}` : '')}
+                          </span>
                         </span>
-                        <span className="terminal__wt-branch">
-                          {wt.branch ?? (wt.head ? `detached @ ${wt.head}` : '')}
-                        </span>
-                      </span>
-                      {(wt.additions > 0 || wt.deletions > 0) && (
-                        <span className="terminal__wt-diff" aria-label="미커밋 변경량">
-                          <span className="terminal__wt-add">+{wt.additions}</span>
-                          <span className="terminal__wt-del">−{wt.deletions}</span>
-                        </span>
+                        {(wt.additions > 0 || wt.deletions > 0) && (
+                          <span className="terminal__wt-diff" aria-label="미커밋 변경량">
+                            <span className="terminal__wt-add">+{wt.additions}</span>
+                            <span className="terminal__wt-del">−{wt.deletions}</span>
+                          </span>
+                        )}
+                      </button>
+                      {!wt.isMain && (
+                        <Tooltip label="워크트리 제거">
+                          <button
+                            type="button"
+                            className="terminal__wt-remove"
+                            aria-label={`'${worktreeName(wt)}' 워크트리 제거`}
+                            onClick={() => onRemoveWorktree(ws, wt)}
+                          >
+                            <Icon name="x" size={14} />
+                          </button>
+                        </Tooltip>
                       )}
-                    </button>
-                    {!wt.isMain && (
-                      <Tooltip label="워크트리 제거">
-                        <button
-                          type="button"
-                          className="terminal__wt-remove"
-                          aria-label={`'${worktreeName(wt)}' 워크트리 제거`}
-                          onClick={() => onRemoveWorktree(ws, wt)}
-                        >
-                          <Icon name="x" size={14} />
-                        </button>
-                      </Tooltip>
-                    )}
-                  </div>
-                );
-              })}
-            {isOpen && list && list.length === 0 && (
-              <p className="terminal__list-empty">워크트리가 없습니다</p>
-            )}
+                    </div>
+                  );
+                })}
+                {list && list.length === 0 && (
+                  <p className="terminal__list-empty">워크트리가 없습니다</p>
+                )}
+              </div>
+            </div>
           </div>
         );
       })}
