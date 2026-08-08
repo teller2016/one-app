@@ -16,9 +16,18 @@ import { FormRow } from '../../../components/FormRow';
 import { baseTagOf, needsBaseConfirm, sortBaseOptions } from '../lib/baseBranches';
 import { rel } from '../lib/relTime';
 
-/** 브랜치명에서 Jira 이슈 키 추출 — 예: bugfix/BBJ-2924 → BBJ-2924 */
-const issueKeyOf = (branch: string) =>
-  branch.match(/[A-Z][A-Z0-9]{1,9}[-_]\d+/)?.[0]?.replace('_', '-') ?? null;
+/**
+ * PR 제목의 대괄호에 넣을 브랜치 이름 — **맨 앞 타입 접두사만 뗀다**.
+ * 예: `bugfix/BBJ-2924` → `BBJ-2924` · `feature/cart-total` → `cart-total`
+ *     `feature/user/login` → `user/login` (첫 세그먼트만 제거) · `BBJ-2924` → 그대로
+ *
+ * 예전에는 Jira 이슈 키 패턴(`BBJ-2924`)만 뽑아 쓰고 못 찾으면 대괄호 자체를 뺐는데,
+ * 이슈 키가 없는 브랜치(`feature/cart-total` 류)에서는 아무 맥락도 안 남았다.
+ */
+const branchLabelOf = (branch: string) => {
+  const i = branch.indexOf('/');
+  return i >= 0 ? branch.slice(i + 1) : branch;
+};
 
 /** 한 번에 렌더할 최대 옵션 수 — 저장소당 브랜치가 수백 개다 (초과분은 검색으로) */
 const OPTION_LIMIT = 50;
@@ -128,10 +137,11 @@ export function CreatePrModal({
       setCommits(list);
       setFiles(res.files ?? []);
       setStats(res.stats ?? null);
-      const key = issueKeyOf(head);
-      const firstTitle = list[0]?.message.split('\n')[0] ?? head;
+      // 제목 = [브랜치명(타입 접두사 제외)] 첫 커밋 · 본문 = 커밋 내역 불릿
+      const label = branchLabelOf(head);
+      const firstTitle = list[0]?.message.split('\n')[0] ?? '';
       if (!titleDirty.current)
-        setTitle(`${key ? `[${key}] ` : ''}${firstTitle}`.slice(0, 100));
+        setTitle(`[${label}]${firstTitle ? ` ${firstTitle}` : ''}`.slice(0, 100));
       if (!bodyDirty.current)
         setBody(list.map((c) => `- ${c.message.split('\n')[0]}`).join('\n'));
     });

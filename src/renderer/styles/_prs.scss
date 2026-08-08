@@ -372,6 +372,12 @@
     &__label {
       min-width: 32px; // 짧은 라벨(원본·대상) — 셀렉트에 폭을 넘긴다
     }
+
+    // 대상(base)은 절반만 — 주요 브랜치(main·develop)라 이름이 짧고,
+    // 긴 쪽은 원본(feature/BBJ-1234-…)이라 남는 폭을 그쪽에 준다
+    &:last-of-type {
+      flex: 0.5;
+    }
   }
 
   &-arrow {
