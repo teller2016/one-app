@@ -114,6 +114,23 @@ term.unicode.activeVersion = '11';
 term.open(termEl);
 fit.fit();
 
+// ⚠️ 폰 키보드의 **예측 입력(단어 조합)** 억제 — 안 하면 타이핑이 즉시 터미널로 가지
+// 않고 스페이스로 단어를 확정해야 한 번에 들어간다(2026-08-08 사용자 지적).
+// xterm 은 IME 조합 중에는 아무것도 보내지 않고 compositionend 에서 한 번에 보내는데,
+// Gboard·삼성 키보드는 **영문도 단어 단위 조합**으로 처리하기 때문이다.
+//
+// xterm 이 거는 autocorrect/autocapitalize/spellcheck 만으로는 부족했으므로(그 상태에서
+// 증상이 났다) `inputmode` 까지 바꾼다 — url 모드는 예측·자동완성을 끄는 게 규격상
+// 의도된 동작이고, 터미널에 자주 쓰는 `/` 가 키보드에 노출되는 부수 이득도 있다.
+// 한글 입력은 그대로 되지만(키보드 전환 가능) 스페이스바가 조금 좁아진다 —
+// 실기기에서 불편하면 이 두 줄만 지우면 원래대로 돌아온다.
+const ta = term.textarea;
+if (ta) {
+  ta.setAttribute('autocomplete', 'off'); // xterm 이 걸지 않는 유일한 항목
+  ta.setAttribute('autocapitalize', 'none'); // xterm 은 'off' — 표준값은 'none'
+  ta.setAttribute('inputmode', 'url');
+}
+
 // 웹폰트가 늦게 오면 xterm 이 폴백 폭으로 잰 셀 크기가 굳는다 — 로드 후 한 번 다시 잰다
 void document.fonts.ready.then(() => {
   term.clearTextureAtlas();
