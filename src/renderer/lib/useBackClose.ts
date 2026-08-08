@@ -12,8 +12,8 @@ import { useEffect, useRef } from 'react';
  * ⚠️ UI 로 닫을 때 되돌리지 않으면 **유령 항목이 쌓여** 나중에 뒤로가기를 두 번 눌러야
  * 나가게 된다. 중첩 모달은 각자 항목을 쌓으므로 자연히 스택처럼 하나씩 닫힌다.
  *
- * 데스크톱은 마우스 뒤로가기를 `mouseup`(button 3)으로 직접 잡으므로(`App.tsx`)
- * 이 히스토리 항목과 충돌하지 않는다 — 섹션 이동 동작은 그대로다.
+ * ⚠️ 데스크톱에서는 아무 일도 하지 않는다 — `html.mo` 가 있을 때만 동작한다.
+ *    데스크톱에서 항목을 쌓으면 마우스 X1/X2 의 기본 앞/뒤와 겹쳐 섹션 이동이 뒤엉킨다.
  */
 export function useBackClose(
   onClose: () => void,
@@ -27,6 +27,13 @@ export function useBackClose(
 
   useEffect(() => {
     if (!active) return;
+    // ⚠️ **폰에서만** 히스토리를 건드린다(`html.mo` — 앱 셸이 붙인다).
+    // 데스크톱은 뒤로가기 버튼이 없어 이 기능이 필요 없는데, 여기서 항목을 쌓으면
+    // 마우스 X1/X2 의 Electron 기본 앞/뒤 동작과 겹쳐 섹션 이동이 뒤엉킨다
+    // (2026-08-08 사용자 지적: "앞으로 가기하면 뒤로 간다").
+    // 데스크톱 모달은 Escape·오버레이 클릭으로 닫으면 된다.
+    if (!document.documentElement.classList.contains('mo')) return;
+
     let popped = false;
     history.pushState({ appOverlay: true }, '');
 

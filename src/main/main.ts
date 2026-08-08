@@ -113,11 +113,14 @@ const createWindow = () => {
   // 탭 히스토리 이동(뒤로/앞으로) — macOS 는 마우스 X1/X2 버튼을 렌더러 mouseup 으로
   // 전달하지 않는 경우가 많다 (드라이버·SensibleSideButtons 류가 스와이프 제스처로 변환).
   // 그래서 macOS 스와이프 이벤트와 Windows app-command 를 메인에서 받아 렌더러로 중계한다.
+  // ⚠️ **left = 뒤로, right = 앞으로** (2026-08-08 실측). Safari 의 페이지 스와이프 관례
+  // (오른쪽으로 쓸면 뒤로)를 따라 반대로 매핑해 뒀었는데, 실제로 이 창에 도착하는 것은
+  // 트랙패드 제스처가 아니라 **마우스 X1/X2 를 드라이버가 변환한 스와이프**이고 그쪽은
+  // 뒤로 버튼을 left 로 보낸다 — 그래서 앞/뒤가 서로 바뀌어 동작했다(사용자 지적).
+  // 로그로 확정: 뒤로가기 연타 → `swipe left` 만, 앞으로가기 → `swipe right`.
   mainWindow.on("swipe", (_e, direction) => {
-    // 페이지 쓸어넘기기 방향: 오른쪽 스와이프 = 뒤로, 왼쪽 = 앞으로 (Safari 관례)
-    if (direction === "right")
-      mainWindow.webContents.send("app:history", "back");
-    else if (direction === "left")
+    if (direction === "left") mainWindow.webContents.send("app:history", "back");
+    else if (direction === "right")
       mainWindow.webContents.send("app:history", "forward");
   });
   mainWindow.on("app-command", (_e, cmd) => {
