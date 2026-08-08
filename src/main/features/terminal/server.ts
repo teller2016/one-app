@@ -281,6 +281,10 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
         agentId: msg.agentId,
         command: msg.command, // 프리셋 실행 — 있으면 에이전트 기본 명령 대신 이걸 보낸다
         title: msg.title,
+        // 클라이언트가 크기를 주면 그대로 — 뒤따라오는 attach 가 리사이즈를 일으키지
+        // 않아야 자동 실행 명령이 SIGWINCH 재출력과 겹치지 않는다
+        cols: msg.cols,
+        rows: msg.rows,
       });
       send(ws, { type: 'created', id: info.id });
       break;

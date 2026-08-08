@@ -61,6 +61,10 @@ const STATUS_TICK_MS = 1000; // 침묵 판정 틱 (세션별 타이머 대신 �
 const AGENT_LAUNCH_QUIET_MS = 350; // 출력이 이만큼 잠잠해지면 프롬프트가 완성됐다고 본다
 const AGENT_LAUNCH_MAX_WAIT_MS = 3000; // 출력이 계속 이어지는 셸 테마 대비 발사 상한
 const STATUS_DEBUG = process.env.ONEAPP_TERM_DEBUG === '1'; // 상수 보정용 전이 로그
+/** 세션 수명 로그 — 생성·자동 실행·종료. 프리셋 세션이 곧바로 사라질 때 원인을 좁힌다 */
+const life = (...args: unknown[]) => {
+  if (STATUS_DEBUG) console.log('[term:life]', ...args);
+};
 const TITLE_MAX_LEN = 60; // 사용자 지정 제목 상한 — 목록은 한 줄 ellipsis 라 그 이상은 무의미
 
 type Session = {
@@ -313,11 +317,13 @@ function wireSession(s: Session) {
   });
   proc.onExit(({ exitCode }) => {
     flush(s);
+    life('pty-exit', { id: s.id, exitCode, tmuxName: s.tmuxName, killing: s.killing, disposing });
     if (s.tmuxName && !disposing && !s.killing) {
       // tmux 백엔드 — 클라이언트가 끊긴 것(외부 detach 등)과 세션 종료를 구분한다.
       // 세션이 살아있으면 조용히 재접속해 목록에서 사라지지 않게 한다.
       const name = s.tmuxName;
       void hasTmuxSession(name).then((alive) => {
+        life('pty-exit:tmux', { id: s.id, alive });
         if (alive && sessions.get(s.id) === s) scheduleReattach(s);
         else finalizeExit(s, exitCode);
       });
@@ -387,6 +393,27 @@ function reattach(s: Session) {
   wireSession(s);
 }
 
+/** 작은따옴표 셸 인용 — 임의 명령을 sh 한 줄에 안전하게 끼워 넣는다 */
+const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * tmux `new-session` 에 넘길 셸 명령 — **명령을 pane 입력으로 주입하지 않고 여기서 실행**한다.
+ *
+ * ⚠️ 예전에는 셸을 띄운 뒤 PTY 에 명령을 write 했는데, 그 시점이 zsh 의 ZLE 초기화·히스토리
+ * 로드 및 tmux 의 터미널 능력 협상(xterm 이 되돌리는 DA 응답 `ESC[?1;2c`)과 겹쳐 **입력이
+ * 뒤섞였다** — `env` 가 `v`·`nv` 로 잘리고 뒷부분이 중복돼 `command not found` 가 났다
+ * (2026-08-08 실측, 폰에서 특히 재현이 잦았다). 여기로 넘기면 주입 자체가 없어 경합이 사라진다.
+ *
+ * - `env -u TMUX …` 는 **셸 바깥**에 둔다 — `zsh -ic 'env -u TMUX … <명령>'` 처럼 안에 넣으면
+ *   pane 이 즉시 종료된다(실측). 이유는 규명하지 못했고, 바깥에 두면 정상이다.
+ * - `-ic` 로 실행해야 rc 가 로드돼 PATH 가 잡힌다(GUI 앱이 물려주는 PATH 는 빈약하다).
+ * - 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다 — 예전 동작과 같다.
+ */
+function launchShellCommand(shell: string, rawCommand: string): string {
+  const sh = shQuote(shell);
+  return `env -u TMUX -u TMUX_PANE ${sh} -ic ${shQuote(rawCommand)}; exec ${sh} -il`;
+}
+
 export function createSession(opts: TerminalCreateInput = {}): TerminalSessionInfo {
   const shell = process.env.SHELL ?? '/bin/zsh';
   // projectId 가 있으면 프로젝트 레지스트리에서 위치 해석 (cwd 보다 우선)
@@ -401,12 +428,19 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
   const now = Date.now();
   const id = crypto.randomUUID().slice(0, 8);
 
+  // 자동 실행할 원시 명령 — 프리셋이 있으면 그것, 없으면 에이전트 기본 명령
+  const autoRun = opts.command?.trim() || agentCommand(agentId);
+
   // tmux 가 있으면 셸 대신 tmux 클라이언트를 spawn — 실제 셸은 tmux 서버 소유(영속)
   const bin = getTmuxBin();
   const tmuxName = bin ? tmuxSessionName(id) : undefined;
   const proc =
     bin && tmuxName
-      ? pty.spawn(bin, tmuxNewSessionArgs(tmuxName, cwd), ptyOptions(cwd, cols, rows))
+      ? pty.spawn(
+          bin,
+          tmuxNewSessionArgs(tmuxName, cwd, autoRun ? launchShellCommand(shell, autoRun) : undefined),
+          ptyOptions(cwd, cols, rows)
+        )
       : pty.spawn(shell, ['-il'], ptyOptions(cwd, cols, rows));
 
   const session = makeSession({
@@ -443,14 +477,12 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
     });
   }
 
-  // 프리셋 명령이 있으면 에이전트 기본 명령 대신 사용 — TMUX 를 지우는 이유는
-  // agents.ts 의 agentCommand 주석 참고 (claude 트루컬러). env 는 앞의 VAR=값
-  // 지정(JAVA_HOME=… ./gradlew 류)도 그대로 처리하므로 임의 명령에 안전하다.
-  const preset = opts.command?.trim();
-  const command = preset
-    ? `env -u TMUX -u TMUX_PANE ${preset}`
-    : agentCommand(agentId);
-  if (command) launchAgent(session, command);
+  life('create', { id, cwd, agentId, cols, rows, tmuxName, autoRun: autoRun || '(없음)' });
+  // tmux 백엔드는 위에서 new-session 의 shell-command 로 이미 넘겼다 — 여기서 입력을
+  // 주입하는 건 폴백(tmux 미설치) 세션뿐이다.
+  if (!tmuxName && autoRun) {
+    launchAgent(session, `env -u TMUX -u TMUX_PANE ${autoRun}`);
+  }
 
   wireSession(session);
   emitChanged();
@@ -518,10 +550,13 @@ export async function restoreSessions(): Promise<void> {
 }
 
 /**
- * 에이전트 자동 실행 — ⚠️ spawn 직후 바로 write 하면 zsh 가 초기화(ZLE) 중에
- * 입력 버퍼를 비우면서 명령이 유실된다(2026-08 실측 — 커널 PTY 버퍼만 믿으면 안 됨).
- * 첫 출력 후 잠깐 잠잠해지면(프롬프트 완성) 보내고, 출력이 계속 이어지는 셸 테마를
- * 대비해 상한 시간이 지나면 그냥 보낸다. 사용자 입력이 아니므로 noteInput 은 타지 않는다.
+ * 에이전트 자동 실행 — **tmux 미설치 폴백 세션 전용**이다. tmux 백엔드는 명령을 입력으로
+ * 주입하지 않고 `new-session` 의 shell-command 로 넘긴다(`launchShellCommand()` 주석 참고).
+ *
+ * ⚠️ spawn 직후 바로 write 하면 zsh 가 초기화(ZLE) 중에 입력 버퍼를 비우면서 명령이
+ * 유실된다(2026-08 실측 — 커널 PTY 버퍼만 믿으면 안 됨). 첫 출력 후 잠깐 잠잠해지면
+ * (프롬프트 완성) 보내고, 출력이 계속 이어지는 셸 테마를 대비해 상한 시간이 지나면 그냥
+ * 보낸다. 사용자 입력이 아니므로 noteInput 은 타지 않는다.
  */
 function launchAgent(s: Session, command: string) {
   let sent = false;
@@ -532,10 +567,11 @@ function launchAgent(s: Session, command: string) {
     if (quietTimer) clearTimeout(quietTimer);
     clearTimeout(maxTimer);
     sub.dispose();
+    life('launch', { id: s.id, alive: sessions.has(s.id), command });
     try {
       s.pty.write(`${command}\r`);
-    } catch {
-      // 그 사이 세션 종료 — 무해
+    } catch (err) {
+      life('launch:failed', { id: s.id, err: String(err) });
     }
   };
   const sub = s.pty.onData(() => {

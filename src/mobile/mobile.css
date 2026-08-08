@@ -31,6 +31,7 @@
   --muted: #9a9aa0;
   --accent: #2997ff;
   --ok: #34c759;
+  --danger: #ff6961;
   /* 터미널·경로·브랜치 등 고정폭이 필요한 곳 공용 (데스크톱 --font-mono 와 같은 구성) */
   --font-term: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
 }
@@ -75,7 +76,8 @@ body {
 #newBtn,
 #presetBtn,
 #kbBtn,
-#waitBtn {
+#waitBtn,
+#closeBtn {
   height: 26px;
   border-radius: 6px;
 }
@@ -115,6 +117,22 @@ body {
 #kbBtn.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* 현재 세션 종료 — 되돌릴 수 없는 동작이라 위험색으로 구분한다(누르면 확인을 한 번 더 받는다) */
+#closeBtn {
+  width: 26px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--danger);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+#closeBtn[hidden] {
+  display: none;
 }
 
 /* 입력 대기 바로가기 — 초록으로 눈에 띄게(세션 글리프 ● 와 같은 의미) */

@@ -58,6 +58,7 @@ const statusEl = document.getElementById('status') as HTMLElement;
 const selectEl = document.getElementById('sessionSelect') as HTMLSelectElement;
 const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
 const presetBtn = document.getElementById('presetBtn') as HTMLButtonElement;
+const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
 const kbBtn = document.getElementById('kbBtn') as HTMLButtonElement;
@@ -336,7 +337,18 @@ function renderSessions() {
     selectEl.appendChild(opt);
   }
   if (attachedId) selectEl.value = attachedId;
+  // 종료 버튼은 붙어 있는 세션이 있을 때만 — 없으면 누를 대상이 없다
+  closeBtn.hidden = !attached;
 }
+
+// 현재 세션 종료 — 되돌릴 수 없으므로 한 번 더 묻는다(폰은 오터치가 잦다).
+// 서버가 kill 후 sessions 브로드캐스트와 exit 를 보내므로 목록·화면은 알아서 따라온다.
+closeBtn.addEventListener('click', () => {
+  const s = attachedId ? sessions.find((x) => x.id === attachedId) : null;
+  if (!s) return;
+  if (!confirm(`'${s.title}' 세션을 종료할까요?`)) return;
+  sendMsg({ type: 'kill', id: s.id });
+});
 
 function attach(id: string) {
   fit.fit();
@@ -419,11 +431,20 @@ function handleMessage(msg: TermServerMsg) {
     case 'exit':
       if (msg.id === attachedId) {
         attachedId = null;
-        term.write('\r\n\x1b[90m[세션이 종료되었습니다]\x1b[0m\r\n');
+        // 종료 코드를 함께 남긴다 — 방금 만든 세션이 곧바로 사라질 때 원인을 좁히는
+        // 유일한 단서다(0=정상 종료 · 127=명령 없음 · 그 외=실행 실패).
+        term.write(
+          `\r\n\x1b[90m[세션이 종료되었습니다 — exit ${msg.exitCode}]\x1b[0m\r\n`
+        );
+        notice(`세션 종료 (exit ${msg.exitCode})`);
       }
       break;
     case 'error':
-      setStatus(msg.message, false);
+      // ⚠️ setStatus(_, false) 를 쓰면 안 된다 — 그 함수는 **연결 끊김**을 뜻해서
+      //    ≡·＋·⚡·세션 select 를 전부 비활성화한다. attach 실패 한 번처럼 소켓과
+      //    무관한 오류에도 폰 UI 가 통째로 잠겨 "아무것도 안 된다"가 된다
+      //    (2026-08-08 프리셋 디버깅 중 발견). 연결은 멀쩡하므로 알림만 띄운다.
+      notice(msg.message);
       break;
   }
 }
@@ -692,6 +713,10 @@ function renderPresetSheet() {
         agentId: agentIdFromCommand(p.command),
         command: p.command,
         title: p.name,
+        // 처음부터 이 화면 크기로 — 뒤따르는 attach 가 리사이즈를 일으키면 그 재출력이
+        // 자동 실행 중인 명령줄과 겹쳐 글자가 섞인다(2026-08-08 사용자 지적)
+        cols: term.cols,
+        rows: term.rows,
       });
     });
   }
@@ -735,8 +760,15 @@ function pickCwd(path: string | undefined) {
 
 function createSession(agentId: TerminalAgentId) {
   closeSheet();
-  // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환
-  sendMsg({ type: 'create', cwd: pendingCwd, agentId });
+  // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환.
+  // cols/rows 는 프리셋과 같은 이유로 함께 보낸다(에이전트 자동 실행이 걸리는 경로다)
+  sendMsg({
+    type: 'create',
+    cwd: pendingCwd,
+    agentId,
+    cols: term.cols,
+    rows: term.rows,
+  });
 }
 
 newBtn.addEventListener('click', () => {

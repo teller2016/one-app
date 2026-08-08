@@ -27,7 +27,16 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 상단 탭바 → **좌측 세션 패널**(행 = 상태점 + 제목 + `에이전트 · 상태` 서브라벨) + 우측 xterm. 새 세션은 [+] 모달에서 **위치(프로젝트 레지스트리) + 에이전트**(`agents.ts` — 셸·claude·femc·codex·gemini, `zsh -lc "whence -p"` 1회 캐시로 설치 감지 → **미설치는 선택지에서 조용히 제외**, 안내 문구 없음) 선택 → 셸 spawn 후 명령을 자동 입력(에이전트가 죽어도 셸 세션은 유지).
 
 - 에이전트를 추가할 때는 `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES`(3 컨텍스트 공용 표시명)와 `agents.ts` 의 `AGENTS` 두 곳만 손대면 된다.
-- ⚠️ **spawn 직후 즉시 `write` 하면 zsh 초기화(ZLE)가 입력 버퍼를 비우며 명령을 버린다**(2026-08 실측) — `launchAgent()` 가 **첫 출력 후 350ms 잠잠해지면**(프롬프트 완성) 보내고 상한 3초를 둔다.
+
+### ⚠️ 자동 실행 명령은 **입력으로 주입하지 않는다** (2026-08-08)
+tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pane 이 처음부터 그 명령으로 뜬다(`launchShellCommand()`). 예전처럼 셸을 띄운 뒤 PTY 에 `write` 하면, 그 시점이 **zsh 의 ZLE 초기화·히스토리 로드**와 **tmux 의 터미널 능력 협상**(xterm 이 되돌리는 DA 응답 `ESC[?1;2c`)에 겹쳐 **입력이 뒤섞인다** — `env` 가 `v`·`nv` 로 잘리고 뒷부분이 중복돼 `zsh: command not found: v` 가 났다(2026-08-08 실측). 같은 프리셋이 어떤 때는 되고 어떤 때는 깨지는 전형적인 경합이었고, **폰에서 특히 잦았다**(attach 가 늦게 와 협상 구간이 뒤로 밀린다).
+
+- ⚠️ `tmux send-keys` 로 바꿔도 결국 같은 pane tty 에 쓰는 것이라 **해결되지 않는다**(실측 — 그 시도는 되돌렸으니 다시 가지 말 것).
+- 생성 인자로 넘기면 주입 자체가 없어 경합이 사라진다. `-ic` 로 실행해야 rc 가 로드돼 PATH 가 잡힌다(GUI 앱이 물려주는 PATH 는 빈약하다). 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다.
+- ⚠️ **`env -u TMUX …` 는 셸 바깥에 둘 것** — `zsh -ic 'env -u TMUX … <명령>'` 처럼 안에 넣으면 **pane 이 즉시 종료된다**(실측 t5). 바깥(`env -u TMUX … zsh -ic '<명령>'`)이면 정상이다. 원인은 규명하지 못했다.
+- 그래서 `agents.ts` 의 `agentCommand()` 는 **원시 명령**을 반환하고, TMUX 제거 래핑은 `pty.ts` 가 위치를 정해 붙인다.
+- **tmux 미설치 폴백 세션만** 예전 방식(`launchAgent` → PTY write)을 쓴다 — 거기엔 다른 경로가 없다. ⚠️ spawn 직후 즉시 write 하면 zsh 초기화가 입력을 버리므로, **첫 출력 후 350ms 잠잠해지면** 보내고 상한 3초를 둔다.
+- `ONEAPP_TERM_DEBUG=1` 로 켜지는 `[term:life]` 로그(create·launch·pty-exit·pty-exit:tmux)가 이 계열 문제의 진단 도구다.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
 
 ## 데스크톱 세션 화면 구조 (2026-08-05)

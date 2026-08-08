@@ -57,6 +57,8 @@
     <header id="topbar">
       <button id="navBtn" type="button" aria-label="작업 영역 선택">≡</button>
       <select id="sessionSelect" aria-label="세션 선택"></select>
+      <!-- 보고 있는 세션 종료 — 붙어 있는 세션이 있을 때만 나타난다 -->
+      <button id="closeBtn" type="button" hidden aria-label="현재 세션 종료">✕</button>
       <button id="newBtn" type="button" aria-label="새 세션">＋</button>
       <button id="presetBtn" type="button" aria-label="프리셋 실행">⚡</button>
       <!-- U+2328 은 텍스트 표현이 기본이라 글리프가 없으면 두부(□)로 뜬다 — VS16(️)을

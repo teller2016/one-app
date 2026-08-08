@@ -89,7 +89,12 @@ async function detect(): Promise<string | null> {
 export const tmuxBaseArgs = () => ['-L', SOCKET_NAME, '-f', confPath()];
 
 /** 새 세션 생성+attach 인자 (-A: 이미 있으면 attach — 재시도에 안전) */
-export const tmuxNewSessionArgs = (name: string, cwd: string) => [
+export const tmuxNewSessionArgs = (
+  name: string,
+  cwd: string,
+  /** pane 에서 실행할 셸 명령 — 없으면 기본 셸 */
+  shellCommand?: string
+) => [
   ...tmuxBaseArgs(),
   'new-session',
   '-A',
@@ -97,6 +102,7 @@ export const tmuxNewSessionArgs = (name: string, cwd: string) => [
   name,
   '-c',
   cwd,
+  ...(shellCommand ? [shellCommand] : []),
 ];
 
 /** 기존 세션 재접속 인자 (앱 재시작 복원용) */

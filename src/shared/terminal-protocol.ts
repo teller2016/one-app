@@ -42,12 +42,17 @@ export type TermClientMsg =
   | { type: 'resize'; cols: number; rows: number }
   // cwd 없으면 홈 디렉터리. command/title 은 프리셋 실행용 — 데스크톱 프리셋 칩과
   // 같은 동작(그 위치의 새 세션에서 명령 자동 실행)을 폰에서도 하기 위한 필드다.
+  // ⚠️ cols/rows 를 함께 보내 **처음부터 클라이언트 크기로** 만든다 — 안 보내면 80x24 로
+  //    생성됐다가 곧바로 오는 attach 가 리사이즈를 일으키고, 그 SIGWINCH 재출력이
+  //    자동 실행 중인 명령줄과 겹쳐 글자가 섞여 보인다(폰은 rows 가 100 넘어 특히 심하다).
   | {
       type: 'create';
       cwd?: string;
       agentId?: TerminalAgentId;
       command?: string;
       title?: string;
+      cols?: number;
+      rows?: number;
     }
   | { type: 'kill'; id: string };
 
