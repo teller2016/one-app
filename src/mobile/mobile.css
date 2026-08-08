@@ -1,5 +1,28 @@
 /* 모바일(MO) 터미널 전용 최소 스타일 — 앱 디자인 토큰 체계 밖(별도 문서), 다크 고정.
    색은 데스크톱 TerminalView 의 TERM_THEME 과 동일 계열. */
+
+/* 터미널 폰트 — 데스크톱과 **같은 번들 폰트**(JetBrains Mono NL).
+   ⚠️ 예전엔 지정이 없어 기기 기본 monospace 로 그려졌고, 폰마다 자폭·자연 줄높이가
+   달라 박스 드로잉·커서가 어긋나 보였다(데스크톱에서 같은 이유로 이 폰트를 번들했다 —
+   styles.md). Regular·Bold 두 벌만 싣는다: 터미널에서 이탤릭은 드물고 파일당 ~75KB 라
+   폰 최초 로드에 그대로 얹힌다. font-display: block 은 필수 — 폴백 폭으로 셀을 재고
+   굳으면 나중에 폰트가 와도 글자가 셀과 어긋난다(features/terminal.md). */
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../renderer/assets/fonts/JetBrainsMonoNL-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('../renderer/assets/fonts/JetBrainsMonoNL-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   --bg: #1e1e20;
   --fg: #e8e8ea;
@@ -7,6 +30,8 @@
   --border: #3d3d40;
   --muted: #9a9aa0;
   --accent: #2997ff;
+  /* 터미널·경로·브랜치 등 고정폭이 필요한 곳 공용 (데스크톱 --font-mono 와 같은 구성) */
+  --font-term: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
 }
 
 * {
@@ -45,7 +70,9 @@ body {
 
 /* 컨트롤 높이 — 터미널 화면을 최대한 넓게 쓰려고 낮게 잡는다 */
 #sessionSelect,
+#navBtn,
 #newBtn,
+#presetBtn,
 .fontctl button {
   height: 26px;
   border-radius: 6px;
@@ -61,31 +88,100 @@ body {
   font-size: 12px;
 }
 
+/* 작업 영역·프리셋 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
+#navBtn,
+#presetBtn {
+  width: 26px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* 작업 영역이 잡혀 있으면 버튼으로 티를 낸다 — 세션 목록이 걸러진 이유가 보이게 */
+#navBtn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 #newBtn {
-  padding: 0 8px;
+  width: 26px;
+  padding: 0;
   background: var(--accent);
   color: #fff;
   border: none;
-  font-size: 12px;
-  white-space: nowrap;
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 #newBtn:disabled,
+#navBtn:disabled,
+#presetBtn:disabled,
 #sessionSelect:disabled {
   opacity: 0.45;
 }
 
-/* 연결 정상일 때는 텍스트 대신 점만 — 글자로 자리를 먹지 않게 */
+/* 선택된 작업 영역 표시줄 — 워크트리 이름·브랜치와 해제(×) */
+#scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#scope[hidden] {
+  display: none;
+}
+
+#scope .scope-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+#scope .scope-branch {
+  font-family: var(--font-term);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#scope button {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+/* 연결 정상일 때는 텍스트 대신 점만 — 글자로 자리를 먹지 않게.
+   끊겼을 때의 안내 문구는 버튼들이 늘어난 만큼 **먼저 양보**하고 말줄임 한다
+   (nowrap + shrink:0 이면 바 오른쪽 밖으로 밀려 잘린 것처럼 보인다). */
 #status {
   font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #status.ok {
   width: 7px;
   height: 7px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: #34c759;
 }
@@ -196,15 +292,53 @@ body {
   border-color: var(--accent);
 }
 
+/* 지금 고른 항목 — 시트를 다시 열었을 때 어디 있는지 바로 보이게 */
+#cwdList button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 #cwdList .cwd-path {
   display: block;
   margin-top: 2px;
   font-size: 11px;
   color: var(--muted);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-term);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 워크스페이스 이름 — 시트 안 그룹 구분 (버튼이 아니라 라벨) */
+#cwdList .sheet-group {
+  padding: 10px 6px 5px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+#cwdList .sheet-group:first-child {
+  padding-top: 2px;
+}
+
+/* 워크트리 행은 한 단 들여 트리로 읽히게 */
+#cwdList button.sheet-child {
+  margin-left: 10px;
+  width: calc(100% - 10px);
+}
+
+/* 우측 세션 수 — 어느 영역이 살아 있는지 한눈에 (0 이면 렌더하지 않는다) */
+#cwdList .sheet-count {
+  float: right;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-term);
+}
+
+#cwdList .sheet-empty {
+  padding: 10px 6px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 #keybar {
@@ -227,7 +361,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 13px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-term);
   white-space: nowrap;
 }
 

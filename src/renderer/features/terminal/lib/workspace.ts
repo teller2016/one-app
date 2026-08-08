@@ -2,11 +2,11 @@
 // (TerminalSection·WorkspaceNav·SessionTabs·TerminalView 가 함께 쓴다)
 import type { IconName } from '../../../components/Icon';
 import type {
-  TerminalAgentId,
   TerminalPreset,
   TerminalSessionInfo,
   WorktreeInfo,
 } from '../../../../shared/types';
+import { agentIdFromCommand } from '../../../../shared/types';
 
 /**
  * LNB 선택 상태 — 워크트리 하나 또는 '기타 세션'(어느 워크트리에도 안 속한 세션 묶음).
@@ -64,36 +64,9 @@ export function sessionsOf(
   return sessions.filter((s) => s.cwd === worktreePath);
 }
 
-/**
- * 프리셋 바에 보일 프리셋 — 숨김(pinned:false) 제외 + 스코프 필터.
- * 전역(workspaceIds 없음)은 어디서나, 지정 프리셋은 그 워크스페이스에서만.
- */
-export function presetsForWorkspace(
-  presets: TerminalPreset[],
-  wsId: string | null
-): TerminalPreset[] {
-  return presets.filter(
-    (p) =>
-      p.pinned !== false &&
-      (!p.workspaceIds || (wsId !== null && p.workspaceIds.includes(wsId)))
-  );
-}
-
-/**
- * 프리셋 명령의 실행 파일명 → 에이전트 id — 상태 휴리스틱(waiting 알림)이
- * 에이전트 세션 기준이라, claude 프리셋 등은 에이전트로 태깅해 생성한다.
- * 앞의 `VAR=값` 환경 지정(JAVA_HOME=… ./gradlew 류)은 건너뛴다.
- */
-export function agentIdFromCommand(command: string): TerminalAgentId {
-  const bin =
-    command
-      .trim()
-      .split(/\s+/)
-      .find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) ?? '';
-  const name = bin.split('/').pop() ?? '';
-  const agents: TerminalAgentId[] = ['claude', 'femc', 'codex', 'gemini'];
-  return agents.find((a) => a === name) ?? 'shell';
-}
+// 프리셋 스코프·에이전트 태깅 판정은 MO(src/mobile)와 공유해야 해서 shared 로 옮겼다 —
+// 기존 import 경로가 그대로 살아 있도록 여기서 다시 내보낸다.
+export { agentIdFromCommand, presetsForWorkspace } from '../../../../shared/types';
 
 /** 프리셋 칩 아이콘 — claude 는 ✳(Superset 무드), 나머지는 터미널 글리프 */
 export function presetIcon(p: TerminalPreset): IconName {

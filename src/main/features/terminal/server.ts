@@ -12,9 +12,12 @@ import path from 'node:path';
 import type {
   TermClientMsg,
   TermServerMsg,
+  TermWorkspaceNode,
 } from '../../../shared/terminal-protocol';
 import type { TerminalServerStatus } from '../../../shared/types';
 import { listProjects } from '../projects/store';
+import { listWorktrees } from '../workspaces/git';
+import { listPresets, listWorkspaces } from '../workspaces/store';
 import { listAgents } from './agents';
 import {
   attachSession,
@@ -187,6 +190,29 @@ function broadcastAll(msg: TermServerMsg) {
   }
 }
 
+/** MO 작업 영역 시트용 트리 — 데스크톱 LNB 와 같은 출처(워크스페이스 레지스트리 + git) */
+async function buildWorkspaceTree(): Promise<TermWorkspaceNode[]> {
+  return Promise.all(
+    listWorkspaces().map(async (ws) => {
+      let worktrees: TermWorkspaceNode['worktrees'] = [];
+      try {
+        worktrees = (await listWorktrees(ws.repoPath))
+          .filter((wt) => !wt.missing)
+          .map((wt) => ({
+            path: wt.path,
+            // 데스크톱 worktreeName 과 같은 규칙 — 주 워크트리는 'local', 그 외 폴더명
+            name: wt.isMain ? 'local' : (wt.path.split('/').filter(Boolean).pop() ?? wt.path),
+            branch: wt.branch,
+            isMain: wt.isMain,
+          }));
+      } catch {
+        // 저장소가 사라졌거나 git 실패 — 워크스페이스는 남기고 목록만 비운다
+      }
+      return { id: ws.id, name: ws.name, worktrees };
+    })
+  );
+}
+
 function handleMessage(ws: WebSocket, msg: TermClientMsg) {
   const state = socketState.get(ws);
   if (!state) return;
@@ -203,6 +229,17 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       break;
     case 'agents':
       void listAgents().then((items) => send(ws, { type: 'agents', items }));
+      break;
+    case 'workspaces':
+      // 데스크톱 LNB 와 같은 트리 — 워크스페이스마다 git 을 부르므로 **요청 시에만**
+      // 만든다(접속 때 미리 밀면 워크스페이스 수만큼 git 이 도는데, 폰이 시트를
+      // 열지 않으면 통째로 헛일이다). 사라진 워크트리는 고를 수 없으니 뺀다.
+      void buildWorkspaceTree().then((items) =>
+        send(ws, { type: 'workspaces', items })
+      );
+      break;
+    case 'presets':
+      send(ws, { type: 'presets', items: listPresets() });
       break;
     case 'attach': {
       const attachId = msg.id;
@@ -239,7 +276,12 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
         resizeSession(state.attachedId, msg.cols, msg.rows);
       break;
     case 'create': {
-      const info = createSession({ cwd: msg.cwd, agentId: msg.agentId });
+      const info = createSession({
+        cwd: msg.cwd,
+        agentId: msg.agentId,
+        command: msg.command, // 프리셋 실행 — 있으면 에이전트 기본 명령 대신 이걸 보낸다
+        title: msg.title,
+      });
       send(ws, { type: 'created', id: info.id });
       break;
     }
@@ -375,6 +417,9 @@ export async function startServer(): Promise<TerminalServerStatus> {
       items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
     });
     void listAgents().then((items) => send(ws, { type: 'agents', items }));
+    // 프리셋은 파일 한 번 읽기라 미리 보낸다 — 폰이 붙자마자 ⚡ 버튼을 쓸 수 있게.
+    // (workspaces 는 git 을 돌리므로 시트를 열 때만 — 위 handleMessage 참고)
+    send(ws, { type: 'presets', items: listPresets() });
   });
 
   // PTY 이벤트 → attach 된 소켓으로 전달 (세션 목록은 전체 브로드캐스트)

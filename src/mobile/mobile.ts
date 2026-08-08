@@ -1,6 +1,7 @@
 // 모바일(MO) 터미널 — One App 메인 프로세스의 WS 브리지(/term)에 붙어
 // 데스크톱과 같은 PTY 세션을 이어서 쓴다. 재접속 = 재attach = replay 복원.
 import { FitAddon } from '@xterm/addon-fit';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import './mobile.css';
@@ -8,15 +9,24 @@ import type {
   TermClientMsg,
   TermCwdOption,
   TermServerMsg,
+  TermWorkspaceNode,
+  TermWorktreeNode,
 } from '../shared/terminal-protocol';
 import type {
   TerminalAgentId,
   TerminalAgentInfo,
+  TerminalPreset,
   TerminalSessionInfo,
 } from '../shared/types';
-import { TERMINAL_AGENT_NAMES } from '../shared/types';
+import {
+  TERMINAL_AGENT_NAMES,
+  agentIdFromCommand,
+  presetsForWorkspace,
+} from '../shared/types';
 
 const LAST_SESSION_KEY = 'mo:lastSession';
+// 선택한 작업 영역(워크트리) — 데스크톱 LNB 선택에 해당한다
+const SCOPE_KEY = 'mo:scope';
 
 // 데스크톱 TerminalView 의 TERM_THEME 과 동일 팔레트
 const TERM_THEME = {
@@ -46,6 +56,9 @@ const TERM_THEME = {
 const termEl = document.getElementById('term') as HTMLElement;
 const statusEl = document.getElementById('status') as HTMLElement;
 const selectEl = document.getElementById('sessionSelect') as HTMLSelectElement;
+const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
+const presetBtn = document.getElementById('presetBtn') as HTMLButtonElement;
+const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
 const ctrlBtn = document.getElementById('ctrlBtn') as HTMLButtonElement;
 const fontDownBtn = document.getElementById('fontDown') as HTMLButtonElement;
@@ -73,15 +86,36 @@ const initialFont = Number(localStorage.getItem(FONT_KEY)) || FONT_MIN;
 
 const term = new Terminal({
   fontSize: Math.min(FONT_MAX, Math.max(FONT_MIN, initialFont)),
-  lineHeight: 1.25,
+  // 데스크톱과 같은 번들 폰트 — 기기 기본 monospace 는 폰마다 자폭·자연 줄높이가 달라
+  // 박스 드로잉과 커서가 어긋나 보였다(mobile.css 의 @font-face 참고).
+  fontFamily: "'JetBrains Mono NL', ui-monospace, Menlo, monospace",
+  // ⚠️ xterm 의 lineHeight 는 fontSize 가 아니라 **폰트의 자연 줄높이**에 곱해진다 —
+  // 이 폰트는 1.346 배라 1.25 를 주면 행간이 크게 벌어져 세로로 늘어나 보이고
+  // 폰의 좁은 화면에서 보이는 행 수까지 줄었다. 1.0 이 이 폰트로 가능한 최소값이다
+  // (xterm 은 1 미만을 거부한다 — features/terminal.md).
+  lineHeight: 1.0,
   cursorBlink: true,
   scrollback: 3000,
+  // ⚠️ Unicode11Addon 이 쓰는 term.unicode 는 proposed API 라 이 옵션이 없으면
+  // addon load 가 throw 하고 그 뒤 초기화가 통째로 멈춘다(데스크톱 실측).
+  allowProposedApi: true,
   theme: TERM_THEME,
 });
 const fit = new FitAddon();
 term.loadAddon(fit);
+// 한글·이모지의 셀 폭 판정을 최신 규격으로 — 없으면 CJK 가 한 칸으로 계산돼
+// TUI 의 표·테두리가 오른쪽으로 밀린다(데스크톱과 같은 addon 구성).
+const unicode11 = new Unicode11Addon();
+term.loadAddon(unicode11);
+term.unicode.activeVersion = '11';
 term.open(termEl);
 fit.fit();
+
+// 웹폰트가 늦게 오면 xterm 이 폴백 폭으로 잰 셀 크기가 굳는다 — 로드 후 한 번 다시 잰다
+void document.fonts.ready.then(() => {
+  term.clearTextureAtlas();
+  fit.fit();
+});
 
 let ws: WebSocket | null = null;
 let attachedId: string | null = null;
@@ -89,8 +123,66 @@ let attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — �
 let sessions: TerminalSessionInfo[] = [];
 let cwdOptions: TermCwdOption[] = []; // 새 세션 위치 후보 (서버가 프로젝트 레지스트리에서 보내줌)
 let agentOptions: TerminalAgentInfo[] = []; // 에이전트 후보 (설치 감지 포함)
+let workspaceTree: TermWorkspaceNode[] = []; // 작업 영역 트리 (시트를 열 때 받아온다)
+let presets: TerminalPreset[] = []; // 프리셋 (접속 시 서버가 밀어준다)
 let reconnectDelay = 1000;
 let ctrlArmed = false; // ctrl 키바 토글 — 다음 한 글자를 제어문자로
+
+/**
+ * 선택한 작업 영역 — 데스크톱 LNB 의 워크트리 선택에 해당한다.
+ * 세션 목록을 이 위치 것만 남기고, 새 세션·프리셋도 여기서 연다.
+ * null 이면 예전처럼 전체 세션을 보여준다(처음 켠 폰·해제했을 때).
+ */
+type Scope = { wsId: string; wsName: string; path: string; name: string; branch?: string };
+let scope: Scope | null = loadScope();
+
+function loadScope(): Scope | null {
+  try {
+    const raw = localStorage.getItem(SCOPE_KEY);
+    return raw ? (JSON.parse(raw) as Scope) : null;
+  } catch {
+    return null; // 형식이 깨졌으면 전체 보기로
+  }
+}
+
+function setScope(next: Scope | null) {
+  scope = next;
+  if (next) localStorage.setItem(SCOPE_KEY, JSON.stringify(next));
+  else localStorage.removeItem(SCOPE_KEY);
+  renderScope();
+  renderSessions();
+}
+
+/** 지금 보여줄 세션 — 작업 영역이 잡혀 있으면 그 위치에서 시작한 것만 */
+function visibleSessions(): TerminalSessionInfo[] {
+  return scope ? sessions.filter((s) => s.cwd === scope?.path) : sessions;
+}
+
+function renderScope() {
+  if (!scope) {
+    scopeEl.hidden = true;
+    navBtn.classList.remove('on');
+    return;
+  }
+  scopeEl.hidden = false;
+  navBtn.classList.add('on');
+  scopeEl.innerHTML = '';
+  const name = document.createElement('span');
+  name.className = 'scope-name';
+  name.textContent = `${scope.wsName} · ${scope.name}`;
+  scopeEl.appendChild(name);
+  if (scope.branch) {
+    const br = document.createElement('span');
+    br.className = 'scope-branch';
+    br.textContent = scope.branch;
+    scopeEl.appendChild(br);
+  }
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.textContent = '전체 보기';
+  clear.addEventListener('click', () => setScope(null));
+  scopeEl.appendChild(clear);
+}
 
 function sendMsg(msg: TermClientMsg) {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -103,6 +195,8 @@ function setStatus(text: string, ok: boolean) {
   statusEl.classList.toggle('ok', ok);
   // 연결이 없으면 버튼이 조용히 죽는 대신 비활성으로 상태를 드러낸다
   newBtn.disabled = !ok;
+  navBtn.disabled = !ok;
+  presetBtn.disabled = !ok;
   selectEl.disabled = !ok;
 }
 
@@ -114,8 +208,9 @@ const STATUS_GLYPHS: Record<TerminalSessionInfo['status'], string> = {
 };
 
 function renderSessions() {
+  const list = visibleSessions();
   selectEl.innerHTML = '';
-  for (const s of sessions) {
+  for (const s of list) {
     const opt = document.createElement('option');
     opt.value = s.id;
     const glyph = STATUS_GLYPHS[s.status] ?? '○';
@@ -123,10 +218,21 @@ function renderSessions() {
     opt.textContent = `${glyph} ${s.title}${agent}`;
     selectEl.appendChild(opt);
   }
-  if (!sessions.length) {
+  // 보고 있는 세션이 작업 영역 밖이면(다른 영역에서 이어보는 중) 목록에도 남겨둔다 —
+  // 없으면 select 가 엉뚱한 세션을 가리켜 손만 대도 화면이 바뀐다
+  const attached = attachedId ? sessions.find((s) => s.id === attachedId) : null;
+  if (attached && !list.some((s) => s.id === attached.id)) {
+    const opt = document.createElement('option');
+    opt.value = attached.id;
+    opt.textContent = `${STATUS_GLYPHS[attached.status] ?? '○'} ${attached.title} (다른 영역)`;
+    selectEl.appendChild(opt);
+  }
+  if (!selectEl.options.length) {
     const opt = document.createElement('option');
     opt.value = '';
-    opt.textContent = '세션 없음 — 새 세션을 만드세요';
+    opt.textContent = scope
+      ? '이 작업 영역에 세션 없음 — ＋ 로 시작'
+      : '세션 없음 — 새 세션을 만드세요';
     selectEl.appendChild(opt);
   }
   if (attachedId) selectEl.value = attachedId;
@@ -145,9 +251,12 @@ function handleMessage(msg: TermServerMsg) {
         attachedId = null;
       }
       renderSessions();
-      if (!attachedId && sessions.length) {
+      if (!attachedId) {
+        // 마지막에 보던 세션은 작업 영역과 무관하게 이어본다(폰은 '이어서 쓰는' 화면이다).
+        // 없으면 지금 영역의 첫 세션으로.
         const last = localStorage.getItem(LAST_SESSION_KEY);
-        attach(sessions.find((s) => s.id === last)?.id ?? sessions[0].id);
+        const next = sessions.find((s) => s.id === last) ?? visibleSessions()[0];
+        if (next) attach(next.id);
       }
       break;
     case 'cwds':
@@ -155,6 +264,14 @@ function handleMessage(msg: TermServerMsg) {
       break;
     case 'agents':
       agentOptions = msg.items;
+      break;
+    case 'workspaces':
+      workspaceTree = msg.items;
+      if (sheetMode === 'scope') renderScopeSheet(); // 열려 있으면 즉시 채운다
+      break;
+    case 'presets':
+      presets = msg.items;
+      if (sheetMode === 'preset') renderPresetSheet();
       break;
     case 'created':
       attach(msg.id);
@@ -301,13 +418,42 @@ document.querySelectorAll<HTMLButtonElement>('#keybar button').forEach((btn) => 
 selectEl.addEventListener('change', () => {
   if (selectEl.value && selectEl.value !== attachedId) attach(selectEl.value);
 });
-// 새 세션 — 같은 시트에서 ①위치 → ②에이전트 순으로 고른다 (둘 다 데스크톱과 같은 출처)
+// 바텀시트는 하나를 돌려 쓴다 — 작업 영역 트리 · 새 세션(위치→에이전트) · 프리셋.
+// 좁은 화면이라 상시 UI 를 늘리지 않고 버튼 하나 + 시트로 처리한다(2026-08-08 사용자 요청).
+type SheetMode = 'scope' | 'cwd' | 'agent' | 'preset' | null;
+let sheetMode: SheetMode = null;
 let pendingCwd: string | undefined;
 
-function sheetButton(label: string, sub: string | undefined, onPick: () => void) {
+function openSheet(mode: SheetMode, title: string) {
+  sheetMode = mode;
+  cwdTitle.textContent = title;
+  cwdList.innerHTML = '';
+  cwdSheet.hidden = false;
+}
+
+function closeSheet() {
+  sheetMode = null;
+  cwdSheet.hidden = true;
+}
+
+function sheetButton(
+  label: string,
+  sub: string | undefined,
+  onPick: () => void,
+  opts: { child?: boolean; on?: boolean; count?: number } = {}
+) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.textContent = label;
+  if (opts.child) btn.className = 'sheet-child';
+  if (opts.on) btn.classList.add('on');
+  // 세션 수는 라벨 오른쪽에 — 먼저 넣어야 float 가 첫 줄에 걸린다
+  if (opts.count) {
+    const cnt = document.createElement('span');
+    cnt.className = 'sheet-count';
+    cnt.textContent = `세션 ${opts.count}`;
+    btn.appendChild(cnt);
+  }
+  btn.appendChild(document.createTextNode(label));
   if (sub) {
     const span = document.createElement('span');
     span.className = 'cwd-path';
@@ -318,12 +464,123 @@ function sheetButton(label: string, sub: string | undefined, onPick: () => void)
   cwdList.appendChild(btn);
 }
 
-function openCwdStep() {
-  cwdTitle.textContent = '새 세션 위치';
+function sheetGroup(label: string) {
+  const div = document.createElement('div');
+  div.className = 'sheet-group';
+  div.textContent = label;
+  cwdList.appendChild(div);
+}
+
+function sheetEmpty(label: string) {
+  const div = document.createElement('div');
+  div.className = 'sheet-empty';
+  div.textContent = label;
+  cwdList.appendChild(div);
+}
+
+// ── 작업 영역 (데스크톱 LNB 의 폰 판) ──
+
+function pickScope(ws: TermWorkspaceNode, wt: TermWorktreeNode) {
+  setScope({
+    wsId: ws.id,
+    wsName: ws.name,
+    path: wt.path,
+    name: wt.name,
+    branch: wt.branch,
+  });
+  closeSheet();
+  // 고른 영역에 세션이 있으면 바로 그 세션으로 옮겨 붙는다 — 영역만 바꾸고
+  // 화면은 그대로면 무엇이 달라졌는지 알 수 없다
+  const first = visibleSessions()[0];
+  if (first && first.id !== attachedId) attach(first.id);
+}
+
+function renderScopeSheet() {
+  cwdTitle.textContent = '작업 영역';
   cwdList.innerHTML = '';
+  if (scope) {
+    sheetButton('전체 세션 보기', '작업 영역 해제', () => {
+      setScope(null);
+      closeSheet();
+    });
+  }
+  if (!workspaceTree.length) {
+    sheetEmpty('워크스페이스가 없습니다 — 데스크톱에서 저장소를 등록하세요.');
+    return;
+  }
+  for (const ws of workspaceTree) {
+    sheetGroup(ws.name);
+    if (!ws.worktrees.length) {
+      sheetEmpty('워크트리가 없습니다');
+      continue;
+    }
+    for (const wt of ws.worktrees) {
+      const count = sessions.filter((s) => s.cwd === wt.path).length;
+      sheetButton(wt.name, wt.branch, () => pickScope(ws, wt), {
+        child: true,
+        on: scope?.path === wt.path,
+        count,
+      });
+    }
+  }
+}
+
+navBtn.addEventListener('click', () => {
+  sendMsg({ type: 'workspaces' }); // git 조회라 열 때마다 최신으로 (응답 오면 다시 그린다)
+  openSheet('scope', '작업 영역');
+  renderScopeSheet();
+});
+
+// ── 프리셋 (데스크톱 프리셋 바의 폰 판) ──
+
+function renderPresetSheet() {
+  cwdTitle.textContent = '프리셋';
+  cwdList.innerHTML = '';
+  // 스코프 필터는 데스크톱과 같은 판정을 공유한다(shared/types.ts)
+  const list = presetsForWorkspace(presets, scope?.wsId ?? null);
+  if (!list.length) {
+    sheetEmpty(
+      presets.length
+        ? '이 작업 영역에 노출된 프리셋이 없습니다.'
+        : '프리셋이 없습니다 — 데스크톱 터미널의 ⚙ 에서 추가하세요.'
+    );
+    return;
+  }
+  const where = scope ? `${scope.wsName} · ${scope.name}` : '홈 디렉터리';
+  for (const p of list) {
+    sheetButton(p.name, `${p.command}  →  ${where}`, () => {
+      closeSheet();
+      // 데스크톱과 같은 동작 — 그 위치의 **새 세션**에서 명령을 자동 실행한다.
+      // agentId 태깅까지 같아야 입력 대기 알림·상태 휴리스틱이 폰에서도 붙는다.
+      sendMsg({
+        type: 'create',
+        cwd: scope?.path,
+        agentId: agentIdFromCommand(p.command),
+        command: p.command,
+        title: p.name,
+      });
+    });
+  }
+}
+
+presetBtn.addEventListener('click', () => {
+  sendMsg({ type: 'presets' }); // 데스크톱에서 방금 고쳤을 수 있으니 갱신
+  openSheet('preset', '프리셋');
+  renderPresetSheet();
+});
+
+// ── 새 세션 ──
+
+function openCwdStep() {
+  // 작업 영역이 잡혀 있으면 위치는 이미 정해졌다 — 위치 단계를 건너뛴다
+  // (다른 곳에 열려면 ≡ 에서 영역을 바꾸거나 해제하면 된다)
+  if (scope) {
+    pickCwd(scope.path);
+    return;
+  }
+  openSheet('cwd', '새 세션 위치');
   sheetButton('홈 디렉터리', undefined, () => pickCwd(undefined));
   for (const o of cwdOptions) sheetButton(o.name, o.path, () => pickCwd(o.path));
-  cwdSheet.hidden = false;
 }
 
 function pickCwd(path: string | undefined) {
@@ -334,8 +591,7 @@ function pickCwd(path: string | undefined) {
     createSession('shell');
     return;
   }
-  cwdTitle.textContent = '에이전트';
-  cwdList.innerHTML = '';
+  openSheet('agent', '에이전트');
   for (const a of choices) {
     sheetButton(a.name, a.id === 'shell' ? '자동 실행 없음' : undefined, () =>
       createSession(a.id)
@@ -344,7 +600,7 @@ function pickCwd(path: string | undefined) {
 }
 
 function createSession(agentId: TerminalAgentId) {
-  cwdSheet.hidden = true;
+  closeSheet();
   // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환
   sendMsg({ type: 'create', cwd: pendingCwd, agentId });
 }
@@ -354,9 +610,7 @@ newBtn.addEventListener('click', () => {
   sendMsg({ type: 'agents' }); // 에이전트 설치 감지 결과도 함께
   openCwdStep();
 });
-cwdBackdrop.addEventListener('click', () => {
-  cwdSheet.hidden = true;
-});
+cwdBackdrop.addEventListener('click', closeSheet);
 
 // ── 터치 스크롤 ──
 // 폰에서는 손가락 스크롤이 그냥은 먹지 않는다(터미널 텍스트 레이어가 덮고 있고,
@@ -463,4 +717,5 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+renderScope(); // 저장된 작업 영역을 첫 페인트부터 반영 (세션 목록은 sessions 수신 때 그린다)
 connect();

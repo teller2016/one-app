@@ -4,22 +4,51 @@
 import type {
   TerminalAgentId,
   TerminalAgentInfo,
+  TerminalPreset,
   TerminalSessionInfo,
 } from './types';
 
 /** 새 세션을 열 수 있는 위치 후보 (프로젝트 레지스트리 파생 — MO 의 위치 선택용) */
 export type TermCwdOption = { name: string; path: string };
 
+/**
+ * MO 작업 영역 트리 — 데스크톱 LNB(워크스페이스 ▸ 워크트리)의 폰 판.
+ * ±변경량은 싣지 않는다 — 폰 시트에 표시할 자리가 없고 워크스페이스마다
+ * `git diff --shortstat` 을 돌리는 값이라 접속·조회 때마다 물릴 이유가 없다.
+ */
+export type TermWorktreeNode = {
+  path: string;
+  name: string; // 표시명 (주 워크트리는 'local')
+  branch?: string;
+  isMain: boolean;
+};
+
+export type TermWorkspaceNode = {
+  id: string;
+  name: string;
+  worktrees: TermWorktreeNode[];
+};
+
 /** 클라이언트(모바일) → 서버 */
 export type TermClientMsg =
   | { type: 'list' } // 세션 목록 요청
   | { type: 'cwds' } // 새 세션 위치 후보 요청
   | { type: 'agents' } // 에이전트 후보 요청 (설치 감지 결과 포함)
+  | { type: 'workspaces' } // 작업 영역 트리 요청 (git 조회라 시트를 열 때만)
+  | { type: 'presets' } // 프리셋 목록 요청
   | { type: 'attach'; id: string; cols: number; rows: number }
   | { type: 'detach' }
   | { type: 'input'; data: string } // attach 된 세션에 키 입력
   | { type: 'resize'; cols: number; rows: number }
-  | { type: 'create'; cwd?: string; agentId?: TerminalAgentId } // cwd 없으면 홈 디렉터리
+  // cwd 없으면 홈 디렉터리. command/title 은 프리셋 실행용 — 데스크톱 프리셋 칩과
+  // 같은 동작(그 위치의 새 세션에서 명령 자동 실행)을 폰에서도 하기 위한 필드다.
+  | {
+      type: 'create';
+      cwd?: string;
+      agentId?: TerminalAgentId;
+      command?: string;
+      title?: string;
+    }
   | { type: 'kill'; id: string };
 
 /** 서버 → 클라이언트 */
@@ -27,6 +56,8 @@ export type TermServerMsg =
   | { type: 'sessions'; sessions: TerminalSessionInfo[] }
   | { type: 'cwds'; items: TermCwdOption[] }
   | { type: 'agents'; items: TerminalAgentInfo[] }
+  | { type: 'workspaces'; items: TermWorkspaceNode[] }
+  | { type: 'presets'; items: TerminalPreset[] }
   | { type: 'created'; id: string } // create 응답 — 클라이언트가 이어서 attach
   | {
       type: 'attached'; // attach 응답 — replay 는 스크롤백, seq 이하 data 는 중복이라 버린다

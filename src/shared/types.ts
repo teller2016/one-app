@@ -891,6 +891,41 @@ export type TerminalPreset = {
   pinned?: boolean; // false 면 프리셋 바에서 숨김 (기본 노출 — Superset pinnedToBar)
 };
 
+/**
+ * 프리셋 바·시트에 보일 프리셋 — 숨김(pinned:false) 제외 + 스코프 필터.
+ * 전역(workspaceIds 없음)은 어디서나, 지정 프리셋은 그 워크스페이스에서만.
+ * ⚠️ 데스크톱(renderer)과 MO(src/mobile) 가 **같은 판정을 써야** 두 화면의
+ *    프리셋 목록이 갈라지지 않으므로 shared 에 둔다.
+ */
+export function presetsForWorkspace(
+  presets: TerminalPreset[],
+  wsId: string | null
+): TerminalPreset[] {
+  return presets.filter(
+    (p) =>
+      p.pinned !== false &&
+      (!p.workspaceIds || (wsId !== null && p.workspaceIds.includes(wsId)))
+  );
+}
+
+/**
+ * 프리셋 명령의 실행 파일명 → 에이전트 id — 상태 휴리스틱(waiting 알림)이
+ * 에이전트 세션 기준이라, claude 프리셋 등은 에이전트로 태깅해 생성한다.
+ * 앞의 `VAR=값` 환경 지정(JAVA_HOME=… ./gradlew 류)은 건너뛴다.
+ * ⚠️ presetsForWorkspace 와 같은 이유로 shared — 폰에서 실행한 프리셋도 데스크톱과
+ *    똑같이 태깅돼야 입력 대기 알림이 붙는다.
+ */
+export function agentIdFromCommand(command: string): TerminalAgentId {
+  const bin =
+    command
+      .trim()
+      .split(/\s+/)
+      .find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) ?? '';
+  const name = bin.split('/').pop() ?? '';
+  const agents: TerminalAgentId[] = ['claude', 'femc', 'codex', 'gemini'];
+  return agents.find((a) => a === name) ?? 'shell';
+}
+
 /** 베이스 브랜치 선택용 목록 — 로컬·원격 구분 (원격은 `origin/…` 그대로) */
 export type WorkspaceBranches = {
   ok: boolean;
