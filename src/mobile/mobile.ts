@@ -12,7 +12,19 @@ import type {
   TermWorkspaceNode,
   TermWorktreeNode,
 } from '../shared/terminal-protocol';
-import type { TerminalPreset, TerminalSessionInfo } from '../shared/types';
+import type {
+  ChangedFile,
+  ChangesDiffResult,
+  ChangesPushResult,
+  ChangesStatus,
+  TerminalPreset,
+  TerminalSessionInfo,
+} from '../shared/types';
+// 변경사항은 `/term` 이 아니라 **`/rpc`** 로 가져온다 — changes IPC 는 전 채널이
+// handleShared 라 이미 폰에 열려 있고(그게 MO 화이트리스트 선언이다 — mo-app.md),
+// 그 통로가 rpc 다. 프로토콜·서버를 건드리지 않으므로 로직 중복이 0 이다.
+// shim 은 순수 브라우저 WS 클라이언트라 앱 셸과 그대로 공유한다.
+import { call as rpcCall, startRpc } from '../mobile-app/shim/rpc';
 import {
   TERMINAL_AGENT_NAMES,
   agentIdFromCommand,
@@ -53,6 +65,11 @@ const statusEl = document.getElementById('status') as HTMLElement;
 const selectEl = document.getElementById('sessionSelect') as HTMLSelectElement;
 const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
 const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
+const changesBtn = document.getElementById('changesBtn') as HTMLButtonElement;
+const diffView = document.getElementById('diffView') as HTMLElement;
+const diffBack = document.getElementById('diffBack') as HTMLButtonElement;
+const diffPath = document.getElementById('diffPath') as HTMLElement;
+const diffBody = document.getElementById('diffBody') as HTMLElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
 const kbBtn = document.getElementById('kbBtn') as HTMLButtonElement;
@@ -329,8 +346,9 @@ function renderSessions() {
     selectEl.appendChild(opt);
   }
   if (attachedId) selectEl.value = attachedId;
-  // 종료 버튼은 붙어 있는 세션이 있을 때만 — 없으면 누를 대상이 없다
+  // 종료·변경사항은 붙어 있는 세션이 있을 때만 — 둘 다 그 세션이 대상이다
   closeBtn.hidden = !attached;
+  changesBtn.hidden = !attached;
 }
 
 // 현재 세션 종료 — 되돌릴 수 없으므로 한 번 더 묻는다(폰은 오터치가 잦다).
@@ -584,7 +602,7 @@ selectEl.addEventListener('change', () => {
 });
 // 바텀시트는 하나를 돌려 쓴다 — 작업 영역 트리 · 새 세션(위치→에이전트) · 프리셋.
 // 좁은 화면이라 상시 UI 를 늘리지 않고 버튼 하나 + 시트로 처리한다(2026-08-08 사용자 요청).
-type SheetMode = 'scope' | 'cwd' | 'start' | null;
+type SheetMode = 'scope' | 'cwd' | 'start' | 'changes' | null;
 let sheetMode: SheetMode = null;
 let pendingCwd: string | undefined;
 
@@ -749,6 +767,192 @@ navBtn.addEventListener('click', () => {
   openSheet('scope', '작업 영역');
   renderScopeSheet();
 });
+
+// ── 변경사항 (데스크톱 터미널의 변경사항 드로어의 폰 판) ──
+// 작업 중에는 터미널을 벗어나지 않고 바로 보는 게 편하므로, 앱 셸의 '변경' 탭과 별개로
+// 여기서도 본다(2026-08-08 사용자 요청). 대상은 **보고 있는 세션**이라 작업 영역을
+// 고르지 않아도 그 세션의 워크트리가 그대로 잡힌다(ChangesTarget.sessionId).
+// 폴링은 하지 않는다 — 버튼을 누를 때만 조회한다(폰 배터리).
+
+/** 지금 보고 있는 세션 기준 대상 — 세션이 없으면 볼 것도 없다 */
+const changesTarget = () => (attachedId ? { sessionId: attachedId } : null);
+
+const KIND_GLYPH: Record<ChangedFile['kind'], string> = {
+  added: 'A',
+  modified: 'M',
+  deleted: 'D',
+  renamed: 'R',
+  conflict: '!',
+};
+
+async function openChanges() {
+  const target = changesTarget();
+  if (!target) return;
+  openSheet('changes', '변경사항');
+  sheetEmpty('불러오는 중…');
+  try {
+    const st = (await rpcCall('changes:status', [target, 'work'])) as ChangesStatus;
+    if (sheetMode === 'changes') renderChanges(st);
+  } catch (err) {
+    if (sheetMode === 'changes') {
+      cwdList.innerHTML = '';
+      sheetEmpty(`변경사항을 불러오지 못했습니다 — ${(err as Error).message}`);
+    }
+  }
+}
+
+function renderChanges(st: ChangesStatus) {
+  cwdTitle.textContent = '변경사항';
+  cwdList.innerHTML = '';
+  if (!st.ok || !st.repo) {
+    sheetEmpty(st.error ?? 'git 저장소가 아닙니다.');
+    return;
+  }
+
+  // 브랜치 + 안 푸시한 커밋 + [푸시]
+  const head = document.createElement('div');
+  head.className = 'chg-head';
+  const br = document.createElement('span');
+  br.className = 'chg-branch';
+  br.textContent = st.branch ?? '(detached)';
+  head.appendChild(br);
+  const ahead = st.ahead ?? 0;
+  if (ahead > 0 || !st.upstream) {
+    const a = document.createElement('span');
+    a.className = 'chg-ahead';
+    // upstream 이 없으면 아직 한 번도 push 안 한 브랜치 — 푸시는 -u 로 붙는다(main 이 처리)
+    a.textContent = st.upstream ? `↑${ahead}` : '새 브랜치';
+    head.appendChild(a);
+    const push = document.createElement('button');
+    push.type = 'button';
+    push.className = 'chg-push';
+    push.textContent = '푸시';
+    push.addEventListener('click', () => void doPush(push, st));
+    head.appendChild(push);
+  }
+  cwdList.appendChild(head);
+
+  const files = st.files ?? [];
+  if (!files.length) {
+    sheetEmpty('변경된 파일이 없습니다.');
+    return;
+  }
+  for (const f of files) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chg-file';
+
+    const kind = document.createElement('span');
+    kind.className = 'chg-kind';
+    kind.dataset.kind = f.kind;
+    kind.textContent = KIND_GLYPH[f.kind] ?? '?';
+    btn.appendChild(kind);
+
+    const path = document.createElement('span');
+    path.className = 'chg-path';
+    // direction: rtl 이라 경로 앞이 잘린다 — 좌우 기호가 뒤집히지 않게 격리 문자로 감싼다
+    path.textContent = `⁦${f.path}⁩`;
+    btn.appendChild(path);
+
+    if (f.additions != null || f.deletions != null) {
+      const num = document.createElement('span');
+      num.className = 'chg-num';
+      const add = document.createElement('span');
+      add.className = 'chg-add';
+      add.textContent = `+${f.additions ?? 0}`;
+      num.appendChild(add);
+      const del = document.createElement('span');
+      del.className = 'chg-del';
+      del.textContent = `−${f.deletions ?? 0}`;
+      num.appendChild(del);
+      btn.appendChild(num);
+    }
+
+    btn.addEventListener('click', () => void openDiff(f));
+    cwdList.appendChild(btn);
+  }
+}
+
+async function doPush(btn: HTMLButtonElement, st: ChangesStatus) {
+  const target = changesTarget();
+  if (!target) return;
+  if (!confirm(`'${st.branch ?? ''}' 를 푸시할까요?`)) return;
+  btn.disabled = true;
+  btn.textContent = '푸시 중…';
+  try {
+    const res = (await rpcCall('changes:push', [target])) as ChangesPushResult;
+    if (res.ok) {
+      notice('푸시 완료');
+      closeSheet();
+    } else {
+      // 실패 사유는 git 출력 tail 에 들어 있다 — 그대로 보여주는 게 가장 정확하다
+      notice(res.error ?? res.output ?? '푸시 실패');
+      btn.disabled = false;
+      btn.textContent = '푸시';
+    }
+  } catch (err) {
+    notice(`푸시 실패 — ${(err as Error).message}`);
+    btn.disabled = false;
+    btn.textContent = '푸시';
+  }
+}
+
+/** diff 전체화면 — 코드는 가로가 생명이라 폰에서는 화면을 통째로 쓴다 */
+async function openDiff(f: ChangedFile) {
+  const target = changesTarget();
+  if (!target) return;
+  diffPath.textContent = `⁦${f.path}⁩`;
+  diffBody.textContent = '불러오는 중…';
+  diffView.hidden = false;
+  try {
+    const res = (await rpcCall('changes:diff', [
+      target,
+      { path: f.path, origPath: f.origPath, untracked: f.untracked },
+    ])) as ChangesDiffResult;
+    if (diffView.hidden) return; // 그 사이 닫았으면 그리지 않는다
+    if (!res.ok) {
+      diffBody.textContent = res.error ?? 'diff 를 불러오지 못했습니다.';
+      return;
+    }
+    if (res.binary) {
+      diffBody.textContent = '(바이너리 파일)';
+      return;
+    }
+    paintDiff(res.diff ?? '', res.truncated === true);
+  } catch (err) {
+    diffBody.textContent = `불러오지 못했습니다 — ${(err as Error).message}`;
+  }
+}
+
+/** unified diff 색칠 — 줄 단위로 +/-/@@ 만 구분한다(폰에서 과한 하이라이트는 오히려 안 읽힌다) */
+function paintDiff(diff: string, truncated: boolean) {
+  diffBody.textContent = '';
+  const frag = document.createDocumentFragment();
+  for (const line of diff.split('\n')) {
+    const span = document.createElement('span');
+    if (line.startsWith('@@')) span.className = 'd-hunk';
+    else if (line.startsWith('+++') || line.startsWith('---')) span.className = 'd-meta';
+    else if (line.startsWith('+')) span.className = 'd-add';
+    else if (line.startsWith('-')) span.className = 'd-del';
+    else if (line.startsWith('diff ') || line.startsWith('index ')) span.className = 'd-meta';
+    span.textContent = `${line}\n`;
+    frag.appendChild(span);
+  }
+  if (truncated) {
+    const more = document.createElement('span');
+    more.className = 'd-meta';
+    more.textContent = '\n(표시 상한을 넘어 잘렸습니다 — 데스크톱에서 전체를 보세요)\n';
+    frag.appendChild(more);
+  }
+  diffBody.appendChild(frag);
+}
+
+diffBack.addEventListener('click', () => {
+  diffView.hidden = true;
+  diffBody.textContent = ''; // 큰 diff 를 들고 있지 않게
+});
+
+changesBtn.addEventListener('click', () => void openChanges());
 
 // ── 새 세션 = 위치 → 무엇으로 (셸 + 프리셋) ──
 // 예전엔 ⚡ 프리셋 버튼이 따로 있었고 ＋ 는 에이전트(셸·claude·femc)를 물었는데, 결국
@@ -973,6 +1177,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+startRpc(); // 변경사항 조회용 (/rpc) — 터미널 스트림(/term)과 별개 소켓이다
 renderScope(); // 저장된 작업 영역을 첫 페인트부터 반영 (세션 목록은 sessions 수신 때 그린다)
 baseViewportH = viewportH(); // 첫 관측이 '키보드 없는 높이' 기준이 된다
 syncKeybar(); // 고정 설정을 반영 — 기본(비고정)이면 키보드가 뜰 때까지 접혀 있다

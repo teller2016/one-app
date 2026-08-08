@@ -76,7 +76,8 @@ body {
 #newBtn,
 #kbBtn,
 #waitBtn,
-#closeBtn {
+#closeBtn,
+#changesBtn {
   height: 26px;
   border-radius: 6px;
 }
@@ -115,6 +116,22 @@ body {
 #kbBtn.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* 변경사항 — 보고 있는 세션 위치의 git 상태 (± = 변경량) */
+#changesBtn {
+  width: 26px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+#changesBtn[hidden] {
+  display: none;
 }
 
 /* 현재 세션 종료 — 되돌릴 수 없는 동작이라 위험색으로 구분한다(누르면 확인을 한 번 더 받는다) */
@@ -438,6 +455,186 @@ body {
 #cwdList .sheet-empty {
   padding: 10px 6px;
   font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── 변경사항 시트 ── */
+
+/* 브랜치·안 푸시한 커밋 요약 줄 */
+#cwdList .chg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 8px;
+  font-size: 12px;
+}
+
+#cwdList .chg-branch {
+  font-family: var(--font-term);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#cwdList .chg-ahead {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 푸시 — 안 올린 커밋이 있을 때만 나온다 */
+#cwdList button.chg-push {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: auto;
+  padding: 5px 12px;
+  margin-bottom: 0;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#cwdList button.chg-push:disabled {
+  opacity: 0.5;
+}
+
+/* 변경 파일 행 — [상태] 경로 ±줄수. 경로는 뒤쪽(파일명)이 중요해 앞을 자른다 */
+#cwdList button.chg-file {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+#cwdList .chg-kind {
+  flex-shrink: 0;
+  width: 14px;
+  font-family: var(--font-term);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+#cwdList .chg-kind[data-kind='added'] {
+  color: var(--ok);
+}
+
+#cwdList .chg-kind[data-kind='deleted'] {
+  color: var(--danger);
+}
+
+#cwdList .chg-kind[data-kind='conflict'] {
+  color: #ffd60a;
+}
+
+#cwdList .chg-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-term);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl; /* 넘치면 앞(디렉터리)을 자르고 파일명을 남긴다 */
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+#cwdList .chg-num {
+  flex-shrink: 0;
+  font-family: var(--font-term);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#cwdList .chg-add {
+  color: var(--ok);
+}
+
+#cwdList .chg-del {
+  color: var(--danger);
+  margin-left: 4px;
+}
+
+/* ── diff 전체화면 ── */
+#diffView {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+#diffView[hidden] {
+  display: none;
+}
+
+#diffBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  padding-top: calc(4px + env(safe-area-inset-top));
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+}
+
+#diffBack {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  color: var(--fg);
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+#diffPath {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-term);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+/* diff 본문 — 줄바꿈 없이 가로 스크롤(코드는 줄이 접히면 읽기 어렵다) */
+#diffBody {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  overflow: auto;
+  font-family: var(--font-term);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+  -webkit-overflow-scrolling: touch;
+}
+
+#diffBody .d-add {
+  color: var(--ok);
+}
+
+#diffBody .d-del {
+  color: var(--danger);
+}
+
+#diffBody .d-hunk {
+  color: #5ac8fa;
+}
+
+#diffBody .d-meta {
   color: var(--muted);
 }
 

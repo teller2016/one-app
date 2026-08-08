@@ -57,6 +57,8 @@
     <header id="topbar">
       <button id="navBtn" type="button" aria-label="작업 영역 선택">≡</button>
       <select id="sessionSelect" aria-label="세션 선택"></select>
+      <!-- 이 세션 위치의 git 변경사항 — 붙어 있는 세션이 있을 때만 나타난다 -->
+      <button id="changesBtn" type="button" hidden aria-label="변경사항">±</button>
       <!-- 보고 있는 세션 종료 — 붙어 있는 세션이 있을 때만 나타난다 -->
       <button id="closeBtn" type="button" hidden aria-label="현재 세션 종료">✕</button>
       <!-- 새 세션 = 셸 + 프리셋 (예전엔 ⚡ 가 따로 있었는데 결국 '무엇으로 시작할까'라는
@@ -87,6 +89,15 @@
     <!-- 키바는 입력할 때만 필요하다 — 기본은 터미널에 포커스가 있을 때만 펼쳐지고,
          ⌨ 버튼으로 고정할 수 있다(mobile.ts). 붙여넣기는 폰에서 xterm 에 클립보드를
          넣을 유일한 경로라 여기 둔다. -->
+    <!-- diff 전체화면 — 코드는 가로가 생명이라 폰에서는 화면을 통째로 쓴다.
+         목록(바텀시트)에서 파일을 탭하면 열리고 ‹ 로 돌아간다. -->
+    <div id="diffView" hidden>
+      <header id="diffBar">
+        <button id="diffBack" type="button" aria-label="목록으로">‹</button>
+        <span id="diffPath"></span>
+      </header>
+      <pre id="diffBody"></pre>
+    </div>
     <footer id="keybar">
       <button type="button" data-key="esc">esc</button>
       <button type="button" data-key="tab">tab</button>
