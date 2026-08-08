@@ -5,7 +5,6 @@ import { ToastProvider } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
-import { HomeSection } from "../features/home";
 import { JiraSection, isDone } from "../features/jira";
 import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
@@ -22,18 +21,18 @@ import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
 
-// 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다
-// render 는 섹션 이동 함수(navigate)를 받는다 — 홈 대시보드 카드 클릭 이동용
+// 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다.
+// ⚠️ 배열 첫 항목이 앱을 열었을 때의 화면이다(activeId 초기값 = SECTIONS[0].id).
 type AppSection = SidebarSection & {
-  render: (ctx: { navigate: (id: string) => void }) => ReactNode;
+  render: () => ReactNode;
 };
 
 const SECTIONS: AppSection[] = [
   {
-    id: "home",
-    label: "홈",
-    icon: <Icon name="layout-grid" size={16} />,
-    render: ({ navigate }) => <HomeSection onNavigate={navigate} />,
+    id: "terminal",
+    label: "터미널",
+    icon: <Icon name="terminal" size={16} />,
+    render: () => <TerminalSection />,
   },
   {
     id: "jira",
@@ -64,12 +63,6 @@ const SECTIONS: AppSection[] = [
     label: "프로젝트",
     icon: <Icon name="folder" size={16} />,
     render: () => <ProjectsSection />,
-  },
-  {
-    id: "terminal",
-    label: "터미널",
-    icon: <Icon name="terminal" size={16} />,
-    render: () => <TerminalSection />,
   },
   {
     id: "applink",
@@ -298,7 +291,7 @@ export function App() {
             </header>
 
             {/* 메인 영역 */}
-            <main className="main">{active.render({ navigate })}</main>
+            <main className="main">{active.render()}</main>
           </section>
         </div>
       </ConfirmProvider>
