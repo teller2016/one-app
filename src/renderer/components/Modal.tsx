@@ -1,11 +1,12 @@
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useBackClose } from '../lib/useBackClose';
 import { Icon } from './Icon';
 
 /**
  * 공통 모달 — 오버레이 + 패널(헤더·스크롤 본문). 스타일은 _base.scss 의 .modal 계열.
  * 열림 여부는 부모가 조건부 렌더로 제어한다: {open && <Modal ...>}
- * Escape 키·오버레이 클릭·닫기 버튼으로 onClose 가 호출된다.
+ * Escape 키·오버레이 클릭·닫기 버튼, 그리고 **폰의 뒤로가기**로 onClose 가 호출된다.
  */
 export function Modal({
   title,
@@ -26,6 +27,9 @@ export function Modal({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // 폰 뒤로가기로도 닫힌다 — 안 하면 모달을 띄운 채 뒤로가기를 누르는 순간 앱을 벗어난다
+  useBackClose(onClose);
 
   // body 끝으로 포털 — 사이드바·탑바(-webkit-app-region: drag)보다 문서 순서상
   // 뒤에 있어야 오버레이의 no-drag 가 창 드래그 영역을 걷어내 dim 클릭이 전달된다

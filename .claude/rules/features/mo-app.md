@@ -35,3 +35,14 @@ WS 클라이언트는 BrowserWindow 가 아니라 `broadcast()` 로도 안 닿�
 - 폰은 평문 http = insecure context 라 **`navigator.clipboard` 가 없다** → `lib/useCopy.ts` 에 `execCommand` 폴백을 넣었다(데스크톱은 기존 경로).
 
 스타일 오버라이드(`mobile-app/styles/mo.scss`)는 스타일 규칙 문서 참고 — 데스크톱 SCSS 무수정, `html.mo` 스코프로만 덮는다.
+
+- ⚠️ **데스크톱 화면을 개편하면 그 기능의 MO 오버라이드도 함께 봐야 한다** — 오버라이드는 클래스 이름으로 붙어 있어서, 개편으로 클래스가 바뀌면 **조용히 아무 일도 하지 않는다**(에러도 경고도 없다). PR 섹션을 마스터-디테일로 개편했을 때 `prs__meta`·`prs__quick-row`·`prs__main`·`prs__title` 오버라이드가 통째로 죽어 폰에서 화면이 깨졌다(2026-08-08 사용자 지적). 의심되면 `mo.scss` 의 선택자를 그 기능의 실제 클래스와 대조할 것.
+- 데스크톱이 이미 좁은 창을 처리한다면(예: `prs__body` 는 1080px 이하에서 1열로 스택) 그 규칙을 다시 쓰지 말고, **폰에서만 어긋나는 것**만 덮는다 — 데스크톱 탑바 기준의 `sticky top`·고정폭(`width: 200px`) 같은 것들이다.
+
+## 뒤로가기로 오버레이 닫기
+공용 `useBackClose`(`renderer/lib/useBackClose.ts`)가 **모든 모달**(`Modal`)과 **확인 다이얼로그**(`ConfirmDialog`)에 걸려 있다 — 폰에서 모달을 띄운 채 뒤로가기를 누르면 앱을 벗어나던 것을 막는다(2026-08-08, MO 터미널에서 먼저 겪고 공통화).
+
+- 열릴 때 `history.pushState` 로 항목을 쌓고, **뒤로가기로 닫히면** `popstate` 가 `onClose` 를, **UI 로 닫히면** 언마운트 cleanup 이 `history.back()` 을 부른다. ⚠️ 후자를 빼먹으면 유령 항목이 쌓여 나중에 뒤로가기를 두 번 눌러야 나간다.
+- ⚠️ `onClose` 는 렌더마다 새 함수일 수 있어 **ref 로 참조**한다 — deps 에 넣으면 항목이 계속 쌓인다.
+- 데스크톱은 마우스 뒤로가기를 `mouseup`(button 3)으로 직접 잡으므로(`App.tsx`) 이 히스토리 항목과 충돌하지 않는다 — 섹션 이동 동작은 그대로다.
+- MO 터미널 페이지(`src/mobile`)는 React 가 없어 같은 규칙을 자체 구현한다(`features/terminal.md`).

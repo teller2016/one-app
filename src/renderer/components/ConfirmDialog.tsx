@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useBackClose } from '../lib/useBackClose';
 import { Button } from './Button';
 
 type ConfirmOptions = {
@@ -58,6 +59,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     },
     [pending],
   );
+
+  // 폰 뒤로가기 = 취소 (Escape 와 같은 의미) — 떠 있는 동안만 히스토리 항목을 쥔다
+  useBackClose(useCallback(() => close(false), [close]), !!pending);
 
   // 키보드 — capture 로 먼저 받아 아래 깔린 Modal 의 Escape 닫힘을 막는다
   useEffect(() => {

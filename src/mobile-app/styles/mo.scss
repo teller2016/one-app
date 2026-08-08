@@ -208,24 +208,66 @@ html.mo {
   }
 
   // ── PR ──
+  // ⚠️ 2026-08-08 개편(저장소 탭 + 마스터-디테일)으로 클래스가 통째로 바뀌었다 —
+  //    예전 오버라이드(`prs__meta`·`prs__quick-row`·`prs__main`·`prs__title`)는 가리키는
+  //    요소가 사라져 아무 일도 하지 않았고, 폰에서 화면이 깨져 보였다(사용자 지적).
+  //    데스크톱 골격은 손대지 않고 폰에서 어긋나는 것만 여기서 덮는다.
 
-  // 메타 행(뱃지·작성자·시각 + margin-left:auto 로 밀린 [머지])이 폰 폭을 넘는다
-  .prs__meta {
-    flex-wrap: wrap;
-    row-gap: 6px;
+  // 목록은 데스크톱에서 sticky 로 남겨 두는 게 맞지만(상세가 길어도 목록이 보인다),
+  // 폰은 1 컬럼이라 그 규칙이 **목록이 화면을 거의 다 먹고 상세는 한참 아래**가 된다.
+  // top:56px 도 데스크톱 프로스트 탑바 기준이라 폰에는 맞지 않는다.
+  .prs__list {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
-  // 빠른 PR 한 줄: [저장소칩][최근 브랜치][액션 2개] 가 나란히 있어 폰에서 브랜치명이
-  // 100px 대로 눌려 못 읽는다 → 브랜치 표시를 아래 줄 전폭으로 내린다
-  // (저장소 칩과 액션은 첫 줄에 남는다)
-  .prs__quick-row {
+  // 헤더: [제목][검색·새 PR·새로고침]이 한 줄에 안 들어간다 → 툴바를 아래 전폭으로
+  .prs__head {
     flex-wrap: wrap;
     row-gap: 8px;
   }
 
-  .prs__quick-latest {
+  .prs__toolbar {
     flex: 1 1 100%;
-    order: 1;
+    margin-top: 0;
+  }
+
+  // 검색은 데스크톱 고정폭(200px) 대신 남는 폭을 채운다
+  .prs__search {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  // 저장소 탭 — 저장소가 여러 개면 폰 폭을 넘는다. 줄바꿈 대신 가로 스크롤로 두어
+  // 탭 줄이 화면을 잡아먹지 않게 한다(바는 감춘다 — 터미널 세션 탭과 같은 규칙).
+  // ⚠️ 위 여백은 여기서 직접 준다 — 데스크톱은 헤더(제목+툴바 한 줄) 아래로 자연히
+  //    간격이 생기지만, 폰은 헤더가 wrap 되면서 탭이 바로 붙어 버린다(사용자 지적).
+  .prs__tabs {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    margin-top: 14px;
+
+    .segment {
+      flex: 1 1 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+  }
+
+  // 상세 패널 — 데스크톱 여백(20/24)이 폰에서는 본문 폭을 크게 깎는다
+  .prs__detail {
+    padding: 14px 12px;
+  }
+
+  // 커밋·변경 파일 목록은 코드라 가로가 필요하다 — 폰 높이 상한을 낮춰 스크롤 구간을 줄인다
+  .prs__detail-panel {
+    max-height: 220px;
   }
 
   // PR 생성 모달의 [원본 → 대상] 한 줄은 폰 폭에 두 셀렉트가 안 들어간다 → 세로로 쌓고
@@ -241,17 +283,6 @@ html.mo {
     &-arrow {
       display: none;
     }
-  }
-
-  // PR 제목이 저장소 칩·번호와 한 줄에 눌려 잘린다 → 제목을 전폭으로
-  .prs__main {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-
-  .prs__title {
-    flex: 1 1 100%;
-    white-space: normal;
   }
 
   // ── 메일 ──

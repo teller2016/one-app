@@ -4,6 +4,7 @@ import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { useBackClose } from '../../../lib/useBackClose';
 import { useThemeMode } from '../../../lib/theme';
 import { isDone } from '../lib/issue';
 
@@ -110,6 +111,11 @@ export function JiraDetailPanel({
   const panelRef = useRef<HTMLElement>(null);
   // 테마가 바뀌면 srcDoc 팔레트도 함께 재생성된다
   const dark = useThemeMode() === 'dark';
+
+  // 폰 뒤로가기로 닫힌다 — ⚠️ 이 패널은 Modal 이 아니라 슬라이드 패널이라 공용 Modal 의
+  // 처리가 닿지 않는다. 안 걸어두면 상세를 연 채 뒤로가기를 누르는 순간 앱이 닫힌다
+  // (2026-08-08 사용자 지적).
+  useBackClose(onClose, open);
 
   useEffect(() => {
     if (!open || !issueKey) return;
