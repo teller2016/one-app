@@ -27,6 +27,7 @@ import {
 import type { WorkspaceSelection } from '../lib/workspace';
 import { MoAccessModal } from './MoAccessModal';
 import { NewSessionModal } from './NewSessionModal';
+import { PresetBar } from './PresetBar';
 import { PresetsModal } from './PresetsModal';
 import { NewWorkspaceModal } from './NewWorkspaceModal';
 import { NewWorktreeModal } from './NewWorktreeModal';
@@ -361,11 +362,15 @@ export function TerminalSection() {
     }
   };
 
-  /** 프리셋 실행 — 같은 위치의 새 세션에서 명령 자동 실행 (Superset new-tab 동일) */
-  const runPreset = async (session: TerminalSessionInfo, preset: TerminalPreset) => {
+  /**
+   * 프리셋 실행 — 그 위치의 새 세션에서 명령 자동 실행 (Superset new-tab 동일).
+   * 세션이 아니라 **cwd** 를 받는다 — 세션이 하나도 없는 화면에서도 선택된
+   * 워크트리 경로로 첫 세션을 프리셋으로 시작할 수 있어야 한다(2026-08-08).
+   */
+  const runPreset = async (cwd: string, preset: TerminalPreset) => {
     try {
       const info = await terminalApi()?.create({
-        cwd: session.cwd,
+        cwd,
         // claude 프리셋 등은 에이전트로 태깅 — 입력대기 알림·상태 휴리스틱이 살아난다
         agentId: agentIdFromCommand(preset.command),
         command: preset.command,
@@ -756,10 +761,30 @@ export function TerminalSection() {
               fontSize={fontSize}
               onFontSize={changeFontSize}
               presets={presetsForWorkspace(presets, workspaceIdOf(s.cwd))}
-              onRunPreset={(p) => void runPreset(s, p)}
+              onRunPreset={(p) => void runPreset(s.cwd, p)}
               onEditPresets={() => setPresetsOpen(true)}
             />
           ))}
+          {/* 세션이 없어도 프리셋 바는 **세션 화면과 같은 자리**에 남는다 — 첫 세션을
+              프리셋으로 시작하는 게 가장 자연스러운 흐름인데, 예전엔 바가 TerminalView
+              안에만 있어 세션이 0 개면 통째로 사라졌다(2026-08-08 사용자 지적).
+              워크스페이스 등록 자체가 안 된 화면에서는 등록이 먼저라 감춘다. */}
+          {!activeSession && workspaces.length > 0 && (
+            <div className="terminal__bar terminal__bar--empty">
+              <PresetBar
+                presets={presetsForWorkspace(
+                  presets,
+                  selection?.kind === 'worktree' ? selection.wsId : null
+                )}
+                cwd={selection?.kind === 'worktree' ? selection.path : undefined}
+                disabled={!canCreate}
+                onRun={(p) => {
+                  if (selection?.kind === 'worktree') void runPreset(selection.path, p);
+                }}
+                onEdit={() => setPresetsOpen(true)}
+              />
+            </div>
+          )}
           {!activeSession && (
             <div className="terminal__empty">
               {workspaces.length === 0 && otherSessions.length === 0 ? (

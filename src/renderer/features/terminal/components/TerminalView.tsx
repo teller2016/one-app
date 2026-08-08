@@ -20,7 +20,7 @@ import type {
   TerminalPreset,
   TerminalSessionInfo,
 } from '../../../../shared/types';
-import { presetIcon } from '../lib/workspace';
+import { PresetBar } from './PresetBar';
 
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -449,35 +449,14 @@ export function TerminalView({
   return (
     <div className={`terminal__pane${active ? '' : ' terminal__pane--hidden'}`}>
       <div className="terminal__bar">
-        {/* 프리셋 바 (Superset 동일) — [⚙ | 칩…]. 칩 클릭 = 같은 위치의 새 세션에서 실행.
-            세션 제목은 상단 탭이 이미 보여주므로 여기 중복 표기하지 않는다. */}
-        <span className="terminal__bar-presets" title={session.cwd}>
-          <Tooltip label="프리셋 편집 — 클릭 한 번으로 실행할 명령 관리">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="프리셋 편집"
-              onClick={onEditPresets}
-            >
-              <Icon name="settings" size={14} />
-            </button>
-          </Tooltip>
-          {presets.length > 0 && (
-            <span className="terminal__bar-sep" aria-hidden="true" />
-          )}
-          {presets.map((p) => (
-            <Tooltip key={p.id} label={`${p.command} — 새 세션에서 실행`}>
-              <button
-                type="button"
-                className="terminal__preset"
-                onClick={() => onRunPreset(p)}
-              >
-                <Icon name={presetIcon(p)} size={13} />
-                <span className="terminal__preset-name">{p.name}</span>
-              </button>
-            </Tooltip>
-          ))}
-        </span>
+        {/* 세션 제목은 상단 탭이 이미 보여주므로 바에 중복 표기하지 않는다.
+            바 자체는 '세션 없음' 화면과 공용(PresetBar) — 같은 자리에 계속 떠 있다 */}
+        <PresetBar
+          presets={presets}
+          cwd={session.cwd}
+          onRun={onRunPreset}
+          onEdit={onEditPresets}
+        />
         {/* 아이콘만으로는 무슨 기능인지 알 수 없어 전부 Tooltip 으로 감싼다.
             네이티브 title 은 지연이 길고 어두운 툴바에서 눈에 안 띈다(2026-08-05 사용자 지적).
             접근성 이름은 툴팁이 아니라 각 버튼의 aria-label 이 담당한다. */}
