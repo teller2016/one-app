@@ -74,7 +74,6 @@ body {
 #sessionSelect,
 #navBtn,
 #newBtn,
-#presetBtn,
 #kbBtn,
 #waitBtn,
 #closeBtn {
@@ -92,9 +91,8 @@ body {
   font-size: 12px;
 }
 
-/* 작업 영역·프리셋·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
+/* 작업 영역·키바 — 라벨을 쓸 폭이 없어 글리프 하나짜리 정사각 버튼 + aria-label */
 #navBtn,
-#presetBtn,
 #kbBtn {
   width: 26px;
   padding: 0;
@@ -165,7 +163,6 @@ body {
 
 #newBtn:disabled,
 #navBtn:disabled,
-#presetBtn:disabled,
 #sessionSelect:disabled {
   opacity: 0.45;
 }

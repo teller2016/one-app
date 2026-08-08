@@ -12,12 +12,7 @@ import type {
   TermWorkspaceNode,
   TermWorktreeNode,
 } from '../shared/terminal-protocol';
-import type {
-  TerminalAgentId,
-  TerminalAgentInfo,
-  TerminalPreset,
-  TerminalSessionInfo,
-} from '../shared/types';
+import type { TerminalPreset, TerminalSessionInfo } from '../shared/types';
 import {
   TERMINAL_AGENT_NAMES,
   agentIdFromCommand,
@@ -57,7 +52,6 @@ const termEl = document.getElementById('term') as HTMLElement;
 const statusEl = document.getElementById('status') as HTMLElement;
 const selectEl = document.getElementById('sessionSelect') as HTMLSelectElement;
 const navBtn = document.getElementById('navBtn') as HTMLButtonElement;
-const presetBtn = document.getElementById('presetBtn') as HTMLButtonElement;
 const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
 const scopeEl = document.getElementById('scope') as HTMLElement;
 const newBtn = document.getElementById('newBtn') as HTMLButtonElement;
@@ -143,7 +137,6 @@ let attachedId: string | null = null;
 let attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — 버린다
 let sessions: TerminalSessionInfo[] = [];
 let cwdOptions: TermCwdOption[] = []; // 새 세션 위치 후보 (서버가 프로젝트 레지스트리에서 보내줌)
-let agentOptions: TerminalAgentInfo[] = []; // 에이전트 후보 (설치 감지 포함)
 let workspaceTree: TermWorkspaceNode[] = []; // 작업 영역 트리 (시트를 열 때 받아온다)
 let presets: TerminalPreset[] = []; // 프리셋 (접속 시 서버가 밀어준다)
 let reconnectDelay = 1000;
@@ -217,7 +210,6 @@ function setStatus(text: string, ok: boolean) {
   // 연결이 없으면 버튼이 조용히 죽는 대신 비활성으로 상태를 드러낸다
   newBtn.disabled = !ok;
   navBtn.disabled = !ok;
-  presetBtn.disabled = !ok;
   selectEl.disabled = !ok;
 }
 
@@ -376,15 +368,15 @@ function handleMessage(msg: TermServerMsg) {
       cwdOptions = msg.items;
       break;
     case 'agents':
-      agentOptions = msg.items;
-      break;
+      break; // 새 세션은 에이전트 대신 셸+프리셋으로 고른다 — 이 목록은 더 쓰지 않는다
     case 'workspaces':
       workspaceTree = msg.items;
       if (sheetMode === 'scope') renderScopeSheet(); // 열려 있으면 즉시 채운다
       break;
     case 'presets':
       presets = msg.items;
-      if (sheetMode === 'preset') renderPresetSheet();
+      // '무엇으로' 시트가 열려 있으면 목록을 다시 그린다(위치는 이미 골라 둔 상태)
+      if (sheetMode === 'start') pickCwd(pendingCwd);
       break;
     case 'created':
       attach(msg.id);
@@ -575,7 +567,7 @@ selectEl.addEventListener('change', () => {
 });
 // 바텀시트는 하나를 돌려 쓴다 — 작업 영역 트리 · 새 세션(위치→에이전트) · 프리셋.
 // 좁은 화면이라 상시 UI 를 늘리지 않고 버튼 하나 + 시트로 처리한다(2026-08-08 사용자 요청).
-type SheetMode = 'scope' | 'cwd' | 'agent' | 'preset' | null;
+type SheetMode = 'scope' | 'cwd' | 'start' | null;
 let sheetMode: SheetMode = null;
 let pendingCwd: string | undefined;
 
@@ -686,49 +678,12 @@ navBtn.addEventListener('click', () => {
   renderScopeSheet();
 });
 
-// ── 프리셋 (데스크톱 프리셋 바의 폰 판) ──
-
-function renderPresetSheet() {
-  cwdTitle.textContent = '프리셋';
-  cwdList.innerHTML = '';
-  // 스코프 필터는 데스크톱과 같은 판정을 공유한다(shared/types.ts)
-  const list = presetsForWorkspace(presets, scope?.wsId ?? null);
-  if (!list.length) {
-    sheetEmpty(
-      presets.length
-        ? '이 작업 영역에 노출된 프리셋이 없습니다.'
-        : '프리셋이 없습니다 — 데스크톱 터미널의 ⚙ 에서 추가하세요.'
-    );
-    return;
-  }
-  const where = scope ? `${scope.wsName} · ${scope.name}` : '홈 디렉터리';
-  for (const p of list) {
-    sheetButton(p.name, `${p.command}  →  ${where}`, () => {
-      closeSheet();
-      // 데스크톱과 같은 동작 — 그 위치의 **새 세션**에서 명령을 자동 실행한다.
-      // agentId 태깅까지 같아야 입력 대기 알림·상태 휴리스틱이 폰에서도 붙는다.
-      sendMsg({
-        type: 'create',
-        cwd: scope?.path,
-        agentId: agentIdFromCommand(p.command),
-        command: p.command,
-        title: p.name,
-        // 처음부터 이 화면 크기로 — 뒤따르는 attach 가 리사이즈를 일으키면 그 재출력이
-        // 자동 실행 중인 명령줄과 겹쳐 글자가 섞인다(2026-08-08 사용자 지적)
-        cols: term.cols,
-        rows: term.rows,
-      });
-    });
-  }
-}
-
-presetBtn.addEventListener('click', () => {
-  sendMsg({ type: 'presets' }); // 데스크톱에서 방금 고쳤을 수 있으니 갱신
-  openSheet('preset', '프리셋');
-  renderPresetSheet();
-});
-
-// ── 새 세션 ──
+// ── 새 세션 = 위치 → 무엇으로 (셸 + 프리셋) ──
+// 예전엔 ⚡ 프리셋 버튼이 따로 있었고 ＋ 는 에이전트(셸·claude·femc)를 물었는데, 결국
+// "무엇으로 시작할까"라는 같은 질문이라 하나로 합쳤다(2026-08-08 사용자 요청).
+// 에이전트 목록 대신 **셸 + 사용자가 설정한 프리셋**을 보여준다 — claude·FEMC 도 프리셋에
+// 있으므로 목록이 겹치지 않고, 프리셋마다 붙여 둔 옵션(`--dangerously-skip-permissions` 등)이
+// 그대로 살아난다.
 
 function openCwdStep() {
   // 작업 영역이 잡혀 있으면 위치는 이미 정해졌다 — 위치 단계를 건너뛴다
@@ -744,36 +699,54 @@ function openCwdStep() {
 
 function pickCwd(path: string | undefined) {
   pendingCwd = path;
-  const choices = agentOptions.filter((a) => a.installed);
-  // 에이전트 목록이 없으면(구버전 서버·감지 실패) 고를 게 없다 — 바로 셸 세션
-  if (choices.length <= 1) {
-    createSession('shell');
-    return;
-  }
-  openSheet('agent', '에이전트');
-  for (const a of choices) {
-    sheetButton(a.name, a.id === 'shell' ? '자동 실행 없음' : undefined, () =>
-      createSession(a.id)
+  openSheet('start', '무엇으로 시작할까요');
+  sheetButton('셸', '자동 실행 없음', () => startShell());
+
+  // 스코프 필터는 데스크톱과 같은 판정을 공유한다(shared/types.ts).
+  // ⚠️ 위치를 직접 고른 경우엔 워크스페이스를 알 수 없어 전역 프리셋만 나온다 —
+  //    레포 전용 프리셋을 쓰려면 ≡ 에서 작업 영역을 고르면 된다.
+  const wsId = scope && scope.path === path ? scope.wsId : null;
+  const list = presetsForWorkspace(presets, wsId);
+  for (const p of list) sheetButton(p.name, p.command, () => startPreset(p));
+
+  if (!list.length) {
+    sheetEmpty(
+      presets.length
+        ? '이 위치에 노출된 프리셋이 없습니다 — ≡ 에서 작업 영역을 고르면 그 레포 프리셋이 보입니다.'
+        : '프리셋이 없습니다 — 데스크톱 터미널의 ⚙ 에서 추가하세요.'
     );
   }
 }
 
-function createSession(agentId: TerminalAgentId) {
+/** 공통 생성 인자 — cols/rows 는 attach 리사이즈로 자동 실행이 깨지지 않게 항상 실어 보낸다 */
+const createBase = () => ({
+  cwd: pendingCwd,
+  cols: term.cols,
+  rows: term.rows,
+});
+
+function startShell() {
   closeSheet();
-  // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환.
-  // cols/rows 는 프리셋과 같은 이유로 함께 보낸다(에이전트 자동 실행이 걸리는 경로다)
+  // undefined 필드는 JSON 직렬화에서 빠진다 — 구버전 서버와도 호환
+  sendMsg({ type: 'create', ...createBase(), agentId: 'shell' });
+}
+
+function startPreset(p: TerminalPreset) {
+  closeSheet();
+  // 데스크톱 프리셋 칩과 같은 동작 — 그 위치의 새 세션에서 명령을 자동 실행한다.
+  // agentId 태깅까지 같아야 입력 대기 알림·상태 휴리스틱이 폰에서도 붙는다.
   sendMsg({
     type: 'create',
-    cwd: pendingCwd,
-    agentId,
-    cols: term.cols,
-    rows: term.rows,
+    ...createBase(),
+    agentId: agentIdFromCommand(p.command),
+    command: p.command,
+    title: p.name,
   });
 }
 
 newBtn.addEventListener('click', () => {
   sendMsg({ type: 'cwds' }); // 최신 목록으로 갱신 (프로젝트가 추가됐을 수 있음)
-  sendMsg({ type: 'agents' }); // 에이전트 설치 감지 결과도 함께
+  sendMsg({ type: 'presets' }); // 데스크톱에서 방금 고쳤을 수 있으니 함께 갱신
   openCwdStep();
 });
 cwdBackdrop.addEventListener('click', closeSheet);
