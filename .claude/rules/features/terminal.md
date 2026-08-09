@@ -158,6 +158,34 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 ## MO 접속
 툴바 폰 아이콘 → 서버 on/off + 접속 URL·QR + 토큰 재발급. 도달·암호화는 **Tailscale**(맥·폰에 설치 전제, URL 은 100.64.0.0/10 주소 우선 정렬)이 담당하고 앱은 **토큰 인증**만 한다 — `?token=` 1회 → `timingSafeEqual` 검증 → **HttpOnly 쿠키 승격**, WS(`/term`) upgrade 에서 재검증, 30초 ping 으로 죽은 소켓 회수. 토큰은 `safeStorage` 로 `userData/terminal.json`(포트 기본 18317·자동 시작 여부)에 저장하고, 켜둔 상태면 앱 재시작 시 자동으로 다시 켜진다.
 
+### ⚠️ 회사 VPN(full-tunnel)을 켜면 MO 접속이 통째로 끊긴다 (2026-08-09 실측)
+증상: VPN 연결 중에는 **폰에서 맥북이 Tailscale 목록에 offline 으로만 보이고** MO 에 접속할 수 없다. Tailscale 앱에는 `Logged Out`(fetch control key … failed to resolve) → `Out Of Sync`(not-in-map-poll) → `Relay Server Unavailable`(no-derp-connection) 이 차례로 뜬다.
+
+원인은 OpenVPN 서버가 push 하는 **`redirect-gateway`(full-tunnel)** 다. 기본 경로가 `0/1`·`128/1` 로 터널에 잡히면서 Tailscale 이 쓰는 **세 갈래가 전부 회사망을 거쳐 막힌다**:
+
+| 삼켜지는 것 | 대역(실측) | 막혔을 때 증상 |
+|---|---|---|
+| **DNS 조회** | `168.126.63.0/24`(KT) | `controlplane.tailscale.com` 해석 실패 → **로그인 자체가 안 된다** |
+| 컨트롤 플레인 | `192.200.0.0/24` | `Online: False` → tailnet 에 offline 으로 광고 |
+| DERP 릴레이 | `172.237.0.0/16`·`172.238.0.0/16`(Tokyo) | `no-derp-connection` → 데이터 경로 소멸 |
+
+- ⚠️ **셋이 순차적으로 드러나** 하나를 뚫으면 다음 것이 막힌 채로 남는다 — 하나만 보고 "해결됐다"고 판단하지 말 것. 특히 **DNS 가 첫 관문**이라 이걸 못 뚫으면 나머지는 시도조차 되지 않는다.
+
+**해결 — full-tunnel 은 유지하고 Tailscale 대역만 뺀다** (`.ovpn` 에 추가, 2026-08-09 적용·검증):
+```
+route 168.126.63.0 255.255.255.0 net_gateway   # DNS (첫 관문)
+route 192.200.0.0 255.255.255.0 net_gateway    # Tailscale 컨트롤 플레인
+route 172.237.0.0 255.255.0.0 net_gateway      # DERP 릴레이 (Tokyo)
+route 172.238.0.0 255.255.0.0 net_gateway      # DERP 릴레이 (Tokyo)
+```
+`net_gateway` 는 OpenVPN 이 "원래 물리 게이트웨이"로 치환하는 매크로라 **VPN 연결/해제에 맞춰 자동으로 붙었다 떨어진다** — 수동 `route add`(재부팅이면 사라지고 매번 관리자 인증이 필요)와 달리 영구적이다.
+
+- 🚫 **`pull-filter ignore "redirect-gateway"`(split tunnel)로 풀지 말 것** — 한 줄로 Tailscale 3요소가 다 살아나서 정답처럼 보이지만, **사내 서비스는 '회사 IP 에서 나온 요청'만 허용**하므로 full-tunnel 을 없애는 순간 회사 경로 접속이 통째로 끊긴다(2026-08-09 실측, 되돌림). 사용자가 VPN 을 켜는 목적 자체가 **출발지 IP 를 회사 것으로 만드는 것**이다.
+- 판정 기준: `curl -s https://ifconfig.me` 가 **회사 IP(221.151.188.x)** 면 정상, 집 IP(222.236.x)면 full-tunnel 이 깨진 것이다.
+- ⚠️ 이 방식의 약점은 **Tailscale 이 DERP 서버 IP 대역을 바꾸면 다시 끊긴다**는 것(증상: `no-derp-connection`). 그때는 `dig derp7{a..h}.tailscale.com` 으로 새 대역을 확인해 `route … net_gateway` 줄을 갱신한다.
+- ⚠️ **진단 중 `tailscale down` 을 하지 말 것** — `up` 은 non-default 플래그(이 환경은 `--accept-routes`)를 전부 다시 명시해야 하고, 그 사이 DNS 가 죽어 있으면 재로그인이 **불가능해져 로그아웃 상태로 고착**된다(실측). 빠져나오려면 `tailscale up --accept-routes --accept-dns=false` 로 Tailscale 의 DNS 관리를 잠시 끄고 로그인한 뒤 되돌린다.
+- ⚠️ **측정할 때마다 VPN 이 실제로 켜져 있는지 함께 확인할 것** — 중간에 VPN 이 꺼진 줄 모르고 "고쳐졌다"고 오판하기 쉽다(실측으로 한 번 겪음). 판정 기준은 `pgrep -x openvpn` + `netstat -rn | grep -E "^(0/1|128\.0/1)"`.
+
 ### HTTPS (Tailscale 인증서)
 `terminal/tls.ts` 가 `tailscale cert` 로 MagicDNS 이름(`<host>.<tailnet>.ts.net`) 인증서를 받아 `userData/mo-cert/` 에 두고, 서버는 그게 있으면 `https`, 없으면 기존 `http` 로 뜬다(폴백).
 
