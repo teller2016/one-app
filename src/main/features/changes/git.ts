@@ -1,6 +1,7 @@
 // 변경사항 — 워킹트리의 git 상태·파일 diff 조회 + 커밋(전체 일괄) + push.
 // "AI 작업 → 변경 확인 → 커밋 → 푸시" 루프의 확인·커밋·푸시 담당
 // (커밋은 2026-08 터미널 개편에서 추가 — 우측 커밋 패널의 [커밋] 버튼).
+import crypto from 'node:crypto';
 import path from 'node:path';
 import type {
   ChangedFile,
@@ -243,7 +244,12 @@ export async function getChangesStatus(
 export async function getChangesDiff(
   repoPath: string,
   file: ChangesDiffFile,
-  scope?: ChangesDiffScope
+  scope?: ChangesDiffScope,
+  /**
+   * 호출부가 이미 갖고 있는 diff 의 해시. 내용이 그대로면 본문 없이 `unchanged` 만 돌려준다
+   * — 5초 폴링이 바뀌지도 않은 512KB 를 매번 실어 나르던 것을 없앤다.
+   */
+  knownHash?: string
 ): Promise<ChangesDiffResult> {
   // 경로 탈출 차단 — untracked 는 절대 경로로 diff 하므로 저장소 안인지 확인 필수
   const abs = path.resolve(repoPath, file.path);
@@ -301,7 +307,13 @@ export async function getChangesDiff(
     diff = Buffer.from(diff, 'utf8').subarray(0, DIFF_MAX_BYTES).toString('utf8');
     truncated = true;
   }
-  return { ok: true, diff, binary, truncated };
+
+  // 잘라낸 뒤의 최종 본문으로 해시한다 — 화면에 실제로 가는 내용과 1:1 이어야 한다
+  const hash = crypto.createHash('sha1').update(diff).digest('hex');
+  if (knownHash && knownHash === hash) {
+    return { ok: true, hash, unchanged: true, binary, truncated };
+  }
+  return { ok: true, diff, binary, truncated, hash };
 }
 
 /** 최근 커밋 목록 — 미푸시 여부 포함 (커밋 섹션용) */

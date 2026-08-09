@@ -2,6 +2,7 @@
 // ⚠️ 활성 탭만 렌더한다(데스크톱 App.tsx 와 같은 규칙) — 5개를 동시에 마운트하면
 // 각 섹션의 폴러(배포 60초·Jira 2분·메일 30초…)가 동시에 돌아 사내 서버를 이중으로 두드린다.
 import { ConfirmProvider } from '../renderer/components/ConfirmDialog';
+import { ErrorBoundary } from '../renderer/components/ErrorBoundary';
 import { Icon } from '../renderer/components/Icon';
 import type { IconName } from '../renderer/components/Icon';
 import { ToastProvider } from '../renderer/components/Toast';
@@ -83,8 +84,11 @@ export function App() {
             />
           </header>
 
+          {/* 탭마다 별도 경계 — 폰은 DevTools 도 새로고침 경로도 마땅치 않아 백지가 더 치명적이다 */}
           <main className="mo-app__body">
-            {active.render({ goTab: setActiveId })}
+            <ErrorBoundary key={active.id} label={active.label}>
+              {active.render({ goTab: setActiveId })}
+            </ErrorBoundary>
           </main>
 
           <nav className="mo-app__tabs">

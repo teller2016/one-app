@@ -253,6 +253,8 @@ declare global {
           target: ChangesTarget,
           file: ChangesDiffFile,
           scope?: ChangesDiffScope,
+          /** 갖고 있는 diff 의 해시 — 내용이 같으면 본문 없이 unchanged 만 온다 */
+          knownHash?: string,
         ) => Promise<ChangesDiffResult>;
         log: (target: ChangesTarget) => Promise<ChangesLogResult>;
         commitFiles: (

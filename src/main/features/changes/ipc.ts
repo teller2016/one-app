@@ -65,8 +65,21 @@ export function registerChangesIpc() {
   );
   handleShared(
     'changes:diff',
-    async (target: ChangesTarget, file: ChangesDiffFile, scope?: ChangesDiffScope) =>
-      getChangesDiff(await resolveTarget(target), file, sanitizeScope(scope))
+    async (
+      target: ChangesTarget,
+      file: ChangesDiffFile,
+      scope?: ChangesDiffScope,
+      knownHash?: string
+    ) =>
+      getChangesDiff(
+        await resolveTarget(target),
+        file,
+        sanitizeScope(scope),
+        // 해시는 비교에만 쓰이지만 형식은 확인한다 (폰에 열리는 채널의 입력은 전부 검증)
+        typeof knownHash === 'string' && /^[0-9a-f]{40}$/.test(knownHash)
+          ? knownHash
+          : undefined
+      )
   );
   handleShared('changes:log', async (target: ChangesTarget) =>
     getCommitLog(await resolveTarget(target))

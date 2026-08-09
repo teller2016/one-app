@@ -25,6 +25,11 @@ import { createTray } from "./features/tray/tray";
 import { registerVpnIpc } from "./features/vpn/ipc";
 import { registerWeeklyIpc } from "./features/weekly/ipc";
 import { registerWorkspacesIpc } from "./features/workspaces/ipc";
+import {
+  loadWindowState,
+  trackWindowState,
+  WINDOW_MIN,
+} from "./lib/windowState";
 import { app, BrowserWindow, ipcMain, nativeTheme, shell } from "electron";
 import started from "electron-squirrel-startup";
 import path from "node:path";
@@ -78,12 +83,17 @@ const createWindow = () => {
   // 렌더러의 prefers-color-scheme(theme.ts 의 system 해석)도 이 값을 따라간다
   nativeTheme.themeSource = getThemePref();
 
+  // 마지막으로 두었던 크기·위치 (없거나 화면 밖이면 기본값 — windowState.ts)
+  const saved = loadWindowState();
+
   // 메인 창 생성
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    width: saved.width,
+    height: saved.height,
+    x: saved.x,
+    y: saved.y,
+    minWidth: WINDOW_MIN.width,
+    minHeight: WINDOW_MIN.height,
     title: "One App",
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: "hiddenInset",
@@ -99,6 +109,10 @@ const createWindow = () => {
       preload: path.join(__dirname, "preload.js"),
     },
   });
+
+  if (saved.maximized) mainWindow.maximize();
+  // 이후의 크기·위치 변화를 저장 (디바운스 + 닫을 때 확정)
+  trackWindowState(mainWindow);
 
   // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록
   setNotifyWindow(mainWindow);

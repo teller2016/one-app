@@ -1028,6 +1028,14 @@ export type ChangesDiffResult = {
   binary?: boolean; // 바이너리 파일 — diff 본문 대신 안내 표시
   truncated?: boolean; // 표시 상한 초과로 잘림
   error?: string;
+  /** diff 본문의 내용 해시 — 다음 조회에 `knownHash` 로 되돌려주면 증분 응답을 받는다 */
+  hash?: string;
+  /**
+   * 보낸 `knownHash` 와 내용이 같아 **본문을 생략**했다는 표시.
+   * 5초 폴링이 매번 최대 512KB 를 실어 나르던 것을 없앤다 — 이때 `diff` 는 비어 있으므로
+   * 호출부는 화면에 이미 있는 내용을 그대로 두어야 한다(덮어쓰면 diff 가 사라진다).
+   */
+  unchanged?: boolean;
 };
 
 export type ChangesPushResult = {

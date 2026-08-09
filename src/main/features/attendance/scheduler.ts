@@ -8,6 +8,7 @@ import { getCredentials } from '../settings/store';
 import { notify } from '../notify/notify';
 import type { AttendanceInfo } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
+import { readUserJson, writeUserJson } from '../../lib/store';
 import { sleep, localDateKey } from '../../lib/util';
 
 /** 근태 상태 조회 — 순간 실패(VPN 블립·동시 실행 충돌)를 흡수하도록 재시도한다 */
@@ -32,6 +33,53 @@ const alertOpen = new Set<'come' | 'leave'>(); // 알럿이 떠 있는 동안 �
 const inProgress = new Set<'come' | 'leave'>(); // 상태 조회~알럿 처리 중 재진입 방지
 // (조회가 반복 간격보다 오래 걸리면 alertOpen 이 세팅되기 전에 다음 tick 이 이중 발화)
 let stateDate = '';
+
+// ⚠️ 위 하루 단위 상태는 **디스크에 남긴다** — 메모리에만 두면 앱을 재시작하는 순간
+// "오늘은 이미 처리했다"는 기억이 사라져, 반복 알림이 처음부터 다시 발화하고
+// '하루 1회' 인 실패 폴백 알림도 재발화한다(재시작이 잦은 개발 중엔 매번).
+// alertOpen·inProgress 는 프로세스 생명주기 상태라 저장하지 않는다 —
+// 저장하면 알럿이 떠 있던 채로 죽었을 때 그날 내내 발화가 막힌다.
+const STATE_FILE = 'reminder-state.json';
+
+type PersistedState = {
+  date: string;
+  done: string[];
+  failSafe: string[];
+  lastAttempt: Record<string, number>;
+};
+
+function persistState() {
+  const state: PersistedState = {
+    date: stateDate,
+    done: [...doneToday],
+    failSafe: [...failSafeFired],
+    lastAttempt: Object.fromEntries(lastAttempt),
+  };
+  try {
+    writeUserJson(STATE_FILE, state);
+  } catch {
+    // 저장 실패는 치명적이지 않다 — 재시작 시 재발화할 뿐이므로 조용히 넘긴다
+  }
+}
+
+/** 저장된 오늘 상태 복원 (앱 시작 시 1회) — 어제 것이면 버린다 */
+function restoreState() {
+  const saved = readUserJson<Partial<PersistedState>>(STATE_FILE, {});
+  const today = localDateKey(new Date());
+  if (saved.date !== today) return;
+  stateDate = today;
+  for (const k of saved.done ?? []) doneToday.add(k);
+  for (const k of saved.failSafe ?? []) failSafeFired.add(k);
+  for (const [k, v] of Object.entries(saved.lastAttempt ?? {})) {
+    if (typeof v === 'number') lastAttempt.set(k, v);
+  }
+}
+
+/** 오늘 처리 완료로 표시 (+ 디스크 반영) */
+function markDone(key: string) {
+  doneToday.add(key);
+  persistState();
+}
 
 const toMinutes = (time: string) => {
   const [h, m] = time.split(':').map(Number);
@@ -75,18 +123,18 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
   if (type === 'come') {
     if (comeTime) {
       console.log('[reminder] 출근 알림 건너뜀 (이미 출근:', comeTime, ')');
-      doneToday.add(key);
+      markDone(key);
       return; // 이미 출근함
     }
   } else {
     if (leaveTime) {
       console.log('[reminder] 퇴근 알림 건너뜀 (이미 퇴근:', leaveTime, ')');
-      doneToday.add(key);
+      markDone(key);
       return; // 이미 퇴근함
     }
     if (!checkFailed && !comeTime) {
       console.log('[reminder] 퇴근 알림 건너뜀 (출근 기록 없음)');
-      doneToday.add(key);
+      markDone(key);
       return; // 출근 기록이 없으면(휴무 등) 퇴근 알림 생략
     }
   }
@@ -94,6 +142,7 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
   if (checkFailed) {
     if (failSafeFired.has(key)) return;
     failSafeFired.add(key);
+    persistState();
   }
 
   const label = type === 'come' ? '출근' : '퇴근';
@@ -113,6 +162,7 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
     // 반복 간격은 알럿(결과 알럿 포함)을 닫은 시점부터 다시 센다 (방치 중 중복 알럿 방지)
     alertOpen.delete(type);
     lastAttempt.set(key, nowMinutes(new Date()));
+    persistState();
   }
 }
 
@@ -123,7 +173,7 @@ async function stampFromAlert(type: 'come' | 'leave', key: string) {
   pushStamping(type);
   try {
     const info = await runAttendance(type);
-    doneToday.add(key);
+    markDone(key);
     pushAttendanceChanged(info);
     const time = type === 'come' ? info.comeTime : info.leaveTime;
     console.log(`[reminder] 알럿에서 ${label} 찍기 완료`, time ?? '');
@@ -164,6 +214,7 @@ function tick() {
     doneToday.clear();
     failSafeFired.clear();
     stateDate = dateKey;
+    persistState(); // 날짜가 바뀐 직후 재시작해도 어제 상태가 남지 않게
   }
 
   const day = now.getDay(); // 0=일 … 6=토
@@ -193,13 +244,34 @@ function tick() {
     if (!due) return;
 
     lastAttempt.set(key, nowMin);
+    persistState();
     inProgress.add(type);
     void handleReminder(type, key).finally(() => inProgress.delete(type));
   });
 }
 
+/** 설정에 켜진 슬롯이 하나라도 있는지 — 하나도 없으면 tick 을 돌릴 이유가 없다 */
+function hasEnabledSlot(): boolean {
+  return getReminderConfig().days.some((d) => d.come?.enabled || d.leave?.enabled);
+}
+
+/**
+ * 타이머 가동 여부 재평가 — 리마인더를 전부 꺼 둔 사용자에게는 30초 인터벌 자체를 없앤다.
+ * 요일 판정은 tick 이 계속 하므로(주말·미설정 요일은 즉시 반환) 여기서는 설정만 본다.
+ * 설정을 저장할 때(`reminders:set`) 다시 불러 준다 — 그래야 재시작 없이 켜고 끌 수 있다.
+ */
+export function refreshReminderSchedule(): void {
+  const need = hasEnabledSlot();
+  if (need && !timer) {
+    timer = setInterval(tick, 30000);
+  } else if (!need && timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+}
+
 /** 리마인더 스케줄러 시작 (앱 ready 후 1회 호출) */
 export function startReminderScheduler() {
-  if (timer) return;
-  timer = setInterval(tick, 30000);
+  restoreState(); // 오늘 이미 처리한 슬롯을 기억한 채로 시작
+  refreshReminderSchedule();
 }

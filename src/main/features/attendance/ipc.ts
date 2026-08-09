@@ -3,6 +3,7 @@ import { handleShared } from '../../lib/moIpc';
 import { runAttendance } from './attend';
 import { getCredentials } from '../settings/store';
 import { getReminderConfig, saveReminderConfig } from './reminders';
+import { refreshReminderSchedule } from './scheduler';
 import type {
   AttendanceResult,
   ReminderConfig,
@@ -45,8 +46,10 @@ export function registerAttendanceIpc() {
 
   // 출퇴근 리마인더 설정 조회/저장 (스케줄러는 저장값을 매 tick 읽으므로 재시작 불필요)
   ipcMain.handle('reminders:get', (): ReminderConfig => getReminderConfig());
-  ipcMain.handle(
-    'reminders:set',
-    (_e, config: ReminderConfig): ReminderConfig => saveReminderConfig(config),
-  );
+  ipcMain.handle('reminders:set', (_e, config: ReminderConfig): ReminderConfig => {
+    const saved = saveReminderConfig(config);
+    // 전부 껐으면 타이머를 멈추고, 다시 켜면 되살린다 (재시작 없이 반영)
+    refreshReminderSchedule();
+    return saved;
+  });
 }

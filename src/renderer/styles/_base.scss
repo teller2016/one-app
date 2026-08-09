@@ -1345,6 +1345,38 @@ input.input--sm {
   }
 }
 
+// ===== 에러 경계 (ErrorBoundary) =====
+.err-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  .empty-state {
+    width: 100%;
+  }
+
+  // 사이드바 위젯용 한 줄 — 카드가 아니라 위젯 자리에 맞는 최소 표시
+  &--compact {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    @include type-small;
+  }
+
+  &__msg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--danger);
+  }
+}
+
 // ===== 스피너 · 진행바 =====
 .spinner {
   width: 16px;

@@ -53,6 +53,11 @@ export function useChanges(
   // 5초마다 diff 전체(수천 DOM 노드)가 재렌더되고 memo 자식이 전부 무력화된다.
   const statusKeyRef = useRef('');
   const logKeyRef = useRef('');
+  // 증분 diff — 화면에 떠 있는 diff 의 (파일+기준) 키와 그 내용 해시.
+  // ⚠️ 키가 맞을 때만 해시를 보낸다 — 다른 파일에 보내면 우연히 해시가 같을 때
+  // (빈 diff 등) main 이 '변경 없음'을 돌려줘 남의 diff 가 화면에 남는다.
+  const diffKeyRef = useRef('');
+  const diffHashRef = useRef('');
 
   const applyStatus = (s: ChangesStatus) => {
     const key = JSON.stringify(s);
@@ -74,33 +79,56 @@ export function useChanges(
 
   const loadDiff = useCallback(
     async (file: ChangedFile) => {
+      const scope = scopeNow();
+      const key = `${file.path}|${file.untracked ? 'u' : ''}|${JSON.stringify(scope ?? {})}`;
+      const known = diffKeyRef.current === key ? diffHashRef.current : undefined;
       let r: ChangesDiffResult;
       try {
         r = await window.oneApp.changes.diff(
           tgt,
           { path: file.path, origPath: file.origPath, untracked: file.untracked },
-          scopeNow()
+          scope,
+          known || undefined
         );
       } catch (err) {
         // 세션 종료 등으로 대상이 사라진 레이스 — 에러 상태로 담는다
         r = { ok: false, error: (err as Error).message };
       }
-      // 그 사이 다른 파일을 선택했으면 버린다 (뒤늦은 응답 무시).
+      // 그 사이 다른 파일을 선택했으면 버린다 (뒤늦은 응답 무시)
+      if (selectedRef.current?.path !== file.path) return;
+
+      // 내용이 그대로면 본문이 오지 않는다 — 화면에 있는 것을 그대로 둔다.
+      // (폴링의 정상 경로다. 여기서 setDiff 를 부르면 diff 가 사라진다.)
+      if (r.unchanged) return;
+
+      diffKeyRef.current = key;
+      diffHashRef.current = r.hash ?? '';
       // 내용이 같으면 이전 객체 유지 — SplitDiff/UnifiedDiff 의 memo 가 재렌더를 건너뛴다.
-      if (selectedRef.current?.path === file.path)
-        setDiff((prev) =>
-          prev &&
-          prev.ok === r.ok &&
-          prev.diff === r.diff &&
-          prev.binary === r.binary &&
-          prev.truncated === r.truncated &&
-          prev.error === r.error
-            ? prev
-            : r
-        );
+      // (main 이 해시로 걸러 주지만, 에러 응답처럼 해시가 없는 경로도 있어 남겨 둔다.)
+      setDiff((prev) =>
+        prev &&
+        prev.ok === r.ok &&
+        prev.diff === r.diff &&
+        prev.binary === r.binary &&
+        prev.truncated === r.truncated &&
+        prev.error === r.error
+          ? prev
+          : r
+      );
     },
     [tgt]
   );
+
+  /**
+   * diff 를 비운다 — 증분 캐시 키도 함께 지운다.
+   * ⚠️ 둘이 어긋나면(state 는 null 인데 키는 남음) 다음 조회가 '변경 없음'을 받아
+   * 화면이 빈 채로 굳는다.
+   */
+  const clearDiff = useCallback(() => {
+    diffKeyRef.current = '';
+    diffHashRef.current = '';
+    setDiff(null);
+  }, []);
 
   /** 모드를 인자로 받는 이유 — setMode 직후 stale ref 로 옛 모드를 조회하지 않게 */
   const doRefresh = useCallback(
@@ -138,10 +166,10 @@ export function useChanges(
         // 커밋되거나 되돌려져 목록에서 사라짐 — 선택 해제
         selectedRef.current = null;
         setSelected(null);
-        setDiff(null);
+        clearDiff();
       }
     },
-    [tgt, loadDiff]
+    [tgt, loadDiff, clearDiff]
   );
 
   const refresh = useCallback(
@@ -167,10 +195,10 @@ export function useChanges(
       setCommitFiles(null);
       selectedRef.current = null;
       setSelected(null);
-      setDiff(null);
+      clearDiff();
       void doRefresh(m);
     },
-    [doRefresh]
+    [doRefresh, clearDiff]
   );
 
   /** 커밋 선택 — null 이면 해제(모드 기준 목록으로 복귀) */
@@ -181,7 +209,7 @@ export function useChanges(
       setCommitFiles(null); // 로딩 표시
       selectedRef.current = null;
       setSelected(null);
-      setDiff(null);
+      clearDiff();
       if (!entry) return;
       window.oneApp.changes
         .commitFiles(tgt, entry.hash)
@@ -193,7 +221,7 @@ export function useChanges(
           if (commitSelRef.current?.hash === entry.hash) setCommitFiles([]);
         });
     },
-    [tgt]
+    [tgt, clearDiff]
   );
 
   /** 파일 선택 — null 이면 diff 닫기 */
@@ -201,10 +229,10 @@ export function useChanges(
     (file: ChangedFile | null) => {
       selectedRef.current = file;
       setSelected(file);
-      setDiff(null);
+      clearDiff();
       if (file) void loadDiff(file);
     },
-    [loadDiff]
+    [loadDiff, clearDiff]
   );
 
   /** 전체 일괄 커밋 — 결과를 돌려주고 성공 시 재조회 (토스트는 뷰가) */

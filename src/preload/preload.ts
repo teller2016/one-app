@@ -341,9 +341,14 @@ contextBridge.exposeInMainWorld("oneApp", {
     // mode='branch' 면 베이스 브랜치(main) 분기점 대비 목록
     status: (target: ChangesTarget, mode?: ChangesMode) =>
       ipcRenderer.invoke("changes:status", target, mode),
-    // 파일 하나의 unified diff — scope 로 분기점 대비·특정 커밋의 변경 지정
-    diff: (target: ChangesTarget, file: ChangesDiffFile, scope?: ChangesDiffScope) =>
-      ipcRenderer.invoke("changes:diff", target, file, scope),
+    // 파일 하나의 unified diff — scope 로 분기점 대비·특정 커밋의 변경 지정.
+    // knownHash 를 주면 내용이 그대로일 때 본문 없이 { unchanged: true } 만 온다(폴링용)
+    diff: (
+      target: ChangesTarget,
+      file: ChangesDiffFile,
+      scope?: ChangesDiffScope,
+      knownHash?: string
+    ) => ipcRenderer.invoke("changes:diff", target, file, scope, knownHash),
     // 최근 커밋 목록 (미푸시 여부 포함)
     log: (target: ChangesTarget) => ipcRenderer.invoke("changes:log", target),
     // 커밋 한 건의 변경 파일 목록

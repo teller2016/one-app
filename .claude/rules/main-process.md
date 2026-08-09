@@ -12,6 +12,10 @@ paths:
 - userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(`readUserJson`·`writeUserJson`·`encryptSecret`·`decryptSecret`).
 - 전 창 이벤트는 `main/lib/broadcast.ts`.
 - `sleep`·`localDateKey` 는 `main/lib/util.ts`.
+- 창 크기·위치 기억은 `main/lib/windowState.ts`(`loadWindowState`·`trackWindowState`·`WINDOW_MIN`) — `userData/window-state.json`.
+  - ⚠️ **`getBounds()` 가 아니라 `getNormalBounds()`** 로 저장한다 — 최대화·전체화면 상태에서 저장하면 화면 전체 크기가 잡혀 **되돌릴 크기를 잃는다**.
+  - ⚠️ 복원 전 **화면 밖인지 검사**한다(`isReachable`) — 외부 모니터에 두고 껐다가 노트북만으로 켜면 창이 보이지 않는다(있긴 한데 손이 닿지 않는다). 이때 좌표만 버리고 크기는 살린다.
+  - resize/move 는 드래그 중 초당 수십 번 오므로 500ms 디바운스 + `close` 에서 확정. ⚠️ **SIGTERM 으로 죽이면 `close` 가 안 탄다**(2026-08-09 실측) — 창을 한 번이라도 움직였으면 디바운스 저장분이 남으므로 실사용에는 문제없다.
 - 외부 HTML(메일 본문·Jira 이슈 등)은 렌더 전에 `main/lib/sanitize.ts` 의 `sanitizeHtml` 로 정화한다 — 렌더러의 **sandbox iframe 과 함께 이중 방어**이므로 둘 중 하나만 쓰지 말 것.
 
 ## IPC 등록

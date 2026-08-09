@@ -32,6 +32,9 @@ paths:
 1. **상태**: `status --porcelain --branch --untracked-files=all`(⚠️ 기본값은 새 디렉터리를 통째 `dir/` 로 묶어 파일별 diff 가 안 된다 — 2026-08 실측) + `diff <ref> --numstat`(+/− 수, work 는 HEAD·branch 는 merge-base) + `log @{u}..HEAD`(푸시 대기 커밋)
 2. **branch 모드 파일 목록**: `diff --name-status -M <merge-base>` — 커밋된 것 + 워킹트리 변경이 한 번에 잡히지만 **untracked 는 diff 에 안 잡혀** porcelain 결과에서 합친다.
 3. **파일 diff**: 추적 파일은 `diff <ref>`, untracked 는 `--no-index /dev/null`(**exit 1 이 정상**), 커밋 한 건은 `show --format= -M <hash> -- <path>`(--format= 이 커밋 헤더 억제), 512KB 초과는 truncated
+   - **증분 응답**(2026-08-09): 응답에 본문의 sha1 `hash` 를 함께 싣고, 호출부가 다음 조회에 `knownHash` 로 되돌려주면 내용이 같을 때 **본문 없이 `{unchanged:true}`** 만 준다 — 5초 폴링이 바뀌지도 않은 512KB 를 매번 IPC 로 실어 나르던 것을 없앤다(실측 351B → 0B). 해시는 **잘라낸 뒤의 최종 본문**으로 계산한다(화면에 가는 내용과 1:1).
+   - ⚠️ `knownHash` 는 폰에도 열린 채널의 입력이라 **40자 hex 형식을 검증**한다(비교에만 쓰이지만 규칙은 규칙).
+   - MO 터미널 페이지(`src/mobile`)는 `knownHash` 를 보내지 않으므로 항상 전체를 받는다(하위 호환 — 거긴 폴링도 안 한다).
 4. **커밋 목록**: `log --pretty=%h\t%ct\t%s`(커밋 0개면 log 자체가 실패 → 빈 목록), 미푸시 집합은 `@{u}..HEAD`(upstream 없으면 전부 미푸시)
 5. **커밋**: `add -A` 후 `commit -m`(통째 한 번 — 여러 -m 은 문단 분리) / **푸시**: upstream 없으면 `-u origin HEAD`
 
@@ -42,6 +45,13 @@ IPC 6채널 전부 `handleShared`(MO 화이트리스트) — ⚠️ **클라이�
 
 ## 뷰
 보이는 동안 5초 폴링(선택 파일 diff 도 함께 갱신 — 에이전트가 고치는 중 따라감). 세션 종료와 폴링의 레이스는 try/catch 로 에러 화면 처리(안 하면 매 틱 unhandled rejection — 실측). 드로어 diff 는 라이브러리 없이 줄 prefix 파싱 + `panel-dark` 토큰(--ok/--danger 재매핑), 오버레이는 `SplitDiff`(4열 grid — `display: contents` 행, 긴 줄은 열 안 줄바꿈, 색은 글자 대신 **배경 틴트**: 행 soft + 달라진 구간 `<mark>` strong — 구간은 파서가 좌우 공통 접두/접미로 계산).
+
+### ⚠️ 증분 diff 를 쓰는 쪽의 규칙 (`useChanges`)
+훅은 화면에 떠 있는 diff 의 **(파일 + 기준) 키**와 그 해시를 함께 들고 있다가, **키가 일치할 때만** `knownHash` 를 보낸다.
+
+- ⚠️ **다른 파일에 보내면 안 된다** — 빈 diff 처럼 우연히 해시가 같으면 main 이 '변경 없음'을 돌려줘 **남의 diff 가 화면에 남는다**.
+- ⚠️ `unchanged` 응답에서 **`setDiff` 를 부르면 안 된다**(본문이 없어 diff 가 사라진다). 그냥 반환하는 게 폴링의 정상 경로다.
+- ⚠️ diff 를 비울 때는 **캐시 키도 같이 비운다**(`clearDiff`) — 둘이 어긋나면(state 는 null 인데 키는 남음) 다음 조회가 '변경 없음'을 받아 화면이 빈 채로 굳는다.
 
 ## ⚠️ diff 렌더 성능 (2026-08-06 CPU 폭주 사후 수정)
 1. **폴링 콜백은 안정화해서** — `usePolling` 에 인라인 화살표를 넘기면 렌더마다 인터벌 재시작+immediate 실행이 반복돼 IPC 왕복 주기로 폭주한다(`renderer-ui.md` 참고).

@@ -1,4 +1,5 @@
 import { ConfirmProvider } from "../components/ConfirmDialog";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
 import { ToastProvider } from "../components/Toast";
@@ -252,12 +253,23 @@ export function App() {
             })}
             activeId={activeId}
             onSelect={navigate}
-            header={<MailWidget />}
+            header={
+              <ErrorBoundary label="메일" compact>
+                <MailWidget />
+              </ErrorBoundary>
+            }
             footer={
               <>
-                <MirrorWidget />
-                <VpnWidget />
-                <AttendanceWidget />
+                {/* 위젯은 각자 격리한다 — 하나가 죽어도 나머지 위젯과 사이드바는 살아 있다 */}
+                <ErrorBoundary label="폰 미러링" compact>
+                  <MirrorWidget />
+                </ErrorBoundary>
+                <ErrorBoundary label="VPN" compact>
+                  <VpnWidget />
+                </ErrorBoundary>
+                <ErrorBoundary label="근태" compact>
+                  <AttendanceWidget />
+                </ErrorBoundary>
               </>
             }
           />
@@ -290,8 +302,12 @@ export function App() {
               <span className="topbar__title">{active.label}</span>
             </header>
 
-            {/* 메인 영역 */}
-            <main className="main">{active.render()}</main>
+            {/* 메인 영역 — 섹션마다 별도 경계(key)라 다른 섹션으로 옮기면 오류 상태도 초기화된다 */}
+            <main className="main">
+              <ErrorBoundary key={active.id} label={active.label}>
+                {active.render()}
+              </ErrorBoundary>
+            </main>
           </section>
         </div>
       </ConfirmProvider>

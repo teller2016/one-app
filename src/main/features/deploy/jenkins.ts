@@ -247,6 +247,22 @@ export async function fetchBuildDetail(
 }
 
 /**
+ * 추적 폴링 간격 — 경과가 길수록 늘린다.
+ *
+ * 고정 3초면 10분짜리 빌드에 젠킨스를 200번 두드리는데 그 대부분은 "아직 빌드 중"이라는
+ * 같은 답이고, 창을 닫아 두어도(완료 알림을 위해 추적은 계속된다) 그대로 돈다.
+ * 짧은 빌드는 처음 2분 안에 끝나므로 그 구간만 촘촘하게 두고 뒤로 갈수록 늘린다.
+ *
+ * ⚖️ 대가는 **완료 감지가 최대 이 간격만큼 늦어지는 것**이다(화면 반영·완료 알림).
+ * 10분을 넘긴 빌드에서 15초 늦는 것은 감수할 만하다고 봤다.
+ */
+function watchPollMs(elapsedMs: number): number {
+  if (elapsedMs < 2 * 60_000) return 3000;
+  if (elapsedMs < 10 * 60_000) return 8000;
+  return 15_000;
+}
+
+/**
  * 트리거 이후 상태 추적: 큐 대기 → 빌드 번호 확정 → 완료(성공/실패)까지 폴링.
  * 단계가 바뀔 때마다 onStatus 로 알린다. (최대 30분)
  */
@@ -257,7 +273,8 @@ export async function watchBuild(
   onStatus: (s: DeployStatus) => void,
 ): Promise<void> {
   const headers = { Authorization: authHeader(a) };
-  const deadline = Date.now() + 30 * 60 * 1000;
+  const startedAt = Date.now();
+  const deadline = startedAt + 30 * 60 * 1000;
 
   // 1) 큐 대기 → 빌드 번호 확정
   onStatus({ state: 'queued' });
@@ -268,7 +285,10 @@ export async function watchBuild(
       onStatus({ state: 'error', error: '상태 추적 시간 초과(30분)' });
       return;
     }
-    await sleep(2000);
+    // 큐도 길게 밀릴 수 있어 같은 완화를 쓴다 — 다만 첫 구간은 2초로 더 촘촘하게
+    // (사용자가 '대기중'을 보며 기다리는 지점이라 빌드 번호 확정은 빨리 잡는다)
+    const waited = Date.now() - startedAt;
+    await sleep(waited < 2 * 60_000 ? 2000 : watchPollMs(waited));
     try {
       if (queueUrl) {
         const res = await fetch(`${queueUrl}/api/json`, { headers });
@@ -308,7 +328,7 @@ export async function watchBuild(
       onStatus({ state: 'error', buildNumber, error: '상태 추적 시간 초과(30분)' });
       return;
     }
-    await sleep(3000);
+    await sleep(watchPollMs(Date.now() - startedAt));
     try {
       const res = await fetch(`${buildUrl}api/json`, { headers });
       if (!res.ok) continue;

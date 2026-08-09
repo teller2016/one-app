@@ -11,6 +11,14 @@ paths:
 ## 공용 UI는 `components/` 의 컴포넌트 사용
 버튼 `Button`(variant: primary/ghost/danger · size: md/sm · loading), 입력 `Input`(small)·`Textarea`(code), 라벨+입력 행 `FormRow`, 섹션 제목 `SectionHeader`(icon), 배너 `Banner`(variant: warning/danger/info), 새로고침 `RefreshButton`, 열고닫기 `Collapsible`(icon·storageKey), 아이콘 `Icon`, 상태 뱃지 `Badge`·`StatusDot`, 링크형 버튼 `TextLink`, 파일 선택 `FileTrigger`, 세그먼트 `Segment`, 토스트 `useToast`, 모달 `Modal`(title·onClose·wide — Escape/오버레이 클릭 닫힘, 부모가 조건부 렌더로 제어), 확인 다이얼로그 `useConfirm`(promise 기반 window.confirm 대체 — `await confirm({title, danger})`), 빈 상태 `EmptyState`(icon·message·hint), 마크다운 렌더 `Markdown`, 날짜 선택 `DatePicker`(미니 캘린더 팝오버 — "YYYY-MM-DD"), 시간 선택 `TimePicker`(타이핑 허용 + N분 단위 리스트 — "HH:MM", `step` 기본 30분·`small` 변형), 체크박스 `Checkbox`(label 래핑·클릭 토글 — `danger`: 운영 확인용), 셀렉트 `Select`(`options` prop — TimePicker 계열 커스텀 팝오버 드롭다운, `small` 변형, **`searchable`**: 팝오버 상단 고정 검색창 + `limit` 으로 렌더 개수 제한 — 브랜치처럼 수백 개인 목록용. 옵션 라벨이 ReactNode 라 검색 문자열은 `SelectOption.search`(없으면 `value`)로 준다), 페이지네이션 `Pagination`(`page`(1-based)·`pageSize`·`total`·`onChange` — 서버 페이징 목록 공용. `1 … 6 [7] 8 … 616` 창 방식 + 좌측 "31–60 / 18,475건" 요약, 한 페이지면 아무것도 렌더 안 함, `span`·`unitLabel` 로 조정), 사이드바 위젯 셸 `SidebarWidget`(icon·dot·tooltip — 축소 시 아이콘 타일 + 오른쪽 팝오버, 아래 '축소 사이드바' 절).
 
+## 렌더 예외는 `ErrorBoundary` 로 격리한다
+`App.tsx` 가 **섹션 렌더(`key={active.id}`)와 사이드바 위젯 4개(메일·미러링·VPN·근태, `compact`)를 각각** 감싸고, MO 셸(`mobile-app/App.tsx`)도 탭마다 감싼다. 하나가 죽어도 나머지 화면은 살아 있다 — 예전엔 섹션 하나의 예외가 React 루트를 통째로 언마운트해 **앱이 백지가 됐다**(Electron 창은 새로고침 경로가 눈에 안 보여 사실상 재시작뿐이다. `allowProposedApi` 누락으로 실제로 겪었다 — `features/terminal.md`).
+
+- ⚠️ **자식을 `attempt` 로 keying 하는 게 핵심**이다 — state 의 error 만 비우면 React 가 같은 엘리먼트 트리를 재사용해 오류 직전 상태가 그대로 살아 있고 [다시 시도]가 즉시 다시 죽는다.
+- 섹션 경계는 `key={active.id}` 라 **다른 섹션으로 옮기면 오류 상태가 저절로 초기화**된다.
+- 잡히는 것은 **렌더 중 예외뿐**이다 — 이벤트 핸들러·비동기 IPC 실패는 지금처럼 각 기능이 토스트·에러 상태로 처리해야 한다.
+- ⚠️ **App 컴포넌트 자신의 예외는 못 잡는다**(경계가 그 안쪽이다) — 전역 조작으로 테스트하면 앱이 통째로 죽어 "경계가 안 먹는다"고 오판하기 쉽다(2026-08-09 실측).
+
 아이콘만 있는 버튼의 설명은 **`Tooltip`**(label — hover 250ms·키보드 포커스는 즉시, `body` portal + `usePopover` 배치)으로 감싼다. 네이티브 `title` 은 지연이 1초 이상이고 OS 스타일이라 어두운 툴바에서 눈에 띄지 않는다(2026-08-05 사용자 지적).
 
 - 접근성 이름은 툴팁이 아니라 **버튼의 `aria-label`** 이 담당한다(툴팁은 시각 보조일 뿐 — 두 곳에 다 쓸 것).
