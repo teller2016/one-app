@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   DeployActivity,
   DeployProjectView,
@@ -12,7 +12,7 @@ import { Modal } from '../../../components/Modal';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { EmptyState } from '../../../components/EmptyState';
-import { useTick } from '../../../lib/usePolling';
+import { usePolling, useTick } from '../../../lib/usePolling';
 import { ActivityPanel } from './ActivityPanel';
 import { ProjectCard } from './ProjectCard';
 import { BuildDetailPanel } from './BuildDetailPanel';
@@ -60,11 +60,16 @@ export function DeploySection() {
 
   useTick(60_000); // "n분 전" 갱신용 1분 틱
 
-  // 젠킨스 서버 현황 조회 (실행 중 + 대기) — 해당 프로젝트의 서버 기준
-  const refreshActivity = async (projectId: string) => {
+  // 젠킨스 서버 현황 조회 (실행 중 + 대기) — 해당 프로젝트의 서버 기준.
+  // ⚠️ 응답이 오는 사이 팝업을 닫거나 다른 프로젝트로 옮겼을 수 있다 — 늦게 도착한
+  // 응답이 지금 보고 있는 화면을 덮어쓰지 않게 대상이 그대로일 때만 반영한다.
+  const activityForRef = useRef<string | null>(null);
+  activityForRef.current = activityFor;
+  const refreshActivity = useCallback(async (projectId: string) => {
     setActivityLoading(true);
     try {
       const res = await window.oneApp.deploy.fetchActivity(projectId);
+      if (activityForRef.current !== projectId) return;
       if (res.ok) {
         setActivity(res.activity ?? null);
         setActivityError(undefined);
@@ -73,12 +78,13 @@ export function DeploySection() {
         setActivityError(res.error ?? '현황 조회 실패');
       }
     } catch (err) {
+      if (activityForRef.current !== projectId) return;
       setActivity(null);
       setActivityError((err as Error).message);
     } finally {
-      setActivityLoading(false);
+      if (activityForRef.current === projectId) setActivityLoading(false);
     }
-  };
+  }, []);
 
   // 카드의 [현황] 버튼 → 팝업 열고 즉시 조회
   const openActivity = (projectId: string) => {
@@ -88,12 +94,15 @@ export function DeploySection() {
     void refreshActivity(projectId);
   };
 
-  // 현황 팝업이 열려 있는 동안 5초마다 자동 갱신 (실행/대기 목록은 자주 바뀜)
-  useEffect(() => {
-    if (!activityFor) return;
-    const id = setInterval(() => void refreshActivity(activityFor), 5_000);
-    return () => clearInterval(id);
-  }, [activityFor]);
+  // 현황 팝업이 열려 있는 동안 5초마다 자동 갱신 (실행/대기 목록은 자주 바뀜).
+  // 여는 순간 위에서 한 번 조회하므로 immediate 는 끈다.
+  const pollActivity = useCallback(() => {
+    if (activityFor) void refreshActivity(activityFor);
+  }, [activityFor, refreshActivity]);
+  usePolling(pollActivity, 5_000, {
+    enabled: !!activityFor,
+    immediate: false,
+  });
 
   // 빌드중이면 5초 틱으로 진행률(경과 시간)을 갱신
   const anyBuilding = Object.values(statuses).some(
@@ -102,7 +111,7 @@ export function DeploySection() {
   useTick(5_000, anyBuilding);
 
   // 프로젝트 목록의 최근 빌드 상태 조회
-  const refreshStatuses = async (list: DeployProjectView[]) => {
+  const refreshStatuses = useCallback(async (list: DeployProjectView[]) => {
     await Promise.all(
       list
         .filter((p) => p.hasSecret)
@@ -123,7 +132,7 @@ export function DeploySection() {
           });
         }),
     );
-  };
+  }, []);
 
   useEffect(() => {
     window.oneApp?.deploy.getProjects().then((list) => {
@@ -148,12 +157,17 @@ export function DeploySection() {
     return () => off?.();
   }, []);
 
-  // 배포 탭을 보는 동안 1분마다 상태 자동 새로고침 (젠킨스에서 직접 돌린 빌드도 반영)
-  useEffect(() => {
-    if (projects.length === 0) return;
-    const id = setInterval(() => void refreshStatuses(projects), 60_000);
-    return () => clearInterval(id);
-  }, [projects]);
+  // 배포 탭을 보는 동안 1분마다 상태 자동 새로고침 (젠킨스에서 직접 돌린 빌드도 반영).
+  // 목록은 ref 로 읽어 폴러가 프로젝트 저장마다 재시작되지 않게 한다.
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+  const pollStatuses = useCallback(() => {
+    void refreshStatuses(projectsRef.current);
+  }, [refreshStatuses]);
+  usePolling(pollStatuses, 60_000, {
+    enabled: projects.length > 0,
+    immediate: false,
+  });
 
   // ── 배포 실행 — 확인 모달을 열고, 모달에서 [배포]를 눌러야 트리거된다 ──
   const openDeployConfirm = (projectId: string, targetId: string) => {

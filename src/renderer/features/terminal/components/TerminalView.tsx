@@ -11,15 +11,12 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
-import type {
-  TerminalPreset,
-  TerminalSessionInfo,
-} from '../../../../shared/types';
+import type { TerminalPreset } from '../../../../shared/types';
 import { PresetBar } from './PresetBar';
 
 const cssVar = (name: string) =>
@@ -110,8 +107,15 @@ const searchDecorations = () => {
   };
 };
 
-export function TerminalView({
-  session,
+/**
+ * ⚠️ 세션 객체(TerminalSessionInfo)가 아니라 **id·cwd 만** 받는다 — 세션 목록 브로드캐스트는
+ * 상태(busy↔waiting)가 바뀔 때마다 오고 그때마다 객체가 새로 만들어지는데, 객체를 그대로
+ * 받으면 memo 가 매번 깨져 살아 있는 모든 pane 이 함께 리렌더된다. 여기서 실제로 쓰는 값은
+ * 이 둘뿐이라 원시값으로 쪼개면 memo 가 유지된다(제목·상태는 탭바가 표시한다).
+ */
+export const TerminalView = memo(function TerminalView({
+  sessionId: id,
+  cwd,
   active,
   fontSize,
   onFontSize,
@@ -119,18 +123,20 @@ export function TerminalView({
   onRunPreset,
   onEditPresets,
 }: {
-  session: TerminalSessionInfo;
+  sessionId: string;
+  /** 세션의 작업 폴더 — 프리셋 실행 위치·툴팁에 쓴다 */
+  cwd: string;
   /** 지금 보이는 세션인지 — 숨은 pane 은 크기를 주장하지 않는다(아래 activeRef 참고) */
   active: boolean;
   fontSize: number;
   onFontSize: (n: number) => void;
   /** 프리셋 바 칩 — 이 세션의 워크스페이스에 해당하는 것만 (Superset 동일) */
   presets: TerminalPreset[];
-  /** 칩 클릭 = 같은 위치의 새 세션에서 명령 실행 (Superset executionMode: new-tab) */
-  onRunPreset: (preset: TerminalPreset) => void;
+  /** 칩 클릭 = 같은 위치의 새 세션에서 명령 실행 (Superset executionMode: new-tab).
+   *  cwd 를 함께 넘겨 상위가 세션마다 다른 화살표를 만들지 않아도 되게 한다(memo 유지) */
+  onRunPreset: (cwd: string, preset: TerminalPreset) => void;
   onEditPresets: () => void;
 }) {
-  const id = session.id;
   const toast = useToast();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -446,6 +452,12 @@ export function TerminalView({
     if (!res.ok) toast('위치를 열지 못했습니다.', 'fail');
   };
 
+  // 프리셋 실행 — 위치(cwd)는 이 pane 이 알고 있으므로 여기서 붙인다
+  const runPreset = useCallback(
+    (p: TerminalPreset) => onRunPreset(cwd, p),
+    [cwd, onRunPreset]
+  );
+
   return (
     <div className={`terminal__pane${active ? '' : ' terminal__pane--hidden'}`}>
       <div className="terminal__bar">
@@ -453,8 +465,8 @@ export function TerminalView({
             바 자체는 '세션 없음' 화면과 공용(PresetBar) — 같은 자리에 계속 떠 있다 */}
         <PresetBar
           presets={presets}
-          cwd={session.cwd}
-          onRun={onRunPreset}
+          cwd={cwd}
+          onRun={runPreset}
           onEdit={onEditPresets}
         />
         {/* 아이콘만으로는 무슨 기능인지 알 수 없어 전부 Tooltip 으로 감싼다.
@@ -591,4 +603,4 @@ export function TerminalView({
       <div className="terminal__host" ref={hostRef} />
     </div>
   );
-}
+});

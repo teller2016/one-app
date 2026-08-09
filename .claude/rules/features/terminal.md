@@ -39,8 +39,24 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - `ONEAPP_TERM_DEBUG=1` 로 켜지는 `[term:life]` 로그(create·launch·pty-exit·pty-exit:tmux)가 이 계열 문제의 진단 도구다.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
 
-## 데스크톱 세션 화면 구조 (2026-08-05)
-`TerminalSection` 이 **세션마다 `TerminalView` 를 만들고 보이지 않는 것도 언마운트하지 않는다**(`--hidden` = `visibility:hidden` + `position:absolute; inset:0`). 예전엔 `key={activeId}` 로 xterm 을 매번 파괴해 전환마다 attach 왕복 + TUI 전체 리렌더를 다시 겪고 선택 영역·검색 상태가 사라졌다.
+## 데스크톱 세션 화면 구조 (2026-08-05, pane 상한은 2026-08-09)
+`TerminalSection` 이 **본 적 있는 세션마다 `TerminalView` 를 만들고 보이지 않게 돼도 언마운트하지 않는다**(`--hidden` = `visibility:hidden` + `position:absolute; inset:0`). 예전엔 `key={activeId}` 로 xterm 을 매번 파괴해 전환마다 attach 왕복 + TUI 전체 리렌더를 다시 겪고 선택 영역·검색 상태가 사라졌다.
+
+### ⚠️ pane 은 **활성이 된 세션만** 만든다 — 전체 세션 동시 attach 금지 (2026-08-09)
+예전엔 `sessions` **전부**를 마운트해서, 터미널 섹션에 들어가는 순간 세션 수만큼 xterm·WebGL 컨텍스트·attach(tmux 클라이언트 spawn)가 **한꺼번에** 생겼다. 지금은 `livePanes`(최근 사용 순 배열)에 든 세션만 그리고, `activeId` 가 될 때 목록 앞에 넣는다.
+
+- **상한 `MAX_LIVE_PANES`(8)** — WebGL 컨텍스트는 **브라우저 전역 개수 제한**이 있어 무한정 쌓으면 오래된 컨텍스트가 강제 유실되며 이미 열린 터미널이 깨진다. 넘치면 가장 오래 안 본 pane 을 버리고, 다시 고르면 attach 로 복원된다(tmux 가 전체 화면을 다시 그리므로 잃는 것은 xterm 쪽 스크롤백·선택 영역뿐).
+- 안 보는 세션의 출력이 IPC 로 오지 않는 것은 이미 `terminal:data` 게이트의 설계다 — 링버퍼·tmux 에 남아 재attach replay 로 복원되고, **상태(busy/waiting) 판정은 main 의 pty 가 하므로 뱃지·알림은 그대로다.**
+- 실측(2026-08-09 E2E): 세션 3개 · 탭 3개에서 진입 시 pane **1개**, 탭을 옮길 때마다 2 → 3 으로 늘고 되돌아오면 3 유지(재사용).
+
+### ⚠️ pane·탭바·LNB 는 `memo` 다 — 넘기는 props 는 참조가 고정돼야 한다 (2026-08-09)
+세션 목록 브로드캐스트는 **상태(busy↔waiting)가 바뀔 때마다** 오고, 패널 폭 드래그는 **프레임마다** 상위 상태를 바꾼다. 그때마다 살아 있는 pane 전부가 리렌더되던 것을 막았다.
+
+- `TerminalView` 는 세션 객체가 아니라 **`sessionId`·`cwd` 원시값**을 받는다 — 객체를 그대로 받으면 브로드캐스트마다 새 객체라 memo 가 매번 깨진다. 제목·상태는 탭바가 표시하므로 pane 은 이 둘만 있으면 된다.
+- 프리셋은 렌더 중에 `presetsForWorkspace` 를 부르지 말고 **`presetsByCwd` 맵(useMemo)** 에서 꺼낸다. 키는 세션 목록이 아니라 **cwd 집합을 문자열로 굳힌 값**이라, 상태만 바뀐 브로드캐스트에는 재계산되지 않는다. 프리셋이 없으면 고정 상수 `NO_PRESETS` 를 넘긴다(매번 `[]` 를 만들면 memo 가 깨진다).
+- 프리셋 실행 콜백은 `(cwd, preset)` 을 받는다 — 세션마다 다른 화살표를 만들지 않으려고 위치를 인자로 올렸다.
+- LNB 는 위치별 세션 수·대기 여부를 **한 번에 집계**(`byCwd`)한다 — 행마다 `sessions.filter` 를 돌면 워크트리 × 세션 이다.
+- ⚠️ 워크트리 폴링(10초)은 **내용이 같으면 이전 객체를 유지**한다(`JSON.stringify` 비교) — 새 객체로 갈아끼우면 거기 매달린 파생값과 LNB 가 통째로 다시 계산된다.
 
 - ⚠️ **숨은 pane 은 PTY 크기를 주장하지 않는다**(`activeRef` 로 `onResize` 전달·`reclaimSize` 차단) — 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣어 **폰(MO)이 보고 있는 세션 크기까지 되돌린다**(크기 공유는 마지막 주장 기준). 보이게 된 순간 `fit`+재주장+포커스를 한다.
 - ⚠️ `display:none` 금지 — 크기가 0 이 되어 다시 보일 때 80x24 를 거치며 TUI 가 두 번 리플로우한다. `inset:0` 이면 숨은 pane 도 활성과 **같은 크기**라 전환 시 리사이즈가 0이다(실측: 세션 4개 전환 왕복에 PTY 301x62 불변).

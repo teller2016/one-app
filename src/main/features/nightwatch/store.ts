@@ -109,13 +109,21 @@ export function saveNwState(state: NwState) {
   writeJson(nwPaths().state, state);
 }
 
+// 사이클 로그 상한 — 이 로그는 tail 로만 읽히는데 로테이션이 없어 앱을 쓰는 내내
+// 무한히 자랐다. 상한을 넘으면 뒤쪽 절반만 남긴다(읽는 쪽은 마지막 200줄뿐이다).
+const CYCLE_LOG_MAX_BYTES = 256 * 1024;
+
 export function appendCycleLog(message: string) {
   try {
     ensureNwDirs();
-    fs.appendFileSync(
-      nwPaths().cycleLog,
-      `[${new Date().toISOString()}] ${message}\n`
-    );
+    const file = nwPaths().cycleLog;
+    fs.appendFileSync(file, `[${new Date().toISOString()}] ${message}\n`);
+    if (fs.statSync(file).size > CYCLE_LOG_MAX_BYTES) {
+      const raw = fs.readFileSync(file, "utf8");
+      // 줄 경계에서 자른다 — 첫 줄이 반토막 나면 tail 이 깨진 문자열을 보여준다
+      const cut = raw.indexOf("\n", Math.floor(raw.length / 2));
+      fs.writeFileSync(file, cut >= 0 ? raw.slice(cut + 1) : raw, "utf8");
+    }
   } catch {
     // 로그 실패가 사이클을 막으면 안 된다
   }

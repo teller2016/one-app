@@ -274,29 +274,28 @@ export function NightwatchSection() {
   const queuedKeys = status?.queue ?? [];
   const isTeamAccount = !!form?.claudeConfigDir.endsWith(".claude-team");
 
-  // 실행·대기 중엔 상태를 5초 간격으로 — 대기열이 다음 티켓으로 넘어가는 걸 빠르게 반영
+  // 실행·대기 중엔 상태를 5초 간격으로 — 대기열이 다음 티켓으로 넘어가는 걸 빠르게 반영.
+  // usePolling 을 쓰면 창이 백그라운드일 때 주기가 저절로 느슨해진다(직접 돌리던 인터벌은
+  // 다른 앱을 보는 내내 5초마다 Jira·파일을 훑었다).
   const missionActive = !!status?.running || queuedKeys.length > 0;
-  useEffect(() => {
-    if (!missionActive) return;
-    const timer = setInterval(() => void load(), 5000);
-    return () => clearInterval(timer);
-  }, [missionActive, load]);
+  const pollActive = useCallback(() => {
+    void load();
+  }, [load]);
+  usePolling(pollActive, 5_000, { enabled: missionActive, immediate: false });
 
   // 실행 중 미션 진행 로그 라이브 tail (3초 폴링)
-  useEffect(() => {
-    if (!runningKey) return;
-    let cancelled = false;
-    const tick = async () => {
-      const res = await window.oneApp.nightwatch.getMissionLog(runningKey);
-      if (!cancelled && res.ok && res.content) setMissionLog(res.content);
-    };
-    void tick();
-    const timer = setInterval(() => void tick(), 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+  const runningKeyRef = useRef(runningKey);
+  runningKeyRef.current = runningKey;
+  const pollMissionLog = useCallback(() => {
+    const key = runningKey;
+    if (!key) return;
+    void window.oneApp.nightwatch.getMissionLog(key).then((res) => {
+      // 응답이 오는 사이 다른 티켓으로 넘어갔으면 그 결과는 버린다
+      if (runningKeyRef.current !== key) return;
+      if (res.ok && res.content) setMissionLog(res.content);
+    });
   }, [runningKey]);
+  usePolling(pollMissionLog, 3_000, { enabled: !!runningKey });
 
   // 새 로그가 붙으면 맨 아래로 스크롤 유지
   useEffect(() => {

@@ -1,7 +1,7 @@
 // 상단 세션 탭바 — 선택된 워크트리의 세션들 + [+] 새 세션 (Superset 스타일).
 // 탭 더블클릭 = 이름 인라인 편집(main 의 sidecar 에 반영 — 재시작 후에도 유지).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
@@ -25,7 +25,9 @@ const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
   idle: '유휴',
 };
 
-export function SessionTabs({
+// memo — 패널 드래그(프레임마다 상태 변경)·pane 리렌더에 탭바가 끌려가지 않게.
+// 상위가 콜백을 useCallback 으로 안정화하고 sessions 는 useMemo 파생값이라 실제로 유지된다.
+export const SessionTabs = memo(function SessionTabs({
   sessions,
   activeId,
   canCreate,
@@ -192,4 +194,4 @@ export function SessionTabs({
       </div>
     </div>
   );
-}
+});

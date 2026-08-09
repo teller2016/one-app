@@ -3,12 +3,13 @@
 //    예전엔 TerminalView 안에만 있어서 세션이 0 개면 프리셋이 통째로 사라졌다.
 //    첫 세션을 프리셋으로 시작하는 것이 가장 자연스러운 흐름인데 그게 막혀 있었다
 //    (2026-08-08 사용자 지적). 자리도 같아서 세션이 생겨도 바가 움직이지 않는다.
+import { memo } from 'react';
 import type { TerminalPreset } from '../../../../shared/types';
 import { Icon } from '../../../components/Icon';
 import { Tooltip } from '../../../components/Tooltip';
 import { presetIcon } from '../lib/workspace';
 
-export function PresetBar({
+export const PresetBar = memo(function PresetBar({
   presets,
   cwd,
   disabled = false,
@@ -61,4 +62,4 @@ export function PresetBar({
       ))}
     </span>
   );
-}
+});

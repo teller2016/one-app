@@ -2,7 +2,7 @@
 // 워크트리를 고르면 상단 탭바가 그 위치의 세션들로 바뀐다.
 // 행 드래그로 순서 변경, 우클릭 컨텍스트 메뉴로 이름·색·Finder·제거.
 // 축소 모드에선 워크스페이스 타일 + (펼친 워크스페이스의) 워크트리 아이콘 타일이 남는다.
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type {
   TerminalSessionInfo,
@@ -25,7 +25,9 @@ import {
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
 
-export function WorkspaceNav({
+// memo — 패널 폭 드래그는 프레임마다 상위 상태를 바꾸는데, 트리는 그동안 달라질 것이 없다.
+// 상위가 콜백을 전부 useCallback 으로 안정화해 두어야 실제로 효과가 난다.
+export const WorkspaceNav = memo(function WorkspaceNav({
   workspaces,
   worktrees,
   sessions,
@@ -135,9 +137,34 @@ export function WorkspaceNav({
   const dropClass = (ws: TerminalWorkspace, base: string) =>
     drop?.id === ws.id ? ` ${base}--drop-${drop.after ? 'after' : 'before'}` : '';
 
-  const wsSessions = (ws: TerminalWorkspace): TerminalSessionInfo[] => {
-    const paths = new Set((worktrees[ws.id] ?? []).map((w) => w.path));
-    return sessions.filter((s) => paths.has(s.cwd));
+  // 위치(cwd)별 세션 수·입력대기 여부를 한 번에 집계한다 — 예전엔 워크스페이스 행과
+  // 워크트리 행마다 sessions 를 통째로 훑어 (워크트리 수 × 세션 수) 만큼 돌았다.
+  // 세션 상태 브로드캐스트마다 트리가 다시 그려지는 자리라 훑는 횟수가 그대로 비용이다.
+  const byCwd = useMemo(() => {
+    const map = new Map<string, { count: number; waiting: boolean }>();
+    for (const s of sessions) {
+      const cur = map.get(s.cwd);
+      if (cur) {
+        cur.count += 1;
+        cur.waiting ||= s.status === 'waiting';
+      } else {
+        map.set(s.cwd, { count: 1, waiting: s.status === 'waiting' });
+      }
+    }
+    return map;
+  }, [sessions]);
+
+  /** 워크스페이스 아래 전 워크트리의 세션 합계 (부모 행의 개수 뱃지·대기 색) */
+  const wsAgg = (ws: TerminalWorkspace) => {
+    let count = 0;
+    let waiting = false;
+    for (const wt of worktrees[ws.id] ?? []) {
+      const a = byCwd.get(wt.path);
+      if (!a) continue;
+      count += a.count;
+      waiting ||= a.waiting;
+    }
+    return { count, waiting };
   };
 
   const contextMenu = menu && (
@@ -203,8 +230,7 @@ export function WorkspaceNav({
     return (
       <div className="terminal__list" role="list">
         {workspaces.map((ws) => {
-          const inWs = wsSessions(ws);
-          const waiting = inWs.some((s) => s.status === 'waiting');
+          const { count: wsCount, waiting } = wsAgg(ws);
           const isOpen = expanded.includes(ws.id);
           const wsActive =
             selection?.kind === 'worktree' && selection.wsId === ws.id;
@@ -217,7 +243,7 @@ export function WorkspaceNav({
               {...dropTarget(ws)}
             >
               <Tooltip
-                label={`${ws.name} — 세션 ${inWs.length}개${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
+                label={`${ws.name} — 세션 ${wsCount}개${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
               >
                 {/* 펼침 모드의 행 클릭과 같은 동작 — 워크트리 타일 목록을 접고 편다
                     (예전엔 첫 워크트리를 선택했는데 두 모드의 클릭 의미가 달라 혼란 — 2026-08-06) */}
@@ -242,7 +268,7 @@ export function WorkspaceNav({
                     {initials(ws.name)}
                   </span>
                   {/* 자식 워크트리에 켜진 세션 합계 — 부모만 보여도 사용 중임을 알 수 있게 */}
-                  {inWs.length > 0 && (
+                  {wsCount > 0 && (
                     <span
                       className={
                         'terminal__wt-sq-count' +
@@ -250,7 +276,7 @@ export function WorkspaceNav({
                       }
                       aria-hidden="true"
                     >
-                      {inWs.length}
+                      {wsCount}
                     </span>
                   )}
                 </button>
@@ -270,10 +296,9 @@ export function WorkspaceNav({
                       wsId: ws.id,
                       path: wt.path,
                     });
-                    const count = sessions.filter((s) => s.cwd === wt.path).length;
-                    const wtWaiting = sessions.some(
-                      (s) => s.cwd === wt.path && s.status === 'waiting'
-                    );
+                    const agg = byCwd.get(wt.path);
+                    const count = agg?.count ?? 0;
+                    const wtWaiting = agg?.waiting ?? false;
                     return (
                       <Tooltip
                         key={wt.path}
@@ -344,8 +369,7 @@ export function WorkspaceNav({
     <div className="terminal__list">
       {workspaces.map((ws) => {
         const isOpen = expanded.includes(ws.id);
-        const inWs = wsSessions(ws);
-        const wsWaiting = inWs.some((s) => s.status === 'waiting');
+        const { count: wsCount, waiting: wsWaiting } = wsAgg(ws);
         const list = worktrees[ws.id];
         return (
           <div
@@ -402,14 +426,14 @@ export function WorkspaceNav({
                     </span>
                     <span className="terminal__ws-name">{ws.name}</span>
                     {/* 자식 워크트리에 켜진 세션 합계 — 입력 대기가 있으면 초록 */}
-                    {inWs.length > 0 && (
+                    {wsCount > 0 && (
                       <span
                         className={
                           'terminal__ws-count' +
                           (wsWaiting ? ' terminal__ws-count--waiting' : '')
                         }
                       >
-                        ({inWs.length})
+                        ({wsCount})
                       </span>
                     )}
                   </button>
@@ -460,10 +484,9 @@ export function WorkspaceNav({
                     wsId: ws.id,
                     path: wt.path,
                   });
-                  const count = sessions.filter((s) => s.cwd === wt.path).length;
-                  const waiting = sessions.some(
-                    (s) => s.cwd === wt.path && s.status === 'waiting'
-                  );
+                  const agg = byCwd.get(wt.path);
+                  const count = agg?.count ?? 0;
+                  const waiting = agg?.waiting ?? false;
                   return (
                     <div
                       key={wt.path}
@@ -562,4 +585,4 @@ export function WorkspaceNav({
       {contextMenu}
     </div>
   );
-}
+});

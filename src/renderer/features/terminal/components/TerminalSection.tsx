@@ -48,6 +48,19 @@ const terminalApi = () => window.oneApp?.terminal;
 // 워크트리 목록·±변경량 갱신 주기 — 로컬 git 명령 몇 개라 수십 ms, 보이는 동안만 돈다
 const WORKTREE_POLL_MS = 10_000;
 
+/**
+ * 동시에 살려 두는 xterm pane 수 상한 (최근 사용 순).
+ *
+ * 세션은 그대로 두고 **화면(pane)만** 재활용한다 — 버려진 pane 은 다시 고르는 순간
+ * attach 로 복원되므로(tmux 가 전체 화면을 다시 그린다) 잃는 것은 xterm 쪽 스크롤백·
+ * 선택 영역뿐이다. 상한이 필요한 이유는 WebGL 컨텍스트가 **브라우저 전역으로 개수 제한**이
+ * 있어서, 넘기면 오래된 컨텍스트가 강제 유실되며 이미 열린 터미널이 깨지기 때문이다.
+ */
+const MAX_LIVE_PANES = 8;
+
+/** 프리셋이 없는 위치에 넘길 고정 빈 배열 — 매번 [] 를 만들면 pane 의 memo 가 깨진다 */
+const NO_PRESETS: TerminalPreset[] = [];
+
 // 변경사항 드로어 너비 — 좌측 모서리 드래그로 조절, localStorage 기억
 const CHANGES_MIN_W = 240;
 const CHANGES_MAX_W = 640;
@@ -133,10 +146,11 @@ export function TerminalSection() {
   const available = !!terminalApi();
 
   const [fontSize, setFontSize] = useState(savedFontSize);
-  const changeFontSize = (n: number) => {
+  // pane 들이 memo 로 묶여 있으므로 내려보내는 콜백은 전부 참조가 고정돼야 한다
+  const changeFontSize = useCallback((n: number) => {
     localStorage.setItem(FONT_SIZE_KEY, String(n));
     setFontSize(n);
-  };
+  }, []);
 
   // ── 워크스페이스 목록 — main 저장 + 브로드캐스트 구독 ──
   // ⚠️ ready 플래그 — 아래 '선택 보정' effect 가 목록 로드 **전**(빈 배열)에 돌면
@@ -171,7 +185,13 @@ export function TerminalSection() {
         }
       })
     );
-    setWorktrees(Object.fromEntries(entries));
+    const next = Object.fromEntries(entries);
+    // ⚠️ 10초 폴링은 대부분 **같은 결과**를 돌려준다 — 그때마다 새 객체로 갈아끼우면
+    // 이 객체에 매달린 파생값(workspaceIdOf·프리셋 맵)과 LNB 가 통째로 다시 계산된다.
+    // 내용이 같으면 이전 객체를 그대로 유지해 리렌더 자체를 만들지 않는다.
+    setWorktrees((prev) =>
+      JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+    );
   }, []);
   useEffect(() => {
     void refreshWorktrees();
@@ -218,6 +238,22 @@ export function TerminalSection() {
     },
     [workspaces, worktrees]
   );
+
+  // 위치(cwd)별 프리셋 목록 — pane 마다 렌더 중에 계산하면 매번 새 배열이 되어
+  // pane 의 memo 가 통째로 깨진다(세션 상태 브로드캐스트는 초 단위로 온다).
+  // 위치 집합이 그대로면 같은 배열 인스턴스를 계속 넘기도록 키를 문자열로 굳힌다.
+  const cwdKey = useMemo(
+    () => [...new Set(sessions.map((s) => s.cwd))].sort().join('\n'),
+    [sessions]
+  );
+  const presetsByCwd = useMemo(() => {
+    const map = new Map<string, TerminalPreset[]>();
+    for (const cwd of cwdKey ? cwdKey.split('\n') : []) {
+      const forWs = presetsForWorkspace(presets, workspaceIdOf(cwd));
+      map.set(cwd, forWs.length > 0 ? forWs : NO_PRESETS);
+    }
+    return map;
+  }, [cwdKey, presets, workspaceIdOf]);
 
   // MO 서버 실행 여부 — 아이콘에 상태 점 표시
   useEffect(() => {
@@ -310,13 +346,13 @@ export function TerminalSection() {
       })()
     )
   );
-  const rememberActive = (key: string, id: string) => {
+  const rememberActive = useCallback((key: string, id: string) => {
     lastActiveRef.current.set(key, id);
     localStorage.setItem(
       'terminal:lastActive',
       JSON.stringify(Object.fromEntries(lastActiveRef.current))
     );
-  };
+  }, []);
   // 방금 만든 세션 — 목록 브로드캐스트가 아직 안 왔으면 보정 효과가 첫 탭으로 되돌리므로,
   // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관)
   const pendingRef = useRef<string | null>(null);
@@ -340,19 +376,37 @@ export function TerminalSection() {
     );
   }, [tabSessions, activeId, selKey]);
 
-  const selectTab = (id: string) => {
-    rememberActive(selKey, id);
-    setActiveId(id);
-  };
+  const selectTab = useCallback(
+    (id: string) => {
+      rememberActive(selKey, id);
+      setActiveId(id);
+    },
+    [rememberActive, selKey]
+  );
 
   /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다 */
-  const activateSession = (id: string) => {
+  const activateSession = useCallback((id: string) => {
     pendingRef.current = id;
     setActiveId(id);
-  };
+  }, []);
+
+  // ── 살아 있는 pane — **실제로 본 적 있는 세션만** xterm 을 만든다 ──
+  // 예전엔 sessions 전부를 마운트해서 터미널 섹션에 들어가는 순간 세션 수만큼
+  // xterm·WebGL 컨텍스트·attach(tmux 클라이언트 spawn)가 한꺼번에 생겼다.
+  // 지금은 활성이 된 세션만 붙이고, 한 번 연 pane 은 상한(MAX_LIVE_PANES)까지 유지해
+  // 전환 즉시성과 스크롤백·검색 상태를 지킨다.
+  const [livePanes, setLivePanes] = useState<string[]>([]); // 최근 사용 순
+  useEffect(() => {
+    if (!activeId) return;
+    setLivePanes((cur) =>
+      cur[0] === activeId
+        ? cur
+        : [activeId, ...cur.filter((id) => id !== activeId)].slice(0, MAX_LIVE_PANES)
+    );
+  }, [activeId]);
 
   /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
-  const createShell = async () => {
+  const createShell = useCallback(async () => {
     if (selection?.kind !== 'worktree') return;
     try {
       const info = await terminalApi()?.create({ cwd: selection.path });
@@ -360,27 +414,52 @@ export function TerminalSection() {
     } catch (err) {
       toast(`세션 생성 실패: ${(err as Error).message}`, 'fail');
     }
-  };
+  }, [selection, activateSession, toast]);
 
   /**
    * 프리셋 실행 — 그 위치의 새 세션에서 명령 자동 실행 (Superset new-tab 동일).
    * 세션이 아니라 **cwd** 를 받는다 — 세션이 하나도 없는 화면에서도 선택된
    * 워크트리 경로로 첫 세션을 프리셋으로 시작할 수 있어야 한다(2026-08-08).
    */
-  const runPreset = async (cwd: string, preset: TerminalPreset) => {
-    try {
-      const info = await terminalApi()?.create({
-        cwd,
-        // claude 프리셋 등은 에이전트로 태깅 — 입력대기 알림·상태 휴리스틱이 살아난다
-        agentId: agentIdFromCommand(preset.command),
-        command: preset.command,
-        title: preset.name,
-      });
-      if (info) activateSession(info.id);
-    } catch (err) {
-      toast(`프리셋 실행 실패: ${(err as Error).message}`, 'fail');
-    }
-  };
+  const runPreset = useCallback(
+    async (cwd: string, preset: TerminalPreset) => {
+      try {
+        const info = await terminalApi()?.create({
+          cwd,
+          // claude 프리셋 등은 에이전트로 태깅 — 입력대기 알림·상태 휴리스틱이 살아난다
+          agentId: agentIdFromCommand(preset.command),
+          command: preset.command,
+          title: preset.name,
+        });
+        if (info) activateSession(info.id);
+      } catch (err) {
+        toast(`프리셋 실행 실패: ${(err as Error).message}`, 'fail');
+      }
+    },
+    [activateSession, toast]
+  );
+  const runPresetForPane = useCallback(
+    (cwd: string, preset: TerminalPreset): void => {
+      void runPreset(cwd, preset);
+    },
+    [runPreset]
+  );
+  const openPresets = useCallback(() => setPresetsOpen(true), []);
+  // '세션 없음' 화면의 프리셋 바 — 선택된 워크트리 위치로 첫 세션을 만든다
+  const selectionPresets = useMemo(
+    () =>
+      presetsForWorkspace(
+        presets,
+        selection?.kind === 'worktree' ? selection.wsId : null
+      ),
+    [presets, selection]
+  );
+  const runPresetForSelection = useCallback(
+    (p: TerminalPreset): void => {
+      if (selection?.kind === 'worktree') void runPreset(selection.path, p);
+    },
+    [selection, runPreset]
+  );
 
   const activeSession = tabSessions.find((s) => s.id === activeId) ?? null;
 
@@ -477,19 +556,22 @@ export function TerminalSection() {
   };
 
   // 부수효과는 updater 밖에서 — updater 는 순수해야 한다(StrictMode 이중 호출)
-  const toggleChanges = () => {
+  const toggleChanges = useCallback(() => {
     const next = !changesOpen;
     localStorage.setItem('terminal:changesOpen', next ? '1' : '0');
     setChangesOpen(next);
-  };
+  }, [changesOpen]);
 
-  const toggleExpand = (wsId: string) => {
-    const next = expanded.includes(wsId)
-      ? expanded.filter((id) => id !== wsId)
-      : [...expanded, wsId];
-    localStorage.setItem('terminal:wsExpanded', JSON.stringify(next));
-    setExpanded(next);
-  };
+  const toggleExpand = useCallback(
+    (wsId: string) => {
+      const next = expanded.includes(wsId)
+        ? expanded.filter((id) => id !== wsId)
+        : [...expanded, wsId];
+      localStorage.setItem('terminal:wsExpanded', JSON.stringify(next));
+      setExpanded(next);
+    },
+    [expanded]
+  );
 
   const ensureExpanded = (wsId: string) => {
     if (expanded.includes(wsId)) return;
@@ -497,6 +579,25 @@ export function TerminalSection() {
     localStorage.setItem('terminal:wsExpanded', JSON.stringify(next));
     setExpanded(next);
   };
+
+  // 확인 없이 즉시 종료 (2026-08-06 사용자 요청 — Superset 도 바로 닫는다).
+  // tmux 백엔드라 실수로 닫아도 프로세스만 죽고 복구 대상이 없다.
+  const closeSession = useCallback(
+    async (s: TerminalSessionInfo) => {
+      try {
+        await terminalApi()?.kill(s.id);
+      } catch (err) {
+        toast(`세션 종료 실패: ${(err as Error).message}`, 'fail');
+      }
+    },
+    [toast]
+  );
+  const closeSessionFromTab = useCallback(
+    (s: TerminalSessionInfo): void => {
+      void closeSession(s);
+    },
+    [closeSession]
+  );
 
   // ── 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료.
   // ⚠️ capture 단계 + stopPropagation 으로 잡는다 — bubble 로 잡으면 xterm 의 textarea
@@ -540,21 +641,17 @@ export function TerminalSection() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-    // closeSession·selectTab·createShell 은 매 렌더 새로 만들어지지만 그 안에서 쓰는
-    // confirm·toast 가 안정적이라 참조 값(선택·탭 목록·활성 세션)만 의존성으로 둔다
-  }, [tabSessions, activeId, activeSession, canCreate, selection]);
+  }, [
+    tabSessions,
+    activeId,
+    activeSession,
+    canCreate,
+    closeSession,
+    selectTab,
+    createShell,
+  ]);
 
-  // 확인 없이 즉시 종료 (2026-08-06 사용자 요청 — Superset 도 바로 닫는다).
-  // tmux 백엔드라 실수로 닫아도 프로세스만 죽고 복구 대상이 없다.
-  const closeSession = async (s: TerminalSessionInfo) => {
-    try {
-      await terminalApi()?.kill(s.id);
-    } catch (err) {
-      toast(`세션 종료 실패: ${(err as Error).message}`, 'fail');
-    }
-  };
-
-  const removeWorktree = async (ws: TerminalWorkspace, wt: WorktreeInfo) => {
+  const removeWorktree = useCallback(async (ws: TerminalWorkspace, wt: WorktreeInfo) => {
     const inUse = sessions.filter((s) => s.cwd === wt.path).length;
     const ok = await confirm({
       title: '워크트리 제거',
@@ -586,62 +683,104 @@ export function TerminalSection() {
     } catch (err) {
       toast(`워크트리 제거 실패: ${(err as Error).message}`, 'fail');
     }
-  };
+  }, [sessions, confirm, toast, refreshWorktrees]);
 
-  const removeWorkspace = async (ws: TerminalWorkspace) => {
-    const ok = await confirm({
-      title: '워크스페이스 제거',
-      message: `'${ws.name}' 를 목록에서 제거합니다. 저장소·워크트리 파일은 삭제되지 않습니다.`,
-      confirmLabel: '제거',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await window.oneApp.workspaces.delete(ws.id); // 목록 갱신은 onChanged 브로드캐스트
-    } catch (err) {
-      toast(`워크스페이스 제거 실패: ${(err as Error).message}`, 'fail');
-    }
-  };
+  const removeWorkspace = useCallback(
+    async (ws: TerminalWorkspace) => {
+      const ok = await confirm({
+        title: '워크스페이스 제거',
+        message: `'${ws.name}' 를 목록에서 제거합니다. 저장소·워크트리 파일은 삭제되지 않습니다.`,
+        confirmLabel: '제거',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await window.oneApp.workspaces.delete(ws.id); // 목록 갱신은 onChanged 브로드캐스트
+      } catch (err) {
+        toast(`워크스페이스 제거 실패: ${(err as Error).message}`, 'fail');
+      }
+    },
+    [confirm, toast]
+  );
 
   // 이름·색 변경은 같은 save 채널 — 미지정 필드는 main 이 기존 값을 유지한다
-  const saveWorkspace = async (input: {
-    id: string;
-    name: string;
-    repoPath: string;
-    color?: number;
-  }) => {
-    try {
-      await window.oneApp.workspaces.save(input);
-    } catch (err) {
-      toast(`워크스페이스 저장 실패: ${(err as Error).message}`, 'fail');
-    }
-  };
+  const saveWorkspace = useCallback(
+    async (input: { id: string; name: string; repoPath: string; color?: number }) => {
+      try {
+        await window.oneApp.workspaces.save(input);
+      } catch (err) {
+        toast(`워크스페이스 저장 실패: ${(err as Error).message}`, 'fail');
+      }
+    },
+    [toast]
+  );
 
   // 드래그 순서 변경 — 브로드캐스트를 기다리면 드롭 순간 원래 자리로 튀어 보이므로
   // 로컬 목록을 먼저 재배열한다(낙관적 갱신 — main 저장 결과가 곧 덮어 확정)
-  const reorderWorkspaces = (ids: string[]) => {
-    setWorkspaces((cur) => {
-      const byId = new Map(cur.map((w) => [w.id, w]));
-      const next: TerminalWorkspace[] = [];
-      for (const id of ids) {
-        const w = byId.get(id);
-        if (w) {
-          next.push(w);
-          byId.delete(id);
+  const reorderWorkspaces = useCallback(
+    (ids: string[]) => {
+      setWorkspaces((cur) => {
+        const byId = new Map(cur.map((w) => [w.id, w]));
+        const next: TerminalWorkspace[] = [];
+        for (const id of ids) {
+          const w = byId.get(id);
+          if (w) {
+            next.push(w);
+            byId.delete(id);
+          }
         }
-      }
-      next.push(...byId.values());
-      return next;
-    });
-    window.oneApp.workspaces.reorder(ids).catch((err: Error) => {
-      toast(`순서 저장 실패: ${err.message}`, 'fail');
-    });
-  };
+        next.push(...byId.values());
+        return next;
+      });
+      window.oneApp.workspaces.reorder(ids).catch((err: Error) => {
+        toast(`순서 저장 실패: ${err.message}`, 'fail');
+      });
+    },
+    [toast]
+  );
 
-  const revealWorkspace = async (ws: TerminalWorkspace) => {
-    const r = await window.oneApp.workspaces.reveal(ws.id);
-    if (!r.ok) toast(`폴더를 열지 못했습니다: ${r.error ?? ''}`, 'fail');
-  };
+  const revealWorkspace = useCallback(
+    async (ws: TerminalWorkspace) => {
+      const r = await window.oneApp.workspaces.reveal(ws.id);
+      if (!r.ok) toast(`폴더를 열지 못했습니다: ${r.error ?? ''}`, 'fail');
+    },
+    [toast]
+  );
+
+  // ── LNB·탭바에 넘길 핸들러 — memo 유지를 위해 인라인 화살표를 쓰지 않는다 ──
+  const handleRemoveWorktree = useCallback(
+    (ws: TerminalWorkspace, wt: WorktreeInfo): void => {
+      void removeWorktree(ws, wt);
+    },
+    [removeWorktree]
+  );
+  const handleRemoveWorkspace = useCallback(
+    (ws: TerminalWorkspace): void => {
+      void removeWorkspace(ws);
+    },
+    [removeWorkspace]
+  );
+  const handleRenameWorkspace = useCallback(
+    (ws: TerminalWorkspace, name: string): void => {
+      void saveWorkspace({ id: ws.id, name, repoPath: ws.repoPath });
+    },
+    [saveWorkspace]
+  );
+  const handleSetColor = useCallback(
+    (ws: TerminalWorkspace, color: number): void => {
+      void saveWorkspace({ id: ws.id, name: ws.name, repoPath: ws.repoPath, color });
+    },
+    [saveWorkspace]
+  );
+  const handleReveal = useCallback(
+    (ws: TerminalWorkspace): void => {
+      void revealWorkspace(ws);
+    },
+    [revealWorkspace]
+  );
+  const openNewWorkspace = useCallback(() => setNewWsOpen(true), []);
+  const openNewSession = useCallback(() => setNewSessionOpen(true), []);
+  const openMoModal = useCallback(() => setMoOpen(true), []);
 
   // 변경사항 대상 — 워크트리 선택이면 그 경로(세션 불필요), '기타'면 활성 세션의 cwd
   const changesTarget: ChangesTarget | null =
@@ -684,7 +823,7 @@ export function TerminalSection() {
                 type="button"
                 className="icon-btn"
                 aria-label="새 워크스페이스"
-                onClick={() => setNewWsOpen(true)}
+                onClick={openNewWorkspace}
               >
                 <Icon name="plus" size={16} />
               </button>
@@ -703,16 +842,12 @@ export function TerminalSection() {
           onToggleExpand={toggleExpand}
           onSelect={selectAndSave}
           onNewWorktree={setWorktreeFor}
-          onRemoveWorktree={(ws, wt) => void removeWorktree(ws, wt)}
-          onRemoveWorkspace={(ws) => void removeWorkspace(ws)}
+          onRemoveWorktree={handleRemoveWorktree}
+          onRemoveWorkspace={handleRemoveWorkspace}
           onReorder={reorderWorkspaces}
-          onRename={(ws, name) =>
-            void saveWorkspace({ id: ws.id, name, repoPath: ws.repoPath })
-          }
-          onSetColor={(ws, color) =>
-            void saveWorkspace({ id: ws.id, name: ws.name, repoPath: ws.repoPath, color })
-          }
-          onReveal={(ws) => void revealWorkspace(ws)}
+          onRename={handleRenameWorkspace}
+          onSetColor={handleSetColor}
+          onReveal={handleReveal}
         />
       </aside>
 
@@ -741,10 +876,10 @@ export function TerminalSection() {
           changesOpen={changesOpen}
           moRunning={moRunning}
           onSelect={selectTab}
-          onClose={(s) => void closeSession(s)}
-          onNew={() => setNewSessionOpen(true)}
+          onClose={closeSessionFromTab}
+          onNew={openNewSession}
           onToggleChanges={toggleChanges}
-          onOpenMo={() => setMoOpen(true)}
+          onOpenMo={openMoModal}
         />
 
         {/* ⚠️ 세션마다 pane 을 만들고 **보이지 않는 것도 언마운트하지 않는다** — 예전엔
@@ -753,18 +888,22 @@ export function TerminalSection() {
             inset:0 이라 활성 pane 과 같은 크기를 유지한다 — 탭바가 위에 생겼으므로
             기준 컨테이너는 __main 이 아니라 이 __panes 다(아니면 탭바 높이만큼 어긋난다). */}
         <div className="terminal__panes">
-          {sessions.map((s) => (
-            <TerminalView
-              key={s.id}
-              session={s}
-              active={s.id === activeId}
-              fontSize={fontSize}
-              onFontSize={changeFontSize}
-              presets={presetsForWorkspace(presets, workspaceIdOf(s.cwd))}
-              onRunPreset={(p) => void runPreset(s.cwd, p)}
-              onEditPresets={() => setPresetsOpen(true)}
-            />
-          ))}
+          {sessions
+            // 본 적 있는 세션만 pane 을 만든다 — 섹션 진입 시 전 세션 동시 attach 방지
+            .filter((s) => livePanes.includes(s.id))
+            .map((s) => (
+              <TerminalView
+                key={s.id}
+                sessionId={s.id}
+                cwd={s.cwd}
+                active={s.id === activeId}
+                fontSize={fontSize}
+                onFontSize={changeFontSize}
+                presets={presetsByCwd.get(s.cwd) ?? NO_PRESETS}
+                onRunPreset={runPresetForPane}
+                onEditPresets={openPresets}
+              />
+            ))}
           {/* 세션이 없어도 프리셋 바는 **세션 화면과 같은 자리**에 남는다 — 첫 세션을
               프리셋으로 시작하는 게 가장 자연스러운 흐름인데, 예전엔 바가 TerminalView
               안에만 있어 세션이 0 개면 통째로 사라졌다(2026-08-08 사용자 지적).
@@ -772,16 +911,11 @@ export function TerminalSection() {
           {!activeSession && workspaces.length > 0 && (
             <div className="terminal__bar terminal__bar--empty">
               <PresetBar
-                presets={presetsForWorkspace(
-                  presets,
-                  selection?.kind === 'worktree' ? selection.wsId : null
-                )}
+                presets={selectionPresets}
                 cwd={selection?.kind === 'worktree' ? selection.path : undefined}
                 disabled={!canCreate}
-                onRun={(p) => {
-                  if (selection?.kind === 'worktree') void runPreset(selection.path, p);
-                }}
-                onEdit={() => setPresetsOpen(true)}
+                onRun={runPresetForSelection}
+                onEdit={openPresets}
               />
             </div>
           )}

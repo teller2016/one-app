@@ -19,7 +19,7 @@ import { getJiraApiConfig } from "../settings/store";
 import {
   appendMissionLog,
   buildObserveMission,
-  detectClaudeBin,
+  ensureClaudeBin,
   runMission,
 } from "./mission";
 import {
@@ -204,7 +204,9 @@ function pruneOldTickets(state: NwState): boolean {
 }
 
 // ── 상태 조립 ───────────────────────────────────────────────────────────
-export function getNightwatchStatus(): NightwatchStatus {
+// claude 탐지가 비동기라 async 다 — 동기로 돌리면 로그인 셸 rc 로딩 동안 메인
+// 프로세스(= 모든 IPC·터미널 입출력)가 멈춘다(mission.ts 의 ensureClaudeBin 주석 참고).
+export async function getNightwatchStatus(): Promise<NightwatchStatus> {
   const p = nwPaths();
   const state = loadNwState();
   if (pruneOldTickets(state)) saveNwState(state);
@@ -220,7 +222,7 @@ export function getNightwatchStatus(): NightwatchStatus {
     );
   return {
     jiraConfigured: !!getJiraApiConfig(),
-    claudeFound: !!detectClaudeBin(),
+    claudeFound: !!(await ensureClaudeBin()),
     running: missionBusy,
     currentTicket: runningTicket ?? undefined,
     queue: queue.map((q) => q.key),
@@ -535,6 +537,8 @@ async function processTicket(
       note: opts.note,
     });
     runningTicket = key;
+    // 탐지가 아직이면 여기서 기다린다 — runMission 은 캐시된 경로만 읽는다
+    await ensureClaudeBin();
     const missionRun = runMission({
       mission,
       repoPath: repo.path,

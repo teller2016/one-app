@@ -1,7 +1,7 @@
 // 관찰 모드 미션 템플릿 + 헤드리스 Claude 세션 실행.
 // 미션 세션은 설치된 femc 런타임(~/.femc 의 settings·plugin·orchestrator)을 그대로 사용한다.
 // stream-json 출력을 실시간 파싱해 미션 로그 파일로 남긴다 — UI 가 tail 해 진행 상황을 보여준다.
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -81,21 +81,45 @@ export function buildObserveMission(params: {
 }
 
 let cachedClaudeBin: string | null | undefined;
+let claudeBinProbe: Promise<string | null> | null = null;
 
-/** claude 바이너리 탐지 — zsh 로그인 셸의 PATH 해석을 빌려 1회 캐시 */
-export function detectClaudeBin(): string | null {
-  if (cachedClaudeBin !== undefined) return cachedClaudeBin;
-  try {
-    const out = execFileSync("/bin/zsh", ["-lc", "whence -p claude"], {
-      encoding: "utf8",
-      timeout: 10_000,
-    }).trim();
-    cachedClaudeBin = out ? out.split("\n")[0] : null;
-  } catch {
-    const fallback = path.join(os.homedir(), ".local", "bin", "claude");
-    cachedClaudeBin = fs.existsSync(fallback) ? fallback : null;
+/**
+ * claude 바이너리 탐지 — zsh 로그인 셸의 PATH 해석을 빌려 1회 캐시.
+ *
+ * ⚠️ **동기(execFileSync)로 돌리면 안 된다** — 로그인 셸의 rc 로딩은 수백 ms 에서 길게는
+ * 초 단위이고 타임아웃이 10초다. 그동안 메인 프로세스가 통째로 멈춰 터미널 입출력·모든
+ * IPC 가 함께 정지한다(Nightwatch 섹션에 들어가는 것만으로 상태 조회가 이 경로를 탔다).
+ * 터미널의 `agents.ts` 와 같은 비동기 + Promise 캐시 방식으로 맞춘다.
+ */
+export function ensureClaudeBin(): Promise<string | null> {
+  if (cachedClaudeBin !== undefined) return Promise.resolve(cachedClaudeBin);
+  if (!claudeBinProbe) {
+    claudeBinProbe = new Promise<string | null>((resolve) => {
+      execFile(
+        "/bin/zsh",
+        ["-lc", "whence -p claude"],
+        { timeout: 10_000 },
+        (_err, stdout) => {
+          const out = String(stdout).trim();
+          if (out) {
+            resolve(out.split("\n")[0]);
+            return;
+          }
+          const fallback = path.join(os.homedir(), ".local", "bin", "claude");
+          resolve(fs.existsSync(fallback) ? fallback : null);
+        }
+      );
+    }).then((bin) => {
+      cachedClaudeBin = bin;
+      return bin;
+    });
   }
-  return cachedClaudeBin;
+  return claudeBinProbe;
+}
+
+/** 이미 탐지된 경로 (미탐지면 null) — 탐지를 보장하려면 ensureClaudeBin 을 await 한다 */
+export function detectClaudeBin(): string | null {
+  return cachedClaudeBin ?? null;
 }
 
 // ── stream-json 이벤트 → 사람이 읽는 미션 로그 한 줄 ──────────────────
