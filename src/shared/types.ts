@@ -581,7 +581,14 @@ export type AttendanceResult = {
   error?: string;
 };
 
-// ── 야근 결재 (그룹웨어 전자결재 '연장근무내역서' 상신) ──
+// ── 결재 (그룹웨어 전자결재 자동 작성·상신) ──
+// 야근 결재(연장근무내역서) · 지출결의서(개인) · 휴가신청서 세 가지를 '결재' 섹션이 다룬다.
+
+/** 어떤 결재를 올릴지 — 결재 섹션의 시작 화면에서 고른다 */
+export type ApprovalKind = 'overtime' | 'expend' | 'vacation';
+
+/** 작업 진행 단계 (메인 → 렌더러 이벤트 — 폼의 진행 문구) */
+export type ApprovalProgress = { step: string };
 
 /** 입력 기본값 — 마지막으로 작성한 업무내용을 저장해 다음 입력에 미리 채운다 (시간은 매번 계산) */
 export type OvertimeDefaults = {
@@ -598,13 +605,92 @@ export type OvertimeSubmitInput = OvertimeDefaults & {
 
 export type OvertimeSubmitResult = {
   ok: boolean;
-  title?: string; // 상신된 문서 제목
-  docUrl?: string; // 문서 보기(결재 버튼) 팝업 URL — '결재하러 가기' 링크
+  title?: string; // 작성된 문서 제목
   error?: string;
 };
 
-/** 상신 진행 단계 (메인 → 렌더러 이벤트 — 모달의 진행 문구) */
-export type OvertimeProgress = { step: string };
+/** 상신 진행 단계 (호환용 별칭 — 야근 결재 모달이 쓰던 이름) */
+export type OvertimeProgress = ApprovalProgress;
+
+/** 지출결의서 — 석식대 한 줄 (연장근로 석식비) */
+export type ExpendDinner = {
+  date: string; // 증빙일자 "YYYY-MM-DD"
+  amount: number; // 공급대가
+};
+
+export type ExpendInput = {
+  /** 주차요금 대상 월 "YYYY-MM" — 적요의 'N월'·증빙일자(그 달 말일)에 쓰인다 */
+  month: string;
+  /** 주차요금 (주차권 매수) — 넣지 않으면 null */
+  parking: { manCount: number; halfCount: number } | null;
+  /** 석식대 (여러 건) */
+  dinners: ExpendDinner[];
+};
+
+/** 지출결의서 기본값 — 주차권 매수는 매달 비슷하므로 저장해 재사용한다 */
+export type ExpendDefaults = {
+  manCount: number; // 만원권 매수
+  halfCount: number; // 5천원권 매수
+};
+
+export type ExpendResult = {
+  ok: boolean;
+  added?: number; // 실제로 작성된 항목 수
+  itemCount?: number; // 작성하려던 항목 수
+  error?: string;
+};
+
+/** 휴가신청서 인수인계 한 줄 — "[프로젝트명]: [팀원1], [팀원2]" 로 문서에 들어간다 */
+export type VacationHandover = {
+  project: string;
+  members: string; // 쉼표로 구분된 팀원 이름
+};
+
+/** 휴가신청서 기본값 — 매번 같은 값(비상연락망·인수인계)을 저장해 재사용한다 */
+export type VacationDefaults = {
+  emergencyContact: string; // 비상연락망 (본인 번호)
+  handovers: VacationHandover[];
+};
+
+/** 휴가신청서 — 근태구분(연차·반차·시차 등) */
+export type VacationInput = {
+  attDivName: string; // 근태구분 문구 (화면 콤보의 attDivName 과 동일 — 예: 연차)
+  fromDate: string; // 시작일자 "YYYY-MM-DD"
+  toDate: string; // 종료일자 "YYYY-MM-DD"
+  title: string; // 제목 (기본값은 렌더러가 만들어 미리 채운다)
+  remark: string; // 비고 (빈 값 허용)
+  /** 전자결재 본문의 '사유' 체크 항목 문구 (예: 휴식 · 여행 · 기타) */
+  reason: string;
+  /** 사유가 '기타' 일 때 괄호에 넣을 문구 */
+  reasonEtc?: string;
+  emergencyContact: string; // 본문 '비상연락망'
+  handovers: VacationHandover[]; // 본문 '인수인계'
+  /** 일정등록 캘린더 문구 조각 — 비우면 기본값(부재공유) */
+  calendarText?: string;
+};
+
+export type VacationResult = {
+  ok: boolean;
+  title?: string; // 작성된 문서 제목
+  dayCount?: string; // 화면이 계산한 신청일수
+  useDayCount?: string; // 화면이 계산한 연차차감
+  /** [결재상신] 이후 전자결재 문서 창까지 열려 내용이 채워졌는지 */
+  eaReady?: boolean;
+  /** 본문에서 자동으로 채우지 못한 항목 (사용자가 창에서 직접 채워야 한다) */
+  missed?: string[];
+  error?: string;
+};
+
+/** 휴가 현황 — 연차 잔여 + 제목 자동 생성에 쓰는 신청자 정보 */
+export type VacationStatus = {
+  total: string; // 총 연차일수
+  used: string; // 사용일수
+  rest: string; // 잔여연차
+  progress: string; // 결재 진행 연차
+  name: string; // 신청자 이름
+  chapter: string; // 챕터 (예: FE)
+  division: string; // 부문 (예: 플랫폼서비스사업부문)
+};
 
 // 출퇴근 리마인더 — 요일별로 출근/퇴근 알림 시각을 따로 설정
 export type ReminderSlot = {

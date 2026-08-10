@@ -33,8 +33,10 @@ import type {
   WorktreeAddInput,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
-  OvertimeProgress,
+  ApprovalProgress,
+  ExpendInput,
   OvertimeSubmitInput,
+  VacationInput,
 } from "../shared/types";
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -230,18 +232,31 @@ contextBridge.exposeInMainWorld("oneApp", {
       return () => ipcRenderer.removeListener("attendance:stamping", listener);
     },
   },
-  overtime: {
-    // 입력 기본값 조회 (마지막 상신 값)
-    getDefaults: () => ipcRenderer.invoke("overtime:defaults:get"),
-    // 연장근무내역서 작성·상신 (headless 브라우저 — 수십 초 소요)
-    submit: (input: OvertimeSubmitInput) =>
-      ipcRenderer.invoke("overtime:submit", input),
-    // 상신 진행 단계 구독 (로그인 → 작성 → 상신). 해제 함수를 반환한다.
-    onProgress: (cb: (progress: OvertimeProgress) => void) => {
-      const listener = (_e: unknown, progress: OvertimeProgress) =>
+  // 결재 — 야근(연장근무내역서) · 지출결의서(개인) · 휴가신청서
+  approval: {
+    // 입력 기본값 조회 (마지막 작성 값)
+    getOvertimeDefaults: () => ipcRenderer.invoke("approval:overtime:defaults"),
+    getExpendDefaults: () => ipcRenderer.invoke("approval:expend:defaults"),
+    getVacationDefaults: () => ipcRenderer.invoke("approval:vacation:defaults"),
+    // 연장근무내역서 작성·상신 (자동화 창 — 수십 초 소요)
+    submitOvertime: (input: OvertimeSubmitInput) =>
+      ipcRenderer.invoke("approval:overtime:submit", input),
+    // 지출결의서 항목 작성 (상신은 사용자가 열린 창에서 직접)
+    runExpend: (input: ExpendInput) =>
+      ipcRenderer.invoke("approval:expend:run", input),
+    // 휴가신청서 작성 + 내역추가 + 결재상신
+    submitVacation: (input: VacationInput) =>
+      ipcRenderer.invoke("approval:vacation:submit", input),
+    // 연차 현황 조회 (총·사용·잔여)
+    vacationStatus: () => ipcRenderer.invoke("approval:vacation:status"),
+    // 사용자에게 남겨둔 자동화 창 닫기
+    closeWindow: () => ipcRenderer.invoke("approval:close-window"),
+    // 진행 단계 구독 (양식 열기 → 작성 → 상신). 해제 함수를 반환한다.
+    onProgress: (cb: (progress: ApprovalProgress) => void) => {
+      const listener = (_e: unknown, progress: ApprovalProgress) =>
         cb(progress);
-      ipcRenderer.on("overtime:progress", listener);
-      return () => ipcRenderer.removeListener("overtime:progress", listener);
+      ipcRenderer.on("approval:progress", listener);
+      return () => ipcRenderer.removeListener("approval:progress", listener);
     },
   },
   weekly: {

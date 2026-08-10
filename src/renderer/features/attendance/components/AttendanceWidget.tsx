@@ -6,7 +6,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
-import { OvertimeModal } from '../../overtime';
+import { OvertimeModal } from '../../approval';
 import { publishAttendance } from '../lib/shared';
 
 type Busy = 'fetch' | 'come' | 'leave' | null;

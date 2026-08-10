@@ -5,7 +5,7 @@ paths:
   - "src/main/features/attendance/**"
   - "src/main/features/weekly/**"
   - "src/main/features/schedule/**"
-  - "src/main/features/overtime/**"
+  - "src/main/features/approval/**"
   - "src/main/lib/groupware.ts"
 ---
 
@@ -27,7 +27,11 @@ paths:
 
 ## 적용 현황
 - **메일·근태는 공용 세션**(근태 조회 4.5초 → **0.7초**, 6~7배).
-- **주간보고·야근결재·일정 등록은 아직 각자 로그인**하며 `main/lib/groupware.ts` 의 `withGroupwareLogin()` 직렬화 큐를 경유한다(공용 세션의 로그인도 같은 큐를 지나므로 서로 충돌하지 않음). 이들도 `gotoWithSession` 으로 옮기면 같은 이득을 얻지만, 야근결재는 상신(쓰기) 흐름이라 E2E 검증이 어려워 보류했다.
+- **결재(야근·휴가·지출결의서)도 공용 세션**을 쓴다 — 다만 puppeteer 가 아니라 Electron
+  `BrowserWindow` 자동화라 `gotoWithSession` 이 아니라 **`approval/gw.ts` 의 `gotoAsUser()`** 를 쓴다.
+  같은 쿠키 목록을 창 파티션(`ses.cookies.set`)에 주입하는 방식이고, 공용 세션을 못 얻으면
+  창에서 직접 폼 로그인하는 폴백이 있다(그 폴백도 `withGroupwareLogin` 큐 경유).
+- **주간보고·일정 등록은 아직 각자 로그인**하며 `main/lib/groupware.ts` 의 `withGroupwareLogin()` 직렬화 큐를 경유한다(공용 세션의 로그인도 같은 큐를 지나므로 서로 충돌하지 않음).
 - `standalone/` 은 별도 프로세스라 큐·세션이 공유되지 않는다.
 
 계정은 전부 환경설정의 비즈박스 계정 공용이다.

@@ -79,10 +79,17 @@ import type {
   WorktreeAddInput,
   WorktreeActionResult,
   WorktreeInfo,
+  ApprovalProgress,
+  ExpendDefaults,
+  ExpendInput,
+  ExpendResult,
   OvertimeDefaults,
-  OvertimeProgress,
   OvertimeSubmitInput,
   OvertimeSubmitResult,
+  VacationDefaults,
+  VacationInput,
+  VacationResult,
+  VacationStatus,
   TerminalCreateInput,
   TerminalSessionInfo,
   TerminalAttachResult,
@@ -185,10 +192,22 @@ declare global {
           cb: (action: 'come' | 'leave' | null) => void,
         ) => () => void;
       };
-      overtime: {
-        getDefaults: () => Promise<OvertimeDefaults>;
-        submit: (input: OvertimeSubmitInput) => Promise<OvertimeSubmitResult>;
-        onProgress: (cb: (progress: OvertimeProgress) => void) => () => void;
+      approval: {
+        getOvertimeDefaults: () => Promise<OvertimeDefaults>;
+        getExpendDefaults: () => Promise<ExpendDefaults>;
+        getVacationDefaults: () => Promise<VacationDefaults>;
+        submitOvertime: (
+          input: OvertimeSubmitInput,
+        ) => Promise<OvertimeSubmitResult>;
+        runExpend: (input: ExpendInput) => Promise<ExpendResult>;
+        submitVacation: (input: VacationInput) => Promise<VacationResult>;
+        vacationStatus: () => Promise<{
+          ok: boolean;
+          status?: VacationStatus;
+          error?: string;
+        }>;
+        closeWindow: () => Promise<{ closed: boolean }>;
+        onProgress: (cb: (progress: ApprovalProgress) => void) => () => void;
       };
       weekly: {
         fetch: (weekOffset: number, monWeek?: boolean) => Promise<WeeklyFetchResult>;

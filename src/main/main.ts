@@ -1,4 +1,6 @@
 import { registerApplinkIpc } from "./features/applink/ipc";
+import { registerApprovalIpc } from "./features/approval/ipc";
+import { closeKeptPage } from "./features/approval/keeper";
 import { registerAttendanceIpc } from "./features/attendance/ipc";
 import { registerChangesIpc } from "./features/changes/ipc";
 import { startReminderScheduler } from "./features/attendance/scheduler";
@@ -9,7 +11,6 @@ import { registerMirrorIpc } from "./features/mirror/ipc";
 import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
 import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
-import { registerOvertimeIpc } from "./features/overtime/ipc";
 import { registerProjectsIpc } from "./features/projects/ipc";
 import { registerPrsIpc } from "./features/prs/ipc";
 import {
@@ -53,7 +54,7 @@ registerMirrorIpc();
 registerJiraIpc();
 registerMailIpc();
 registerNightwatchIpc();
-registerOvertimeIpc();
+registerApprovalIpc();
 registerProjectsIpc();
 registerTerminalIpc();
 registerChangesIpc();
@@ -192,6 +193,8 @@ app.on("before-quit", () => {
   void stopTerminalServer();
   disposeMirror();
   disposeScheduleBrowser();
+  // 결재 작성용으로 사용자에게 남겨둔 자동화 창도 함께 정리
+  closeKeptPage();
 });
 
 // 모든 창이 닫히면 종료 (macOS 제외)

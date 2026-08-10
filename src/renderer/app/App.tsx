@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
 import { ToastProvider } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
+import { ApprovalSection } from "../features/approval";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
 import { JiraSection, isDone } from "../features/jira";
@@ -18,6 +19,7 @@ import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { runSectionBack, useHasSectionBack } from "../lib/sectionBack";
 import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
@@ -72,6 +74,12 @@ const SECTIONS: AppSection[] = [
     render: () => <ApplinkSection />,
   },
   {
+    id: "approval",
+    label: "결재",
+    icon: <Icon name="pencil" size={16} />,
+    render: () => <ApprovalSection />,
+  },
+  {
     id: "schedule",
     label: "일정 등록",
     icon: <Icon name="calendar" size={16} />,
@@ -119,6 +127,9 @@ export function App() {
   }, []);
 
   const goBack = useCallback(() => {
+    // 섹션 안에 하위 화면이 있으면(결재 폼 → 목록) 먼저 그쪽을 닫는다.
+    // 이게 없으면 뒤로가기가 섹션을 통째로 떠나 "메뉴가 아예 바뀐다".
+    if (runSectionBack()) return;
     setActiveId((cur) => {
       const prev = backStack.current.pop();
       if (!prev) return cur;
@@ -222,6 +233,8 @@ export function App() {
   }, []);
 
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
+  // 섹션 내부에 돌아갈 하위 화면이 있으면 히스토리가 비어 있어도 뒤로 버튼을 살린다
+  const hasSectionBack = useHasSectionBack();
 
   // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환
   useEffect(() => {
@@ -283,7 +296,7 @@ export function App() {
                   type="button"
                   className="icon-btn"
                   onClick={goBack}
-                  disabled={backStack.current.length === 0}
+                  disabled={backStack.current.length === 0 && !hasSectionBack}
                   title="뒤로 (⌘[)"
                 >
                   <Icon name="chevron-left" size={16} />

@@ -2,17 +2,15 @@
 paths:
   - "src/main/features/schedule/**"
   - "src/main/features/attendance/**"
-  - "src/main/features/overtime/**"
   - "src/main/features/weekly/**"
   - "src/main/features/mail/**"
   - "src/renderer/features/schedule/**"
   - "src/renderer/features/attendance/**"
-  - "src/renderer/features/overtime/**"
   - "src/renderer/features/weekly/**"
   - "src/renderer/features/mail/**"
 ---
 
-# 그룹웨어 기능 (일정 등록 · 출퇴근 · 야근 결재 · 주간보고 · 메일)
+# 그룹웨어 기능 (일정 등록 · 출퇴근 · 주간보고 · 메일)
 
 > 로그인·쿠키는 전부 공용 세션 모듈 담당 — `groupware-session` 규칙을 함께 볼 것.
 
@@ -46,23 +44,14 @@ paths:
 - ⚠️ **`alertOpen`·`inProgress` 는 저장하지 않는다** — 프로세스 생명주기 상태라, 저장하면 알럿이 떠 있던 채로 죽었을 때 그날 내내 발화가 막힌다.
 - **타이머 유휴화**: 설정에 켜진 슬롯이 하나도 없으면 30초 인터벌 자체를 안 돌린다(`refreshReminderSchedule()` — `reminders:set` 이 저장 후 호출하므로 재시작 없이 켜고 꺼진다). 요일 판정은 tick 이 계속 하므로 여기서는 설정만 본다(주말이어도 타이머는 돌고 tick 이 즉시 반환). ⚠️ 이득은 **리마인더를 전부 꺼둔 사용자에게만** 있다.
 
-## 야근 결재 (연장근무내역서 상신)
-`renderer/features/overtime` + `main/features/overtime`
+## 야근 결재 → **결재 기능으로 이동** (`features/approval.md`)
+야근 결재(연장근무내역서)는 휴가신청서·지출결의서와 함께 **결재 섹션**(`features/approval`)으로 합쳤고,
+자동화도 puppeteer 에서 **Electron BrowserWindow** 로 바뀌었다. 상세·함정은 `features/approval` 규칙을 볼 것.
 
-진입점은 **출퇴근 위젯의 아이콘 버튼**(`sbw__overtime`) → `OvertimeModal`. **상신(쓰기) 흐름이라 MO(폰) 셸에서는 이 클래스를 숨겨 제외**한다. 사이드바를 접었을 때는 근태 아이콘 타일 → 팝오버 안에 이 버튼이 있다(공용 `SidebarWidget` — 예전엔 축소 모드에서 `.sbw__actions` 가 감춰져 진입로 자체가 없었다).
-
-headless 브라우저로 전자결재 **연장근무내역서 양식 팝업**(`EAAppDocPop.do?form_id=41`)을 URL 로 직접 열어 제목·근무자 표·업무내용을 채우고 [상신]까지 자동화한다. 결재선 기본값이 '본인'이라 **승인은 사용자가 미결함에서 직접** 한다. 완료 후 모달의 '결재하러 가기'가 `docViewUrl(docId)` 를 기본 브라우저로 연다. 그룹웨어 화면이 바뀌면 `config.ts` 의 `selectors` 만 고치면 된다.
-
-로그인은 공용 세션이 아니라 `withGroupwareLogin()` **직렬화 큐**를 경유한다(쓰기 흐름이라 E2E 검증이 어려워 `gotoWithSession` 이관 보류 — `groupware-session` 규칙 참고). 시스템 설치 Chrome 을 쓴다(`channel: 'chrome'` — 배포판에 Chromium 을 동봉하지 않기 위함).
-
-⚠️ **함정 (제거하면 조용히 실패한다)**
-- `waitFormReady` 는 제목·에디터 본문뿐 아니라 **품의번호(`#ddlNumberingID`)·결재라인 JSON(`#hidAppDocLine`)·[상신] 버튼의 jQuery click 핸들러 바인딩**까지 확인한다. 덜 로드된 상태에서 누르면 **경고만 뜨고 조용히 무시**된다.
-- 본문은 **이중 iframe**(`#editorView` → `#dzeditor_0`) 안의 contentEditable 문서를 직접 수정한다.
-- [상신]은 좌표 클릭이 로딩 오버레이에 가로채이므로 **JS `.click()` 으로 핸들러를 직접 발화**한다.
-- 성공 판정은 `#hidDocID` 가 **새 문서 id 로 바뀌는 것**이고, 실패는 커스텀 다이얼로그 `.PUDD-UI-Message`(네이티브 dialog 아님)의 문구다 — `page.on('dialog')` 로는 못 잡는다.
-- 30초 내 응답을 확인 못 하면 **재시도하지 말라고 안내**한다(이미 상신됐을 수 있음). 모듈 스코프 `running` 플래그로 동시 실행도 막는다.
-
-업무 대상·수행 내용·연장근무 사유는 마지막 값을 `userData/overtime.json`(평문)에 저장해 다음 입력 기본값으로 쓴다.
+출퇴근 위젯의 아이콘 버튼(`sbw__overtime`) → `OvertimeModal` 진입점은 그대로 유지된다(모달 본문은
+결재 섹션의 `OvertimeForm` 재사용). **상신(쓰기) 흐름이라 MO(폰) 셸에서는 이 클래스를 숨겨 제외**한다.
+사이드바를 접었을 때는 근태 아이콘 타일 → 팝오버 안에 이 버튼이 있다(공용 `SidebarWidget` — 예전엔
+축소 모드에서 `.sbw__actions` 가 감춰져 진입로 자체가 없었다).
 
 ## 주간보고
 `renderer/features/weekly` + `main/features/weekly`

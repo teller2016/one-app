@@ -90,3 +90,6 @@ typings/
 
 # Electron-Forge
 out/
+
+# Playwright MCP 아티팩트 (페이지 스냅샷·콘솔 로그 — 그룹웨어 내용이 담길 수 있어 커밋 금지)
+.playwright-mcp/

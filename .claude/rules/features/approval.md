@@ -1,0 +1,186 @@
+---
+paths:
+  - src/main/features/approval/**
+  - src/renderer/features/approval/**
+---
+
+# 결재 (야근 결재 · 휴가신청서 · 지출결의서)
+
+`renderer/features/approval` + `main/features/approval` — 사이드바 **결재** 섹션에서 종류를 고르면
+그 폼으로 들어간다. 야근 결재는 **출퇴근 위젯의 아이콘 버튼**(`OvertimeModal`)에서도 열리며,
+모달 본문은 섹션과 **같은 `OvertimeForm` 을 재사용**한다(로직 중복 없음).
+
+계정은 환경설정의 비즈박스 공용. 입력 기본값은 `userData/approval.json`(평문)에 저장하고,
+합치기 전 저장본(`overtime.json`)이 있으면 처음 읽을 때 승격한다.
+
+## ⚠️ 세 결재 모두 "작성만" 한다 — [상신] 은 사용자가 누른다
+버튼은 전부 **[작성 시작]** 이고, 자동화 창은 **처음부터 보이게** 띄운다(채워지는 걸 눈으로 보라고).
+작성이 끝나면 `releasePage()` 로 자동화 장치를 걷어내고 `keepPage()` 로 창을 넘긴다.
+앱이 [상신]·[결재]를 대신 누르지 않는 것이 이 기능의 방침이다(2026-08 사용자 결정).
+
+- ⚠️ `releasePage()` 를 빼면 사용자가 [상신] 을 눌렀을 때 **자동화용 confirm(항상 '예')이 확인창을
+  몰래 승낙해** 창이 닫히는 등 흐름이 깨진다.
+- 결과 화면은 [창 닫기](`approval:close-window`) + [창 그대로 두고 계속] 두 갈래.
+
+## 섹션 내부 뒤로가기
+결재는 **목록 → 폼** 2단이라, 폼에서 뒤로가기를 누르면 섹션을 떠나는 게 아니라 목록으로 돌아가야 한다.
+`renderer/lib/sectionBack.ts` 에 핸들러를 등록해 App 의 `goBack` 이 **섹션 내부를 먼저 소비**한다
+(⌘[ · 탑바 버튼 · 마우스 뒤로 · 스와이프 전부 같은 경로). 탑바 뒤로 버튼은 히스토리가 비어 있어도
+`useHasSectionBack()` 으로 살려 둔다. 하위 화면이 있는 다른 섹션도 이 훅을 쓰면 된다.
+
+목록으로 돌아가는 눈에 보이는 경로는 **제목 앞의 공용 `.icon-btn`(chevron-left)** 이다.
+`SectionHeader` 의 `icon` 슬롯에 [버튼 + 결재 종류 아이콘] 을 나란히 넣는다.
+
+- ⚠️ **버튼에 공용 클래스를 붙이지 않으면 UA 기본 회색 배경이 그대로 나온다** — 이 프로젝트에는
+  전역 `button` 리셋이 없고 `.btn`·`.icon-btn` 같은 클래스가 각자 `border:none; background:transparent`
+  를 설정한다. 자체 클래스만 만들고 `background` 를 hover 에만 주면 평상시 버튼이 깨져 보인다
+  (2026-08 실측 — 사용자 지적).
+
+## ⚠️ 자동화는 puppeteer 가 아니라 Electron `BrowserWindow` 다 (`browser.ts`)
+`standalone/overtime` 판에서 이식했다. puppeteer 를 쓰지 않는 이유가 두 가지다.
+
+1. **시스템 Chrome 이 필요 없다** — Chromium 이 앱에 들어 있다.
+2. **작성한 창을 사용자에게 그대로 넘길 수 있다** — 지출결의서(첨부·상신)·미리보기가 이 위에 선다.
+   `releasePage()` 가 자동화 장치(alert/confirm 가로채기·오프너 교체)를 걷어낸 뒤 넘긴다.
+   **이걸 빼면** 사용자가 [결재상신] 을 눌렀을 때 자동화용 confirm(항상 '예')이 확인창을
+   몰래 승낙해 창이 닫힌다.
+
+puppeteer 대응표: `page.goto`→`goto()` · `page.evaluate`→`evalInPage()` ·
+`page.waitForFunction`→`waitInPage()` · 팝업→`openPage(..,{allowPopups:true})`+`waitForPopup()`.
+
+- ⚠️ **`evalInPage` 의 fn 은 문자열로 직렬화된다** — 바깥 스코프 변수를 참조할 수 없다. 값은 `args` 로.
+- ⚠️ **`window.open`·`window.close` 를 실행하는 스크립트는 `executeJavaScript` 가 반환하지 않는다**
+  (2026-07 실측). 그런 호출은 `fireInPage()` 로 발화만 하고 성공은 **창 상태**로 판정한다.
+- ⚠️ **`outlivesOpener: true` 는 자동화 중 팝업에도 필요하다.** 그룹웨어 결재는 "새 창을 열고
+  자기 창을 닫는" 방식으로 단계를 넘어가는데, Electron 기본값(false)이면 opener 가 닫히는 순간
+  자식 창까지 파괴된다. 휴가신청서 [결재상신] 이 정확히 이 모양이라 여기서 걸린다.
+- ⚠️ `disableDialogs` 를 켜지 말 것 — 사용자가 이어서 쓰는 창의 확인창과 **창 닫기까지** 막힌다.
+  대신 `will-prevent-unload` 를 preventDefault 해 이탈 가드가 걸린 화면도 X 로 닫히게 한다.
+- 알럿 문구는 버리지 않고 `window.__autoAlerts` 에 모아 `takeAlerts()` 로 읽는다 — 지출결의서
+  검증 오류가 alert 로 오기 때문에 지우면 실패 이유를 알 수 없다.
+
+## 로그인은 공용 세션 쿠키 주입 (`gw.ts`)
+`gotoAsUser(page, url)` 가 **공용 세션**(`features/groupware/session.ts`)의 쿠키를 자동화 창
+파티션에 주입해 로그인 화면을 건너뛴다. 튕기면 1회 재로그인, 공용 세션 자체를 못 얻으면
+(Chrome 미설치 등) 창에서 직접 폼 로그인한다(`withGroupwareLogin` 큐 경유).
+→ `groupware-session` 규칙의 '적용 현황' 을 함께 볼 것.
+
+## 야근 결재 (연장근무내역서)
+전자결재 양식 팝업 `EAAppDocPop.do?form_id=41` 을 URL 로 직접 열어 제목·근무자 표·업무내용을
+채우고 **창을 넘긴다**(`runOvertimeDraft`). 결재선 기본값이 '본인'이라 상신 후 미결함에서
+본인이 승인하면 끝난다.
+
+⚠️ **함정 (제거하면 조용히 실패한다)**
+- `waitFormReady` 는 제목·에디터 본문뿐 아니라 **품의번호(`#ddlNumberingID`)·결재라인
+  JSON(`#hidAppDocLine`)·[상신] 버튼의 jQuery click 핸들러 바인딩**까지 확인한다.
+  덜 로드된 상태에서 누르면 **경고만 뜨고 조용히 무시**된다.
+- 본문은 **이중 iframe**(`#editorView` → `#dzeditor_0`) 안 contentEditable 문서를 직접 수정한다.
+- [상신]은 좌표 클릭이 로딩 오버레이에 가로채이므로 **JS `.click()`** 으로 핸들러를 직접 발화.
+- 성공 판정은 `#hidDocID` 가 **새 문서 id 로 바뀌는 것**, 실패는 커스텀 다이얼로그
+  `.PUDD-UI-Message`(네이티브 dialog 아님)의 문구다.
+- 30초 내 응답을 못 보면 **재시도하지 말라고 안내**한다(이미 상신됐을 수 있음).
+
+## 휴가신청서 (2026-08 조사)
+전자결재가 아니라 **근태 서브시스템**이다 — `/attend/Views/Common/pop/eaPop.do?processId=ATTProc18&form_id=18&…`.
+iframe 도 `<form>` 도 없고 Kendo 위젯으로 되어 있다.
+
+화면 흐름과 실제 함수:
+```
+Step01 기본정보  #names(신청자) · #eaTitle(제목) · #sch_sel(일정등록 ComboBox)
+Step02 신청정보  #gt_sel(근태구분 ComboBox) · #from_date/#to_date(DatePicker)
+                 #dayCnt(신청일수) · #useDayCnt(연차차감) — 둘 다 화면이 자동계산
+                 #reqRemark(비고, 선택)
+   [내역추가] = addAnnualLeave()  → 중복확인 ajax 후 #grid 에 행 추가 (서버 기록 없음)
+Step03 신청내역  #grid (Kendo Grid) · 연차 현황 #person_*
+   [결재상신] = save()
+```
+
+**`save()` 의 실제 동작** — 이걸 알아야 자동화가 성립한다.
+```
+window.open('', '_blank')            ← 빈 창을 먼저 연다 (URL 로 판정하면 안 되는 이유)
+→ ajax /attend/WebAttend/InsertEaAttReq   (근태신청 저장)
+→ docApprove()  → ajax /eap/ea/interface/eadocmake.do   (전자결재 문서 생성 → docId)
+→ updateEaAttDoc() → ajax /attend/WebAttend/UpdateEaAttDocId
+→ 빈 창의 location = /eap/ea/interface/eadocpop.do?…docId=…
+→ 작성 창은 self.close()
+```
+- ⚠️ **팝업이 잡히는 시점엔 아직 about:blank** 다 — URL 이 아니라 **요소(`#btnDraft`)가 나타날
+  때까지** 기다린다. ajax 3회 + 페이지 로드라 대기를 60초로 잡았다.
+- ⚠️ **작성 창이 스스로 닫힌다** — 위의 `outlivesOpener` 가 없으면 전자결재 창이 함께 죽는다.
+  (2026-08 실측으로 확인: 수정 후 작성 창이 닫혀도 전자결재 창이 살아남는다)
+
+**이어지는 전자결재 창은 결국 `EAAppDocPop.do` 다**(2026-08 실측 — `/eap/ea/interface/eadocpop.do`
+가 그리로 넘긴다). 그래서 연장근무내역서와 같은 선택자가 통한다. `prepareEaWindow` 가 여기까지
+준비하고 창을 넘긴다 — **[상신] 은 누르지 않는다**.
+
+- 그룹웨어가 알아서 채워 주는 것: 근태 표(docContent)·연차 현황 줄·**결재선 4단**(매니저→리더 합의
+  →PM→이사)·수신및참조(경영지원실)·품의번호. 앱은 제목이 비었을 때만 보강한다.
+
+### 본문 서식 채우기 (`fillDocBody`)
+에디터(이중 iframe) 안 휴가신청서 표의 **종류·사유·기간·비상연락망·인수인계·작성 년월일**을 앱이 채운다.
+
+- ⚠️ **체크박스에 id·name 이 없다.** 구조가 `<span contenteditable="false"><input type="checkbox"></span>`
+  + 그 **뒤에 오는 텍스트가 라벨**이라, 감싼 span 의 `nextSibling` 을 다음 체크박스 전까지 모아
+  라벨로 쓴다. `input.nextSibling` 을 보면 항상 비어 있으니 주의.
+- 표기가 콤보와 다르다 — 근태구분 '오전반차' → 본문 '반차(오전)'. `attDivToDocKind` 표로 옮기고,
+  표에 없는 값(공가 등)은 **'기타' 에 체크하고 괄호에 원래 문구**를 넣는다.
+- `checked` 프로퍼티만 켜면 HTML 직렬화에 안 실릴 수 있어 **`setAttribute('checked')` 도 함께** 박는다.
+- 기간·비상연락망·인수인계는 셀의 `<p>` 서식(`style`)을 그대로 물려 텍스트만 갈아끼운다.
+  인수인계는 줄마다 `<p>` — `프로젝트명: 팀원1, 팀원2` 형식.
+- 작성 년월일은 `"2026 년 월 일"` 만 있는 문단을 찾아 채운다(안내 문장은 건드리지 않는다).
+- 채우지 못한 항목은 `missed[]` 로 돌려주고 UI 가 "창에서 직접 채우세요" 로 안내한다.
+
+**비상연락망·인수인계는 매번 같으므로 `approval.json` 의 `vacation` 에 저장**해 다음 입력에 채운다
+(`VacationDefaults`). 사유는 매번 고르게 두었다(기타 선택 시 괄호 문구 입력칸이 붙는다).
+- ⚠️ **에디터(이중 iframe)가 로딩을 끝낼 때까지 기다려야 한다** — `loading` 상태에서 사용자가
+  [상신] 을 누르면 경고만 뜨고 조용히 무시된다(연장근무내역서와 같은 함정).
+- 결재선까지 확인되면 `eaReady: true`. 못 붙어도 창은 넘긴다(사용자가 화면에서 지정 가능).
+- ⚠️ **[결재상신] 은 서버에 근태신청을 저장한다**(`InsertEaAttReq`) — 이후 상신을 안 해도 신청
+  레코드와 '작성 중' 전자결재 문서가 남는다. 검증용으로 돌렸다면 그룹웨어에서 정리할 것.
+
+**Kendo 위젯 입력** — `input.value` 에 직접 쓰면 위젯 모델이 갱신되지 않아 코드가 비어 나간다.
+ComboBox 는 `value()/text()/trigger('change')`, DatePicker 는 `value(Date)/trigger('change')`.
+날짜 change 를 발화해야 화면이 신청일수·연차차감을 서버에서 계산해 채운다.
+
+**근태구분 코드**(`attDivCode`): 연차 11 · 오전반차 12 · 오후반차 13 · 시차_1시간 6000 ·
+시차_2시간 6001 · 공가 5001 · 대체휴가 5002 · 출산휴가 16 · 산전후휴가 17 · 육아휴직 18 ·
+무급휴직 6002 · 기타휴직 14 · 무급보건휴가 15. **코드가 아니라 이름(attDivName)으로 찾는다**
+(코드가 바뀌어도 견디게).
+
+**일정등록**은 `[전사] 부재공유 캘린더`(mcalSeq 113)가 기본 — 문구 조각 '부재공유' 로 찾는다.
+
+**제목 형식**은 사용자 관례를 따른다 — `[휴가_연차] 정수범_FE_플랫폼서비스사업부문 [8월 27일]`.
+이름·챕터는 `#names`("[(주)포비즈코리아/FE] 정수범")에서 파싱하고 부문은 `WORKER_DEPT` 앞부분.
+폼은 이름을 모르는 동안 `이름_소속` 자리표시를 보여주고, **자리표시가 남아 있으면 사용자가
+고친 것으로 치지 않고** main 이 다시 만든다(그대로 상신되면 곤란하다).
+
+## 지출결의서(개인)
+전자결재와 다른 지출 전용 화면(`/exp/`). 항목만 채우고 **상신하지 않고 창을 남긴다** —
+첨부파일·결재상신은 사용자가 직접.
+
+- ⚠️ **결재양식 목록에서 클릭해 팝업으로 띄워야** 한다. URL 을 직접 열면 `window.opener` 가 없어
+  [결재상신] 때 창만 닫히고 결재선 팝업이 안 열린다(2026-07 실측). 그래서 숨긴 목록 창(shell)을
+  opener 로 살려 두고 `keepPage(page, shell)` 로 함께 관리한다.
+- ⚠️ 표준적요·증빙유형·카드는 **'찾기' 도움창에서 골라야** 코드가 채워진다(직접 입력하면 저장 안 됨).
+  도움창은 ①검색어가 넘어가 1건이면 스스로 닫힘 ②목록에서 선택 ③검색 — 세 갈래라 **상태를 폴링**해
+  대응하고, 성공은 **부모 화면의 코드 칸이 찼는지**로만 판정한다(도움창이 이미 닫혔을 수 있다).
+- ⚠️ `CM_FNC_CALL_POPUP` 을 갈아끼워 **창 이름을 매번 다르게** 한다. 원본은 같은 이름을 재사용하는데
+  두 번째 항목에서 `window.open` 이 돌아오지 않아 자동화가 멈춘다(2026-07 실측).
+- ⚠️ 금액칸은 **keyup 이 핵심** — 자동계산(공급대가→공급가액·부가세)과 콤마 마스킹이 keyup 에
+  걸려 있어, 빼면 공급가액·부가세가 0 으로 남는다.
+- 주차 공급대가 = (만원권×10,000 + 5천원권×5,000) ÷ 2, 증빙일자는 그 달 말일.
+
+## 검증 현황 (2026-08-10)
+E2E 방법은 `one-app-e2e-verify` 메모 참고 — `--remote-debugging-port` + `puppeteer.connect` 로
+`window.oneApp.approval.*` 를 직접 호출하면 main 자동화를 단독 검증할 수 있다.
+
+실제 그룹웨어로 통과 확인:
+- 야근 결재 — 제목·근무자 표·업무내용 3줄 (에디터 iframe 을 직접 읽어 대조)
+- 휴가신청서 — 작성 → 내역추가 → **결재상신 → 전자결재 창 + 본문 서식까지 전 구간**
+  (종류 ☑연차 · 사유 ☑휴식 · 기간 `2026 년 9 월 1 일 부터 … ( 1 일간)` · 비상연락망 ·
+  인수인계 2줄 · 작성일자 — `missed` 없음)
+- 지출결의서 — 1건 및 **3건(주차 1 + 석식 2)**. 다중 항목이 `patchPopupOpener` 경로를 태운다
+- 연차 현황 조회 · 라이트/다크 테마 · 섹션 내부 뒤로가기
+
+**앱이 [상신] 을 누르지 않으므로** 이제 전 구간을 실행해도 결재 문서가 올라가지는 않는다.
+단 휴가의 [결재상신] 은 근태신청을 저장하니 검증 후 정리가 필요하다(위 참고).

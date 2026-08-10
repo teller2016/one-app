@@ -37,9 +37,9 @@ src/
 ```
 
 **기능 목록**
-- **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 프로젝트 · 딥링크 · 일정 등록 · 주간보고 · 환경설정
+- **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
 - **사이드바 위젯**: 메일(상단) · 폰 미러링 · VPN · 출퇴근(하단 — 야근 결재 모달 진입점 포함)
-- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재(출퇴근 위젯의 모달)
+- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용)
 - **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리) · `tray`
 
 ## ⚠️ 반드시 지킬 것
@@ -80,7 +80,8 @@ src/
 | `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
 | `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
 | `features/mo-app.md` | `src/mobile-app/**` · moIpc · rpc | RPC shim·broadcast fan-out·폰 셸 |
-| `features/groupware-apps.md` | schedule · attendance · overtime · weekly · mail | 다섯 기능의 동작·실측 함정 |
+| `features/approval.md` | approval | 결재 3종(야근·휴가·지출결의서)·BrowserWindow 자동화 함정 |
+| `features/groupware-apps.md` | schedule · attendance · weekly · mail | 네 기능의 동작·실측 함정 |
 | `features/devops.md` | projects · deploy · prs · jira · nightwatch | 프로젝트 레지스트리·젠킨스·Gitea·Jira·분석 미션 |
 | `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
