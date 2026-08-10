@@ -33,6 +33,7 @@ export const SessionTabs = memo(function SessionTabs({
   sessions,
   activeId,
   draggingId,
+  groupMarks,
   canCreate,
   changesOpen,
   moRunning,
@@ -43,12 +44,15 @@ export const SessionTabs = memo(function SessionTabs({
   onOpenMo,
   onDragStartSession,
   onDragEndSession,
+  onDetachSession,
 }: {
-  /** 현재 선택(워크트리 또는 '기타')에 속한 세션들 */
+  /** 현재 선택(워크트리 또는 '기타')에 속한 세션들 — 그룹 멤버가 인접하게 정렬돼 온다 */
   sessions: TerminalSessionInfo[];
   activeId: string | null;
   /** 지금 끌리는 세션 — 드롭 존을 그리는 TerminalSection 이 상태를 소유한다 */
   draggingId: string | null;
+  /** 분할 그룹 묶음 표시 — 멤버 세션 id → 묶음 내 위치 (그룹이 없으면 null) */
+  groupMarks: Map<string, 'start' | 'mid' | 'end'> | null;
   /** 워크트리가 선택돼 있을 때만 새 세션을 만들 수 있다 ('기타'는 위치가 없다) */
   canCreate: boolean;
   changesOpen: boolean;
@@ -60,11 +64,22 @@ export const SessionTabs = memo(function SessionTabs({
   onOpenMo: () => void;
   onDragStartSession: (id: string) => void;
   onDragEndSession: () => void;
+  /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리(혼자 보기) */
+  onDetachSession: (id: string) => void;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 탭을 더블클릭하면 제목이 입력창으로 바뀐다
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  // 분리 드롭 존 표시 — 그룹 멤버를 끌어 탭바 위에 올렸을 때만
+  const [detachHover, setDetachHover] = useState(false);
+  // 끌리는 탭이 그룹 멤버일 때만 탭바가 '분리' 드롭 존이 된다
+  const detachable = !!draggingId && !!groupMarks?.has(draggingId);
+  /** 드래그 시작한 자기 탭 위인지 — 제자리 드롭(클릭에 가까운 손놀림)을 분리로 오인하지 않게 */
+  const overSelfTab = (e: ReactDragEvent) => {
+    const tab = (e.target as HTMLElement).closest?.('[data-session]');
+    return tab instanceof HTMLElement && tab.dataset.session === draggingId;
+  };
 
   // Enter·blur 공용 — 빈 값이나 변경 없음이면 조용히 닫는다(main 도 같은 판정을 한다)
   const commitRename = async () => {
@@ -81,7 +96,29 @@ export const SessionTabs = memo(function SessionTabs({
   };
 
   return (
-    <div className="terminal__tabs">
+    /* 그룹 멤버를 끌어 올리면 탭바 전체가 '그룹에서 분리' 드롭 존이 된다 — pane 위
+       드롭 존(분할·교체)과 달리 "탭으로 돌려보낸다" = 혼자 보기. 자기 탭 위에서는
+       preventDefault 를 안 해 드롭이 성립하지 않는다(제자리 드롭 = 취소). */
+    <div
+      className={`terminal__tabs${detachHover ? ' terminal__tabs--detach' : ''}`}
+      onDragOver={(e) => {
+        if (!detachable) return;
+        if (overSelfTab(e)) {
+          setDetachHover(false);
+          return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDetachHover(true);
+      }}
+      onDragLeave={() => setDetachHover(false)}
+      onDrop={(e) => {
+        if (!detachable) return;
+        e.preventDefault();
+        setDetachHover(false);
+        if (draggingId) onDetachSession(draggingId);
+      }}
+    >
       <div className="terminal__tabs-list" role="tablist" aria-label="터미널 세션">
         {sessions.map((s, i) =>
           editingId === s.id ? (
@@ -107,10 +144,14 @@ export const SessionTabs = memo(function SessionTabs({
                드래그 = 분할 드롭 소스 (WorkspaceNav 의 dragSource 와 같은 규칙) */
             <span
               key={s.id}
+              data-session={s.id}
               className={[
                 'terminal__tab',
                 s.id === activeId ? 'terminal__tab--active' : '',
                 s.id === draggingId ? 'terminal__tab--dragging' : '',
+                groupMarks?.has(s.id)
+                  ? `terminal__tab--grouped terminal__tab--group-${groupMarks.get(s.id)}`
+                  : '',
               ]
                 .filter(Boolean)
                 .join(' ')}

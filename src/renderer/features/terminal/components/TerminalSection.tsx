@@ -28,8 +28,12 @@ import {
   computeLayout,
   deserializeLayout,
   dropSideAt,
+  findSplit,
+  groupOf,
   moveSession,
   panelsOf,
+  removeFromGroups,
+  replaceGroup,
   replaceSession,
   sanitizeLayout,
   sessionIdsOf,
@@ -146,19 +150,22 @@ function savedSelection(): WorkspaceSelection | null {
   }
 }
 
-// ── 분할 레이아웃 (lib/layout.ts) — selKey → 이진 트리 맵을 localStorage 에 기억 ──
+// ── 분할 그룹 (lib/layout.ts) — selKey → 트리 **배열**을 localStorage 에 기억 ──
 // terminal:lastActive 와 같은 방식. 세션 생존 여부는 여기서 보지 않는다(로드 시점엔
 // 세션 목록이 없다) — sessionsReady 이후 sanitize effect 가 걷어낸다.
-function savedLayouts(): Record<string, LayoutNode> {
+function savedLayouts(): Record<string, LayoutNode[]> {
   try {
     const raw = JSON.parse(
       localStorage.getItem(LAYOUT_STORAGE_KEY) ?? '{}'
     ) as Record<string, unknown>;
-    const out: Record<string, LayoutNode> = {};
+    const out: Record<string, LayoutNode[]> = {};
     for (const [key, v] of Object.entries(raw)) {
-      const tree = deserializeLayout(v);
-      // 단일 panel 트리는 저장 대상이 아니다(단일 모드 = 트리 없음) — 손상 방어
-      if (tree && tree.kind === 'split') out[key] = tree;
+      const list = Array.isArray(v) ? v : [v]; // 구버전(트리 하나) 호환
+      const trees = list
+        .map(deserializeLayout)
+        // 단일 panel 트리는 저장 대상이 아니다(그룹 = pane 2개 이상) — 손상 방어
+        .filter((t): t is LayoutNode => !!t && t.kind === 'split');
+      if (trees.length > 0) out[key] = trees;
     }
     return out;
   } catch {
@@ -166,10 +173,13 @@ function savedLayouts(): Record<string, LayoutNode> {
   }
 }
 
-function persistLayouts(map: Record<string, LayoutNode>): void {
+function persistLayouts(map: Record<string, LayoutNode[]>): void {
   if (Object.keys(map).length === 0) localStorage.removeItem(LAYOUT_STORAGE_KEY);
   else localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(map));
 }
+
+/** 그룹이 하나도 없는 selKey 에 쓰는 고정 빈 배열 — 매번 [] 를 만들면 파생 memo 가 깨진다 */
+const NO_GROUPS: LayoutNode[] = [];
 
 /** 단일 모드(트리 없음)의 드롭 존이 쓰는 전체 화면 rect + 가상 panelId */
 const FULL_RECT: PaneRect = { left: 0, top: 0, width: 100, height: 100 };
@@ -197,8 +207,8 @@ export function TerminalSection() {
     () => localStorage.getItem('terminal:changesOpen') === '1'
   );
   const [changesFullOpen, setChangesFullOpen] = useState(false);
-  // 분할 레이아웃 트리 — selKey 별. 파생값·갱신·영속화는 아래 '분할 레이아웃' 블록
-  const [layouts, setLayouts] = useState<Record<string, LayoutNode>>(savedLayouts);
+  // 분할 그룹(트리 배열) — selKey 별. 파생값·갱신·영속화는 아래 '분할 그룹' 블록
+  const [layouts, setLayouts] = useState<Record<string, LayoutNode[]>>(savedLayouts);
   const available = !!terminalApi();
 
   const [fontSize, setFontSize] = useState(savedFontSize);
@@ -417,25 +427,32 @@ export function TerminalSection() {
   const selKeyRef = useRef(selKey);
   selKeyRef.current = selKey;
 
-  // ── 분할 레이아웃 — selKey 별 이진 트리 (lib/layout.ts) ──
-  // 트리는 pane 2개 이상일 때만 존재한다. 1개로 붕괴하면 키를 지워 단일 모드
-  // (활성 pane flex + 숨은 pane --hidden inset:0)로 되돌린다 — 최빈 경로(단일)의
-  // 렌더가 오늘과 완전히 같도록 구조적으로 보장한다.
-  const layout = layouts[selKey] ?? null;
-  const layoutIds = useMemo(() => (layout ? sessionIdsOf(layout) : null), [layout]);
+  // ── 분할 그룹 — selKey 별 이진 트리 **배열** (lib/layout.ts, 2026-08-10 개편) ──
+  // **화면은 activeId 의 함수다**: 포커스 세션이 그룹에 속하면 그 그룹 전체가 보이고,
+  // 어디에도 안 속하면 혼자 전체 화면이다. 그룹 밖 탭을 눌러도 그룹은 해체되지 않고
+  // 화면만 바뀐다(예전 '포커스 슬롯 교체' 의미론은 그룹을 덮어써서 폐기 — 사용자 지적).
+  // 그룹은 pane 2개 이상일 때만 존재하고, 1개로 붕괴하면 배열에서 빠져 단일로 복귀한다.
+  const groups = layouts[selKey] ?? NO_GROUPS;
+  const activeTree = useMemo(
+    () => (activeId ? groupOf(groups, activeId) : null),
+    [groups, activeId]
+  );
+  const activeGroupIds = useMemo(
+    () => (activeTree ? sessionIdsOf(activeTree) : null),
+    [activeTree]
+  );
 
-  const updateLayout = useCallback((key: string, next: LayoutNode | null) => {
+  const updateGroups = useCallback((key: string, next: LayoutNode[]) => {
     setLayouts((cur) => {
-      const tree = next && next.kind === 'split' ? next : null; // 단일 승격 → 트리 소멸
-      const prev = cur[key] ?? null;
-      if (prev === tree) return cur;
-      if (!tree) {
+      const prev = cur[key] ?? NO_GROUPS;
+      if (prev === next) return cur;
+      if (next.length === 0) {
         if (!(key in cur)) return cur;
         const rest = { ...cur };
         delete rest[key];
         return rest;
       }
-      return { ...cur, [key]: tree };
+      return { ...cur, [key]: next };
     });
   }, []);
 
@@ -447,34 +464,99 @@ export function TerminalSection() {
     persistLayouts(layouts);
   }, [layouts]);
 
-  // 죽은 세션을 레이아웃에서 걷어낸다(형제 승격 → 마지막 1개면 트리 소멸) —
+  // 죽은 세션을 그룹에서 걷어낸다(형제 승격 → 1개 남으면 그룹 해체) —
   // ⌘⇧W·자연사·외부 tmux kill 이 전부 여기로 수렴한다.
-  // ⚠️ 목록 로드 완료 후에만 — 빈 초기 배열로 돌면 복원한 레이아웃을 통째로
+  // ⚠️ 목록 로드 완료 후에만 — 빈 초기 배열로 돌면 복원한 그룹을 통째로
   // 오파기한다(위 '선택 보정'의 ready 게이트와 같은 교훈).
   useEffect(() => {
     if (!sessionsReady) return;
-    const tree = layouts[selKey];
-    if (!tree) return;
+    const list = layouts[selKey];
+    if (!list) return;
     const alive = new Set(sessions.map((s) => s.id));
-    const next = sanitizeLayout(tree, alive);
-    if (next !== tree) updateLayout(selKey, next);
-  }, [sessions, sessionsReady, selKey, layouts, updateLayout]);
+    let changed = false;
+    let focusFallback: string | null = null;
+    const next: LayoutNode[] = [];
+    for (const g of list) {
+      const r = sanitizeLayout(g, alive);
+      if (r === g) {
+        next.push(g);
+        continue;
+      }
+      changed = true;
+      // 보고 있던 그룹에서 focused 세션이 죽었으면 남은 멤버가 화면을 이어받는다
+      const cur = activeIdRef.current;
+      if (cur && !alive.has(cur) && sessionIdsOf(g).includes(cur) && r)
+        focusFallback = sessionIdsOf(r)[0] ?? null;
+      if (r && r.kind === 'split') next.push(r);
+    }
+    if (!changed) return;
+    updateGroups(selKey, next);
+    if (focusFallback) {
+      // ⚠️ rememberActive 가 경합의 열쇠다 — 이 effect 뒤에 도는 '활성 세션 보정'이
+      // remembered 를 먼저 찾으므로, 여기서 기억을 갱신해 두면 둘 다 같은 세션을 고른다
+      rememberActive(selKey, focusFallback);
+      setActiveId(focusFallback);
+    }
+  }, [sessions, sessionsReady, selKey, layouts, updateGroups, rememberActive]);
 
   const selectTab = useCallback(
     (id: string) => {
+      // 탭 클릭 = 화면 전환뿐이다 — 그룹 소속이면 그 그룹이, 아니면 단일 전체 화면이
+      // 따라온다(뷰 = activeId 의 함수). 그룹을 건드리지 않는다.
       rememberActive(selKey, id);
-      // 분할 중 레이아웃 밖 세션을 고르면 **포커스된 슬롯의 세션을 교체**한다
-      // (트리 안 세션이면 포커스만 이동). 단일 모드는 오늘과 동일 — 화면 전환.
-      const tree = layoutsRef.current[selKey] ?? null;
-      if (tree && !sessionIdsOf(tree).includes(id)) {
-        const focusedPanel =
-          panelsOf(tree).find((p) => p.sessionId === activeIdRef.current) ?? null;
-        if (focusedPanel)
-          updateLayout(selKey, replaceSession(tree, focusedPanel.id, id));
-      }
       setActiveId(id);
     },
-    [rememberActive, selKey, updateLayout]
+    [rememberActive, selKey]
+  );
+
+  // ── 탭바 표시 순서 — 그룹 멤버는 나란히 묶는다(첫 멤버의 원래 자리에) ──
+  // 흩어져 있으면 '묶임' 표시(연결선)가 이어지지 않는다. marks 는 묶음의 시작/중간/끝.
+  const tabView = useMemo(() => {
+    if (groups.length === 0)
+      return {
+        tabs: tabSessions,
+        marks: null as Map<string, 'start' | 'mid' | 'end'> | null,
+      };
+    const byId = new Map(tabSessions.map((s) => [s.id, s]));
+    const placed = new Set<string>();
+    const tabs: TerminalSessionInfo[] = [];
+    const marks = new Map<string, 'start' | 'mid' | 'end'>();
+    for (const s of tabSessions) {
+      if (placed.has(s.id)) continue;
+      const g = groupOf(groups, s.id);
+      const members = g
+        ? sessionIdsOf(g)
+            .map((id) => byId.get(id))
+            .filter((x): x is TerminalSessionInfo => !!x)
+        : [];
+      if (members.length < 2) {
+        // 그룹 미소속(또는 sanitize 전 과도기라 멤버가 1개뿐) — 일반 탭
+        tabs.push(s);
+        placed.add(s.id);
+        continue;
+      }
+      members.forEach((m, i) => {
+        placed.add(m.id);
+        tabs.push(m);
+        marks.set(m.id, i === 0 ? 'start' : i === members.length - 1 ? 'end' : 'mid');
+      });
+    }
+    return { tabs, marks };
+  }, [tabSessions, groups]);
+
+  /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리 — 혼자 전체 화면으로 (2026-08-10) */
+  const detachSession = useCallback(
+    (id: string) => {
+      const key = selKeyRef.current;
+      const list = layoutsRef.current[key] ?? NO_GROUPS;
+      const next = removeFromGroups(list, id);
+      if (next === list) return; // 그룹 미소속 — 할 일 없음
+      updateGroups(key, next);
+      // '빼기'의 목적 자체가 단독 보기다 — 분리된 세션이 화면을 이어받는다
+      rememberActive(key, id);
+      setActiveId(id);
+    },
+    [updateGroups, rememberActive]
   );
 
   /** pane 클릭 = 포커스 이동 — 분할 중 어느 터미널이 키보드·⌘F 를 받는지 정한다 */
@@ -532,21 +614,16 @@ export function TerminalSection() {
 
   useEffect(() => {
     if (pendingRef.current) return;
-    // 분할 중엔 포커스가 화면(레이아웃) 안에 있어야 한다 — 밖으로 새면 ⌘F 와
-    // 탭 클릭(슬롯 교체)의 대상이 안 보이는 pane 이 된다. 폴백 후보도 레이아웃로 제한.
-    const inTabs = !!activeId && tabSessions.some((s) => s.id === activeId);
-    if (inTabs && (!layoutIds || layoutIds.includes(activeId as string))) return;
+    if (activeId && tabSessions.some((s) => s.id === activeId)) return;
+    // 그룹 뷰에서 focused 가 죽은 경우는 위 sanitize effect 가 남은 멤버를
+    // rememberActive 로 먼저 기억해 두므로, 여기서도 같은 세션이 골라진다.
     const remembered = lastActiveRef.current.get(selKey);
-    const pool = layoutIds
-      ? tabSessions.filter((s) => layoutIds.includes(s.id))
-      : tabSessions;
     setActiveId(
-      pool.find((s) => s.id === remembered)?.id ??
-        pool[0]?.id ??
-        tabSessions[0]?.id ??
+      tabView.tabs.find((s) => s.id === remembered)?.id ??
+        tabView.tabs[0]?.id ??
         null
     );
-  }, [tabSessions, activeId, selKey, layoutIds]);
+  }, [tabSessions, tabView, activeId, selKey]);
 
   /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다 */
   const activateSession = useCallback((id: string) => {
@@ -561,7 +638,7 @@ export function TerminalSection() {
   // pane 은 상한(MAX_LIVE_PANES)까지 유지해 전환 즉시성과 스크롤백·검색 상태를 지킨다.
   const [livePanes, setLivePanes] = useState<string[]>([]); // 화면 세션들 + 최근 사용 순
   useEffect(() => {
-    const shown = layoutIds ?? (activeId ? [activeId] : []);
+    const shown = activeGroupIds ?? (activeId ? [activeId] : []);
     if (shown.length === 0) return;
     setLivePanes((cur) => {
       // LRU 축출은 **화면 밖 세션만** 잘라낸다 — 보이는 pane 을 버리면 그 자리가 빈다
@@ -574,14 +651,14 @@ export function TerminalSection() {
         ? cur
         : next;
     });
-  }, [activeId, layoutIds]);
+  }, [activeId, activeGroupIds]);
 
-  // ── 분할 렌더 파생값 — 트리 → %rect (pane·경계 grip). layout 참조 불변이면 재계산 없음 ──
+  // ── 분할 렌더 파생값 — **지금 보는 그룹**의 트리 → %rect (pane·경계 grip) ──
   const layoutRects = useMemo(() => {
-    if (!layout) return null;
-    const { panes, grips } = computeLayout(layout);
+    if (!activeTree) return null;
+    const { panes, grips } = computeLayout(activeTree);
     return { panes, grips, bySession: new Map(panes.map((p) => [p.sessionId, p])) };
-  }, [layout]);
+  }, [activeTree]);
 
   // ── 분할 드래그 앤 드롭 — 탭(SessionTabs)이 소스, 드롭 존은 드래그 중에만 pane 위에 덮는다.
   // ⚠️ pane 자체에 dragover 를 걸지 않는 이유: xterm 의 canvas/textarea 가 이벤트를
@@ -617,37 +694,54 @@ export function TerminalSection() {
     setDragSession(null);
     setDropHint(null);
     if (!dragged) return;
-    const tree = layoutsRef.current[selKey] ?? null;
-    if (!tree) {
-      // 단일 모드 — 활성 세션과의 첫 분할 (중앙 드롭은 그 세션으로 전환일 뿐)
-      const cur = activeIdRef.current;
-      if (!cur || cur === dragged) return;
+    const key = selKeyRef.current;
+    const list = layoutsRef.current[key] ?? NO_GROUPS;
+    const cur = activeIdRef.current;
+    if (!cur) return;
+    const view = groupOf(list, cur); // 지금 화면의 그룹 (없으면 단일 뷰)
+
+    if (!view) {
+      // 단일 뷰 — 활성 세션과 **새 그룹**을 만든다 (중앙 드롭은 그 세션으로 전환일 뿐).
+      // 드래그 세션이 다른 그룹 소속이었으면 먼저 빼낸다(한 세션은 한 그룹에만).
+      if (cur === dragged) return;
       if (side !== 'center') {
+        const freed = removeFromGroups(list, dragged);
         const rootPanel: PanelNode = {
           kind: 'panel',
           id: crypto.randomUUID(),
           sessionId: cur,
         };
-        updateLayout(selKey, splitAt(rootPanel, rootPanel.id, side, dragged));
+        updateGroups(key, [...freed, splitAt(rootPanel, rootPanel.id, side, dragged)]);
       }
-      rememberActive(selKey, dragged);
+      rememberActive(key, dragged);
       setActiveId(dragged);
       return;
     }
+
+    const inView = sessionIdsOf(view).includes(dragged);
     if (side === 'center') {
-      // 교체 (드래그 세션이 트리 안이면 두 슬롯 swap — 불변식 유지)
-      updateLayout(selKey, replaceSession(tree, panelId, dragged));
-    } else {
-      if (
-        !sessionIdsOf(tree).includes(dragged) &&
-        panelsOf(tree).length >= MAX_SPLIT_PANES
-      ) {
-        toast(`분할은 최대 ${MAX_SPLIT_PANES}개까지입니다`, 'fail');
-        return;
+      if (inView) {
+        // 같은 그룹 안 — 두 슬롯 swap (불변식 유지)
+        updateGroups(key, replaceGroup(list, view, replaceSession(view, panelId, dragged)));
+      } else {
+        // 밖에서 온 세션 — 그 pane 의 세션은 그룹 밖(단일)으로 나간다.
+        // 드래그 세션이 다른 그룹 소속이었으면 먼저 빼낸다(view 는 다른 트리라 identity 유지).
+        const freed = removeFromGroups(list, dragged);
+        updateGroups(key, replaceGroup(freed, view, replaceSession(view, panelId, dragged)));
       }
-      updateLayout(selKey, moveSession(tree, dragged, panelId, side));
+    } else {
+      if (inView) {
+        updateGroups(key, replaceGroup(list, view, moveSession(view, dragged, panelId, side)));
+      } else {
+        if (panelsOf(view).length >= MAX_SPLIT_PANES) {
+          toast(`분할은 최대 ${MAX_SPLIT_PANES}개까지입니다`, 'fail');
+          return;
+        }
+        const freed = removeFromGroups(list, dragged);
+        updateGroups(key, replaceGroup(freed, view, splitAt(view, panelId, side, dragged)));
+      }
     }
-    rememberActive(selKey, dragged);
+    rememberActive(key, dragged);
     setActiveId(dragged); // 방금 놓은 세션이 포커스를 갖는다
   };
 
@@ -702,9 +796,11 @@ export function TerminalSection() {
     const move = (ev: PointerEvent) => {
       const ratio = horizontal ? (ev.clientX - rl) / rw : (ev.clientY - rt) / rh;
       if (!Number.isFinite(ratio)) return;
-      const tree = layoutsRef.current[key];
+      // ⚠️ 트리는 setRatio 마다 참조가 바뀌므로 identity 가 아니라 splitId 로 찾는다
+      const list = layoutsRef.current[key] ?? NO_GROUPS;
+      const tree = list.find((t) => findSplit(t, g.splitId));
       if (!tree) return;
-      updateLayout(key, setRatio(tree, g.splitId, ratio)); // 클램프는 setRatio 가
+      updateGroups(key, replaceGroup(list, tree, setRatio(tree, g.splitId, ratio)));
     };
     const up = () => {
       document.body.style.cursor = '';
@@ -926,13 +1022,14 @@ export function TerminalSection() {
         e.preventDefault();
         e.stopPropagation();
       };
+      // 순회·번호는 **표시 순서**(tabView — 그룹 멤버 인접 정렬)를 따른다
+      const tabs = tabView.tabs;
       if (e.ctrlKey && !e.metaKey && e.key === 'Tab') {
-        if (tabSessions.length < 2) return;
+        if (tabs.length < 2) return;
         claim();
-        const cur = tabSessions.findIndex((s) => s.id === activeId);
-        const next =
-          (cur + (e.shiftKey ? -1 : 1) + tabSessions.length) % tabSessions.length;
-        selectTab(tabSessions[next].id);
+        const cur = tabs.findIndex((s) => s.id === activeId);
+        const next = (cur + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length;
+        selectTab(tabs[next].id);
         return;
       }
       if (!e.metaKey || e.altKey || e.ctrlKey) return;
@@ -948,7 +1045,7 @@ export function TerminalSection() {
         claim();
         void createShell(); // 모달 없이 바로 셸 — 에이전트 선택은 [+] 또는 프리셋 바
       } else if (e.key >= '1' && e.key <= '9') {
-        const target = tabSessions[Number(e.key) - 1];
+        const target = tabs[Number(e.key) - 1];
         if (!target) return;
         claim();
         selectTab(target.id);
@@ -957,7 +1054,7 @@ export function TerminalSection() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [
-    tabSessions,
+    tabView,
     activeId,
     activeSession,
     canCreate,
@@ -1185,9 +1282,10 @@ export function TerminalSection() {
 
       <div className="terminal__main">
         <SessionTabs
-          sessions={tabSessions}
+          sessions={tabView.tabs}
           activeId={activeId}
           draggingId={dragSession}
+          groupMarks={tabView.marks}
           canCreate={canCreate}
           changesOpen={changesOpen}
           moRunning={moRunning}
@@ -1198,6 +1296,7 @@ export function TerminalSection() {
           onOpenMo={openMoModal}
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}
+          onDetachSession={detachSession}
         />
 
         {/* 상단 공용 바 — pane 마다 있던 툴바를 탭바 아래 하나로 고정(2026-08-10 사용자

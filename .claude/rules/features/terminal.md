@@ -57,17 +57,20 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - 안 보는 세션의 출력이 IPC 로 오지 않는 것은 이미 `terminal:data` 게이트의 설계다 — 링버퍼·tmux 에 남아 재attach replay 로 복원되고, **상태(busy/waiting) 판정은 main 의 pty 가 하므로 뱃지·알림은 그대로다.**
 - 실측(2026-08-09 E2E): 세션 3개 · 탭 3개에서 진입 시 pane **1개**, 탭을 옮길 때마다 2 → 3 으로 늘고 되돌아오면 3 유지(재사용).
 
-### 분할(스플릿) 레이아웃 — 탭 드래그로 여러 pane 동시 표시 (2026-08-10)
-토스 트리 아티클 방식: `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + orientation + ratio)가 상태의 전부이고, 렌더는 트리 순회(`computeLayout`)로 계산한 %rect 를 pane 에 인라인으로 준다 — **pane 들은 여전히 `__panes` 의 플랫 형제**다(React 재부모화 = xterm 언마운트라 트리 모양대로 중첩하면 안 된다). 드롭 판정은 X자 — 축별 정규화(`nx=(x/w)*2-1`) 후 `|nx|>|ny|`, 중앙 데드존(0.3)은 분할이 아니라 **그 pane 의 세션 교체**. 상한 `MAX_SPLIT_PANES(4) < MAX_LIVE_PANES(8)`.
+### 분할(스플릿) 그룹 — 탭 드래그로 여러 pane 동시 표시 (2026-08-10, 그룹 모델은 같은 날 개편)
+토스 트리 아티클 방식: `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + orientation + ratio)가 분할 하나(=그룹)의 상태이고, 렌더는 트리 순회(`computeLayout`)로 계산한 %rect 를 pane 에 인라인으로 준다 — **pane 들은 여전히 `__panes` 의 플랫 형제**다(React 재부모화 = xterm 언마운트라 트리 모양대로 중첩하면 안 된다). 드롭 판정은 X자 — 축별 정규화(`nx=(x/w)*2-1`) 후 `|nx|>|ny|`, 중앙 데드존(0.3)은 분할이 아니라 **그 pane 의 세션 교체**. 상한은 그룹당 `MAX_SPLIT_PANES(4) < MAX_LIVE_PANES(8)`.
 
-- **단일 pane 은 트리 없음(null)** — 2개 이상일 때만 트리가 존재하고, 1개로 붕괴하면 `updateLayout` 이 selKey 키를 지운다. 그래서 최빈 경로(단일)의 렌더와 `--hidden` inset:0 무리사이즈 전환은 분할 도입 전과 완전히 같다.
+- **화면은 activeId 의 함수다** — 포커스 세션이 그룹에 속하면 그 그룹 전체가 보이고, 어디에도 안 속하면 **혼자 전체 화면**이다. 상태는 selKey 별 **트리 배열**(`groups`)이고 워크트리 하나에 그룹이 여러 개 공존한다. ⚠️ 처음엔 "그룹 밖 탭 클릭 = 포커스 슬롯 교체"(VS Code 식)였는데 **분할을 덮어써 버려 폐기**했다(2026-08-10 사용자 지적) — 탭 클릭·⌘1..9·⌃Tab·새 세션(pending)은 전부 `selectTab` = 화면 전환뿐, 그룹을 건드리지 않는다.
+- **그룹의 생성·변경은 드롭만 한다** — 단일 뷰에 드롭 = 새 그룹(활성 세션과 2분할), 그룹 뷰 가장자리 드롭 = 그 그룹에 추가(그룹당 4개 상한)/그룹 내 재배치, 중앙 드롭 = 그 pane 세션 교체(그룹 안이면 swap, 밖에서 오면 밀려난 세션은 그룹에서 나간다). 다른 그룹 소속 세션을 드롭하면 **먼저 그쪽에서 빼낸다**(`removeFromGroups` — 한 세션은 한 그룹에만). pane 1개가 남는 그룹은 해체된다.
+- **그룹에서 빼기 = 멤버 탭을 탭바에 드롭** — 탭바 전체가 분리 드롭 존이 되고(`--detach` 하이라이트 + "놓으면 그룹에서 분리" 라벨) 분리된 세션이 혼자 전체 화면을 이어받는다. ⚠️ **자기 탭 위에서는 dragover 에 preventDefault 를 하지 않는다** — 제자리 드롭(클릭에 가까운 손놀림)이 분리로 오인되는 것을 드롭 불성립으로 막는다(`overSelfTab`, `data-session` 속성으로 판정).
+- **탭바는 그룹 멤버를 나란히 묶는다** — `tabView`(TerminalSection)가 첫 멤버의 원래 자리에 멤버들을 인접 정렬하고 `groupMarks`(start/mid/end)를 내려 `--grouped` 채움 + 상단 2px `--accent-glow` 연결선 + 양 끝 위 모서리 라운드로 표시한다. ⌘1..9·⌃Tab 순회도 이 **표시 순서**를 따른다.
 - **active 는 visible(다중)/focused(단일)로 분리됐다** — 크기 주장(`visibleRef`)·fit·아틀라스 복구는 보이는 pane 전부(서로 **다른 세션**이라 크기 주장이 충돌하지 않는다), `term.focus()`·⌘F 는 focused(=activeId) 하나만. ⚠️ visible effect 에서 `focus()` 를 부르면 분할 드롭 순간 새 pane 이 포커스를 훔친다 — 그래서 effect 가 둘로 나뉘어 있다.
-- ⚠️ **한 세션은 트리에 1회만** — main 의 attach 추적(`desktopAttached`)이 `Set<세션id>` 라 같은 세션의 pane 이 둘이면 한쪽 detach 가 다른 쪽의 `terminal:data` 방송까지 끊는다. `moveSession`(선제 제거)·`replaceSession`(트리 안 세션이면 swap)·`sanitizeLayout`(중복 제거)이 3중으로 지키고, **main 은 무변경**이다.
+- ⚠️ **한 세션은 그룹 전체를 통틀어 1회만** — main 의 attach 추적(`desktopAttached`)이 `Set<세션id>` 라 같은 세션의 pane 이 둘이면 한쪽 detach 가 다른 쪽의 `terminal:data` 방송까지 끊는다. `moveSession`·`removeFromGroups`(선제 제거)·`replaceSession`(그룹 안이면 swap)·`sanitizeLayout`(중복 제거)이 지키고, **main 은 무변경**이다.
 - **드롭 존은 드래그 중에만 pane 위에 덮는 투명 오버레이**(`terminal__drop-zone`) — xterm 의 canvas/textarea 가 dragover 를 삼키는 문제를 원천 회피한다. dragover 는 고빈도라 `setDropHint` 는 동일값 조기 반환(WorkspaceNav 와 같은 규칙).
-- `livePanes` 는 레이아웃 세션 전부를 포함하고 **LRU 축출은 화면 밖 세션만** 자른다(보이는 pane 을 버리면 그 자리가 빈다). 활성 보정도 분할 중엔 폴백 후보를 레이아웃 세션으로 제한한다 — 포커스가 레이아웃 밖으로 새면 ⌘F·탭 클릭(슬롯 교체)의 대상이 안 보이는 pane 이 된다.
-- 탭 클릭·⌘1..9·⌃Tab·새 세션(pending)은 전부 `selectTab` 경유 — 분할 중 레이아웃 밖 세션이면 **포커스된 슬롯의 세션을 교체**, 안 세션이면 포커스만 이동. 단일 모드는 기존과 동일.
-- 영속화는 localStorage `terminal:layout`(selKey → 트리 맵 — `terminal:lastActive` 와 같은 방식). ⚠️ 복원 sanitize(죽은 세션 걷어내기)는 **`sessionsReady` 이후에만** — 빈 초기 목록으로 돌면 복원한 레이아웃을 통째로 오파기한다(선택 보정의 ready 게이트와 같은 교훈). 그립 드래그 중에는 저장 effect 를 스킵하고 pointerup 에서 1회 저장한다.
-- 분할 중 탭 교체로 숨은 pane(inset:0 = 전체 크기)이 작은 슬롯에 들어올 때의 fit 1회는 불가피한 허용 비용이다(단일 모드에는 해당 없음).
+- `livePanes` 는 **보는 그룹**의 세션 전부를 포함하고 LRU 축출은 화면 밖 세션만 자른다(보이는 pane 을 버리면 그 자리가 빈다).
+- **그룹 뷰에서 focused 세션이 죽으면 남은 멤버가 화면을 이어받는다** — sanitize effect 가 폴백을 고르고 ⚠️ **`rememberActive` 로 먼저 기억해 둔다**: 뒤에 도는 '활성 세션 보정' effect 가 같은 flush 에서 remembered 를 읽으므로, 기억을 안 바꾸면 두 effect 가 서로 다른 setActiveId 를 쌓아 나중 것이 이긴다(경합).
+- 영속화는 localStorage `terminal:layout`(selKey → **트리 배열** 맵 — 구버전 단일 트리 값도 배열로 감싸 읽는다). ⚠️ 복원 sanitize(죽은 세션 걷어내기)는 **`sessionsReady` 이후에만** — 빈 초기 목록으로 돌면 복원한 그룹을 통째로 오파기한다(선택 보정의 ready 게이트와 같은 교훈). 그립 드래그 중에는 저장 effect 를 스킵하고 pointerup 에서 1회 저장한다. 그립의 ratio 갱신은 트리 identity 가 아니라 **splitId 로 대상을 찾는다**(`findSplit` — setRatio 마다 참조가 바뀐다).
+- 그룹 전환으로 숨은 pane(inset:0 = 전체 크기)이 작은 슬롯에 들어올 때의 fit 1회는 불가피한 허용 비용이다(단일 뷰 사이 전환에는 해당 없음).
 - **툴바(프리셋·검색·글자크기·맨아래로·Finder)는 pane 이 아니라 탭바 아래 공용 바 하나다** — 분할하면 pane 마다 반복될 이유가 없다(2026-08-10 사용자 요청, 아래 '상단 공용 바' 절).
 - ⚠️ **pane 의 경계·포커스 표시를 pane 자체의 inset box-shadow 로 그리면 안 보인다** — inset 그림자는 배경 레이어와 함께 그려져 자식(`__host` 다크 배경)이 위에 덮는다(2026-08-10 실측: 바 높이 22px 에서만 테두리가 보였다). 그래서 pane 사이 구분선은 `split-grip::after` 가 **상시**(2px `--border-dark`, hover 시 `--on-dark-3`) 그리고, focused 테두리는 `--focused::after` 오버레이(z-index + pointer-events:none)로 콘텐츠 위에 띄운다.
 

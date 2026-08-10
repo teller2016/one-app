@@ -282,6 +282,64 @@ export function deserializeLayout(v: unknown): LayoutNode | null {
   return null;
 }
 
+// ── 그룹(트리) 목록 유틸 — 워크트리 하나에 분할 그룹이 여러 개 공존한다 ──
+// (2026-08-10 개편) 뷰 = activeId 가 속한 그룹, 어디에도 안 속하면 단일 전체 화면.
+// 그룹 밖 탭을 눌러도 그룹은 해체되지 않고 화면만 바뀐다.
+
+/** 세션이 속한 그룹 — 없으면 null (한 세션은 최대 한 그룹에만 — 불변식) */
+export function groupOf(
+  groups: readonly LayoutNode[],
+  sessionId: string
+): LayoutNode | null {
+  return groups.find((g) => sessionIdsOf(g).includes(sessionId)) ?? null;
+}
+
+/** splitId 를 가진 노드 탐색 — 그립 드래그가 트리 identity 대신 노드 id 로 대상을 찾는다
+ *  (setRatio 마다 트리 참조가 바뀌므로 identity 비교는 드래그 중에 어긋난다) */
+export function findSplit(root: LayoutNode, splitId: string): SplitNode | null {
+  if (root.kind === 'panel') return null;
+  if (root.id === splitId) return root;
+  return findSplit(root.a, splitId) ?? findSplit(root.b, splitId);
+}
+
+/** 모든 그룹에서 세션 제거 — pane 1개가 남는 그룹은 해체된다(그 세션은 단일로 복귀).
+ *  변화 없으면 원본 배열을 그대로 반환한다. */
+export function removeFromGroups(
+  groups: LayoutNode[],
+  sessionId: string
+): LayoutNode[] {
+  let changed = false;
+  const next: LayoutNode[] = [];
+  for (const g of groups) {
+    const r = removeSession(g, sessionId);
+    if (r === g) {
+      next.push(g);
+      continue;
+    }
+    changed = true;
+    if (r && r.kind === 'split') next.push(r);
+  }
+  return changed ? next : groups;
+}
+
+/** 그룹 하나를 갱신한 목록 — split 이 아니게 되면(해체) 목록에서 뺀다. 무변화면 원본 */
+export function replaceGroup(
+  groups: LayoutNode[],
+  prev: LayoutNode,
+  next: LayoutNode | null
+): LayoutNode[] {
+  if (prev === next) return groups;
+  const out: LayoutNode[] = [];
+  for (const g of groups) {
+    if (g !== prev) {
+      out.push(g);
+      continue;
+    }
+    if (next && next.kind === 'split') out.push(next);
+  }
+  return out;
+}
+
 /**
  * 죽은 세션 + 중복 세션 제거(불변식 최후 방어선 — 직렬화 손상 대비).
  * 부분 생존이면 형제 승격, 전멸이면 null. 변화 없으면 원본 참조.

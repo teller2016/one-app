@@ -614,6 +614,19 @@
     flex-shrink: 0;
     padding-right: 8px; // 풀블리드라 우측 액션이 창 모서리에 붙지 않게
     border-bottom: 1px solid var(--border);
+
+    // 그룹 멤버 탭을 끌어 올린 상태 — 탭바 = '그룹에서 분리' 드롭 존임을 알린다
+    &--detach {
+      background: var(--accent-soft);
+
+      &::after {
+        content: '놓으면 그룹에서 분리';
+        @include type-small;
+        color: var(--accent);
+        flex-shrink: 0;
+        pointer-events: none; // 라벨이 드롭 이벤트를 가로채지 않게
+      }
+    }
   }
 
   &__tabs-list {
@@ -651,6 +664,32 @@
     &--active:hover {
       background: var(--accent-soft);
       box-shadow: inset 0 -2px 0 0 var(--accent);
+    }
+
+    // 분할 그룹 묶음 — 같은 그룹의 탭은 나란히 정렬돼 오고(TerminalSection tabView),
+    // 옅은 채움 + 상단 2px 연결선이 이어져 하나로 묶여 보인다. 활성 표시(하단 액센트)와
+    // 겹치지 않게 위쪽에 긋고, 묶음 양 끝은 위 모서리만 둥글려 캡슐 느낌을 준다.
+    &--grouped {
+      background: var(--overlay-faint);
+      box-shadow: inset 0 2px 0 0 var(--accent-glow);
+    }
+
+    // 그룹 안의 활성 탭 — 연결선(위)과 활성 라인(아래)을 **둘 다** 그린다
+    // (box-shadow 는 규칙 간 합성이 안 되므로 여기서 한 번에).
+    &--active#{&}--grouped,
+    &--active#{&}--grouped:hover {
+      background: var(--accent-soft);
+      box-shadow:
+        inset 0 2px 0 0 var(--accent-glow),
+        inset 0 -2px 0 0 var(--accent);
+    }
+
+    &--group-start {
+      border-top-left-radius: var(--r-sm);
+    }
+
+    &--group-end {
+      border-top-right-radius: var(--r-sm);
     }
 
     &--edit {
