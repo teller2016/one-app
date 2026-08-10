@@ -17,7 +17,7 @@ paths:
 ## 일정 등록
 `renderer/features/schedule` + `main/features/schedule`
 
-비즈박스 그룹웨어에 하루 일정을 puppeteer 로 자동 등록. 하루 작업은 **타임라인 카드**(행마다 계산된 시작→종료·소요시간 칩, 12:30 종료 뒤 점심 구분선, 헤더에 합계·OT — 점심 규칙 12.5/13.5 는 `config.ts` 와 동기)로 중간중간 기록(종료시간 TimePicker + 일정명 + [추가], 시간순 자동 정렬, 추가 행에 다음 시작 시각 표시). 날짜·시작 시간은 상단 툴바 한 줄(시작은 TimePicker), 실행 로그는 실행 전엔 숨김.
+비즈박스 그룹웨어에 하루 일정을 자동 등록(자동화 창 — `lib/browser.ts`, 사용자가 보게 띄운다. 로그인은 공용 세션 쿠키 주입 → `portalUrl` 직행). 하루 작업은 **타임라인 카드**(행마다 계산된 시작→종료·소요시간 칩, 12:30 종료 뒤 점심 구분선, 헤더에 합계·OT — 점심 규칙 12.5/13.5 는 `config.ts` 와 동기)로 중간중간 기록(종료시간 TimePicker + 일정명 + [추가], 시간순 자동 정렬, 추가 행에 다음 시작 시각 표시). 날짜·시작 시간은 상단 툴바 한 줄(시작은 TimePicker), 실행 로그는 실행 전엔 숨김.
 
 **작업 항목과 시작 시각**(`ScheduleWorklog` = `{ items, startTime }`)이 **`userData/worklog.json`** 에 IPC(`schedule:worklog:get/set`, 렌더러 300ms 디바운스)로 즉시 저장되어 탭 이동·재시작·강제 종료에도 유지된다(예전 배열 형식 저장본은 읽을 때 자동 승격, [비우기]는 항목만 지우고 시작 시각은 유지, 기본값 `SCHEDULE_DEFAULT_START_TIME`. 날짜 선택은 오등록 방지를 위해 저장하지 않고 매번 '오늘'로 시작).
 
@@ -28,7 +28,7 @@ paths:
 ## 출퇴근
 `renderer/features/attendance` + `main/features/attendance`
 
-사이드바 하단 고정 위젯(공용 `SidebarWidget` 셸 — 접히면 아이콘 타일 + 팝오버. 축소 타일에는 조회 실패를 `StatusDot fail` 로, 출퇴근 완료를 체크로 알린다). headless puppeteer 로 **공용 그룹웨어 세션 쿠키를 주입**해(`gotoWithSession`, 로그인 화면 안 거침) userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용(로그인은 공용 세션 모듈이 담당 — `runAttendance(action)` 는 계정 인자를 받지 않는다). 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거친다.
+사이드바 하단 고정 위젯(공용 `SidebarWidget` 셸 — 접히면 아이콘 타일 + 팝오버. 축소 타일에는 조회 실패를 `StatusDot fail` 로, 출퇴근 완료를 체크로 알린다). 숨긴 자동화 창에 **공용 그룹웨어 세션 쿠키를 주입**해(`gotoWithSessionInWindow`, 로그인 화면 안 거침) userMain.do 근태 위젯(`#tab1`/`#tab2`)에서 출퇴근 시각을 읽고, 찍을 때는 그룹웨어 자체 함수 `fnAttendCheck(1=출근, 4=퇴근)`를 호출(confirm 자동 수락). 계정은 환경설정의 비즈박스 계정 공용(로그인은 공용 세션 모듈이 담당 — `runAttendance(action)` 는 계정 인자를 받지 않는다). 실수 방지를 위해 클릭 시 앱에서 확인 대화상자를 거친다.
 
 ### 출퇴근 리마인더
 `main/features/attendance/scheduler.ts` + `reminders.ts`
@@ -56,7 +56,7 @@ paths:
 ## 주간보고
 `renderer/features/weekly` + `main/features/weekly`
 
-FE챕터 공유일정의 **개인별 주간** 화면을 headless puppeteer 로 수집해 팀원별 T/OT·MM 을 카드+차트(chart.js)로 표시. 엑셀 다운로드 없이 페이지의 `calendarExcelSave()` form submit 을 후킹해 `datas`(JSON payload)를 가로챈다(익스텐션 `fe-schedule-extension` 이식). 주간 이동은 페이지 함수 `beforeWeek()`/`nextWeek()`, 현재 주는 iframe 전역 `startDate`/`endDate`(YYYYMMDD)로 판별.
+FE챕터 공유일정의 **개인별 주간** 화면을 숨긴 자동화 창으로 수집해(로그인은 공용 세션 쿠키 주입 → `portalUrl` 직행) 팀원별 T/OT·MM 을 카드+차트(chart.js)로 표시. 엑셀 다운로드 없이 페이지의 `calendarExcelSave()` form submit 을 후킹해 `datas`(JSON payload)를 가로챈다(익스텐션 `fe-schedule-extension` 이식). 주간 이동은 페이지 함수 `beforeWeek()`/`nextWeek()`, 현재 주는 iframe 전역 `startDate`/`endDate`(YYYYMMDD)로 판별.
 
 개인별 주간 진입/주간 이동 직후 일정 목록이 ajax 로 늦게 채워지므로 **datasExcel 행 수 안정화 대기 + 캡처 재시도**가 들어 있음(제거하면 빈 결과 레이스 재발).
 

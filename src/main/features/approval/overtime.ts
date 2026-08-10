@@ -7,7 +7,7 @@ import {
   releasePage,
   waitInPage,
   type Page,
-} from './browser';
+} from '../../lib/browser';
 import { OVERTIME_CONFIG, WORKER_DEPT } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';

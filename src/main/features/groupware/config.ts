@@ -4,6 +4,11 @@ export const GROUPWARE_CONFIG = {
   loginUrl: 'https://gw.forbiz.co.kr/gw/uat/uia/egovLoginUsr.do',
   // 로그인 직후 세션 안정화용 포털 메인 (로그인 페이지로 튕기면 실패 판정)
   mainUrl: 'https://gw.forbiz.co.kr/gw/userMain.do',
+  /**
+   * 상단 메뉴(#topMenu…)가 있는 포털 셸 — 로그인 리다이렉트가 도착하는 화면이다.
+   * 메뉴를 클릭해 들어가는 기능(일정 등록·주간보고)이 쿠키 주입 후 여기로 직행한다.
+   */
+  portalUrl: 'https://gw.forbiz.co.kr/gw/bizbox.do',
 
   selectors: {
     userId: '#userId',

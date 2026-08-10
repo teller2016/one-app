@@ -15,7 +15,7 @@ import {
   takeAlerts,
   waitInPage,
   type Page,
-} from './browser';
+} from '../../lib/browser';
 import { VACATION_CONFIG, WORKER_DEPT } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';

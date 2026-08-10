@@ -4,15 +4,9 @@
 //   - 전역 startDate/endDate(YYYYMMDD)가 현재 표시 중인 주, beforeWeek()/nextWeek()로 이동
 //   - calendarExcelSave()가 엑셀 생성용 datas(JSON)를 form 으로 제출 → 후킹해 가로챈다)
 export const WEEKLY_CONFIG = {
-  loginUrl: 'https://gw.forbiz.co.kr/gw/uat/uia/egovLoginUsr.do',
   viewport: { width: 1600, height: 900 },
 
   selectors: {
-    // 로그인 페이지 (출퇴근·일정 매크로와 동일한 그룹웨어)
-    userId: '#userId',
-    userPw: '#userPw',
-    loginSubmit: '.login_submit',
-
     // 일정 페이지 진입 (일정 매크로와 동일)
     scheduleMenu: '#topMenu300000000',
     chapterText: '[기술부문] FE챕터',

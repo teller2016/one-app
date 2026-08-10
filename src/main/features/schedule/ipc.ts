@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import type { Browser } from 'puppeteer';
+import { closePage, type Page } from '../../lib/browser';
 import { runMacro } from './runMacro';
 import { resolveBaseDate } from './scheduleUtils';
 import { SCHEDULE_CONFIG } from './config';
@@ -13,7 +13,7 @@ import {
 } from '../../../shared/types';
 
 let running = false;
-let currentBrowser: Browser | null = null;
+let currentPage: Page | null = null;
 
 // 작업 기록 — localStorage 는 강제 종료 시 디스크 flush 가 안 돼 유실되므로
 // (2026-07-29 실측: 쓰기 후 45초에도 leveldb 미커밋) userData JSON 에 즉시 저장한다.
@@ -42,22 +42,18 @@ function normalizeWorklog(raw: unknown): ScheduleWorklog {
 }
 
 /**
- * 앱 종료 시 남은 자동화 브라우저 정리 — 완료 후 확인용으로 열어 두는 GUI Chrome
- * (closeBrowserOnFinish=false)이 고아로 남지 않게 한다. close() 는 비동기라 종료
- * 시점에 완주를 보장할 수 없으므로 프로세스 kill 로 마무리한다(2026-08-07).
+ * 앱 종료 시 남은 자동화 창 정리 — 완료 후 확인용으로 열어 두는 창
+ * (closeBrowserOnFinish=false)이 고아로 남지 않게 한다.
+ * BrowserWindow 는 앱 프로세스 안에 있어 destroy 로 즉시 회수된다(예전 Chrome kill 대체).
  */
 export function disposeScheduleBrowser(): void {
-  if (!currentBrowser) return;
-  try {
-    currentBrowser.process()?.kill();
-  } catch {
-    // 이미 닫혔으면 무시
-  }
-  currentBrowser = null;
+  if (!currentPage) return;
+  closePage(currentPage);
+  currentPage = null;
   running = false;
 }
 
-/** 일정 등록 관련 IPC 핸들러 등록 (앱 내부에서 puppeteer 직접 실행) */
+/** 일정 등록 관련 IPC 핸들러 등록 (앱 내부 자동화 창으로 실행) */
 export function registerScheduleIpc() {
   ipcMain.handle('schedule:run', async (event, payload: ScheduleRunPayload) => {
     const sender = event.sender;
@@ -70,9 +66,8 @@ export function registerScheduleIpc() {
       return { ok: false, error: 'already_running' };
     }
 
-    // 1) 자격증명 확인
-    const credentials = getCredentials();
-    if (!credentials) {
+    // 1) 자격증명 확인 (로그인 자체는 공용 세션 모듈이 담당 — 여기서는 미설정만 걸러낸다)
+    if (!getCredentials()) {
       send(
         'stderr',
         '⚠️ 비즈박스 계정 정보가 없습니다. [환경설정] 탭에서 아이디/비밀번호를 먼저 저장하세요.\n',
@@ -108,14 +103,10 @@ export function registerScheduleIpc() {
       return { ok: false, error: 'bad_date' };
     }
 
-    // 이전 실행 브라우저가 남아 있으면 닫기
-    if (currentBrowser) {
-      try {
-        await currentBrowser.close();
-      } catch {
-        // 이미 닫혔거나 실패해도 무시
-      }
-      currentBrowser = null;
+    // 이전 실행 창이 남아 있으면 닫기
+    if (currentPage) {
+      closePage(currentPage);
+      currentPage = null;
     }
 
     send(
@@ -133,10 +124,9 @@ export function registerScheduleIpc() {
       startTime,
       baseDate,
       testMode: !!payload.testMode,
-      credentials,
       onLog: (msg) => send('stdout', msg),
-      onBrowser: (b) => {
-        currentBrowser = b;
+      onPage: (pg) => {
+        currentPage = pg;
       },
     })
       .then(() => done(0))
@@ -160,14 +150,10 @@ export function registerScheduleIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('schedule:cancel', async () => {
-    if (currentBrowser) {
-      try {
-        await currentBrowser.close();
-      } catch {
-        // 이미 닫혔거나 실패해도 무시
-      }
-      currentBrowser = null;
+  ipcMain.handle('schedule:cancel', () => {
+    if (currentPage) {
+      closePage(currentPage);
+      currentPage = null;
       running = false;
       return { ok: true };
     }

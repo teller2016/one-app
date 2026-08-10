@@ -12,9 +12,9 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 
 // Vite 플러그인은 external 로 둔 모듈을 패키지에서 제외한다(electron/forge#3738).
-// 런타임에 require 하는 puppeteer 등 프로덕션 의존성 전체를 패키지 node_modules 로 복사한다.
+// 런타임에 require 하는 프로덕션 의존성(node-pty·ws 등) 전체를 패키지 node_modules 로 복사한다.
+// npm ls --omit=dev 로 계산하므로 devDependency(puppeteer 등)는 자동으로 빠진다.
 // npm 이 계산한 실제 트리(호이스팅·중첩 포함)를 그대로 복사하므로 누락이 없다.
-// (Chromium 은 동봉하지 않고 시스템 Chrome 을 쓰므로 용량은 작다.)
 function copyRuntimeDeps(buildPath: string): number {
   const projectRoot = process.cwd();
   let out = '';
@@ -57,11 +57,11 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   hooks: {
-    // asar 로 묶기 전에, Vite 가 제외한 런타임 모듈(puppeteer 등)을 채워 넣는다
+    // asar 로 묶기 전에, Vite 가 제외한 런타임 모듈(node-pty·ws)을 채워 넣는다
     packageAfterCopy: async (_forgeConfig, buildPath) => {
       const count = copyRuntimeDeps(buildPath);
       // eslint-disable-next-line no-console
-      console.log(`[forge] 런타임 의존성 ${count}개 패키지에 포함 (puppeteer 등)`);
+      console.log(`[forge] 런타임 의존성 ${count}개 패키지에 포함`);
     },
     // 자가서명 인증서로 고정 서명 — adhoc 서명은 빌드마다 바뀌어 safeStorage 의
     // 키체인 접근이 끊기고, 폴백 저장으로 암호화 설정이 날아간다(2026-07 실사고).

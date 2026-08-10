@@ -1,13 +1,25 @@
-// 주간보고 — headless 브라우저로 그룹웨어 개인별 주간 화면에서 일정 데이터를 수집한다.
+// 주간보고 — 숨긴 자동화 창으로 그룹웨어 개인별 주간 화면에서 일정 데이터를 수집한다.
 // 엑셀 파일을 내려받지 않고, 엑셀 생성 함수(calendarExcelSave)가 서버로 보내는
 // datas(JSON payload)를 form submit 후킹으로 가로채 그대로 사용한다.
-import puppeteer, { type Browser, type Dialog, type Page } from 'puppeteer';
+//
+// ⚠️ puppeteer 대신 Electron BrowserWindow(`lib/browser.ts`)를 쓴다 — 시스템 Chrome 의존 제거
+// (2026-08 전환). 후킹이 **in-page** 라서(네트워크 인터셉트가 아니라) 그대로 이식된다.
+// XPath 셀렉터(`::-p-xpath`)만 텍스트 검색 함수로 대체했다.
+// 로그인은 하지 않고 **공용 세션 쿠키를 주입**한다(2026-08-10 — 메일·근태와 로그인 공유).
 import { WEEKLY_CONFIG } from './config';
 import type { WeeklyPeriod, WeeklyRawRow } from '../../../shared/types';
 import { sleep } from '../../lib/util';
-import { withGroupwareLogin } from '../../lib/groupware';
+import { GROUPWARE_CONFIG } from '../groupware/config';
+import { gotoWithSessionInWindow } from '../groupware/session';
+import {
+  AUTOMATION_PARTITION,
+  closePage,
+  evalInPage,
+  openPage,
+  waitInPage,
+  type Page,
+} from '../../lib/browser';
 
-type Credentials = { id: string; password: string };
 type ProgressFn = (step: string) => void;
 
 export type WeeklyCollectData = { rows: WeeklyRawRow[]; period: WeeklyPeriod };
@@ -15,8 +27,43 @@ export type WeeklyCollectData = { rows: WeeklyRawRow[]; period: WeeklyPeriod };
 // 동시 실행 방지 (headless 브라우저 중복 기동 막기)
 let running = false;
 
-/** 텍스트가 정확히 일치하는 요소를 찾는 puppeteer XPath 셀렉터 */
-const xpathByText = (text: string) => `::-p-xpath(//*[text()='${text}'])`;
+/** 텍스트가 정확히 일치하는 말단 요소를 클릭 (puppeteer XPath 셀렉터 대체) */
+async function clickByText(page: Page, text: string): Promise<boolean> {
+  return evalInPage(
+    page,
+    (want: string) => {
+      const squash = (s: string | null | undefined) =>
+        (s ?? '').replace(/\s+/g, ' ').trim();
+      const hit = Array.from(document.querySelectorAll('*')).find(
+        (el) =>
+          squash(el.textContent) === squash(want) &&
+          !Array.from(el.children).some(
+            (c) => squash(c.textContent) === squash(want),
+          ),
+      );
+      if (!hit) return false;
+      (hit as HTMLElement).click();
+      return true;
+    },
+    [text],
+  ).catch((): boolean => false);
+}
+
+/** 텍스트가 정확히 일치하는 요소가 나타날 때까지 대기 */
+async function waitForText(page: Page, text: string, timeout: number) {
+  await waitInPage(
+    page,
+    (want: string) => {
+      const squash = (s: string | null | undefined) =>
+        (s ?? '').replace(/\s+/g, ' ').trim();
+      return Array.from(document.querySelectorAll('*')).some(
+        (el) => squash(el.textContent) === squash(want),
+      );
+    },
+    [text],
+    { timeout, label: '메뉴 항목' },
+  );
+}
 
 /** 대상 주의 시작일. monday=true 면 월요일(월~일 기준), 아니면 일요일(그룹웨어 페이지 기준) */
 function weekAnchor(weekOffset: number, monday: boolean): Date {
@@ -59,64 +106,40 @@ const dayMmdd = (r: WeeklyRawRow) => r.day.slice(0, 5);
 const toDashDate = (yyyymmdd: string) =>
   `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 
-/** 페이지 이동 중 컨텍스트 파괴 오류인지 (그룹웨어가 리다이렉트를 여러 번 함) */
-const isContextDestroyed = (err: unknown) =>
-  /Execution context was destroyed|Cannot find context|Target closed|detached/i.test(
-    (err as Error)?.message ?? '',
-  );
-
-async function login(page: Page, credentials: Credentials) {
-  const { selectors: sel } = WEEKLY_CONFIG;
-  await page.goto(WEEKLY_CONFIG.loginUrl, { waitUntil: 'networkidle2' });
-
-  // 로그인 폼이 있으면 로그인 수행 (세션이 있으면 메인으로 리다이렉트됨)
-  if (await page.$(sel.userId)) {
-    await page.type(sel.userId, credentials.id);
-    await page.type(sel.userPw, credentials.password);
-    await Promise.all([
-      page
-        .waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
-        .catch((): null => null),
-      page.click(sel.loginSubmit),
-    ]);
-    await sleep(1500); // 추가 리다이렉트 정리 대기
-  }
-
-  if (page.url().includes('egovLoginUsr')) {
-    throw new Error('그룹웨어 로그인 실패 — 환경설정의 계정 정보를 확인하세요.');
-  }
-}
-
 /**
  * 클릭이 무시되는 경우를 대비한 재시도 클릭 (일정 매크로와 동일 패턴).
  * 페이지 스크립트가 로드되기 전에 클릭하면 핸들러가 없어 조용히 무시되므로,
  * 기대 요소(expectSelector)가 화면에 보일 때까지 클릭을 반복한다.
  */
-async function clickUntilVisible(
+async function clickUntilTextVisible(
   page: Page,
   clickSelector: string,
-  expectSelector: string,
+  expectText: string,
   retries = 5,
 ) {
-  await page.waitForSelector(clickSelector);
+  await waitInPage(
+    page,
+    (sel: string) => !!document.querySelector(sel),
+    [clickSelector],
+    { timeout: 30000, label: '메뉴 버튼' },
+  );
   for (let i = 0; i < retries; i++) {
-    try {
-      await page.click(clickSelector);
-    } catch {
-      // 일시적으로 클릭 불가(가려짐 등)여도 아래에서 재시도
-    }
-    try {
-      await page.waitForSelector(expectSelector, {
-        visible: true,
-        timeout: 3000,
-      });
-      return;
-    } catch {
-      // 기대 요소가 안 나타남 — 클릭이 무시된 것으로 보고 다시 클릭
-    }
+    // 좌표 클릭이 아니라 JS 클릭 — 로딩 오버레이에 가로채이지 않는다
+    await evalInPage(
+      page,
+      (sel: string) => {
+        (document.querySelector(sel) as HTMLElement | null)?.click();
+        return true;
+      },
+      [clickSelector],
+    ).catch((): void => undefined);
+    const ok = await waitForText(page, expectText, 3000)
+      .then((): boolean => true)
+      .catch((): boolean => false);
+    if (ok) return;
   }
   throw new Error(
-    `메뉴 클릭이 계속 무시됩니다 — 그룹웨어 화면 변경 여부를 확인하세요. (${expectSelector})`,
+    `메뉴 클릭이 계속 무시됩니다 — 그룹웨어 화면 변경 여부를 확인하세요. (${expectText})`,
   );
 }
 
@@ -132,7 +155,7 @@ type FrameState = {
 async function readFrameState(page: Page): Promise<FrameState> {
   const { selectors: sel } = WEEKLY_CONFIG;
   try {
-    return await page.evaluate((s) => {
+    return await evalInPage(page, (s: typeof sel) => {
       const f = document.querySelector(s.contentIframe) as HTMLIFrameElement | null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = f?.contentWindow as any;
@@ -164,11 +187,10 @@ async function readFrameState(page: Page): Promise<FrameState> {
         return { state: 'none' } as const;
       }
       return { state: 'loading' } as const;
-    }, sel);
-  } catch (err) {
-    // 페이지/iframe 이동 중이면 잠시 후 재시도하도록 loading 취급
-    if (isContextDestroyed(err)) return { state: 'loading' };
-    throw err;
+    }, [sel]);
+  } catch {
+    // 페이지/iframe 이동 중이거나 스크립트 실행이 끊기면 잠시 후 재시도하도록 loading 취급
+    return { state: 'loading' };
   }
 }
 
@@ -197,9 +219,8 @@ async function moveToPersonalWeek(page: Page, onProgress?: ProgressFn) {
   const { selectors: sel } = WEEKLY_CONFIG;
 
   onProgress?.('일정 화면으로 이동 중…');
-  const chapterSelector = xpathByText(sel.chapterText);
-  await clickUntilVisible(page, sel.scheduleMenu, chapterSelector);
-  await page.click(chapterSelector);
+  await clickUntilTextVisible(page, sel.scheduleMenu, sel.chapterText);
+  await clickByText(page, sel.chapterText);
 
   // 캘린더(iframe) 로드 대기 — 이미 개인별 주간이면 그대로 사용
   let st = await waitFrameState(
@@ -211,13 +232,18 @@ async function moveToPersonalWeek(page: Page, onProgress?: ProgressFn) {
 
   if (st.state === 'calendar') {
     onProgress?.('개인별 주간 보기로 전환 중…');
-    await page.evaluate((s) => {
-      const f = document.querySelector(s.contentIframe) as HTMLIFrameElement;
-      const btn = f.contentDocument?.querySelector(
-        s.personalWeekButton,
-      ) as HTMLButtonElement | null;
-      btn?.click();
-    }, sel);
+    await evalInPage(
+      page,
+      (s: typeof sel) => {
+        const f = document.querySelector(s.contentIframe) as HTMLIFrameElement | null;
+        const btn = f?.contentDocument?.querySelector(
+          s.personalWeekButton,
+        ) as HTMLButtonElement | null;
+        btn?.click();
+        return true;
+      },
+      [sel],
+    );
     st = await waitFrameState(
       page,
       (s) => s.state === 'personalWeek',
@@ -251,21 +277,22 @@ async function moveToWeek(
 
     onProgress?.('주간 이동 중…');
     const fnName = Number(current) > Number(target) ? 'beforeWeek' : 'nextWeek';
-    await page.evaluate(
-      (s, fn) => {
-        const f = document.querySelector(s.contentIframe) as HTMLIFrameElement;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const w = f.contentWindow as any;
-        if (typeof w[fn] !== 'function') {
-          throw new Error(
-            '주간 이동 함수를 찾을 수 없습니다 — 그룹웨어 화면이 바뀌었을 수 있습니다.',
-          );
-        }
-        w[fn]();
+    const moved = await evalInPage(
+      page,
+      (s: typeof sel, fn: string) => {
+        const f = document.querySelector(s.contentIframe) as HTMLIFrameElement | null;
+        const w = f?.contentWindow as unknown as Record<string, unknown> | undefined;
+        if (typeof w?.[fn] !== 'function') return false;
+        (w[fn] as () => void)();
+        return true;
       },
-      sel,
-      fnName,
+      [sel, fnName],
     );
+    if (!moved) {
+      throw new Error(
+        '주간 이동 함수를 찾을 수 없습니다 — 그룹웨어 화면이 바뀌었을 수 있습니다.',
+      );
+    }
     // 주간 데이터가 ajax 로 갱신되어 startDate 가 바뀔 때까지 대기
     await waitFrameState(
       page,
@@ -282,7 +309,10 @@ async function moveToWeek(
 async function captureRows(page: Page): Promise<WeeklyRawRow[]> {
   const { selectors: sel } = WEEKLY_CONFIG;
 
-  const raw = await page.evaluate(async (s) => {
+  const raw = await evalInPage(
+    page,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (s: any) => {
     const f = document.querySelector(s.contentIframe) as HTMLIFrameElement;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = f.contentWindow as any;
@@ -322,7 +352,11 @@ async function captureRows(page: Page): Promise<WeeklyRawRow[]> {
         }
       }, 10000);
     });
-  }, sel);
+  },
+    [sel],
+    // 페이지 안 타임아웃(10초)보다 넉넉하게
+    30000,
+  );
 
   if (!raw) return [];
 
@@ -378,26 +412,17 @@ async function stabilizeAndCapture(
 
 /** 실제 수집 흐름 — collectWeekly 의 watchdog 안에서 실행된다 */
 async function runCollect(
-  browser: Browser,
+  page: Page,
   weekOffset: number,
   monWeek: boolean,
-  credentials: Credentials,
   onProgress?: ProgressFn,
 ): Promise<WeeklyCollectData> {
-  const page = await browser.newPage();
-  // 명시 timeout 이 없는 대기(waitForSelector 등)도 전부 30초로 제한
-  page.setDefaultTimeout(30000);
-  await page.setViewport(WEEKLY_CONFIG.viewport);
-  // 예기치 않은 alert/confirm 으로 흐름이 멈추지 않도록 자동 닫기
-  page.on('dialog', (d: Dialog): void => {
-    d.dismiss().catch((): void => {
-      // 이미 닫힌 다이얼로그면 무시
-    });
-  });
+  // 예기치 않은 alert/confirm 은 browser.ts 의 DIALOG_OVERRIDE 가 삼킨다
 
-  onProgress?.('그룹웨어 로그인 중…');
-  // 로그인 구간만 직렬화 — 메일·근태와 동시 로그인하면 서버가 한쪽을 거부한다
-  await withGroupwareLogin(() => login(page, credentials));
+  onProgress?.('그룹웨어 접속 중…');
+  // 공용 세션 쿠키를 주입해 로그인 화면을 건너뛰고 상단 메뉴가 있는 포털로 직행한다
+  // (예전엔 여기서 직접 로그인했다 — 메일·근태와 로그인을 나눠 쓰게 되어 한 번을 줄였다)
+  await gotoWithSessionInWindow(page, GROUPWARE_CONFIG.portalUrl);
 
   await moveToPersonalWeek(page, onProgress);
 
@@ -446,20 +471,17 @@ const MON_WEEK_EXTRA_MS = 60000;
 export async function collectWeekly(
   weekOffset: number,
   monWeek: boolean,
-  credentials: Credentials,
   onProgress?: ProgressFn,
 ): Promise<WeeklyCollectData> {
   if (running) throw new Error('이미 주간보고 수집이 진행 중입니다.');
   running = true;
-  let browser: Browser | null = null;
+  let page: Page | null = null;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const deadlineMs = COLLECT_DEADLINE_MS + (monWeek ? MON_WEEK_EXTRA_MS : 0);
   try {
-    // 시스템에 설치된 Google Chrome 사용 (배포판에서 Chromium 동봉 없이 동작)
-    browser = await puppeteer.launch({
-      headless: 'new' as const,
-      channel: 'chrome',
-      timeout: 30000,
+    page = await openPage(false, {
+      partition: AUTOMATION_PARTITION.weekly,
+      title: '주간보고 수집',
     });
     // 어느 단계든 예상 밖으로 멈추면 deadline 이 reject 시켜 로딩이 끝나게 한다
     const deadline = new Promise<never>((_, reject) => {
@@ -474,24 +496,13 @@ export async function collectWeekly(
       );
     });
     return await Promise.race([
-      runCollect(browser, weekOffset, monWeek, credentials, onProgress),
+      runCollect(page, weekOffset, monWeek, onProgress),
       deadline,
     ]);
   } finally {
     running = false;
     if (deadlineTimer) clearTimeout(deadlineTimer);
-    if (browser) {
-      // close 가 멈추는 경우까지 대비해 5초 후 프로세스 강제 종료로 폴백
-      const proc = browser.process();
-      await Promise.race([
-        browser.close().catch((): void => undefined),
-        sleep(5000),
-      ]);
-      try {
-        proc?.kill('SIGKILL');
-      } catch {
-        // 이미 종료된 프로세스면 무시
-      }
-    }
+    // 앱 프로세스 안의 창이라 destroy 로 즉시 회수된다 (예전 Chrome 프로세스 kill 폴백 불필요)
+    closePage(page);
   }
 }

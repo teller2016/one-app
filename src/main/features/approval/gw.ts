@@ -5,14 +5,9 @@
 //      같은 계정 동시 로그인은 서버가 거부하므로(groupware-session 규칙) 로그인은 한 번만 해야 한다.
 //   ② 공용 세션을 못 얻으면(Chrome 미설치 등) 자동화 창에서 직접 폼 로그인한다 —
 //      standalone 판에서 검증된 경로다. 이때도 withGroupwareLogin 큐를 지나 직렬화한다.
-import { evalInPage, goto, waitInPage, type Page } from './browser';
+import { evalInPage, goto, waitInPage, type Page } from '../../lib/browser';
 import { GW_CONFIG } from './config';
-import {
-  getGroupwareSession,
-  invalidateGroupwareSession,
-  isLoginUrl,
-  type GroupwareCookie,
-} from '../groupware/session';
+import { gotoWithSessionInWindow, isLoginUrl } from '../groupware/session';
 import { getCredentials } from '../settings/store';
 import { withGroupwareLogin } from '../../lib/groupware';
 import { sleep } from '../../lib/util';
@@ -20,28 +15,6 @@ import { sleep } from '../../lib/util';
 /** 로그인 화면으로 되돌려졌는지 (세션 만료·자격증명 실패 판정) */
 export function isLoginPage(page: Page): boolean {
   return isLoginUrl(page.wc.getURL());
-}
-
-/** 공용 세션 쿠키를 자동화 창의 파티션에 주입 */
-async function injectCookies(page: Page, cookies: GroupwareCookie[]) {
-  const ses = page.wc.session;
-  // 지난 시도의 죽은 쿠키가 섞이지 않게 비우고 넣는다
-  await ses.clearStorageData({ storages: ['cookies'] });
-  for (const c of cookies) {
-    // 도메인 쿠키(`.forbiz.co.kr`)는 앞 점을 뗀 호스트로 url 을 만들고 domain 을 함께 준다
-    const host = c.domain.replace(/^\./, '');
-    await ses.cookies
-      .set({
-        url: `https://${host}${c.path}`,
-        name: c.name,
-        value: c.value,
-        domain: c.domain,
-        path: c.path,
-        secure: c.secure,
-        httpOnly: c.httpOnly,
-      })
-      .catch((): void => undefined); // 개별 쿠키 실패는 무시 (핵심은 JSESSIONID)
-  }
 }
 
 /**
@@ -114,19 +87,12 @@ async function formLogin(page: Page) {
  */
 export async function gotoAsUser(page: Page, url: string): Promise<void> {
   try {
-    const first = await getGroupwareSession();
-    await injectCookies(page, first.cookies);
-    await goto(page, url);
-    if (!isLoginPage(page)) return;
-
-    // 튕겼다 = 캐시된 세션이 서버에서 이미 죽었다 → 새 로그인으로 1회 재시도
-    invalidateGroupwareSession();
-    const fresh = await getGroupwareSession(true);
-    await injectCookies(page, fresh.cookies);
-    await goto(page, url);
-    if (!isLoginPage(page)) return;
+    // 공용 세션 쿠키 주입 → 로그인 화면 건너뛰기 (만료 시 내부에서 1회 재로그인)
+    await gotoWithSessionInWindow(page, url);
+    return;
   } catch {
-    // 공용 세션 확보 실패(Chrome 미설치 등) — 창에서 직접 로그인하는 경로로 내려간다
+    // 공용 세션 확보 실패 — 창에서 직접 로그인하는 경로로 내려간다.
+    // ⚠️ 이 폴백을 지우지 말 것: 결재 기능을 단독 앱으로 떼어낼 때의 유일한 탈출구다.
   }
 
   await formLogin(page);

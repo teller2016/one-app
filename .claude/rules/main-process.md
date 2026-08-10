@@ -11,7 +11,12 @@ paths:
 - REST 호출은 `main/lib/http.ts` 의 `fetchWithTimeout` — **전역 fetch 직접 사용 금지**(타임아웃이 없어 소켓 hang 시 IPC 가 영영 안 풀린다). `import { fetchWithTimeout as fetch }` 패턴을 쓴다.
 - userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(`readUserJson`·`writeUserJson`·`encryptSecret`·`decryptSecret`).
 - 전 창 이벤트는 `main/lib/broadcast.ts`.
-- `sleep`·`localDateKey` 는 `main/lib/util.ts`.
+- `sleep`·`localDateKey`·`withTimeout` 은 `main/lib/util.ts`.
+- **브라우저 자동화는 `main/lib/browser.ts`** (Electron BrowserWindow — `openPage`·`goto`·
+  `evalInPage`·`waitInPage`·`fireInPage`·`waitForPopup`·`releasePage`·`closePage`).
+  ⚠️ **`puppeteer` 를 새로 쓰지 말 것** — 2026-08-10 전환으로 앱에서 완전히 빠졌다(시스템 Chrome
+  의존 제거). 그룹웨어 페이지가 필요하면 `groupware/session.ts` 의 `gotoWithSessionInWindow` 로
+  쿠키를 주입해 로그인 화면을 건너뛴다. 상세는 `groupware-session` 규칙.
 - 창 크기·위치 기억은 `main/lib/windowState.ts`(`loadWindowState`·`trackWindowState`·`WINDOW_MIN`) — `userData/window-state.json`.
   - ⚠️ **`getBounds()` 가 아니라 `getNormalBounds()`** 로 저장한다 — 최대화·전체화면 상태에서 저장하면 화면 전체 크기가 잡혀 **되돌릴 크기를 잃는다**.
   - ⚠️ 복원 전 **화면 밖인지 검사**한다(`isReachable`) — 외부 모니터에 두고 껐다가 노트북만으로 켜면 창이 보이지 않는다(있긴 한데 손이 닿지 않는다). 이때 좌표만 버리고 크기는 살린다.

@@ -18,7 +18,7 @@ import {
   waitForPopup,
   waitInPage,
   type Page,
-} from './browser';
+} from '../../lib/browser';
 import { EXPEND_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';

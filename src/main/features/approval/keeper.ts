@@ -1,6 +1,6 @@
 // 작성만 해두고 사용자에게 남겨두는 자동화 창을 한 곳에서 관리한다.
 // (야근 결재 미리보기 · 지출결의서 작성 — 한 번에 하나만 열린다)
-import { closePage, closePopups, type Page } from './browser';
+import { closePage, closePopups, type Page } from '../../lib/browser';
 
 let kept: Page | null = null;
 /**

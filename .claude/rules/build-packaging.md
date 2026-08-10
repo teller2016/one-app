@@ -8,7 +8,8 @@ paths:
 # 빌드·패키징 규칙 (Electron Forge + Vite)
 
 ## 네이티브·무거운 의존성은 external
-- `puppeteer`·`node-pty`·`ws` 는 `vite.main.config.ts` 에서 **external 처리**(번들 제외, 런타임 로드 — `forge.config.ts` 의 `copyRuntimeDeps` 훅이 패키지에 채워 넣는다). 무거운 네이티브 의존성을 추가할 때도 동일하게 external 을 고려할 것.
+- `node-pty`·`ws` 는 `vite.main.config.ts` 에서 **external 처리**(번들 제외, 런타임 로드 — `forge.config.ts` 의 `copyRuntimeDeps` 훅이 패키지에 채워 넣는다). 무거운 네이티브 의존성을 추가할 때도 동일하게 external 을 고려할 것.
+- ⚠️ **`puppeteer` 는 2026-08-10 전환으로 앱에서 빠졌다** — 브라우저 자동화는 Electron BrowserWindow(`lib/browser.ts`)로 하고, puppeteer 는 **devDependency**(E2E 검증용)로만 남는다. `copyRuntimeDeps` 는 `npm ls --omit=dev` 로 계산하므로 자동으로 제외된다(패키지 약 8.4MB 감소, 시스템 Chrome 의존도 소멸).
 - `node-pty` prebuild 의 `spawn-helper` 는 **실행 권한이 없는 채로 설치**돼 `posix_spawnp failed` 가 난다 → `package.json` 의 `postinstall` 이 `chmod +x` 로 보정한다(`npm i` 후 오류 시 이 스크립트 확인).
 
 ## ⚠️ node-pty 패키징

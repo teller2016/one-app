@@ -19,7 +19,8 @@ export function registerWeeklyIpc() {
         const offset = Number.isFinite(weekOffset) ? Math.trunc(weekOffset) : 0;
         const mon = monWeek === true;
         console.log(`[weekly] 수집 시작 (offset ${offset}${mon ? ', 월~일' : ''})`);
-        const { rows, period } = await collectWeekly(offset, mon, cred, (step) => {
+        // 계정은 공용 세션 모듈이 알아서 읽는다 — 여기서는 미설정만 미리 걸러낸다
+        const { rows, period } = await collectWeekly(offset, mon, (step) => {
           // 진행 단계를 렌더러와 터미널 로그에 전달 (창이 닫혔으면 무시)
           console.log(`[weekly] ${step}`);
           try {

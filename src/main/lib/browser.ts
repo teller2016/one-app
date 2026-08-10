@@ -13,10 +13,23 @@ import {
   webFrameMain,
   type WebContents,
 } from 'electron';
-import { sleep, withTimeout } from '../../lib/util';
+import { sleep, withTimeout } from './util';
 
-/** 자동화 전용 세션 파티션 — 'persist:' 접두사가 없으면 메모리 세션(매 실행 새 로그인) */
-const PARTITION = 'approval-automation';
+/**
+ * 자동화 전용 세션 파티션 — 'persist:' 접두사가 없으면 메모리 세션(매 실행 새 로그인).
+ *
+ * ⚠️ `openPage` 는 열 때 그 파티션의 쿠키를 **비운다**. 그래서 동시에 돌 수 있는 기능은
+ * 파티션을 달리해야 서로의 세션을 지우지 않는다(결재 작성 중에 근태 조회가 끼어드는 상황).
+ */
+export const AUTOMATION_PARTITION = {
+  approval: 'gw-approval',
+  login: 'gw-login',
+  attendance: 'gw-attendance',
+  schedule: 'gw-schedule',
+  weekly: 'gw-weekly',
+} as const;
+
+const DEFAULT_PARTITION = AUTOMATION_PARTITION.approval;
 
 /**
  * 페이지가 네이티브 다이얼로그를 띄우면 숨긴 창에서 응답할 방법이 없어 멈춘다.
@@ -184,12 +197,21 @@ export async function releasePage(
   await page.wc.executeJavaScript(DIALOG_RESTORE).catch((): void => undefined);
 }
 
-/** 자동화 창 열기 — show=false 면 화면에 보이지 않게 동작한다 */
+/**
+ * 자동화 창 열기 — show=false 면 화면에 보이지 않게 동작한다.
+ * opts.partition 으로 세션을 분리한다(기본은 결재용) — 위 AUTOMATION_PARTITION 주의사항 참고.
+ */
 export async function openPage(
   show: boolean,
-  opts: { allowPopups?: boolean } = {},
+  opts: {
+    allowPopups?: boolean;
+    partition?: string;
+    /** 창 제목 — 사용자에게 넘길 창이면 뜻이 통하는 문구를 준다 */
+    title?: string;
+  } = {},
 ): Promise<Page> {
-  const ses = session.fromPartition(PARTITION);
+  const partition = opts.partition ?? DEFAULT_PARTITION;
+  const ses = session.fromPartition(partition);
   // 지난 실행의 쿠키가 남아 반쪽 로그인 상태로 시작하는 것을 막는다
   await ses.clearStorageData();
 
@@ -197,11 +219,11 @@ export async function openPage(
     show,
     width: 1440,
     height: 900,
-    title: '그룹웨어 자동 작성',
+    title: opts.title ?? '그룹웨어 자동 작성',
     // 숨긴 상태에서도 렌더링을 진행해야 그룹웨어 에디터 초기화가 끝난다
     paintWhenInitiallyHidden: true,
     webPreferences: {
-      partition: PARTITION,
+      partition,
       // 숨긴 창은 '백그라운드'로 취급돼 타이머·애니메이션이 느려진다 → 끄면 정상 속도로 동작
       backgroundThrottling: false,
       // ⚠️ 이 창은 작성이 끝나면 사용자가 이어서 쓴다(첨부·결재상신).
