@@ -633,63 +633,38 @@
     flex: 1;
     min-width: 0;
     display: flex;
-    align-items: stretch;
+    align-items: center; // 칩(26px)을 34px 행 가운데에
+    gap: 3px;
+    padding-left: 6px; // 풀블리드 좌측에서 칩이 숨 쉴 여백
     overflow-x: auto;
     scrollbar-width: none; // 탭 초과분은 휠/트랙패드 가로 스크롤 — 바는 감춘다
   }
 
+  // 세션 탭 = 칩 — 풀높이 세그먼트에서 전환(2026-08-10 재설계). 분할 그룹 묶음을
+  // 선·채움·캡 장식으로 표시하는 안이 전부 반려됐는데, 칩이면 그룹을 **박스가 칩들을
+  // 감싸는 구조**(아래 __tab-pack)로 말할 수 있어 경계 문제 자체가 사라진다.
+  // 앱의 필 버튼·프리셋 칩과 같은 문법이기도 하다(DESIGN.md).
   &__tab {
     display: inline-flex;
     align-items: center;
     // 고정폭 기반 — 늘어나지 않고(이미지 #8), 좁아지면 min 까지 줄고 넘치면 스크롤
     flex: 0 1 150px;
     min-width: 90px;
-    padding-right: 6px;
+    height: 26px;
+    padding-right: 4px;
+    border-radius: var(--r-sm);
     transition: background var(--dur-1) var(--ease);
 
-    // 세그먼트 사이 구분선 — 마지막 탭 뒤([+] 앞)에는 긋지 않는다
-    & + & {
-      border-left: 1px solid var(--border);
-    }
-
     &:hover {
-      background: var(--overlay-faint);
+      background: var(--overlay-hover);
     }
 
-    // 활성 탭 — 제목 색 변화만으로는 어느 탭인지 잘 안 보였다(2026-08-10 사용자 지적).
-    // 액센트 틴트 채움 + 하단 2px 액센트 라인(브라우저 탭 관례)으로 표시한다.
+    // 활성 탭 — 액센트 틴트로 채운 칩 (제목 색만으로는 안 보였다 — 2026-08-10 사용자 지적)
     // ⚠️ :hover(특정도 0,2,0)가 --active(0,1,0)를 이기므로 hover 도 함께 고정해야
     // 활성 탭에 마우스를 올렸을 때 채움이 회색으로 바뀌지 않는다.
     &--active,
     &--active:hover {
       background: var(--accent-soft);
-      box-shadow: inset 0 -2px 0 0 var(--accent);
-    }
-
-    // 분할 그룹 묶음 — 같은 그룹의 탭은 나란히 정렬돼 오고(TerminalSection tabView),
-    // 옅은 채움 + 상단 2px 연결선이 이어져 하나로 묶여 보인다. 활성 표시(하단 액센트)와
-    // 겹치지 않게 위쪽에 긋고, 묶음 양 끝은 위 모서리만 둥글려 캡슐 느낌을 준다.
-    &--grouped {
-      background: var(--overlay-faint);
-      box-shadow: inset 0 2px 0 0 var(--accent-glow);
-    }
-
-    // 그룹 안의 활성 탭 — 연결선(위)과 활성 라인(아래)을 **둘 다** 그린다
-    // (box-shadow 는 규칙 간 합성이 안 되므로 여기서 한 번에).
-    &--active#{&}--grouped,
-    &--active#{&}--grouped:hover {
-      background: var(--accent-soft);
-      box-shadow:
-        inset 0 2px 0 0 var(--accent-glow),
-        inset 0 -2px 0 0 var(--accent);
-    }
-
-    &--group-start {
-      border-top-left-radius: var(--r-sm);
-    }
-
-    &--group-end {
-      border-top-right-radius: var(--r-sm);
     }
 
     &--edit {
@@ -708,12 +683,27 @@
     }
   }
 
+  // 분할 그룹 = 멤버 칩들을 감싼 박스 — 장식(연결선·캡·여백·부분 라운드)이 아니라
+  // **컨테이너 자체**가 묶음을 말한다(2026-08-10 여러 안 반려 끝에 확정). 그룹이
+  // 나란히 붙어도 각자의 테두리가 감싸고 있어 하나로 보일 수 없다.
+  &__tab-pack {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 1;
+    min-width: 0;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--r-md); // 안쪽 칩(r-sm 8) + 패딩 2px 에 맞춘 바깥 곡률
+    box-shadow: inset 0 0 0 1px var(--border);
+    background: var(--overlay-faint);
+  }
+
   &__tab-hit {
     flex: 1;
     display: inline-flex;
     align-items: center;
     min-width: 0;
-    padding: 7px 4px 7px 12px;
+    padding: 4px 4px 4px 10px;
     border: 0;
     background: none;
     color: inherit;

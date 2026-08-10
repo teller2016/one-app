@@ -60,6 +60,7 @@ import { PresetsModal } from './PresetsModal';
 import { NewWorkspaceModal } from './NewWorkspaceModal';
 import { NewWorktreeModal } from './NewWorktreeModal';
 import { SessionTabs } from './SessionTabs';
+import type { TabItem } from './SessionTabs';
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_KEY,
@@ -509,21 +510,17 @@ export function TerminalSection() {
     [rememberActive, selKey]
   );
 
-  // ── 탭바 표시 순서 — 그룹 멤버는 나란히 묶는다(첫 멤버의 원래 자리에) ──
-  // 흩어져 있으면 '묶임' 표시(연결선)가 이어지지 않는다. marks 는 묶음의 시작/중간/끝.
+  // ── 탭바 표시 구조 — 단일 세션 | 분할 그룹(멤버 배열) 아이템 목록 ──
+  // 그룹은 첫 멤버의 원래 자리에 멤버들을 인접 정렬해 **하나의 박스(tab-pack)** 로
+  // 렌더된다. tabs 는 평탄화된 표시 순서(⌘1..9·⌃Tab·활성 보정용).
   const tabView = useMemo(() => {
-    if (groups.length === 0)
-      return {
-        tabs: tabSessions,
-        marks: null as Map<string, 'start' | 'mid' | 'end'> | null,
-      };
     const byId = new Map(tabSessions.map((s) => [s.id, s]));
     const placed = new Set<string>();
+    const items: TabItem[] = [];
     const tabs: TerminalSessionInfo[] = [];
-    const marks = new Map<string, 'start' | 'mid' | 'end'>();
     for (const s of tabSessions) {
       if (placed.has(s.id)) continue;
-      const g = groupOf(groups, s.id);
+      const g = groups.length > 0 ? groupOf(groups, s.id) : null;
       const members = g
         ? sessionIdsOf(g)
             .map((id) => byId.get(id))
@@ -531,17 +528,18 @@ export function TerminalSection() {
         : [];
       if (members.length < 2) {
         // 그룹 미소속(또는 sanitize 전 과도기라 멤버가 1개뿐) — 일반 탭
+        items.push({ kind: 'single', session: s });
         tabs.push(s);
         placed.add(s.id);
         continue;
       }
-      members.forEach((m, i) => {
+      for (const m of members) {
         placed.add(m.id);
         tabs.push(m);
-        marks.set(m.id, i === 0 ? 'start' : i === members.length - 1 ? 'end' : 'mid');
-      });
+      }
+      items.push({ kind: 'group', members });
     }
-    return { tabs, marks };
+    return { items, tabs };
   }, [tabSessions, groups]);
 
   /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리 — 혼자 전체 화면으로 (2026-08-10) */
@@ -1282,10 +1280,9 @@ export function TerminalSection() {
 
       <div className="terminal__main">
         <SessionTabs
-          sessions={tabView.tabs}
+          items={tabView.items}
           activeId={activeId}
           draggingId={dragSession}
-          groupMarks={tabView.marks}
           canCreate={canCreate}
           changesOpen={changesOpen}
           moRunning={moRunning}
