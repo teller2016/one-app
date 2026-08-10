@@ -32,12 +32,20 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pane 이 처음부터 그 명령으로 뜬다(`launchShellCommand()`). 예전처럼 셸을 띄운 뒤 PTY 에 `write` 하면, 그 시점이 **zsh 의 ZLE 초기화·히스토리 로드**와 **tmux 의 터미널 능력 협상**(xterm 이 되돌리는 DA 응답 `ESC[?1;2c`)에 겹쳐 **입력이 뒤섞인다** — `env` 가 `v`·`nv` 로 잘리고 뒷부분이 중복돼 `zsh: command not found: v` 가 났다(2026-08-08 실측). 같은 프리셋이 어떤 때는 되고 어떤 때는 깨지는 전형적인 경합이었고, **폰에서 특히 잦았다**(attach 가 늦게 와 협상 구간이 뒤로 밀린다).
 
 - ⚠️ `tmux send-keys` 로 바꿔도 결국 같은 pane tty 에 쓰는 것이라 **해결되지 않는다**(실측 — 그 시도는 되돌렸으니 다시 가지 말 것).
-- 생성 인자로 넘기면 주입 자체가 없어 경합이 사라진다. `-ic` 로 실행해야 rc 가 로드돼 PATH 가 잡힌다(GUI 앱이 물려주는 PATH 는 빈약하다). 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다.
+- 생성 인자로 넘기면 주입 자체가 없어 경합이 사라진다. `-ic` 로 실행해야 rc 가 로드돼 PATH 가 잡힌다(GUI 앱이 물려주는 PATH 는 빈약하다). 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다 — **단 그 `exec` 는 명령과 같은 셸 안에 있어야 한다**(아래 tty pgrp).
 - ⚠️ **`env -u TMUX …` 는 셸 바깥에 둘 것** — `zsh -ic 'env -u TMUX … <명령>'` 처럼 안에 넣으면 **pane 이 즉시 종료된다**(실측 t5). 바깥(`env -u TMUX … zsh -ic '<명령>'`)이면 정상이다. 원인은 규명하지 못했다.
 - 그래서 `agents.ts` 의 `agentCommand()` 는 **원시 명령**을 반환하고, TMUX 제거 래핑은 `pty.ts` 가 위치를 정해 붙인다.
 - **tmux 미설치 폴백 세션만** 예전 방식(`launchAgent` → PTY write)을 쓴다 — 거기엔 다른 경로가 없다. ⚠️ spawn 직후 즉시 write 하면 zsh 초기화가 입력을 버리므로, **첫 출력 후 350ms 잠잠해지면** 보내고 상한 3초를 둔다.
 - `ONEAPP_TERM_DEBUG=1` 로 켜지는 `[term:life]` 로그(create·launch·pty-exit·pty-exit:tmux)가 이 계열 문제의 진단 도구다.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
+
+### ⚠️ 명령과 `exec` 는 **같은 셸 안에서** 이어야 한다 — tty pgrp (2026-08-10 실측)
+`<sh> -ic '<명령>'; exec <sh> -il` 로 **셸을 두 번** 띄우면 `git pull` 처럼 **끝나는 프리셋**에서 pane 이 즉시 죽었다(`zsh: can't set tty pgrp: Input/output error` → `error on TTY read` → status 1 — 사용자 신고). 앞 셸이 인터랙티브라 job control 을 켜고 tty 소유권(foreground pgrp)을 명령의 프로세스 그룹에 넘긴 뒤 **되돌려주지 않고 죽어서**, 뒤이은 `exec <sh> -il` 이 tty 를 못 잡는다. 지금은 한 셸이 명령을 돌리고 그 자리에서 exec 한다 — `env -u TMUX -u TMUX_PANE <sh> -ic 'trap '\''true'\'' INT; <명령>; exec <sh> -il'`.
+
+- ⚠️ **git 문제가 아니다** — `ls` 로도 100% 재현된다. `claude`·`gradlew bootRun`·`npm run dev` 는 계속 살아 있어 이 경로에 도달하지 않아 안 드러났을 뿐이고, **claude 를 Ctrl+C 로 끝냈을 때도 같은 이유로 세션이 통째로 죽고 있었다.**
+- `trap 'true' INT` 는 **셸만** SIGINT 를 무시하게 한다(자식은 정상 수신 — 실행 중 Ctrl+C 로 `sleep` 이 `^C` 취소되고 셸은 남는 것 실측). 없으면 명령 실행 중 Ctrl+C 가 셸까지 끊어 `exec` 에 도달하지 못한다. ⚠️ `trap '' INT`(무시)는 **자식이 상속**하므로 쓰면 안 된다.
+- 부수 효과로 명령 뒤에 남는 셸도 `TMUX` 가 지워진 상태를 물려받는다(`env` 가 바깥에 있으므로).
+- 진단 재현법: `tmux -L ptest -f <userData>/tmux.conf new-session -d -s t -c <경로> "<pane 명령>"` + `set -g remain-on-exit on` 후 `capture-pane -p` — 죽은 pane 의 마지막 출력과 종료 코드를 그대로 볼 수 있다.
 
 ## 데스크톱 세션 화면 구조 (2026-08-05, pane 상한은 2026-08-09)
 `TerminalSection` 이 **본 적 있는 세션마다 `TerminalView` 를 만들고 보이지 않게 돼도 언마운트하지 않는다**(`--hidden` = `visibility:hidden` + `position:absolute; inset:0`). 예전엔 `key={activeId}` 로 xterm 을 매번 파괴해 전환마다 attach 왕복 + TUI 전체 리렌더를 다시 겪고 선택 영역·검색 상태가 사라졌다.
@@ -165,23 +173,35 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 
 | 삼켜지는 것 | 대역(실측) | 막혔을 때 증상 |
 |---|---|---|
-| **DNS 조회** | `168.126.63.0/24`(KT) | `controlplane.tailscale.com` 해석 실패 → **로그인 자체가 안 된다** |
 | 컨트롤 플레인 | `192.200.0.0/24` | `Online: False` → tailnet 에 offline 으로 광고 |
 | DERP 릴레이 | `172.237.0.0/16`·`172.238.0.0/16`(Tokyo) | `no-derp-connection` → 데이터 경로 소멸 |
 
-- ⚠️ **셋이 순차적으로 드러나** 하나를 뚫으면 다음 것이 막힌 채로 남는다 — 하나만 보고 "해결됐다"고 판단하지 말 것. 특히 **DNS 가 첫 관문**이라 이걸 못 뚫으면 나머지는 시도조차 되지 않는다.
+**⚠️ 현재 상태 = 미해결(원본 `.ovpn` 유지).** 아래는 2026-08-09 에 시도한 것과 그 결과 기록이다. 사용자 판단으로 **VPN 을 켤 땐 MO 를 포기**하고 원본 설정으로 두었다.
 
-**해결 — full-tunnel 은 유지하고 Tailscale 대역만 뺀다** (`.ovpn` 에 추가, 2026-08-09 적용·검증):
-```
-route 168.126.63.0 255.255.255.0 net_gateway   # DNS (첫 관문)
-route 192.200.0.0 255.255.255.0 net_gateway    # Tailscale 컨트롤 플레인
-route 172.237.0.0 255.255.0.0 net_gateway      # DERP 릴레이 (Tokyo)
-route 172.238.0.0 255.255.0.0 net_gateway      # DERP 릴레이 (Tokyo)
-```
-`net_gateway` 는 OpenVPN 이 "원래 물리 게이트웨이"로 치환하는 매크로라 **VPN 연결/해제에 맞춰 자동으로 붙었다 떨어진다** — 수동 `route add`(재부팅이면 사라지고 매번 관리자 인증이 필요)와 달리 영구적이다.
+**시도 ①  `pull-filter ignore "redirect-gateway"`(split tunnel) → 🚫 쓰면 안 된다**
+한 줄로 Tailscale 이 전부 살아나 정답처럼 보이지만, **사내 서비스는 '회사 IP 에서 나온 요청'만 허용**해서 full-tunnel 을 없애는 순간 회사 경로 접속이 통째로 끊긴다(실측 후 되돌림). 사용자가 VPN 을 켜는 목적 자체가 **출발지 IP 를 회사 것으로 만드는 것**이다.
+- 판정 기준: `curl -s https://ifconfig.me` 가 **회사 IP(221.151.188.x)** 면 정상, 집 IP(222.236.x)면 full-tunnel 이 깨진 것.
 
-- 🚫 **`pull-filter ignore "redirect-gateway"`(split tunnel)로 풀지 말 것** — 한 줄로 Tailscale 3요소가 다 살아나서 정답처럼 보이지만, **사내 서비스는 '회사 IP 에서 나온 요청'만 허용**하므로 full-tunnel 을 없애는 순간 회사 경로 접속이 통째로 끊긴다(2026-08-09 실측, 되돌림). 사용자가 VPN 을 켜는 목적 자체가 **출발지 IP 를 회사 것으로 만드는 것**이다.
-- 판정 기준: `curl -s https://ifconfig.me` 가 **회사 IP(221.151.188.x)** 면 정상, 집 IP(222.236.x)면 full-tunnel 이 깨진 것이다.
+**시도 ②  `net_gateway` 예외 4줄 → Tailscale·사내망은 됐지만 Claude 가 끊겼다**
+```
+route 168.126.63.0 255.255.255.0 net_gateway   # ❌ DNS — 이 줄이 문제였다
+route 192.200.0.0 255.255.255.0 net_gateway    # 컨트롤 플레인
+route 172.237.0.0 255.255.0.0 net_gateway      # DERP (Tokyo)
+route 172.238.0.0 255.255.0.0 net_gateway      # DERP (Tokyo)
+```
+`net_gateway` 매크로 자체는 옳다(VPN 연결/해제에 맞춰 자동으로 붙었다 떨어져, 수동 `route add` 처럼 재부팅에 사라지지 않는다). 문제는 **DNS 줄**이다 — 이름 해석만 집 회선으로 빠져 경로가 어긋나면서 **Claude(`api.anthropic.com`) 연결이 끊겼다**.
+
+**⚠️ "DNS 가 첫 관문"은 오진이었다** — 원본 설정 + VPN 켬 상태에서 `controlplane.tailscale.com` 해석은 **정상**(`192.200.0.112`)이다. 회사 DNS 는 Tailscale 을 막지 않는다. 당시 해석이 실패한 진짜 이유는 **진단 중 `tailscale down` 을 해서** 시스템 DNS 1순위(`100.100.100.100` = Tailscale)가 죽고 **자기가 죽어 자기를 못 푸는 순환**에 빠졌기 때문이다.
+
+**다음에 시도한다면 — DNS 줄을 뺀 3줄**(미검증):
+```
+route 192.200.0.0 255.255.255.0 net_gateway
+route 172.237.0.0 255.255.0.0 net_gateway
+route 172.238.0.0 255.255.0.0 net_gateway
+```
+적용 후 **Claude 도달을 먼저 확인**(`curl -s -o /dev/null -w '%{http_code}' https://api.anthropic.com/` → 404 면 정상)하고, 그 다음 MO 를 본다. 또한 이 방식은 Tailscale 이 DERP IP 대역을 바꾸면 재발하므로(`no-derp-connection`), 그때는 `dig +short derp7{a..h}.tailscale.com` 으로 새 대역을 확인해 갱신해야 한다.
+
+**회사 방화벽은 Anthropic 을 막지 않는다** — 원본 설정 + VPN 켬에서 `api.anthropic.com` 404 · `claude.ai` 403 · TCP 443 도달 확인(출발지 `221.151.188.10`).
 - ⚠️ 이 방식의 약점은 **Tailscale 이 DERP 서버 IP 대역을 바꾸면 다시 끊긴다**는 것(증상: `no-derp-connection`). 그때는 `dig derp7{a..h}.tailscale.com` 으로 새 대역을 확인해 `route … net_gateway` 줄을 갱신한다.
 - ⚠️ **진단 중 `tailscale down` 을 하지 말 것** — `up` 은 non-default 플래그(이 환경은 `--accept-routes`)를 전부 다시 명시해야 하고, 그 사이 DNS 가 죽어 있으면 재로그인이 **불가능해져 로그아웃 상태로 고착**된다(실측). 빠져나오려면 `tailscale up --accept-routes --accept-dns=false` 로 Tailscale 의 DNS 관리를 잠시 끄고 로그인한 뒤 되돌린다.
 - ⚠️ **측정할 때마다 VPN 이 실제로 켜져 있는지 함께 확인할 것** — 중간에 VPN 이 꺼진 줄 모르고 "고쳐졌다"고 오판하기 쉽다(실측으로 한 번 겪음). 판정 기준은 `pgrep -x openvpn` + `netstat -rn | grep -E "^(0/1|128\.0/1)"`.

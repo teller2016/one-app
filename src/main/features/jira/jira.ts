@@ -43,6 +43,8 @@ const FIELDS = 'summary,status,issuetype,project,parent,priority,updated';
 // 폴링하므로 짧은 TTL 로 실제 네트워크 호출을 공유한다(2026-08-07 성능 감사: 4곳 중복).
 // 수동 새로고침·상태 전환 직후는 force 로 우회하고, 실패 응답은 캐시하지 않는다.
 const LIST_TTL_MS = 60_000;
+// 목록 조회 타임아웃 — 2분 폴링이라 오래 매달릴 이유가 없다(재시도는 http.ts 가 담당)
+const JIRA_TIMEOUT_MS = 10_000;
 let listCache: { at: number; result: JiraListResult } | null = null;
 let listInFlight: Promise<JiraListResult> | null = null;
 
@@ -83,19 +85,22 @@ async function fetchMyIssuesRemote(): Promise<JiraListResult> {
   const headers = { Authorization: `Basic ${auth}`, Accept: 'application/json' };
   const query = `jql=${encodeURIComponent(JQL)}&maxResults=50&fields=${FIELDS}`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  // ⚠️ 자체 AbortController 를 쓰지 않는다 — signal 을 직접 넘기면 `fetchWithTimeout` 의
+  // 타임아웃·네트워크 오류 재시도가 통째로 비활성화된다(호출부 signal 이 우선하므로).
+  // 회사 VPN 터널이 순간 끊겼을 때 재시도로 흡수되는 것이 이 목록 폴링에 특히 중요하다.
   try {
     // 신형 검색 엔드포인트 우선, 구형 서버면 기존 search 로 폴백
-    let res = await fetch(`${cfg.url}/rest/api/3/search/jql?${query}`, {
-      headers,
-      signal: controller.signal,
-    });
+    let res = await fetch(
+      `${cfg.url}/rest/api/3/search/jql?${query}`,
+      { headers },
+      JIRA_TIMEOUT_MS
+    );
     if (res.status === 404) {
-      res = await fetch(`${cfg.url}/rest/api/3/search?${query}`, {
-        headers,
-        signal: controller.signal,
-      });
+      res = await fetch(
+        `${cfg.url}/rest/api/3/search?${query}`,
+        { headers },
+        JIRA_TIMEOUT_MS
+      );
     }
     if (res.status === 401 || res.status === 403) {
       return {
@@ -133,16 +138,15 @@ async function fetchMyIssuesRemote(): Promise<JiraListResult> {
     });
     return { ok: true, configured: true, issues };
   } catch (err) {
-    const aborted = (err as Error).name === 'AbortError';
+    const message = (err as Error).message;
     return {
       ok: false,
       configured: true,
-      error: aborted
-        ? 'Jira 응답이 없습니다 — 네트워크를 확인하세요.'
-        : `Jira 에 연결할 수 없습니다 — ${(err as Error).message}`,
+      // 타임아웃 메시지는 fetchWithTimeout 이 이미 사람이 읽을 문장으로 바꿔 던진다
+      error: message.includes('시간 초과')
+        ? `Jira 응답이 없습니다 — ${message}`
+        : `Jira 에 연결할 수 없습니다 — ${message}`,
     };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
