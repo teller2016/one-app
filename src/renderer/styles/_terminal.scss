@@ -140,9 +140,13 @@
     // 워크스페이스 그룹 사이 구분선 (Superset 동일).
     // 간격을 1px 까지 줄였다가 되돌렸다 — 좁으면 활성 타일 배경이 선에 닿아 답답하다.
     // 대신 축소 타일의 배경 영역 자체를 줄였다(44→34, 2026-08-06 사용자 피드백)
+    // ⚠️ 선 위 여백 = __list 의 gap 4px + margin-top — margin 6 이던 시절 위 10px vs 아래 6px 로
+    //    선이 아래 그룹에 치우쳐 보였다(2026-08-10 사용자 지적). gap 4 + margin 2 = padding 6 대칭.
+    //    (위 그룹이 펼쳐져 있으면 끝이 흐린 브랜치 글자라 행간만큼 위가 살짝 더 떠 보이는 건
+    //    글자의 속성이라 감수 — 접힌 그룹 기준(타일↔타일)으로 정확히 대칭을 맞춘다)
     & + & {
       border-top: 1px solid var(--border);
-      margin-top: 6px;
+      margin-top: 2px;
       padding-top: 6px;
     }
 
@@ -191,13 +195,23 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding-top: 2px; // 행과의 간격 — 접히면 이것도 함께 클립된다
+
+    // 행과의 간격 — ⚠️ inner 의 padding-top 으로 주면 안 된다: grid 0fr 로 접혀도
+    // 패딩은 트랙 min-content 계산에서 짜부라지지 않아 **그룹 바닥에 유령 여백으로 남는다**
+    // (2026-08-10 실측: 축소 모드 3px — 구분선 위 9px vs 아래 5px 비대칭의 주범이었다).
+    // 첫 행의 margin 은 콘텐츠라 overflow:hidden 에 함께 클립되어 접히면 0 이 된다.
+    > :first-child {
+      margin-top: 2px;
+    }
 
     // 축소 모드 — 타일이라 간격이 조금 넓고 가운데 정렬
     .terminal__wt-list--sq & {
       align-items: center;
       gap: 3px;
-      padding-top: 3px;
+
+      > :first-child {
+        margin-top: 3px;
+      }
     }
   }
 
@@ -465,9 +479,12 @@
 
     // 구분선은 border 가 아니라 pseudo — border-top 은 패널 벽에서 벽까지 이어져
     // 타일보다 넓은 선이 답답해 보였다(2026-08-06 사용자 지적). 좌우 6px 인셋으로 타일 폭에 맞춘다.
+    // ⚠️ 선(1px)이 padding 안쪽 첫 픽셀에 그려지므로 선 아래 = padding − 1 = 5px.
+    //    위 = gap 4 + margin 1 = 5px 로 대칭 (2026-08-10 퍼펫티어 실측으로 확정 —
+    //    margin 2 였을 땐 유령 여백 3px 까지 겹쳐 위 9px vs 아래 5px 로 보였다).
     & + & {
       position: relative;
-      margin-top: 6px;
+      margin-top: 1px;
       padding-top: 6px;
 
       &::before {
