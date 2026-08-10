@@ -240,11 +240,16 @@ export const SessionTabs = memo(function SessionTabs({
           it.kind === 'single' ? (
             renderTab(it.session)
           ) : (
-            /* 분할 그룹 — 멤버 칩들을 하나의 박스로 감싼다. 멤버는 일반 탭과 완전히
-               같은 칩(클릭·더블클릭·드래그·가운데 클릭 전부 동일)이고 박스가 묶음을 말한다 */
+            /* 분할 그룹 = 탭 한 장(통탭) — 멤버는 일반 탭과 같은 마크업(클릭·더블클릭·
+               드래그·가운데 클릭 전부 동일)이고, 장이 활성(멤버 중 하나가 activeId)이면
+               --active 로 아래 면과 이어진다(스타일은 SCSS __tab-pack) */
             <span
               key={`pack:${it.members[0].id}`}
-              className="terminal__tab-pack"
+              className={`terminal__tab-pack${
+                it.members.some((m) => m.id === activeId)
+                  ? ' terminal__tab-pack--active'
+                  : ''
+              }`}
               role="group"
               aria-label={`분할 그룹 — ${it.members.map((m) => m.title).join(', ')}`}
             >
