@@ -232,12 +232,34 @@ export function registerDeployIpc() {
       if ('error' in r) return { ok: false, configured: true, error: r.error };
       try {
         // 마지막 빌드의 git 정보 (revision·branch·저장소)
-        const last = await fetchBuildDetail(r.auth, r.jobPath);
+        let last = await fetchBuildDetail(r.auth, r.jobPath);
+        // ⚠️ lastBuild 는 진행 중이거나 SCM 체크아웃 전에 실패했을 수 있어 git 정보가 없다.
+        //    미리보기의 기준은 어차피 "마지막으로 성공한 배포"이므로 그쪽으로 한 번 더 본다.
         if (!last.revision || !last.repoUrl) {
+          try {
+            const ok = await fetchBuildDetail(
+              r.auth,
+              r.jobPath,
+              'lastSuccessfulBuild',
+            );
+            if (ok.revision && ok.repoUrl) last = ok;
+          } catch {
+            // 성공 빌드가 없으면 무시 — 아래 안내 메시지로 떨어진다
+          }
+        }
+        if (!last.revision || !last.repoUrl) {
+          const missing = [
+            !last.revision && '커밋(revision)',
+            !last.repoUrl && '저장소 주소',
+          ]
+            .filter(Boolean)
+            .join('·');
           return {
             ok: false,
             configured: true,
-            error: '마지막 빌드에서 git 정보(revision)를 찾을 수 없습니다.',
+            error:
+              `마지막 빌드(#${last.number})에서 ${missing}를 찾을 수 없습니다 — ` +
+              '젠킨스 잡이 Git plugin(checkout scm)으로 소스를 받는지 확인하세요.',
           };
         }
         const parsed = parseOwnerRepo(last.repoUrl);

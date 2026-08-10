@@ -178,48 +178,125 @@ type RawChangeItem = {
 };
 
 type RawAction = {
+  _class?: string;
   causes?: { shortDescription?: string; userName?: string }[];
   lastBuiltRevision?: { SHA1?: string; branch?: { name?: string }[] };
+  // BuildData 의 브랜치별 최근 빌드 맵 — lastBuiltRevision 이 비어도 여기 남는 경우가 있다
+  buildsByBranchName?: Record<
+    string,
+    { revision?: { SHA1?: string; branch?: { name?: string }[] } } | null
+  >;
   remoteUrls?: string[];
 } | null;
+
+type RawBuild = {
+  number: number;
+  building: boolean;
+  result: string | null;
+  timestamp?: number;
+  duration?: number;
+  actions?: RawAction[];
+  changeSet?: { items?: RawChangeItem[] }; // freestyle 잡
+  changeSets?: { items?: RawChangeItem[] }[]; // pipeline 잡
+};
+
+/** 빌드 지정자 — 번호 또는 젠킨스 심볼릭 경로 */
+export type BuildRef = number | 'lastBuild' | 'lastSuccessfulBuild';
+
+/**
+ * 빌드 응답에서 git 정보(리비전·브랜치·저장소)를 캐낸다.
+ *
+ * Git plugin 의 `BuildData` action 이 표준 출처지만, 잡 구성에 따라 필드가 제각각이라
+ * (파이프라인·다중 SCM·특정 플러그인 버전) 여러 후보를 순서대로 본다.
+ */
+function extractGit(actions: NonNullable<RawAction>[]): {
+  revision?: string;
+  branch?: string;
+  repoUrl?: string;
+} {
+  let revision: string | undefined;
+  let branch: string | undefined;
+  let repoUrl: string | undefined;
+
+  for (const act of actions) {
+    // ① 표준 — lastBuiltRevision
+    if (!revision && act.lastBuiltRevision?.SHA1) {
+      revision = act.lastBuiltRevision.SHA1;
+      branch ??= act.lastBuiltRevision.branch?.[0]?.name;
+    }
+    // ② 폴백 — buildsByBranchName 맵의 첫 항목
+    if (!revision && act.buildsByBranchName) {
+      for (const [name, v] of Object.entries(act.buildsByBranchName)) {
+        if (v?.revision?.SHA1) {
+          revision = v.revision.SHA1;
+          branch ??= v.revision.branch?.[0]?.name ?? name;
+          break;
+        }
+      }
+    }
+    // 저장소 주소는 별도 action 에 있을 수 있어 독립적으로 찾는다
+    if (!repoUrl && act.remoteUrls?.length) repoUrl = act.remoteUrls[0];
+  }
+  return { revision, branch, repoUrl };
+}
 
 /** 빌드 상세 조회 — 커밋 내역(changeSet)·시작자·revision 포함 */
 export async function fetchBuildDetail(
   a: JenkinsAuth,
   jobPath: string,
-  buildNumber?: number,
+  buildNumber?: BuildRef,
 ): Promise<DeployBuildDetail> {
   const build = buildNumber ?? 'lastBuild';
-  let res: Response;
-  try {
-    res = await fetch(
-      `${jobUrl(a, jobPath)}/${build}/api/json?tree=${encodeURIComponent(
-        DETAIL_TREE,
-      )}`,
-      { headers: { Authorization: authHeader(a) } },
-    );
-  } catch {
-    throw new Error('젠킨스에 연결할 수 없습니다.');
-  }
-  if (res.status === 404) throw new Error('빌드 이력이 없습니다.');
-  if (res.status === 401)
-    throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
-  if (!res.ok) throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
+  const base = `${jobUrl(a, jobPath)}/${build}/api/json`;
 
-  const b = (await res.json()) as {
-    number: number;
-    building: boolean;
-    result: string | null;
-    timestamp?: number;
-    duration?: number;
-    actions?: RawAction[];
-    changeSet?: { items?: RawChangeItem[] }; // freestyle 잡
-    changeSets?: { items?: RawChangeItem[] }[]; // pipeline 잡
+  const get = async (url: string): Promise<RawBuild> => {
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: { Authorization: authHeader(a) } });
+    } catch {
+      throw new Error('젠킨스에 연결할 수 없습니다.');
+    }
+    if (res.status === 404) throw new Error('빌드 이력이 없습니다.');
+    if (res.status === 401)
+      throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
+    if (!res.ok) throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
+    return (await res.json()) as RawBuild;
   };
 
-  const actions = (b.actions ?? []).filter(Boolean) as NonNullable<RawAction>[];
+  let b = await get(`${base}?tree=${encodeURIComponent(DETAIL_TREE)}`);
+  let actions = (b.actions ?? []).filter(Boolean) as NonNullable<RawAction>[];
+  let git = extractGit(actions);
+
+  // ⚠️ tree 로 필드를 좁히면 잡 구성에 따라 git action 이 통째로 비어 오는 경우가 있다.
+  // 미리보기가 여기서 막히므로, git 정보가 없을 때만 tree 없이 한 번 더 받아 본다.
+  if (!git.revision || !git.repoUrl) {
+    try {
+      const full = await get(base);
+      const fullActions = (full.actions ?? []).filter(
+        Boolean,
+      ) as NonNullable<RawAction>[];
+      const fullGit = extractGit(fullActions);
+      if (fullGit.revision || fullGit.repoUrl) {
+        b = full;
+        actions = fullActions;
+        git = {
+          revision: git.revision ?? fullGit.revision,
+          branch: git.branch ?? fullGit.branch,
+          repoUrl: git.repoUrl ?? fullGit.repoUrl,
+        };
+      } else {
+        // 어느 쪽으로도 안 나오면 잡 구성 문제 — 원인 특정용으로 action 종류를 남긴다
+        console.warn(
+          `[deploy] ${jobPath}#${full.number} git 정보 없음 — actions:`,
+          fullActions.map((x) => x._class ?? '(unknown)').join(', '),
+        );
+      }
+    } catch {
+      // 전체 조회 실패는 무시 — tree 결과로 진행
+    }
+  }
+
   const cause = actions.find((x) => Array.isArray(x.causes))?.causes?.[0];
-  const gitData = actions.find((x) => x.lastBuiltRevision || x.remoteUrls);
 
   const items: RawChangeItem[] = [
     ...(b.changeSet?.items ?? []),
@@ -232,6 +309,11 @@ export async function fetchBuildDetail(
     timestamp: it.timestamp,
   }));
 
+  // ③ 마지막 폴백 — changeSet 의 최신 커밋. Git plugin 이 changeSet 을
+  //    "이전 빌드 리비전 → 이번 리비전" 범위로 계산하므로 그 끝이 곧 이번 빌드 리비전이다.
+  //    (변경 없이 재빌드하면 changeSet 이 비어 폴백도 못 쓴다)
+  const revision = git.revision ?? items[items.length - 1]?.commitId;
+
   return {
     number: b.number,
     building: b.building,
@@ -239,9 +321,9 @@ export async function fetchBuildDetail(
     timestamp: b.timestamp,
     duration: b.duration,
     startedBy: cause?.userName ?? cause?.shortDescription,
-    revision: gitData?.lastBuiltRevision?.SHA1,
-    branch: gitData?.lastBuiltRevision?.branch?.[0]?.name,
-    repoUrl: gitData?.remoteUrls?.[0],
+    revision,
+    branch: git.branch,
+    repoUrl: git.repoUrl,
     commits,
   };
 }
