@@ -2,7 +2,7 @@
 // 탭 더블클릭 = 이름 인라인 편집(main 의 sidecar 에 반영 — 재시작 후에도 유지).
 // 탭을 끌어 pane 위에 놓으면 화면이 분할된다(드롭 존·판정은 TerminalSection 소유).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import type {
   TerminalSessionInfo,
@@ -26,6 +26,10 @@ const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
   waiting: '입력 대기',
   idle: '유휴',
 };
+
+// 스프링 로딩 대기 — 드래그 중 다른 탭 위에 이만큼 머물면 그 화면이 열린다.
+// 0 이면 탭바를 가로지르기만 해도 화면이 연쇄 전환되고, 길면 굼떠 보인다.
+const HOVER_OPEN_MS = 180;
 
 // memo — 패널 드래그(프레임마다 상태 변경)·pane 리렌더에 탭바가 끌려가지 않게.
 // 상위가 콜백을 useCallback 으로 안정화하고 sessions 는 useMemo 파생값이라 실제로 유지된다.
@@ -81,11 +85,39 @@ export const SessionTabs = memo(function SessionTabs({
     items.some(
       (it) => it.kind === 'group' && it.members.some((m) => m.id === draggingId)
     );
-  /** 드래그 시작한 자기 탭 위인지 — 제자리 드롭(클릭에 가까운 손놀림)을 분리로 오인하지 않게 */
-  const overSelfTab = (e: ReactDragEvent) => {
-    const tab = (e.target as HTMLElement).closest?.('[data-session]');
-    return tab instanceof HTMLElement && tab.dataset.session === draggingId;
+  /** 탭(또는 그룹 장) 위인지 — 탭 위에서는 분리 하이라이트·드롭을 끈다: 탭 하버는
+   *  '그 화면 열기'(스프링 로딩)지 분리가 아니다(2026-08-10 사용자 지적 — 탭 위인데
+   *  바 전체가 accent 로 칠해졌다). 자기 탭 제자리 드롭 방지도 이걸로 함께 해결된다. */
+  const overTabArea = (e: ReactDragEvent) => {
+    const el = e.target as HTMLElement;
+    return !!el.closest?.('[data-session], .terminal__tab-pack');
   };
+
+  // 스프링 로딩 — 드래그 중 다른 탭 위에 잠시 머물면 그 탭(그룹 멤버면 그 그룹)의
+  // 화면이 열린다(2026-08-10 사용자 요청). 원하는 화면을 하버로 열어 두고 아래
+  // pane 에 놓으면 그 화면과 분할된다. 드롭 대상이 되는 게 아니라 **화면만** 바꾼다.
+  const hoverOpenRef = useRef<{ id: string; timer: number } | null>(null);
+  const clearHoverOpen = () => {
+    if (!hoverOpenRef.current) return;
+    window.clearTimeout(hoverOpenRef.current.timer);
+    hoverOpenRef.current = null;
+  };
+  const onTabDragOver = (id: string) => {
+    if (!draggingId || id === draggingId || id === activeId) return;
+    if (hoverOpenRef.current?.id === id) return; // 같은 탭 위 — 이미 대기 중
+    clearHoverOpen();
+    hoverOpenRef.current = {
+      id,
+      timer: window.setTimeout(() => {
+        hoverOpenRef.current = null;
+        onSelect(id);
+      }, HOVER_OPEN_MS),
+    };
+  };
+  // 드래그가 끝나면(드롭·취소 모두 draggingId 가 비워진다) 대기 중인 전환을 버린다
+  useEffect(() => {
+    if (!draggingId) clearHoverOpen();
+  }, [draggingId]);
 
   // Enter·blur 공용 — 빈 값이나 변경 없음이면 조용히 닫는다(main 도 같은 판정을 한다)
   const commitRename = async () => {
@@ -153,6 +185,7 @@ export const SessionTabs = memo(function SessionTabs({
           onDragStartSession(s.id);
         }}
         onDragEnd={onDragEndSession} // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
+        onDragOver={() => onTabDragOver(s.id)} // 스프링 로딩 — 위 주석 참고
         // 가운데 클릭 = 종료 (브라우저 탭 관례 — 2026-08-10 사용자 요청).
         // 래퍼에 걸어 제목·상태점 어디를 눌러도 닫힌다.
         onAuxClick={(e) => {
@@ -212,14 +245,15 @@ export const SessionTabs = memo(function SessionTabs({
   };
 
   return (
-    /* 그룹 멤버를 끌어 올리면 탭바 전체가 '그룹에서 분리' 드롭 존이 된다 — pane 위
-       드롭 존(분할·교체)과 달리 "탭으로 돌려보낸다" = 혼자 보기. 자기 탭 위에서는
-       preventDefault 를 안 해 드롭이 성립하지 않는다(제자리 드롭 = 취소). */
+    /* 그룹 멤버를 끌어 올리면 탭바의 **빈 영역**이 '그룹에서 분리' 드롭 존이 된다 —
+       pane 위 드롭 존(분할·교체)과 달리 "탭으로 돌려보낸다" = 혼자 보기.
+       탭 위에서는 preventDefault 를 안 해 드롭이 성립하지 않는다 — 탭 하버는
+       스프링 로딩(그 화면 열기)이 맡고, 제자리 드롭(클릭에 가까운 손놀림)도 막힌다. */
     <div
       className={`terminal__tabs${detachHover ? ' terminal__tabs--detach' : ''}`}
       onDragOver={(e) => {
         if (!detachable) return;
-        if (overSelfTab(e)) {
+        if (overTabArea(e)) {
           setDetachHover(false);
           return;
         }
@@ -227,11 +261,17 @@ export const SessionTabs = memo(function SessionTabs({
         e.dataTransfer.dropEffect = 'move';
         setDetachHover(true);
       }}
-      onDragLeave={() => setDetachHover(false)}
+      onDragLeave={() => {
+        setDetachHover(false);
+        // 탭바를 벗어나면 대기 중인 스프링 로딩도 버린다 — 안 버리면 pane 을 조준하는
+        // 사이 타이머가 발화해 화면이 밑에서 바뀐다
+        clearHoverOpen();
+      }}
       onDrop={(e) => {
         if (!detachable) return;
         e.preventDefault();
         setDetachHover(false);
+        clearHoverOpen();
         if (draggingId) onDetachSession(draggingId);
       }}
     >

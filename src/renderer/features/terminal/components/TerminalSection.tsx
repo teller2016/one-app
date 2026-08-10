@@ -665,6 +665,9 @@ export function TerminalSection() {
   const [dropHint, setDropHint] = useState<{ panelId: string; side: DropSide } | null>(
     null
   );
+  // 자기 화면의 탭을 끌면 놓을 곳이 없다 — **드래그 중 다른 탭 위에 올리면 그 탭
+  // (그룹 멤버면 그 그룹)의 화면이 열린다**(SessionTabs 의 스프링 로딩, selectTab 경유).
+  // 원하는 화면을 하버로 열어 두고 아래 pane 에 놓으면 분할된다(2026-08-10 사용자 요청).
   const onDragStartSession = useCallback((id: string) => setDragSession(id), []);
   const onDragEndSession = useCallback(() => {
     // 드롭이 밖에서 끝나도(무효 드롭 포함) 표시·드롭 존이 남지 않게 — WorkspaceNav 동일

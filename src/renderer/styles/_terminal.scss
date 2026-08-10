@@ -623,12 +623,11 @@
   // ── 상단 세션 탭바 (Superset 세그먼트 스타일) — [탭|탭|탭][+] ➝ 우측 [변경사항][MO] ──
   // 탭은 사이 구분선으로 이어진 넓은 세그먼트 — 활성은 밝은 제목 + ×, 비활성은 흐린
   // 제목 + (작업 중·입력 대기일 때만) 상태점.
-  // 탭바 = 가라앉은 선반 + 브라우저형 연결 탭 (2026-08-10 시안 ⑧ '통탭' 확정).
-  // 활성 탭은 아래 면(공용 바 = --bg)과 이어져 보이고, 분할 그룹은 **탭 한 장**을
-  // 멤버 세그먼트로 나눠 쓴다 — "묶음 = 한 장" 은유. 칩·세그먼트 시절의 장식형
-  // 묶음 표시(연결선·캡·여백·박스)는 전부 반려됐다.
-  // ⚠️ 바닥 경계선은 border 가 아니라 **inset box-shadow** — 자식(탭)이 위에
-  // 그려지므로 활성 탭의 배경이 선을 국소적으로 덮어 "뚫린 연결"이 생긴다.
+  // 탭바 = 가라앉은 선반 + '장' 탭 (2026-08-10 시안 ⑧ '통탭' 확정, 같은 날 기하 통일).
+  // 모든 탭이 같은 장(테두리+라운드+톤)이고 분할 그룹은 장이 넓어 멤버 세그먼트가
+  // 여럿일 뿐이다 — "묶음 = 한 장" 은유. 장들은 바닥 경계선 **위에** 얹힌다
+  // (list 의 padding-bottom 1px — 선을 뚫는 연결형은 상태마다 모양이 갈라져 폐기).
+  // 칩·세그먼트 시절의 장식형 묶음 표시(연결선·캡·여백·박스)는 전부 반려됐다.
   &__tabs {
     display: flex;
     align-items: flex-end; // 탭이 바닥(경계선)에 붙는다
@@ -660,41 +659,43 @@
     display: flex;
     align-items: flex-end;
     gap: 2px;
-    padding-left: 8px; // 풀블리드 좌측에서 첫 탭이 숨 쉴 여백
+    padding: 0 0 1px 8px; // 하단 1px — 장들이 바닥 경계선 **위에** 얹힌다(선은 안 끊긴다)
     overflow-x: auto;
     scrollbar-width: none; // 탭 초과분은 휠/트랙패드 가로 스크롤 — 바는 감춘다
   }
 
-  // 세션 탭 — 위만 둥근 브라우저형. 비활성은 투명(선반 위), 활성은 --bg 채움 +
-  // 테두리로 아래 면과 이어진다(경계선은 부모의 inset shadow 라 배경이 덮는다).
+  // 세션 탭 = 테두리 있는 '장' — 단일 탭도 그룹(tab-pack)과 **완전히 같은 기하**다
+  // (그룹은 장이 넓어 세그먼트가 여럿일 뿐). 연결형(--bg 채움으로 바닥선 뚫기)은
+  // 단일/그룹/활성마다 모양·높이가 제각각으로 읽혀 폐기했다(2026-08-10 사용자 지적,
+  // 스크린샷 실측). 활성 표시는 어디서나 같은 **액센트 틴트 한 겹**(background-image —
+  // 바탕색 위에 겹쳐야 해서 색이 아니라 이미지 레이어로 칠한다).
   &__tab {
     display: inline-flex;
     align-items: center;
-    // 고정폭 기반 — 늘어나지 않고(이미지 #8), 좁아지면 min 까지 줄고 넘치면 스크롤
-    flex: 0 1 150px;
-    min-width: 90px;
+    // 고정폭 — 그룹 안팎 어디서나 모든 탭이 정확히 같은 폭(2026-08-10 사용자 요청).
+    // 줄어들지도 늘어나지도 않고, 넘치면 리스트가 스크롤.
+    flex: 0 0 150px;
+    // ⚠️ min-width: 0 필수 — flex 아이템의 기본 최소폭은 콘텐츠(min-content)라,
+    // 없으면 긴 제목이 150px 기준을 밀어내고 탭을 계속 늘린다(2026-08-10 사용자
+    // 신고 — 제목 말줄임은 __tab-title 의 ellipsis 가 맡는다).
+    min-width: 0;
     height: 29px;
     padding-right: 4px;
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
     border-bottom: 0;
     border-radius: var(--r-sm) var(--r-sm) 0 0;
-    // 비활성 탭도 은은한 탭 형태를 갖는다 — 투명이면 글자만 보여서, 통짜 --bg 블록인
-    // 활성 탭만 "혼자 크게" 읽힌다(2026-08-10 사용자 지적 — 실제 폭은 전부 150px).
-    // 반투명 --bg 로 형태를 보여 폭의 균일함이 눈에 보이게 한다(Chrome 탭 문법).
-    background: color-mix(in srgb, var(--bg) 45%, transparent);
-    transition: background var(--dur-1) var(--ease);
+    background-color: color-mix(in srgb, var(--bg) 45%, transparent);
+    transition: background-color var(--dur-1) var(--ease);
 
     &:hover {
-      background: color-mix(in srgb, var(--bg) 70%, transparent);
+      background-image: linear-gradient(var(--overlay-hover), var(--overlay-hover));
     }
 
-    // 활성 탭 — 아래 면과 같은 --bg 로 채워 연결 (제목 색만으로는 안 보였다 —
-    // 2026-08-10 사용자 지적 이후 여러 안을 거쳐 연결형으로 확정).
+    // 활성 탭 — 액센트 틴트 한 겹 (그룹 안 활성 멤버와 동일 합성)
     // ⚠️ :hover(특정도 0,2,0)가 --active(0,1,0)를 이기므로 hover 도 함께 고정
     &--active,
     &--active:hover {
-      background: var(--bg);
-      border-color: var(--border);
+      background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
     }
 
     &--edit {
@@ -708,57 +709,38 @@
       }
     }
 
-    // 분할 드래그 중인 탭 — WorkspaceNav 의 --dragging 과 같은 규칙
+    // 분할 드래그 중인 탭 — 0.45(WorkspaceNav 값)는 활성 탭의 채움·테두리·글자가
+    // 통째로 씻겨 "선택 안 된 것처럼" 보였다(2026-08-10 사용자 신고 — 드래그 중
+    // 스크린샷의 픽셀 실측으로 확인). 끌리는 중임은 고스트 이미지·드롭 존이 이미
+    // 말해 주므로 원본 탭은 정체성이 남을 만큼만 흐린다.
     &--dragging {
-      opacity: 0.45;
+      opacity: 0.65;
     }
   }
 
   // 분할 그룹 = **탭 한 장**을 멤버 세그먼트로 나눠 쓴다 (시안 ⑧ 통탭).
-  // 항상 테두리 있는 한 장으로 서 있고, 멤버 중 하나가 활성이면(--active)
-  // 장 전체가 --bg 로 채워져 아래 면과 이어진다 — 안에서 활성 멤버만 액센트 틴트.
+  // 장의 기하(테두리·라운드·톤)는 단일 탭과 동일 — 폭만 멤버 수만큼 넓다.
   &__tab-pack {
     display: inline-flex;
     align-items: stretch;
-    flex-shrink: 1;
-    min-width: 0;
+    flex-shrink: 0; // 멤버가 고정폭이라 장도 줄지 않는다 — 넘치면 리스트 스크롤
     height: 29px;
     border: 1px solid var(--border);
     border-bottom: 0;
     border-radius: var(--r-sm) var(--r-sm) 0 0;
     overflow: hidden; // 멤버 세그먼트가 라운드 밖으로 삐져나가지 않게
-    background: color-mix(in srgb, var(--bg) 45%, transparent); // 비활성 단일 탭과 같은 톤
-    // 비활성 그룹의 배경이 부모의 바닥 경계선을 덮으므로 같은 선을 다시 그린다
-    box-shadow: inset 0 -1px 0 0 var(--border);
+    background-color: color-mix(in srgb, var(--bg) 45%, transparent);
 
-    &--active {
-      background: var(--bg);
-      box-shadow: none; // 연결 — 경계선이 그룹 폭만큼 뚫린다
-    }
-
-    // 멤버 = 세그먼트 — 탭 베이스에서 개별 윤곽을 지우고 사이 구분선만 남긴다.
-    // ⚠️ 폭(flex 기준·min)은 단일 탭과 **동일하게** — 다르게 두면 그룹 멤버만
-    // 좁아져 탭 크기가 들쭉날쭉해 보인다(2026-08-10 사용자 지적).
+    // 멤버 = 세그먼트 — 장이 테두리·톤을 갖고 있으므로 자기 윤곽·바탕은 지우고
+    // 사이 구분선만 남긴다. hover·활성 틴트(이미지 레이어)는 단일 탭 규칙 그대로.
     .terminal__tab {
       height: 100%;
-      flex: 0 1 150px;
-      min-width: 90px;
       border: 0;
       border-radius: 0;
-      background: none; // 장(pack)이 시트 톤을 이미 갖는다 — 겹치면 톤이 이중으로 진해진다
-
-      &:hover {
-        background: var(--overlay-hover);
-      }
+      background-color: transparent;
 
       & + .terminal__tab {
         border-left: 1px solid var(--border);
-      }
-
-      // 활성 멤버 — 장 안에서 액센트 틴트 (장 전체는 --bg 연결이 담당)
-      &--active,
-      &--active:hover {
-        background: var(--accent-soft);
       }
     }
   }
