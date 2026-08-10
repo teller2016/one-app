@@ -407,11 +407,24 @@ const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
  * - `env -u TMUX …` 는 **셸 바깥**에 둔다 — `zsh -ic 'env -u TMUX … <명령>'` 처럼 안에 넣으면
  *   pane 이 즉시 종료된다(실측). 이유는 규명하지 못했고, 바깥에 두면 정상이다.
  * - `-ic` 로 실행해야 rc 가 로드돼 PATH 가 잡힌다(GUI 앱이 물려주는 PATH 는 빈약하다).
- * - 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다 — 예전 동작과 같다.
+ *
+ * ⚠️ **명령과 `exec` 는 반드시 같은 셸 안에서 이어야 한다** (2026-08-10 실측).
+ * 예전엔 `<sh> -ic '<명령>'; exec <sh> -il` 로 셸을 **두 번** 띄웠는데, 앞 셸이 인터랙티브라
+ * job control 을 켜고 tty 소유권(foreground pgrp)을 명령의 프로세스 그룹에 넘긴 뒤 그대로
+ * 죽는다 — 소유권이 죽은 그룹에 남아 뒤이은 `exec <sh> -il` 이 tty 를 못 잡고
+ * `zsh: can't set tty pgrp: Input/output error` 와 함께 **pane 이 즉시 종료**됐다.
+ * `git pull` 처럼 **끝나는 명령**(`ls` 로도 재현)과 **claude 를 Ctrl+C 로 끝낸 경우**가 여기 걸렸다.
+ * 하나의 셸이 명령을 돌리고 그 자리에서 `exec` 하면 소유권이 넘어간 적이 없어 문제가 사라진다.
+ *
+ * - `trap 'true' INT` 는 **셸만** SIGINT 를 무시하게 한다(자식은 정상 수신 — `sleep` 이 `^C` 로
+ *   즉시 취소되는 것 실측). 없으면 명령 실행 중 Ctrl+C 가 셸까지 끊어 `exec` 에 도달하지 못한다.
+ *   `trap '' INT`(무시)는 자식이 그 설정을 상속하므로 쓰면 안 된다.
+ * - 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다 — 의도했던 동작이 이제 실제로 된다.
  */
 function launchShellCommand(shell: string, rawCommand: string): string {
   const sh = shQuote(shell);
-  return `env -u TMUX -u TMUX_PANE ${sh} -ic ${shQuote(rawCommand)}; exec ${sh} -il`;
+  const inner = `trap 'true' INT; ${rawCommand}; exec ${sh} -il`;
+  return `env -u TMUX -u TMUX_PANE ${sh} -ic ${shQuote(inner)}`;
 }
 
 export function createSession(opts: TerminalCreateInput = {}): TerminalSessionInfo {
