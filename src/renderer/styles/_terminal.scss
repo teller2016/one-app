@@ -652,6 +652,11 @@
         width: 160px;
       }
     }
+
+    // 분할 드래그 중인 탭 — WorkspaceNav 의 --dragging 과 같은 규칙
+    &--dragging {
+      opacity: 0.45;
+    }
   }
 
   &__tab-hit {
@@ -773,7 +778,8 @@
     overflow: hidden;
   }
 
-  // 세션 화면 = [프리셋 바][xterm 패널] 세로 스택 (+ 검색바는 위에 떠 있는 오버레이)
+  // 세션 화면 = xterm 패널 (+ 검색바는 위에 떠 있는 오버레이).
+  // 툴바는 pane 밖 상단 공용 바 하나다 — 2026-08-10, features/terminal.md 참고.
   &__pane {
     position: relative; // 검색 오버레이의 기준
     flex: 1;
@@ -794,10 +800,96 @@
       inset: 0;
       pointer-events: none;
     }
+
+    // 분할 pane — 위치·크기는 인라인 %(레이아웃 트리가 계산, __panes 기준).
+    // pane 사이 구분선은 split-grip 이 상시 그린다(아래) — pane 자체의 inset
+    // box-shadow 는 배경 레이어라 자식(__host 다크 배경)이 덮어 보이지 않는다.
+    &--split {
+      position: absolute;
+    }
+
+    // 포커스 pane — 분할 중 어느 터미널이 키보드·⌘F 를 받는지 (단일 모드에선 안 쓴다).
+    // ⚠️ pane 에 직접 box-shadow 를 걸면 안 된다 — inset 그림자는 배경과 함께 그려져
+    // 자식 콘텐츠(__host) 아래에 깔린다(2026-08-10 실측: 테두리가 바 높이에서만 보였다).
+    // 콘텐츠 위에 뜨는 오버레이(::after + z-index)로 그린다.
+    &--focused::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      box-shadow: inset 0 0 0 1px var(--accent-on-dark);
+    }
   }
 
-  // 툴바 = 프리셋 바 (Superset 동일) — 좌측 [⚙ | 프리셋 칩…], 우측 아이콘 액션.
-  // 높이를 최소로 유지해 터미널을 덜 먹는다
+  // 분할 경계 그립 — 히트 10px 은 side-grip 과 같은 규칙이지만, 시각선(2px)은
+  // **상시 구분선**이다 — 다크 host 끼리 맞닿아 경계가 아예 안 보였다(2026-08-10
+  // 사용자 지적: "hover 했을 때만 나온다"). hover 는 더 밝혀 잡을 수 있음을 알린다.
+  &__split-grip {
+    position: absolute;
+    z-index: 2; // pane 위 — 안 두면 xterm 이 포인터를 가로챈다
+
+    &::after {
+      content: '';
+      position: absolute;
+      border-radius: var(--r-full);
+      background: var(--border-dark); // 다크 터미널 영역 위라 다크 경계 토큰
+      transition: background var(--dur-1) var(--ease);
+    }
+
+    &:hover::after,
+    &:active::after,
+    &:focus-visible::after {
+      background: var(--on-dark-3);
+    }
+
+    &--row {
+      width: 10px;
+      margin-left: -5px; // 경계선이 히트 영역의 중심에 오도록
+      cursor: col-resize;
+
+      &::after {
+        top: 0;
+        bottom: 0;
+        left: 4px;
+        width: 2px;
+      }
+    }
+
+    &--column {
+      height: 10px;
+      margin-top: -5px;
+      cursor: row-resize;
+
+      &::after {
+        left: 0;
+        right: 0;
+        top: 4px;
+        height: 2px;
+      }
+    }
+  }
+
+  // 드롭 존 — 탭 드래그 중에만 pane 전체를 덮는 투명 레이어.
+  // xterm 의 canvas/textarea 가 dragover 를 삼키지 못하게 이벤트를 독점한다.
+  &__drop-zone {
+    position: absolute;
+    z-index: 3;
+  }
+
+  // 드롭 프리뷰 — 분할될 반쪽(중앙 드롭이면 pane 전체)을 액센트로 미리 보여준다
+  &__drop-hint {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none; // 아래 드롭 존의 dragover/drop 을 막으면 안 된다
+    background: var(--accent-glow); // 장식 전용 토큰 (포커스 링 아님)
+    border-radius: var(--r-xs);
+  }
+
+  // 상단 공용 툴바 — 탭바 아래 한 줄(좌측 [⚙ | 프리셋 칩…], 우측 아이콘 액션).
+  // 예전엔 pane 마다 있었는데 분할하면 반복될 이유가 없어 하나로 올렸다(2026-08-10).
+  // __panes 밖(위)의 일반 flex 행이라 모든 pane 에 균일하게 적용된다 — 숨은 pane
+  // inset:0 크기 동등성도 그대로다. 높이는 최소로 유지해 터미널을 덜 먹는다.
   &__bar {
     display: flex;
     align-items: center;
@@ -805,19 +897,6 @@
     gap: 8px;
     min-height: 22px;
     padding: 2px 8px 2px 6px; // 풀블리드라 자체 여백 — 최소한만
-  }
-
-  // '세션 없음' 화면의 프리셋 바 — 세션 화면과 **같은 자리**에 보이되 레이아웃 높이는
-  // 차지하지 않게 떠 있다.
-  // ⚠️ 자리를 차지하면 숨은 pane(absolute inset:0)이 활성 pane 보다 이 바 높이만큼
-  //    커져, 워크트리를 오갈 때 PTY 리사이즈가 한 번 더 생긴다 — 검색바를 세로 스택이
-  //    아니라 오버레이로 둔 것과 같은 이유다(features/terminal.md).
-  &__bar--empty {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1;
   }
 
   &__bar-presets {
@@ -900,7 +979,7 @@
   // 자리를 차지하지 않게 absolute 로 띄워 터미널 크기를 건드리지 않는다.
   &__search {
     position: absolute;
-    top: 30px; // 툴바(24px) + 여백
+    top: 6px; // 툴바가 pane 밖(상단 공용 바)으로 나가 pane 최상단에 바로 뜬다
     right: 10px;
     z-index: 2;
     display: flex;

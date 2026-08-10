@@ -57,6 +57,20 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - 안 보는 세션의 출력이 IPC 로 오지 않는 것은 이미 `terminal:data` 게이트의 설계다 — 링버퍼·tmux 에 남아 재attach replay 로 복원되고, **상태(busy/waiting) 판정은 main 의 pty 가 하므로 뱃지·알림은 그대로다.**
 - 실측(2026-08-09 E2E): 세션 3개 · 탭 3개에서 진입 시 pane **1개**, 탭을 옮길 때마다 2 → 3 으로 늘고 되돌아오면 3 유지(재사용).
 
+### 분할(스플릿) 레이아웃 — 탭 드래그로 여러 pane 동시 표시 (2026-08-10)
+토스 트리 아티클 방식: `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + orientation + ratio)가 상태의 전부이고, 렌더는 트리 순회(`computeLayout`)로 계산한 %rect 를 pane 에 인라인으로 준다 — **pane 들은 여전히 `__panes` 의 플랫 형제**다(React 재부모화 = xterm 언마운트라 트리 모양대로 중첩하면 안 된다). 드롭 판정은 X자 — 축별 정규화(`nx=(x/w)*2-1`) 후 `|nx|>|ny|`, 중앙 데드존(0.3)은 분할이 아니라 **그 pane 의 세션 교체**. 상한 `MAX_SPLIT_PANES(4) < MAX_LIVE_PANES(8)`.
+
+- **단일 pane 은 트리 없음(null)** — 2개 이상일 때만 트리가 존재하고, 1개로 붕괴하면 `updateLayout` 이 selKey 키를 지운다. 그래서 최빈 경로(단일)의 렌더와 `--hidden` inset:0 무리사이즈 전환은 분할 도입 전과 완전히 같다.
+- **active 는 visible(다중)/focused(단일)로 분리됐다** — 크기 주장(`visibleRef`)·fit·아틀라스 복구는 보이는 pane 전부(서로 **다른 세션**이라 크기 주장이 충돌하지 않는다), `term.focus()`·⌘F 는 focused(=activeId) 하나만. ⚠️ visible effect 에서 `focus()` 를 부르면 분할 드롭 순간 새 pane 이 포커스를 훔친다 — 그래서 effect 가 둘로 나뉘어 있다.
+- ⚠️ **한 세션은 트리에 1회만** — main 의 attach 추적(`desktopAttached`)이 `Set<세션id>` 라 같은 세션의 pane 이 둘이면 한쪽 detach 가 다른 쪽의 `terminal:data` 방송까지 끊는다. `moveSession`(선제 제거)·`replaceSession`(트리 안 세션이면 swap)·`sanitizeLayout`(중복 제거)이 3중으로 지키고, **main 은 무변경**이다.
+- **드롭 존은 드래그 중에만 pane 위에 덮는 투명 오버레이**(`terminal__drop-zone`) — xterm 의 canvas/textarea 가 dragover 를 삼키는 문제를 원천 회피한다. dragover 는 고빈도라 `setDropHint` 는 동일값 조기 반환(WorkspaceNav 와 같은 규칙).
+- `livePanes` 는 레이아웃 세션 전부를 포함하고 **LRU 축출은 화면 밖 세션만** 자른다(보이는 pane 을 버리면 그 자리가 빈다). 활성 보정도 분할 중엔 폴백 후보를 레이아웃 세션으로 제한한다 — 포커스가 레이아웃 밖으로 새면 ⌘F·탭 클릭(슬롯 교체)의 대상이 안 보이는 pane 이 된다.
+- 탭 클릭·⌘1..9·⌃Tab·새 세션(pending)은 전부 `selectTab` 경유 — 분할 중 레이아웃 밖 세션이면 **포커스된 슬롯의 세션을 교체**, 안 세션이면 포커스만 이동. 단일 모드는 기존과 동일.
+- 영속화는 localStorage `terminal:layout`(selKey → 트리 맵 — `terminal:lastActive` 와 같은 방식). ⚠️ 복원 sanitize(죽은 세션 걷어내기)는 **`sessionsReady` 이후에만** — 빈 초기 목록으로 돌면 복원한 레이아웃을 통째로 오파기한다(선택 보정의 ready 게이트와 같은 교훈). 그립 드래그 중에는 저장 effect 를 스킵하고 pointerup 에서 1회 저장한다.
+- 분할 중 탭 교체로 숨은 pane(inset:0 = 전체 크기)이 작은 슬롯에 들어올 때의 fit 1회는 불가피한 허용 비용이다(단일 모드에는 해당 없음).
+- **툴바(프리셋·검색·글자크기·맨아래로·Finder)는 pane 이 아니라 탭바 아래 공용 바 하나다** — 분할하면 pane 마다 반복될 이유가 없다(2026-08-10 사용자 요청, 아래 '상단 공용 바' 절).
+- ⚠️ **pane 의 경계·포커스 표시를 pane 자체의 inset box-shadow 로 그리면 안 보인다** — inset 그림자는 배경 레이어와 함께 그려져 자식(`__host` 다크 배경)이 위에 덮는다(2026-08-10 실측: 바 높이 22px 에서만 테두리가 보였다). 그래서 pane 사이 구분선은 `split-grip::after` 가 **상시**(2px `--border-dark`, hover 시 `--on-dark-3`) 그리고, focused 테두리는 `--focused::after` 오버레이(z-index + pointer-events:none)로 콘텐츠 위에 띄운다.
+
 ### ⚠️ pane·탭바·LNB 는 `memo` 다 — 넘기는 props 는 참조가 고정돼야 한다 (2026-08-09)
 세션 목록 브로드캐스트는 **상태(busy↔waiting)가 바뀔 때마다** 오고, 패널 폭 드래그는 **프레임마다** 상위 상태를 바꾼다. 그때마다 살아 있는 pane 전부가 리렌더되던 것을 막았다.
 
@@ -70,11 +84,13 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - ⚠️ `display:none` 금지 — 크기가 0 이 되어 다시 보일 때 80x24 를 거치며 TUI 가 두 번 리플로우한다. `inset:0` 이면 숨은 pane 도 활성과 **같은 크기**라 전환 시 리사이즈가 0이다(실측: 세션 4개 전환 왕복에 PTY 301x62 불변).
 - 글자 크기(`fontSize`)는 pane 이 여러 개 살아 있으므로 **TerminalSection 이 한 곳에서** 들고 내려준다(각자 들면 세션마다 어긋난다).
 
-### 프리셋 바는 세션이 0 개여도 떠 있다 (2026-08-08)
-`PresetBar` 컴포넌트를 **세션 화면(`TerminalView` 툴바 좌측)과 '세션 없음' 화면(`TerminalSection`)이 공용**한다. 예전엔 `TerminalView` 안에만 있어 세션이 하나도 없으면 프리셋이 통째로 사라졌다 — **첫 세션을 프리셋으로 시작하는 게 가장 자연스러운 흐름인데 그게 막혀 있었다**(사용자 지적). 그래서 `runPreset` 도 세션이 아니라 **cwd** 를 받는다(선택된 워크트리 경로로 첫 세션을 만든다). 워크스페이스 자체가 없는 화면에서는 등록이 먼저라 감춘다.
+### 상단 공용 바 — 툴바는 탭바 아래 하나뿐이다 (2026-08-10 개편)
+예전엔 pane 마다 툴바([PresetBar][검색·글자크기·맨아래로·Finder])가 붙어 있었는데, 분할 도입으로 pane 수만큼 반복되자 **탭바 아래 공용 바 하나로 올렸다**(사용자: "다 공유해서 쓰는 거라"). `__panes` **밖**(위)의 일반 flex 행이라 모든 pane 에 균일하게 적용되고, 숨은 pane `inset:0` 크기 동등성도 그대로다 — 예전 '세션 없음' 화면의 `--empty` 오버레이 바는 이 개편으로 사라졌다(공용 바가 세션 유무와 무관하게 같은 자리).
 
-- ⚠️ **'세션 없음' 쪽 바는 `--empty` 로 오버레이(absolute)** 다 — 레이아웃 높이를 차지하면 숨은 pane(`inset:0`)이 활성 pane 보다 바 높이만큼 커져 워크트리를 오갈 때 PTY 리사이즈가 한 번 더 생긴다. 검색바가 오버레이인 것과 같은 이유.
-- 워크트리 미선택이면 실행할 위치가 없으므로 칩은 `disabled`(편집 ⚙ 는 열린다).
+- **프리셋 대상 위치 = 포커스 세션의 cwd, 세션이 없으면 선택된 워크트리** — `runPreset` 은 cwd 를 받으므로(첫 세션을 프리셋으로 시작하는 흐름 유지, 2026-08-08) 그대로 동작한다. 위치가 없으면 칩 `disabled`(편집 ⚙ 는 열린다). 워크스페이스 등록 전 화면에서는 바 전체를 감춘다.
+- **검색 열기·맨 아래로는 pane 핸들 위임** — 터미널 인스턴스를 직접 만져야 해서 `TerminalView` 가 `onRegisterHandle(id, { openSearch, scrollToBottom })` 로 등록하고, 바는 **포커스 pane** 의 핸들만 부른다(`TerminalPaneHandle`). 검색 오버레이 자체는 여전히 pane 안에 뜬다(⌘F 도 focused pane 이 처리).
+- **[맨 아래로] 노출 판정은 boolean 리프트** — pane 이 `onScrolledChange(id, bool)` 로 변화시에만 올리고(스크롤 이벤트마다 아님), 언마운트 시 false 로 정리한다. tmux 백엔드는 xterm 스크롤백이 안 쌓여 실제로는 폴백 세션에서만 등장한다.
+- 글자 크기(A±)·프리셋은 원래 섹션 소유 공유 상태라 이동만으로 끝났다. Finder 열기는 섹션이 `revealCwd(activeId)` 를 직접 부른다.
 
 ### 세션 패널은 드래그 리사이즈 + 완전 축소
 `.terminal__side` 폭은 `TerminalSection` 이 인라인으로 준다(SCSS 값은 첫 페인트용). 우측 `terminal__side-grip` 을 끌어 조절하고 **`SIDE_SNAP_W`(140) 아래로 끌면 축소**(48px), grip 더블클릭·Enter·Space 로도 토글한다 — 앱 사이드바(`Sidebar.tsx`)와 같은 규칙이라 그쪽을 고치면 여기도 함께 볼 것. 저장은 `localStorage`(`terminal:sideWidth`·`terminal:sideCollapsed`)에 **놓는 순간 1회**.
@@ -274,9 +290,11 @@ UI 는 세션 선택(`<option>` 은 스타일 불가라 상태를 **텍스트 �
 ### ⚠️ 터미널 능력 응답(DA)이 셸 입력으로 새어 들어간다 (2026-08-08)
 증상: 폰에서 세션을 열 때마다 화면에 **`^[[?1;2c^[[>0;276;0c`** 가 찍히고 그게 셸·claude 의 입력이 된다.
 
-정체는 **xterm 이 DA 질의에 자동 응답한 것**(DA1 `ESC[?1;2c` · DA2 `ESC[>0;276;0c`)이다. attach 할 때 tmux 가 클라이언트 능력을 물어보는데, **폰은 WS 왕복이 있어 응답이 늦게 돌아오고** tmux 가 그걸 자기 질의의 답으로 못 알아봐 pane 으로 흘려보낸다. 데스크톱은 IPC 라 왕복이 빨라 tmux 가 제때 받아 문제가 없다.
+정체는 **xterm 이 DA 질의에 자동 응답한 것**(DA1 `ESC[?1;2c` · DA2 `ESC[>0;276;0c`)이다. attach 할 때 tmux 가 클라이언트 능력을 물어보는데, **폰은 WS 왕복이 있어 응답이 늦게 돌아오고** tmux 가 그걸 자기 질의의 답으로 못 알아봐 pane 으로 흘려보낸다.
 
 `mobile.ts` 의 `term.onData` 에서 **`DA_REPLY_RE` 로 걸러 서버로 보내지 않는다**(응답뿐이면 아예 전송 생략).
+
+⚠️ **데스크톱도 같은 필터가 필요하다** (2026-08-10 사용자 신고 — 처음엔 "IPC 라 왕복이 빨라 문제없다"고 봤지만 **경로가 하나 더 있었다**): 세션 시작 때 tmux 가 보낸 DA 질의 바이트가 **링버퍼에 남아**, pane 재마운트(HMR·livePanes 축출 후 복귀)의 attach replay 를 xterm 이 파싱하면서 **옛 질의에 응답을 다시 만들어 낸다**. 그 시점의 tmux 는 기다리는 질의가 없어 응답이 셸 입력으로 새고 프롬프트에 `[>0;276;0c` 가 찍힌다. `TerminalView` 의 `term.onData` 가 MO 와 같은 `DA_REPLY_RE` 로 거른다.
 
 - 이 시퀀스는 **사용자가 키보드로 칠 수 없는 입력**이라 걸러도 잃는 것이 없다. 응답을 못 받은 tmux 는 타임아웃 후 기본값을 쓰고, 색·기능은 conf 의 `terminal-features` 가 명시한다.
 - ⚠️ 키바의 `esc`(`ESC` 한 글자)·방향키(`ESC[A`)·`⇧tab`(`ESC[Z`)은 패턴에 걸리지 않는다(검증 완료).

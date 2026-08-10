@@ -1,7 +1,9 @@
 // 상단 세션 탭바 — 선택된 워크트리의 세션들 + [+] 새 세션 (Superset 스타일).
 // 탭 더블클릭 = 이름 인라인 편집(main 의 sidecar 에 반영 — 재시작 후에도 유지).
+// 탭을 끌어 pane 위에 놓으면 화면이 분할된다(드롭 존·판정은 TerminalSection 소유).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
 import { memo, useState } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
@@ -30,6 +32,7 @@ const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
 export const SessionTabs = memo(function SessionTabs({
   sessions,
   activeId,
+  draggingId,
   canCreate,
   changesOpen,
   moRunning,
@@ -38,10 +41,14 @@ export const SessionTabs = memo(function SessionTabs({
   onNew,
   onToggleChanges,
   onOpenMo,
+  onDragStartSession,
+  onDragEndSession,
 }: {
   /** 현재 선택(워크트리 또는 '기타')에 속한 세션들 */
   sessions: TerminalSessionInfo[];
   activeId: string | null;
+  /** 지금 끌리는 세션 — 드롭 존을 그리는 TerminalSection 이 상태를 소유한다 */
+  draggingId: string | null;
   /** 워크트리가 선택돼 있을 때만 새 세션을 만들 수 있다 ('기타'는 위치가 없다) */
   canCreate: boolean;
   changesOpen: boolean;
@@ -51,6 +58,8 @@ export const SessionTabs = memo(function SessionTabs({
   onNew: () => void;
   onToggleChanges: () => void;
   onOpenMo: () => void;
+  onDragStartSession: (id: string) => void;
+  onDragEndSession: () => void;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 탭을 더블클릭하면 제목이 입력창으로 바뀐다
@@ -94,15 +103,24 @@ export const SessionTabs = memo(function SessionTabs({
             </span>
           ) : (
             /* 세그먼트 탭 (Superset 동일) — 제목 좌측, 우측은 활성이면 ×, 아니면 상태점.
-               래퍼 span + [선택 button][닫기 button] 형제 — 중첩 인터랙티브 금지 */
+               래퍼 span + [선택 button][닫기 button] 형제 — 중첩 인터랙티브 금지.
+               드래그 = 분할 드롭 소스 (WorkspaceNav 의 dragSource 와 같은 규칙) */
             <span
               key={s.id}
               className={[
                 'terminal__tab',
                 s.id === activeId ? 'terminal__tab--active' : '',
+                s.id === draggingId ? 'terminal__tab--dragging' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
+              draggable
+              onDragStart={(e: ReactDragEvent) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', s.id);
+                onDragStartSession(s.id);
+              }}
+              onDragEnd={onDragEndSession} // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
             >
               <button
                 type="button"

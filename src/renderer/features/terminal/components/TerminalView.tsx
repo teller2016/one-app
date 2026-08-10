@@ -2,8 +2,9 @@
 // 탭 전환 시 언마운트→재마운트되며, 그때마다 attach 가 링버퍼 replay 로 스크롤백을 복원하고
 // SIGWINCH redraw(main 담당)가 현재 화면을 다시 그린다. 모바일(MO)도 같은 방식으로 붙는다.
 //
-// 상단 툴바(제목 + 검색·글자크기·클리어·맨아래로·Finder·복제)는 터미널 인스턴스를 직접
-// 만지므로 이 컴포넌트가 함께 소유한다 — 바깥에서 조작하려면 핸들을 들고 다녀야 한다.
+// 툴바(프리셋·검색·글자크기·Finder)는 pane 이 아니라 **탭바 아래 공용 바**(TerminalSection)
+// 하나다 — 분할하면 pane 마다 반복될 이유가 없다(2026-08-10 사용자 지적). 터미널 인스턴스를
+// 직접 만져야 하는 조작(검색 열기·맨 아래로)은 onRegisterHandle 로 핸들을 올려 보낸다.
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -14,16 +15,17 @@ import '@xterm/xterm/css/xterm.css';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
-import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
-import type { TerminalPreset } from '../../../../shared/types';
-import { PresetBar } from './PresetBar';
 
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
 const PTY_RESIZE_DEBOUNCE_MS = 120;
+
+// xterm 의 DA(장치 속성 질의) 자동 응답 — ESC[?…c(DA1)·ESC[>…c(DA2).
+// (ESC 를 정규식 리터럴에 직접 쓰면 no-control-regex 에 걸려 문자열로 조립한다 — MO 동일)
+const DA_REPLY_RE = new RegExp(`${String.fromCharCode(27)}\\[[?>][0-9;]*c`, 'g');
 
 // 글자 크기 — 13 이 기본(앱 본문과 같은 크기). 값 보관은 TerminalSection 이 하고
 // (세션 pane 이 여러 개 살아 있어 각자 들고 있으면 세션마다 크기가 어긋난다)
@@ -107,58 +109,72 @@ const searchDecorations = () => {
   };
 };
 
+/** 상단 공용 바가 포커스 pane 을 조작할 때 쓰는 핸들 — pane 이 마운트 중에만 등록된다 */
+export type TerminalPaneHandle = {
+  openSearch: () => void;
+  scrollToBottom: () => void;
+};
+
 /**
- * ⚠️ 세션 객체(TerminalSessionInfo)가 아니라 **id·cwd 만** 받는다 — 세션 목록 브로드캐스트는
+ * ⚠️ 세션 객체(TerminalSessionInfo)가 아니라 **원시값만** 받는다 — 세션 목록 브로드캐스트는
  * 상태(busy↔waiting)가 바뀔 때마다 오고 그때마다 객체가 새로 만들어지는데, 객체를 그대로
- * 받으면 memo 가 매번 깨져 살아 있는 모든 pane 이 함께 리렌더된다. 여기서 실제로 쓰는 값은
- * 이 둘뿐이라 원시값으로 쪼개면 memo 가 유지된다(제목·상태는 탭바가 표시한다).
+ * 받으면 memo 가 매번 깨져 살아 있는 모든 pane 이 함께 리렌더된다(제목·상태는 탭바가,
+ * 프리셋·글자크기 등 툴바는 상단 공용 바가 표시한다).
  */
 export const TerminalView = memo(function TerminalView({
   sessionId: id,
-  cwd,
-  active,
+  visible,
+  focused,
+  rectLeft,
+  rectTop,
+  rectW,
+  rectH,
+  onFocusPane,
   fontSize,
-  onFontSize,
-  presets,
-  onRunPreset,
-  onEditPresets,
+  onRegisterHandle,
+  onScrolledChange,
 }: {
   sessionId: string;
-  /** 세션의 작업 폴더 — 프리셋 실행 위치·툴팁에 쓴다 */
-  cwd: string;
-  /** 지금 보이는 세션인지 — 숨은 pane 은 크기를 주장하지 않는다(아래 activeRef 참고) */
-  active: boolean;
+  /** 화면에 보이는 pane 인지 — 숨은 pane 은 크기를 주장하지 않는다(아래 visibleRef 참고).
+   *  분할 중에는 여러 pane 이 동시에 true 다 — 서로 다른 세션이라 크기 주장이 충돌하지 않는다 */
+  visible: boolean;
+  /** 키보드 입력 대상(항상 하나) — term.focus()·⌘F 는 이 pane 만 갖는다.
+   *  visible 과 분리하지 않으면 분할 드롭 순간 새 pane 이 포커스를 훔친다 */
+  focused: boolean;
+  /** 분할 rect(%, .terminal__panes 기준) — 없으면 기존 단일 pane(flex/--hidden) 경로.
+   *  ⚠️ 객체가 아니라 원시값 4개로 받는다 — 객체로 받으면 상위가 렌더될 때마다
+   *  새 객체가 되어 memo 가 매번 깨진다(세션 상태 브로드캐스트는 초 단위로 온다) */
+  rectLeft?: number;
+  rectTop?: number;
+  rectW?: number;
+  rectH?: number;
+  /** pane 아무 곳이나 클릭 = 포커스 이동 — 상위 useCallback 안정 참조(memo 유지) */
+  onFocusPane: (sessionId: string) => void;
   fontSize: number;
-  onFontSize: (n: number) => void;
-  /** 프리셋 바 칩 — 이 세션의 워크스페이스에 해당하는 것만 (Superset 동일) */
-  presets: TerminalPreset[];
-  /** 칩 클릭 = 같은 위치의 새 세션에서 명령 실행 (Superset executionMode: new-tab).
-   *  cwd 를 함께 넘겨 상위가 세션마다 다른 화살표를 만들지 않아도 되게 한다(memo 유지) */
-  onRunPreset: (cwd: string, preset: TerminalPreset) => void;
-  onEditPresets: () => void;
+  /** 상단 공용 바의 검색·맨아래로 버튼이 이 pane 을 조작할 핸들 등록 (상위 useCallback) */
+  onRegisterHandle: (sessionId: string, handle: TerminalPaneHandle | null) => void;
+  /** 스크롤백을 위로 올렸는지 — 상단 바의 [맨 아래로] 노출 판정 (tmux 폴백 세션만 발화) */
+  onScrolledChange: (sessionId: string, scrolledUp: boolean) => void;
 }) {
-  const toast = useToast();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
   const reclaimRef = useRef<(() => void) | null>(null);
-  // 콜백 안에서 최신 active 를 봐야 한다 — 마운트 effect 는 세션당 한 번만 돌기 때문
-  const activeRef = useRef(active);
-  activeRef.current = active;
+  // 콜백 안에서 최신 visible/focused 를 봐야 한다 — 마운트 effect 는 세션당 한 번만 돌기 때문
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
+  const onScrolledChangeRef = useRef(onScrolledChange);
+  onScrolledChangeRef.current = onScrolledChange;
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState({ index: -1, count: 0 });
-  // 스크롤백을 위로 올린 상태에서만 [맨 아래로] 를 띄운다.
-  // 대체 화면(claude 등 TUI)은 스크롤백이 없고 자체 'Jump to bottom' 이 있어 대상이 아니다.
-  // ⚠️ tmux 백엔드에서는 tmux 클라이언트가 화면 전체를 직접 그려 **xterm 쪽 스크롤백이
-  // 아예 쌓이지 않는다**(2026-08-05 실측: viewport scrollHeight == clientHeight, 슬라이더 0px).
-  // 즉 이 버튼은 tmux 미설치 폴백 세션에서만 실제로 등장한다.
-  const [scrolledUp, setScrolledUp] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -232,12 +248,21 @@ export const TerminalView = memo(function TerminalView({
     const resultSub = search.onDidChangeResults((e) =>
       setHits({ index: e.resultIndex, count: e.resultCount })
     );
-    // 스크롤 위치 추적 — xterm 6 은 네이티브 스크롤 영역이 없어 buffer 좌표로 판정한다
+    // 스크롤 위치 추적 — xterm 6 은 네이티브 스크롤 영역이 없어 buffer 좌표로 판정한다.
+    // [맨 아래로] 버튼은 상단 공용 바에 있으므로 boolean 변화만 위로 올린다.
+    // (대체 화면 TUI 는 스크롤백이 없고, tmux 백엔드도 xterm 스크롤백이 안 쌓여
+    //  실제로는 tmux 미설치 폴백 세션에서만 발화한다 — 2026-08-05 실측)
     const atBottom = () => {
       const b = term.buffer.active;
       return b.type === 'alternate' || b.viewportY >= b.baseY;
     };
-    const syncScrolled = () => setScrolledUp(!atBottom());
+    let lastScrolledUp = false;
+    const syncScrolled = () => {
+      const v = !atBottom();
+      if (v === lastScrolledUp) return;
+      lastScrolledUp = v;
+      onScrolledChangeRef.current(id, v);
+    };
     const scrollSub = term.onScroll(syncScrolled);
     const bufferSub = term.buffer.onBufferChange(syncScrolled);
 
@@ -257,7 +282,17 @@ export const TerminalView = memo(function TerminalView({
       if (ev.cols !== term.cols || ev.rows !== term.rows)
         term.resize(ev.cols, ev.rows);
     });
-    const dataSub = term.onData((data) => window.oneApp.terminal.write(id, data));
+    // ⚠️ DA(터미널 능력 질의) 자동 응답은 PTY 로 보내지 않는다 — attach replay(링버퍼)에
+    // 세션 시작 때 tmux 가 보낸 질의(ESC[>c 등)가 남아 있어 xterm 이 replay 를 파싱하며
+    // 응답을 다시 만들어 낸다. 그 시점의 tmux 는 질의를 기다리지 않으므로 응답이 셸 입력으로
+    // 새어 프롬프트에 `[>0;276;0c` 가 찍힌다(2026-08-10 사용자 신고 — pane 재마운트·HMR
+    // 직후의 재attach 마다 1회). 사용자가 키보드로 만들 수 없는 시퀀스라 걸러도 잃는 것이
+    // 없고, tmux 의 기능 판정은 conf 의 terminal-features 가 명시한다 — MO(mobile.ts)와
+    // 같은 필터다(features/terminal.md 'DA 응답' 절).
+    const dataSub = term.onData((raw) => {
+      const data = raw.replace(DA_REPLY_RE, '');
+      if (data) window.oneApp.terminal.write(id, data);
+    });
     // Shift+Enter = 줄바꿈 (superset 동일 동작) — 터미널은 원래 Enter 의 수정키를 구분하지
     // 못해 Shift 를 눌러도 그냥 \r(제출)이 간다. ESC+CR(\x1b\r)로 바꿔 보내면 claude 등
     // ink 기반 TUI 가 meta+return = 줄바꿈으로 해석한다 — macOptionIsMeta 로 이미 동작하던
@@ -287,7 +322,8 @@ export const TerminalView = memo(function TerminalView({
       // ⚠️ 숨은 pane 은 PTY 크기를 주장하지 않는다 — 세션마다 xterm 을 살려 두므로
       // 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣고,
       // 폰(MO)이 보고 있는 세션의 크기까지 되돌려 버린다(크기 공유는 마지막 주장 기준).
-      if (!activeRef.current) return;
+      // 분할로 보이는 pane 들은 각자 **자기 세션**의 크기를 주장하므로 서로 충돌하지 않는다.
+      if (!visibleRef.current) return;
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
       ptyResizeTimer = window.setTimeout(() => {
         ptyResizeTimer = null;
@@ -305,7 +341,7 @@ export const TerminalView = memo(function TerminalView({
           if (ev.seq > attachSeq) term.write(ev.data);
         }
         queue.length = 0;
-        if (activeRef.current) term.focus(); // 숨은 pane 이 포커스를 훔치지 않게
+        if (focusedRef.current) term.focus(); // 포커스 pane 이 아니면 훔치지 않는다
         // 마운트 직후엔 레이아웃이 아직 안정되지 않아 fit 이 좁게 잡힐 수 있다(탭바·스크롤바
         // 확정 전). 다음 프레임에 한 번 더 맞춰 잘못된 크기를 PTY 에 남기지 않는다.
         requestAnimationFrame(() => {
@@ -336,7 +372,7 @@ export const TerminalView = memo(function TerminalView({
     // 창으로 돌아오면 내 화면 크기를 다시 주장한다 — MO 가 폰 크기로 줄여 둔 채면
     // 데스크톱에 빈 공간이 남고 좁게 보인다(크기 공유는 '마지막에 주장한 쪽' 기준).
     const reclaimSize = () => {
-      if (!activeRef.current) return; // 숨은 pane 은 주장하지 않는다 (onResize 와 같은 이유)
+      if (!visibleRef.current) return; // 숨은 pane 은 주장하지 않는다 (onResize 와 같은 이유)
       const dims = fit.proposeDimensions();
       if (!dims?.cols || !dims.rows) return;
       if (dims.cols !== term.cols || dims.rows !== term.rows) {
@@ -352,6 +388,7 @@ export const TerminalView = memo(function TerminalView({
     return () => {
       disposed = true;
       reclaimRef.current = null;
+      onScrolledChangeRef.current(id, false); // 상단 바의 [맨 아래로] 잔존 방지
       ro.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
@@ -381,10 +418,12 @@ export const TerminalView = memo(function TerminalView({
     fitRef.current?.fit();
   }, [fontSize]);
 
-  // 보이게 된 순간 — 숨어 있는 동안 크기를 주장하지 않았으므로 여기서 되찾고 포커스를 준다.
+  // 보이게 된 순간 — 숨어 있는 동안 크기를 주장하지 않았으므로 여기서 되찾는다.
   // (숨은 pane 도 계속 마운트돼 있어 스크롤백·선택·검색 상태가 그대로 남는다)
+  // ⚠️ 여기서 focus() 를 부르면 안 된다 — 분할로 여러 pane 이 동시에 보이게 될 때
+  // 마지막에 나타난 pane 이 포커스를 훔친다. 포커스는 아래 focused effect 가 담당.
   useEffect(() => {
-    if (!active) return;
+    if (!visible) return;
     fitRef.current?.fit();
     reclaimRef.current?.();
     // ⚠️ 숨어 있는 동안 WebGL 텍스처 아틀라스가 깨진 채 남을 수 있다(글자가 조각나거나
@@ -400,8 +439,13 @@ export const TerminalView = memo(function TerminalView({
       }
       term.refresh(0, term.rows - 1);
     }
-    term?.focus();
-  }, [active]);
+  }, [visible]);
+
+  // 포커스 pane 이 된 순간 — 키보드 입력을 이 xterm 으로 (분할 중에도 항상 하나만)
+  useEffect(() => {
+    if (!focused || !visible) return;
+    termRef.current?.focus();
+  }, [focused, visible]);
 
   // 검색어가 바뀌면 첫 일치로 이동 — incremental 이라 타이핑 중 선택이 자연스럽게 늘어난다
   useEffect(() => {
@@ -431,11 +475,11 @@ export const TerminalView = memo(function TerminalView({
     else search.findNext(query, opts);
   };
 
-  // ⌘F 로 검색 열기 — 세션마다 pane 이 마운트돼 있으므로 **보이는 pane 만** 바인딩한다
-  // (안 그러면 세션 수만큼 핸들러가 붙어 숨은 pane 의 검색까지 함께 열린다).
+  // ⌘F 로 검색 열기 — 세션마다 pane 이 마운트돼 있으므로 **포커스 pane 만** 바인딩한다
+  // (visible 로 걸면 분할 중 보이는 pane 수만큼 핸들러가 붙어 검색이 한꺼번에 열린다).
   // xterm 은 Meta 조합을 셸로 보내지 않으므로 여기서 가로채도 입력을 빼앗지 않는다.
   useEffect(() => {
-    if (!active) return;
+    if (!focused) return;
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey || e.altKey || e.ctrlKey) return;
       if (e.key === 'f' || e.key === 'F') {
@@ -445,103 +489,44 @@ export const TerminalView = memo(function TerminalView({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, openSearch]);
+  }, [focused, openSearch]);
 
-  const reveal = async () => {
-    const res = await window.oneApp.terminal.revealCwd(id);
-    if (!res.ok) toast('위치를 열지 못했습니다.', 'fail');
-  };
+  // 상단 공용 바가 이 pane 을 조작할 핸들 — 터미널 인스턴스를 직접 만지는 조작만 올린다
+  useEffect(() => {
+    onRegisterHandle(id, {
+      openSearch,
+      scrollToBottom: () => termRef.current?.scrollToBottom(),
+    });
+    return () => onRegisterHandle(id, null);
+  }, [id, onRegisterHandle, openSearch]);
 
-  // 프리셋 실행 — 위치(cwd)는 이 pane 이 알고 있으므로 여기서 붙인다
-  const runPreset = useCallback(
-    (p: TerminalPreset) => onRunPreset(cwd, p),
-    [cwd, onRunPreset]
-  );
+  // 분할 rect — 인라인 스타일 객체는 여기(컴포넌트 안)에서 조립한다.
+  // props 로 객체를 받으면 memo 가 깨지지만 내부 생성은 memo 와 무관하다.
+  const split = rectW !== undefined;
+  const splitStyle =
+    split && visible
+      ? {
+          left: `${rectLeft}%`,
+          top: `${rectTop}%`,
+          width: `${rectW}%`,
+          height: `${rectH}%`,
+        }
+      : undefined;
 
   return (
-    <div className={`terminal__pane${active ? '' : ' terminal__pane--hidden'}`}>
-      <div className="terminal__bar">
-        {/* 세션 제목은 상단 탭이 이미 보여주므로 바에 중복 표기하지 않는다.
-            바 자체는 '세션 없음' 화면과 공용(PresetBar) — 같은 자리에 계속 떠 있다 */}
-        <PresetBar
-          presets={presets}
-          cwd={cwd}
-          onRun={runPreset}
-          onEdit={onEditPresets}
-        />
-        {/* 아이콘만으로는 무슨 기능인지 알 수 없어 전부 Tooltip 으로 감싼다.
-            네이티브 title 은 지연이 길고 어두운 툴바에서 눈에 안 띈다(2026-08-05 사용자 지적).
-            접근성 이름은 툴팁이 아니라 각 버튼의 aria-label 이 담당한다. */}
-        <span className="terminal__bar-actions">
-          <Tooltip label="검색 (⌘F)">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="검색"
-              onClick={openSearch}
-            >
-              <Icon name="search" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip label="글자 작게">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="글자 작게"
-              disabled={fontSize <= FONT_SIZE_MIN}
-              onClick={() => onFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
-            >
-              <Icon name="minus" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip
-            label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}
-          >
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
-              onClick={() => onFontSize(FONT_SIZE_DEFAULT)}
-            >
-              <span className="terminal__bar-size">{fontSize}</span>
-            </button>
-          </Tooltip>
-          <Tooltip label="글자 크게">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="글자 크게"
-              disabled={fontSize >= FONT_SIZE_MAX}
-              onClick={() => onFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
-            >
-              <Icon name="plus" size={14} />
-            </button>
-          </Tooltip>
-          {scrolledUp && (
-            <Tooltip label="맨 아래로">
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="맨 아래로"
-                onClick={() => termRef.current?.scrollToBottom()}
-              >
-                <Icon name="arrow-down-to-line" size={14} />
-              </button>
-            </Tooltip>
-          )}
-          <Tooltip label="세션 위치를 Finder 에서 열기">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Finder 에서 열기"
-              onClick={() => void reveal()}
-            >
-              <Icon name="folder" size={14} />
-            </button>
-          </Tooltip>
-        </span>
-      </div>
-
+    <div
+      className={[
+        'terminal__pane',
+        splitStyle ? 'terminal__pane--split' : '',
+        !visible ? 'terminal__pane--hidden' : '',
+        splitStyle && focused ? 'terminal__pane--focused' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={splitStyle}
+      // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다
+      onMouseDownCapture={() => onFocusPane(id)}
+    >
       {searchOpen && (
         <div className="terminal__search">
           <Input

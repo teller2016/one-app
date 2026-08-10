@@ -2,7 +2,10 @@
 // (Superset 스타일 오케스트레이터). 세션은 main 프로세스 소유라 탭·창을 닫아도 유지되고,
 // MO(모바일)와 같은 세션을 공유한다. 워크트리를 고르면 탭바가 그 위치(cwd)의 세션들로 바뀐다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type {
+  DragEvent as ReactDragEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import type {
   ChangesTarget,
   TerminalPreset,
@@ -19,6 +22,27 @@ import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
+import {
+  LAYOUT_STORAGE_KEY,
+  MAX_SPLIT_PANES,
+  computeLayout,
+  deserializeLayout,
+  dropSideAt,
+  moveSession,
+  panelsOf,
+  replaceSession,
+  sanitizeLayout,
+  sessionIdsOf,
+  setRatio,
+  splitAt,
+} from '../lib/layout';
+import type {
+  DropSide,
+  LayoutGrip,
+  LayoutNode,
+  PaneRect,
+  PanelNode,
+} from '../lib/layout';
 import {
   agentIdFromCommand,
   presetsForWorkspace,
@@ -39,6 +63,7 @@ import {
   FONT_SIZE_MIN,
   TerminalView,
 } from './TerminalView';
+import type { TerminalPaneHandle } from './TerminalView';
 import { WorkspaceNav } from './WorkspaceNav';
 
 // 터미널 IPC 노출 여부 — 개발 중 main/preload 변경은 HMR 이 안 되므로(렌더러만 갱신)
@@ -121,6 +146,35 @@ function savedSelection(): WorkspaceSelection | null {
   }
 }
 
+// ── 분할 레이아웃 (lib/layout.ts) — selKey → 이진 트리 맵을 localStorage 에 기억 ──
+// terminal:lastActive 와 같은 방식. 세션 생존 여부는 여기서 보지 않는다(로드 시점엔
+// 세션 목록이 없다) — sessionsReady 이후 sanitize effect 가 걷어낸다.
+function savedLayouts(): Record<string, LayoutNode> {
+  try {
+    const raw = JSON.parse(
+      localStorage.getItem(LAYOUT_STORAGE_KEY) ?? '{}'
+    ) as Record<string, unknown>;
+    const out: Record<string, LayoutNode> = {};
+    for (const [key, v] of Object.entries(raw)) {
+      const tree = deserializeLayout(v);
+      // 단일 panel 트리는 저장 대상이 아니다(단일 모드 = 트리 없음) — 손상 방어
+      if (tree && tree.kind === 'split') out[key] = tree;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistLayouts(map: Record<string, LayoutNode>): void {
+  if (Object.keys(map).length === 0) localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  else localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(map));
+}
+
+/** 단일 모드(트리 없음)의 드롭 존이 쓰는 전체 화면 rect + 가상 panelId */
+const FULL_RECT: PaneRect = { left: 0, top: 0, width: 100, height: 100 };
+const SINGLE_PANEL_ID = '__single__';
+
 export function TerminalSection() {
   const confirm = useConfirm();
   const toast = useToast();
@@ -143,6 +197,8 @@ export function TerminalSection() {
     () => localStorage.getItem('terminal:changesOpen') === '1'
   );
   const [changesFullOpen, setChangesFullOpen] = useState(false);
+  // 분할 레이아웃 트리 — selKey 별. 파생값·갱신·영속화는 아래 '분할 레이아웃' 블록
+  const [layouts, setLayouts] = useState<Record<string, LayoutNode>>(savedLayouts);
   const available = !!terminalApi();
 
   const [fontSize, setFontSize] = useState(savedFontSize);
@@ -353,36 +409,144 @@ export function TerminalSection() {
       JSON.stringify(Object.fromEntries(lastActiveRef.current))
     );
   }, []);
+  // 최신값 ref — 드롭·그립·선택 콜백의 참조를 고정하기 위한 것(pane·탭바 memo 유지)
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const layoutsRef = useRef(layouts);
+  layoutsRef.current = layouts;
+  const selKeyRef = useRef(selKey);
+  selKeyRef.current = selKey;
+
+  // ── 분할 레이아웃 — selKey 별 이진 트리 (lib/layout.ts) ──
+  // 트리는 pane 2개 이상일 때만 존재한다. 1개로 붕괴하면 키를 지워 단일 모드
+  // (활성 pane flex + 숨은 pane --hidden inset:0)로 되돌린다 — 최빈 경로(단일)의
+  // 렌더가 오늘과 완전히 같도록 구조적으로 보장한다.
+  const layout = layouts[selKey] ?? null;
+  const layoutIds = useMemo(() => (layout ? sessionIdsOf(layout) : null), [layout]);
+
+  const updateLayout = useCallback((key: string, next: LayoutNode | null) => {
+    setLayouts((cur) => {
+      const tree = next && next.kind === 'split' ? next : null; // 단일 승격 → 트리 소멸
+      const prev = cur[key] ?? null;
+      if (prev === tree) return cur;
+      if (!tree) {
+        if (!(key in cur)) return cur;
+        const rest = { ...cur };
+        delete rest[key];
+        return rest;
+      }
+      return { ...cur, [key]: tree };
+    });
+  }, []);
+
+  // 저장 — 그립 드래그 중엔 프레임마다 쓰지 않는다(pointerup 이 ref 로 1회 저장,
+  // 마지막 setState 가 그 뒤에 렌더되면 이 effect 가 최종값을 다시 저장한다)
+  const layoutDraggingRef = useRef(false);
+  useEffect(() => {
+    if (layoutDraggingRef.current) return;
+    persistLayouts(layouts);
+  }, [layouts]);
+
+  // 죽은 세션을 레이아웃에서 걷어낸다(형제 승격 → 마지막 1개면 트리 소멸) —
+  // ⌘⇧W·자연사·외부 tmux kill 이 전부 여기로 수렴한다.
+  // ⚠️ 목록 로드 완료 후에만 — 빈 초기 배열로 돌면 복원한 레이아웃을 통째로
+  // 오파기한다(위 '선택 보정'의 ready 게이트와 같은 교훈).
+  useEffect(() => {
+    if (!sessionsReady) return;
+    const tree = layouts[selKey];
+    if (!tree) return;
+    const alive = new Set(sessions.map((s) => s.id));
+    const next = sanitizeLayout(tree, alive);
+    if (next !== tree) updateLayout(selKey, next);
+  }, [sessions, sessionsReady, selKey, layouts, updateLayout]);
+
+  const selectTab = useCallback(
+    (id: string) => {
+      rememberActive(selKey, id);
+      // 분할 중 레이아웃 밖 세션을 고르면 **포커스된 슬롯의 세션을 교체**한다
+      // (트리 안 세션이면 포커스만 이동). 단일 모드는 오늘과 동일 — 화면 전환.
+      const tree = layoutsRef.current[selKey] ?? null;
+      if (tree && !sessionIdsOf(tree).includes(id)) {
+        const focusedPanel =
+          panelsOf(tree).find((p) => p.sessionId === activeIdRef.current) ?? null;
+        if (focusedPanel)
+          updateLayout(selKey, replaceSession(tree, focusedPanel.id, id));
+      }
+      setActiveId(id);
+    },
+    [rememberActive, selKey, updateLayout]
+  );
+
+  /** pane 클릭 = 포커스 이동 — 분할 중 어느 터미널이 키보드·⌘F 를 받는지 정한다 */
+  const focusPane = useCallback(
+    (id: string) => {
+      if (activeIdRef.current === id) return;
+      rememberActive(selKeyRef.current, id);
+      setActiveId(id);
+    },
+    [rememberActive]
+  );
+
+  // ── 상단 공용 바 ↔ pane 연결 — 검색 열기·맨 아래로는 터미널 인스턴스를 직접
+  // 만져야 해서 pane 이 핸들을 등록하고, 바는 **포커스 pane** 의 핸들만 부른다.
+  const paneHandles = useRef(new Map<string, TerminalPaneHandle>());
+  const registerPaneHandle = useCallback(
+    (id: string, handle: TerminalPaneHandle | null) => {
+      if (handle) paneHandles.current.set(id, handle);
+      else paneHandles.current.delete(id);
+    },
+    []
+  );
+  const openActiveSearch = useCallback(() => {
+    if (activeIdRef.current)
+      paneHandles.current.get(activeIdRef.current)?.openSearch();
+  }, []);
+  const scrollActiveToBottom = useCallback(() => {
+    if (activeIdRef.current)
+      paneHandles.current.get(activeIdRef.current)?.scrollToBottom();
+  }, []);
+  // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정(tmux 폴백 세션만 발화)
+  const [scrolledUp, setScrolledUp] = useState<Record<string, boolean>>({});
+  const onScrolledChange = useCallback((id: string, v: boolean) => {
+    setScrolledUp((cur) => (!!cur[id] === v ? cur : { ...cur, [id]: v }));
+  }, []);
+  const revealActive = useCallback(async () => {
+    const id = activeIdRef.current;
+    if (!id) return;
+    const res = await terminalApi()?.revealCwd(id);
+    if (res && !res.ok) toast('위치를 열지 못했습니다.', 'fail');
+  }, [toast]);
+
   // 방금 만든 세션 — 목록 브로드캐스트가 아직 안 왔으면 보정 효과가 첫 탭으로 되돌리므로,
-  // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관)
+  // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관).
+  // selectTab 경유 — 분할 중이면 새 세션이 포커스된 슬롯을 이어받는다(탭 클릭과 동일 의미론)
   const pendingRef = useRef<string | null>(null);
 
   useEffect(() => {
     const pending = pendingRef.current;
     if (pending && sessions.some((s) => s.id === pending)) {
       pendingRef.current = null;
-      rememberActive(selKey, pending);
-      setActiveId(pending);
+      selectTab(pending);
     }
-    // rememberActive 는 ref+localStorage 만 만지는 안정 함수라 의존성에 두지 않는다
-  }, [sessions, selKey]);
+  }, [sessions, selKey, selectTab]);
 
   useEffect(() => {
     if (pendingRef.current) return;
-    if (activeId && tabSessions.some((s) => s.id === activeId)) return;
+    // 분할 중엔 포커스가 화면(레이아웃) 안에 있어야 한다 — 밖으로 새면 ⌘F 와
+    // 탭 클릭(슬롯 교체)의 대상이 안 보이는 pane 이 된다. 폴백 후보도 레이아웃로 제한.
+    const inTabs = !!activeId && tabSessions.some((s) => s.id === activeId);
+    if (inTabs && (!layoutIds || layoutIds.includes(activeId as string))) return;
     const remembered = lastActiveRef.current.get(selKey);
+    const pool = layoutIds
+      ? tabSessions.filter((s) => layoutIds.includes(s.id))
+      : tabSessions;
     setActiveId(
-      tabSessions.find((s) => s.id === remembered)?.id ?? tabSessions[0]?.id ?? null
+      pool.find((s) => s.id === remembered)?.id ??
+        pool[0]?.id ??
+        tabSessions[0]?.id ??
+        null
     );
-  }, [tabSessions, activeId, selKey]);
-
-  const selectTab = useCallback(
-    (id: string) => {
-      rememberActive(selKey, id);
-      setActiveId(id);
-    },
-    [rememberActive, selKey]
-  );
+  }, [tabSessions, activeId, selKey, layoutIds]);
 
   /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다 */
   const activateSession = useCallback((id: string) => {
@@ -393,17 +557,166 @@ export function TerminalSection() {
   // ── 살아 있는 pane — **실제로 본 적 있는 세션만** xterm 을 만든다 ──
   // 예전엔 sessions 전부를 마운트해서 터미널 섹션에 들어가는 순간 세션 수만큼
   // xterm·WebGL 컨텍스트·attach(tmux 클라이언트 spawn)가 한꺼번에 생겼다.
-  // 지금은 활성이 된 세션만 붙이고, 한 번 연 pane 은 상한(MAX_LIVE_PANES)까지 유지해
-  // 전환 즉시성과 스크롤백·검색 상태를 지킨다.
-  const [livePanes, setLivePanes] = useState<string[]>([]); // 최근 사용 순
+  // 지금은 화면의 세션(분할이면 레이아웃 전체, 아니면 활성 하나)만 붙이고, 한 번 연
+  // pane 은 상한(MAX_LIVE_PANES)까지 유지해 전환 즉시성과 스크롤백·검색 상태를 지킨다.
+  const [livePanes, setLivePanes] = useState<string[]>([]); // 화면 세션들 + 최근 사용 순
   useEffect(() => {
-    if (!activeId) return;
-    setLivePanes((cur) =>
-      cur[0] === activeId
+    const shown = layoutIds ?? (activeId ? [activeId] : []);
+    if (shown.length === 0) return;
+    setLivePanes((cur) => {
+      // LRU 축출은 **화면 밖 세션만** 잘라낸다 — 보이는 pane 을 버리면 그 자리가 빈다
+      const rest = cur.filter((id) => !shown.includes(id));
+      const next = [
+        ...shown,
+        ...rest.slice(0, Math.max(0, MAX_LIVE_PANES - shown.length)),
+      ];
+      return next.length === cur.length && next.every((id, i) => id === cur[i])
         ? cur
-        : [activeId, ...cur.filter((id) => id !== activeId)].slice(0, MAX_LIVE_PANES)
+        : next;
+    });
+  }, [activeId, layoutIds]);
+
+  // ── 분할 렌더 파생값 — 트리 → %rect (pane·경계 grip). layout 참조 불변이면 재계산 없음 ──
+  const layoutRects = useMemo(() => {
+    if (!layout) return null;
+    const { panes, grips } = computeLayout(layout);
+    return { panes, grips, bySession: new Map(panes.map((p) => [p.sessionId, p])) };
+  }, [layout]);
+
+  // ── 분할 드래그 앤 드롭 — 탭(SessionTabs)이 소스, 드롭 존은 드래그 중에만 pane 위에 덮는다.
+  // ⚠️ pane 자체에 dragover 를 걸지 않는 이유: xterm 의 canvas/textarea 가 이벤트를
+  // 삼킬 수 있다 — 투명 오버레이가 최상단에서 독점하면 xterm 은 아예 보지 못한다.
+  const [dragSession, setDragSession] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ panelId: string; side: DropSide } | null>(
+    null
+  );
+  const onDragStartSession = useCallback((id: string) => setDragSession(id), []);
+  const onDragEndSession = useCallback(() => {
+    // 드롭이 밖에서 끝나도(무효 드롭 포함) 표시·드롭 존이 남지 않게 — WorkspaceNav 동일
+    setDragSession(null);
+    setDropHint(null);
+  }, []);
+
+  /** 존 안 포인터 위치 → X자(대각선) 판정 */
+  const zoneSide = (e: ReactDragEvent<HTMLDivElement>): DropSide => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return dropSideAt(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
+  };
+  const onZoneDragOver = (e: ReactDragEvent<HTMLDivElement>, panelId: string) => {
+    e.preventDefault(); // 없으면 drop 이 발화하지 않는다
+    e.dataTransfer.dropEffect = 'move';
+    const side = zoneSide(e);
+    // dragover 는 고빈도 — 같은 값이면 setState 를 만들지 않는다
+    setDropHint((cur) =>
+      cur?.panelId === panelId && cur.side === side ? cur : { panelId, side }
     );
-  }, [activeId]);
+  };
+
+  const applyDrop = (panelId: string, side: DropSide) => {
+    const dragged = dragSession;
+    setDragSession(null);
+    setDropHint(null);
+    if (!dragged) return;
+    const tree = layoutsRef.current[selKey] ?? null;
+    if (!tree) {
+      // 단일 모드 — 활성 세션과의 첫 분할 (중앙 드롭은 그 세션으로 전환일 뿐)
+      const cur = activeIdRef.current;
+      if (!cur || cur === dragged) return;
+      if (side !== 'center') {
+        const rootPanel: PanelNode = {
+          kind: 'panel',
+          id: crypto.randomUUID(),
+          sessionId: cur,
+        };
+        updateLayout(selKey, splitAt(rootPanel, rootPanel.id, side, dragged));
+      }
+      rememberActive(selKey, dragged);
+      setActiveId(dragged);
+      return;
+    }
+    if (side === 'center') {
+      // 교체 (드래그 세션이 트리 안이면 두 슬롯 swap — 불변식 유지)
+      updateLayout(selKey, replaceSession(tree, panelId, dragged));
+    } else {
+      if (
+        !sessionIdsOf(tree).includes(dragged) &&
+        panelsOf(tree).length >= MAX_SPLIT_PANES
+      ) {
+        toast(`분할은 최대 ${MAX_SPLIT_PANES}개까지입니다`, 'fail');
+        return;
+      }
+      updateLayout(selKey, moveSession(tree, dragged, panelId, side));
+    }
+    rememberActive(selKey, dragged);
+    setActiveId(dragged); // 방금 놓은 세션이 포커스를 갖는다
+  };
+
+  // 드롭 존 목록 — 분할 중이면 pane 마다, 단일 모드면 화면 전체 하나
+  const dropZones = !dragSession
+    ? null
+    : layoutRects
+      ? layoutRects.panes.map((p) => ({ panelId: p.panelId, rect: p.rect }))
+      : activeId
+        ? [{ panelId: SINGLE_PANEL_ID, rect: FULL_RECT }]
+        : null;
+
+  // 드롭 프리뷰 rect — 분할될 반쪽(중앙이면 pane 전체)
+  const hintRect = useMemo(() => {
+    if (!dropHint) return null;
+    const base =
+      dropHint.panelId === SINGLE_PANEL_ID
+        ? FULL_RECT
+        : layoutRects?.panes.find((p) => p.panelId === dropHint.panelId)?.rect;
+    if (!base) return null;
+    let { left, top, width, height } = base;
+    if (dropHint.side === 'left') width /= 2;
+    else if (dropHint.side === 'right') {
+      left += width / 2;
+      width /= 2;
+    } else if (dropHint.side === 'top') height /= 2;
+    else if (dropHint.side === 'bottom') {
+      top += height / 2;
+      height /= 2;
+    }
+    return { left, top, width, height };
+  }, [dropHint, layoutRects]);
+
+  // ── 분할 경계 그립 — 포인터 드래그로 그 SplitNode 의 ratio 만 바꾼다.
+  // fit·PTY resize 는 pane 자신의 ResizeObserver(rAF)·120ms 디바운스가 방어한다.
+  const panesRef = useRef<HTMLDivElement | null>(null);
+  const onSplitGripDown = (e: ReactPointerEvent<HTMLDivElement>, g: LayoutGrip) => {
+    e.preventDefault();
+    const box = panesRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0 || box.height === 0) return;
+    const key = selKeyRef.current;
+    const horizontal = g.orientation === 'row';
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.style.cursor = horizontal ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+    layoutDraggingRef.current = true;
+    // 그 split 의 영역(region, %)을 px 로 — 포인터 위치를 영역 안 비율로 환산한다
+    const rl = box.left + (g.region.left / 100) * box.width;
+    const rw = (g.region.width / 100) * box.width;
+    const rt = box.top + (g.region.top / 100) * box.height;
+    const rh = (g.region.height / 100) * box.height;
+    const move = (ev: PointerEvent) => {
+      const ratio = horizontal ? (ev.clientX - rl) / rw : (ev.clientY - rt) / rh;
+      if (!Number.isFinite(ratio)) return;
+      const tree = layoutsRef.current[key];
+      if (!tree) return;
+      updateLayout(key, setRatio(tree, g.splitId, ratio)); // 클램프는 setRatio 가
+    };
+    const up = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      layoutDraggingRef.current = false;
+      persistLayouts(layoutsRef.current); // 놓는 순간 1회 저장
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
   const createShell = useCallback(async () => {
@@ -438,14 +751,8 @@ export function TerminalSection() {
     },
     [activateSession, toast]
   );
-  const runPresetForPane = useCallback(
-    (cwd: string, preset: TerminalPreset): void => {
-      void runPreset(cwd, preset);
-    },
-    [runPreset]
-  );
   const openPresets = useCallback(() => setPresetsOpen(true), []);
-  // '세션 없음' 화면의 프리셋 바 — 선택된 워크트리 위치로 첫 세션을 만든다
+  // 세션이 없을 때의 프리셋 — 선택된 워크트리 위치로 첫 세션을 만든다
   const selectionPresets = useMemo(
     () =>
       presetsForWorkspace(
@@ -454,14 +761,22 @@ export function TerminalSection() {
       ),
     [presets, selection]
   );
-  const runPresetForSelection = useCallback(
-    (p: TerminalPreset): void => {
-      if (selection?.kind === 'worktree') void runPreset(selection.path, p);
-    },
-    [selection, runPreset]
-  );
 
   const activeSession = tabSessions.find((s) => s.id === activeId) ?? null;
+
+  // ── 상단 공용 바 — pane 마다 있던 툴바를 탭바 아래 하나로 (2026-08-10 사용자 요청).
+  // 프리셋은 포커스 세션의 위치 기준, 세션이 없으면 선택된 워크트리 기준.
+  const barCwd =
+    activeSession?.cwd ?? (selection?.kind === 'worktree' ? selection.path : null);
+  const barPresets = activeSession
+    ? (presetsByCwd.get(activeSession.cwd) ?? NO_PRESETS)
+    : selectionPresets;
+  const runPresetForBar = useCallback(
+    (p: TerminalPreset): void => {
+      if (barCwd) void runPreset(barCwd, p);
+    },
+    [barCwd, runPreset]
+  );
 
   // ── 패널 너비·축소 (앱 사이드바 Sidebar.tsx 와 같은 규칙) ──
   const [changesWidth, setChangesWidth] = useState(savedChangesWidth);
@@ -872,6 +1187,7 @@ export function TerminalSection() {
         <SessionTabs
           sessions={tabSessions}
           activeId={activeId}
+          draggingId={dragSession}
           canCreate={canCreate}
           changesOpen={changesOpen}
           moRunning={moRunning}
@@ -880,44 +1196,183 @@ export function TerminalSection() {
           onNew={openNewSession}
           onToggleChanges={toggleChanges}
           onOpenMo={openMoModal}
+          onDragStartSession={onDragStartSession}
+          onDragEndSession={onDragEndSession}
         />
+
+        {/* 상단 공용 바 — pane 마다 있던 툴바를 탭바 아래 하나로 고정(2026-08-10 사용자
+            요청: 분할해도 전부 공유값이라 반복될 이유가 없다). 프리셋·글자크기는 원래
+            공유 상태고, 검색·맨아래로·Finder 는 포커스 pane 에 핸들로 위임한다.
+            워크스페이스 등록 전 화면에서는 등록이 먼저라 감춘다. */}
+        {(activeSession || workspaces.length > 0) && (
+          <div className="terminal__bar">
+            <PresetBar
+              presets={barPresets}
+              cwd={barCwd ?? undefined}
+              disabled={!barCwd}
+              onRun={runPresetForBar}
+              onEdit={openPresets}
+            />
+            {/* 아이콘 버튼은 전부 Tooltip — 접근성 이름은 aria-label (renderer-ui 규칙) */}
+            <span className="terminal__bar-actions">
+              <Tooltip label="검색 (⌘F)">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="검색"
+                  disabled={!activeSession}
+                  onClick={openActiveSearch}
+                >
+                  <Icon name="search" size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip label="글자 작게">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="글자 작게"
+                  disabled={fontSize <= FONT_SIZE_MIN}
+                  onClick={() => changeFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
+                >
+                  <Icon name="minus" size={14} />
+                </button>
+              </Tooltip>
+              <Tooltip
+                label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}
+              >
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
+                  onClick={() => changeFontSize(FONT_SIZE_DEFAULT)}
+                >
+                  <span className="terminal__bar-size">{fontSize}</span>
+                </button>
+              </Tooltip>
+              <Tooltip label="글자 크게">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="글자 크게"
+                  disabled={fontSize >= FONT_SIZE_MAX}
+                  onClick={() => changeFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
+                >
+                  <Icon name="plus" size={14} />
+                </button>
+              </Tooltip>
+              {!!activeId && scrolledUp[activeId] && (
+                <Tooltip label="맨 아래로">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="맨 아래로"
+                    onClick={scrollActiveToBottom}
+                  >
+                    <Icon name="arrow-down-to-line" size={14} />
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip label="세션 위치를 Finder 에서 열기">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Finder 에서 열기"
+                  disabled={!activeSession}
+                  onClick={() => void revealActive()}
+                >
+                  <Icon name="folder" size={14} />
+                </button>
+              </Tooltip>
+            </span>
+          </div>
+        )}
 
         {/* ⚠️ 세션마다 pane 을 만들고 **보이지 않는 것도 언마운트하지 않는다** — 예전엔
             key={activeId} 로 xterm 을 매번 파괴해서, 전환할 때마다 선택 영역·검색 상태가
             사라지고 attach 왕복 + TUI 전체 리렌더를 다시 겪었다. 숨은 pane 은 absolute
             inset:0 이라 활성 pane 과 같은 크기를 유지한다 — 탭바가 위에 생겼으므로
-            기준 컨테이너는 __main 이 아니라 이 __panes 다(아니면 탭바 높이만큼 어긋난다). */}
-        <div className="terminal__panes">
+            기준 컨테이너는 __main 이 아니라 이 __panes 다(아니면 탭바 높이만큼 어긋난다).
+            분할 중에는 트리의 pane 이 전부 보이고(%rect absolute), 트리 밖 pane 만 숨는다.
+            pane 들은 트리 구조와 무관하게 **플랫한 형제**로 둔다 — React 트리에서
+            재부모화되면 xterm 이 언마운트된다(토스 아티클과 같은 좌표 렌더 방식). */}
+        <div className="terminal__panes" ref={panesRef}>
           {sessions
             // 본 적 있는 세션만 pane 을 만든다 — 섹션 진입 시 전 세션 동시 attach 방지
             .filter((s) => livePanes.includes(s.id))
-            .map((s) => (
-              <TerminalView
-                key={s.id}
-                sessionId={s.id}
-                cwd={s.cwd}
-                active={s.id === activeId}
-                fontSize={fontSize}
-                onFontSize={changeFontSize}
-                presets={presetsByCwd.get(s.cwd) ?? NO_PRESETS}
-                onRunPreset={runPresetForPane}
-                onEditPresets={openPresets}
-              />
-            ))}
-          {/* 세션이 없어도 프리셋 바는 **세션 화면과 같은 자리**에 남는다 — 첫 세션을
-              프리셋으로 시작하는 게 가장 자연스러운 흐름인데, 예전엔 바가 TerminalView
-              안에만 있어 세션이 0 개면 통째로 사라졌다(2026-08-08 사용자 지적).
-              워크스페이스 등록 자체가 안 된 화면에서는 등록이 먼저라 감춘다. */}
-          {!activeSession && workspaces.length > 0 && (
-            <div className="terminal__bar terminal__bar--empty">
-              <PresetBar
-                presets={selectionPresets}
-                cwd={selection?.kind === 'worktree' ? selection.path : undefined}
-                disabled={!canCreate}
-                onRun={runPresetForSelection}
-                onEdit={openPresets}
-              />
-            </div>
+            .map((s) => {
+              const pane = layoutRects?.bySession.get(s.id);
+              return (
+                <TerminalView
+                  key={s.id}
+                  sessionId={s.id}
+                  visible={layoutRects ? !!pane : s.id === activeId}
+                  focused={s.id === activeId}
+                  rectLeft={pane?.rect.left}
+                  rectTop={pane?.rect.top}
+                  rectW={pane?.rect.width}
+                  rectH={pane?.rect.height}
+                  onFocusPane={focusPane}
+                  fontSize={fontSize}
+                  onRegisterHandle={registerPaneHandle}
+                  onScrolledChange={onScrolledChange}
+                />
+              );
+            })}
+          {/* 분할 경계 그립 — SplitNode 마다 하나, 드래그 = 그 노드의 ratio 조절 */}
+          {layoutRects?.grips.map((g) => (
+            <div
+              key={g.splitId}
+              className={`terminal__split-grip terminal__split-grip--${g.orientation}`}
+              role="separator"
+              aria-orientation={g.orientation === 'row' ? 'vertical' : 'horizontal'}
+              aria-label="분할 비율 조절"
+              style={
+                g.orientation === 'row'
+                  ? {
+                      left: `${g.rect.left}%`,
+                      top: `${g.rect.top}%`,
+                      height: `${g.rect.height}%`,
+                    }
+                  : {
+                      left: `${g.rect.left}%`,
+                      top: `${g.rect.top}%`,
+                      width: `${g.rect.width}%`,
+                    }
+              }
+              onPointerDown={(e) => onSplitGripDown(e, g)}
+            />
+          ))}
+          {/* 드롭 존 — 탭 드래그 중에만 pane 전체를 덮는 투명 레이어.
+              X자 판정으로 상/하/좌/우(분할)·중앙(교체)을 정하고 프리뷰를 띄운다 */}
+          {dropZones?.map((z) => (
+            <div
+              key={z.panelId}
+              className="terminal__drop-zone"
+              style={{
+                left: `${z.rect.left}%`,
+                top: `${z.rect.top}%`,
+                width: `${z.rect.width}%`,
+                height: `${z.rect.height}%`,
+              }}
+              onDragOver={(e) => onZoneDragOver(e, z.panelId)}
+              onDragLeave={() => setDropHint(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                applyDrop(z.panelId, zoneSide(e));
+              }}
+            />
+          ))}
+          {/* 드롭 프리뷰 — 분할될 반쪽(중앙 드롭이면 pane 전체)을 액센트로 표시 */}
+          {hintRect && (
+            <div
+              className="terminal__drop-hint"
+              style={{
+                left: `${hintRect.left}%`,
+                top: `${hintRect.top}%`,
+                width: `${hintRect.width}%`,
+                height: `${hintRect.height}%`,
+              }}
+            />
           )}
           {!activeSession && (
             <div className="terminal__empty">
