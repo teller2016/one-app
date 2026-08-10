@@ -45,10 +45,21 @@ export function PrList({
             <span className="prs__item-title" title={pr.title}>
               {pr.title}
             </span>
-            {/* 상태 뱃지(승인·리뷰 대기·충돌)는 싣지 않는다 — 목록은 훑는 화면이고
-                정본은 어차피 상세 패널이다(2026-08-08 사용자 요청). 대상 브랜치 칩은
-                '어디로 들어가는지'라 성격이 달라 남긴다. */}
+            {/* 상태 뱃지(승인·리뷰 대기)는 싣지 않는다 — 목록은 훑는 화면이고 정본은
+                어차피 상세 패널이다(2026-08-08 사용자 요청). 예외는 **충돌**(2026-08-10
+                사용자 요청) — 손을 대야 하는 PR 을 목록에서 골라내는 신호라 성격이 다르다.
+                '충돌 없음'은 넣지 않는다(정상은 알릴 필요가 없다). 대상 브랜치 칩도
+                '어디로 들어가는지'라 남긴다. */}
             <span className="prs__item-meta">
+              {pr.mergeable === false && (
+                <span
+                  className="prs__item-conflict"
+                  title="대상 브랜치와 컨플릭트가 있어 머지할 수 없습니다"
+                >
+                  <Icon name="alert-triangle" size={12} />
+                  충돌
+                </span>
+              )}
               {pr.base && (
                 <span
                   className={

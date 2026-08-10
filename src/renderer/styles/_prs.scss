@@ -175,6 +175,21 @@
     }
   }
 
+  // 충돌 — 목록에서 유일하게 남긴 상태 표시(손을 대야 하는 PR 골라내기용).
+  // 브랜치 칩과 같은 크기·모양이라 행 높이는 그대로다.
+  &__item-conflict {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: var(--r-full);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-weight: 600;
+    @include type-small;
+  }
+
   &__item-num {
     margin-left: auto;
     flex-shrink: 0;
