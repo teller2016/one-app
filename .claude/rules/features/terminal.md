@@ -109,7 +109,7 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 
 - 세션 행은 래퍼 `div` + `[선택 button][닫기 button]` 형제다 — 예전엔 닫기가 선택 버튼 **안**의 `span[role=button]` 이라 마크업이 유효하지 않고 키보드로 종료할 수 없었다. 활성 표시는 `aria-current`.
 - 세션 이름은 행 **더블클릭 → 인라인 편집**(`terminal:rename` → sidecar 반영이라 재시작 후에도 남는다). 진입 시 `select()` 로 전체 선택하지 않으면 타이핑이 기존 이름에 덧붙는다.
-- 단축키: `⌘T` 새 세션 · `⌘1..9` 전환 · `⌃Tab`/`⌃⇧Tab` 순환 · `⌘⇧W` 종료 · `⌘F` 검색. **capture 단계에서 `stopPropagation`** 으로 잡는다(bubble 로 잡으면 xterm textarea 가 먼저 처리해 같은 키가 셸에도 간다). ⚠️ `⌘W`(창 닫기)·`⌘+/-`(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다. 입력창(`INPUT`)에 포커스가 있으면 전부 넘긴다.
+- 단축키: `⌘T` 새 세션 · `⌘1..9` 전환 · `⌃Tab`/`⌃⇧Tab` 순환 · `⌘⇧W` 종료 · `⌘F` 검색. 탭 **가운데 클릭**도 종료다(브라우저 탭 관례, `onAuxClick` — 2026-08-10). **capture 단계에서 `stopPropagation`** 으로 잡는다(bubble 로 잡으면 xterm textarea 가 먼저 처리해 같은 키가 셸에도 간다). ⚠️ `⌘W`(창 닫기)·`⌘+/-`(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다. 입력창(`INPUT`)에 포커스가 있으면 전부 넘긴다.
 - **Shift+Enter = TUI 줄바꿈** (superset 동일) — `attachCustomKeyEventHandler` 가 `\x1b\r`(ESC+CR)로 바꿔 보내면 ink 기반 TUI(claude 등)가 meta+return = 줄바꿈으로 해석한다(Option+Enter 와 같은 경로). ⚠️ **대체 화면일 때만 개입** — 일반 화면(zsh)에선 ESC+CR 이 개행이 안 되고 그 줄이 그대로 실행됐다(2026-08-06 실측). 핸들러는 keydown 외 keypress·keyup 도 `false` 로 막아야 xterm 이 `\r` 를 덧보내지 않고, `isComposing`(한글 조합 확정 Enter)은 IME 에 넘긴다.
 
 ## xterm addon 구성 (2026-08-05)

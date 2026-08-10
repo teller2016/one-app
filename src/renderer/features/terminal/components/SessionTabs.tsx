@@ -121,6 +121,11 @@ export const SessionTabs = memo(function SessionTabs({
                 onDragStartSession(s.id);
               }}
               onDragEnd={onDragEndSession} // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
+              // 가운데 클릭 = 종료 (브라우저 탭 관례 — 2026-08-10 사용자 요청).
+              // 래퍼에 걸어 제목·상태점 어디를 눌러도 닫힌다.
+              onAuxClick={(e) => {
+                if (e.button === 1) onClose(s);
+              }}
             >
               <button
                 type="button"
@@ -129,7 +134,7 @@ export const SessionTabs = memo(function SessionTabs({
                 aria-selected={s.id === activeId}
                 title={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
                   STATUS_LABELS[s.status]
-                }${i < 9 ? ` (⌘${i + 1})` : ''}\n더블클릭하면 이름을 바꿉니다`}
+                }${i < 9 ? ` (⌘${i + 1})` : ''}\n더블클릭: 이름 변경 · 가운데 클릭: 종료`}
                 onClick={() => onSelect(s.id)}
                 onDoubleClick={() => {
                   setDraft(s.title);
