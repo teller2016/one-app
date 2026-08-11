@@ -4,7 +4,7 @@ import type {
   DeployTarget,
   DeployPreviewResult,
 } from '../../../../shared/types';
-import { formatTime } from '../lib/format';
+import { formatTime, extractIssueKeys, jiraIssueUrl } from '../lib/format';
 import { Modal } from '../../../components/Modal';
 import { Button } from '../../../components/Button';
 import { Banner } from '../../../components/Banner';
@@ -13,12 +13,38 @@ import { Icon } from '../../../components/Icon';
 import { TextLink } from '../../../components/TextLink';
 import { useCopy } from '../../../lib/useCopy';
 
-/** 커밋 제목만 줄줄이 — 배포 전 공유 메시지용 (머지 커밋은 작업 내용이 아니라 제외) */
+/**
+ * 커밋 제목 + 티켓 번호를 줄줄이 — 배포 전 공유 메시지용.
+ * (머지 커밋은 작업 내용이 아니라 제외)
+ */
 function buildShareText(commits: { message: string }[]): string {
   return commits
-    .map((c) => c.message.split('\n')[0].trim())
-    .filter((m) => m && !/^Merge (branch|pull request|remote)/i.test(m))
+    .map((c) => {
+      const title = c.message.split('\n')[0].trim();
+      if (!title || /^Merge (branch|pull request|remote)/i.test(title))
+        return '';
+      // 제목에 이미 키가 있으면 뒤에 또 붙이지 않는다
+      const keys = extractIssueKeys(c.message).filter((k) => !title.includes(k));
+      return keys.length ? `${title} (${keys.join(', ')})` : title;
+    })
+    .filter(Boolean)
     .join('\n');
+}
+
+/** 티켓 칩 — Jira 주소가 있으면 클릭해서 이슈를 연다 */
+function IssueChip({ issueKey, jiraUrl }: { issueKey: string; jiraUrl?: string }) {
+  if (!jiraUrl) return <span className="deploy__issue-chip">{issueKey}</span>;
+  return (
+    <button
+      type="button"
+      className="deploy__issue-chip deploy__issue-chip--link"
+      aria-label={`Jira 이슈 열기 — ${issueKey}`}
+      title={`Jira 이슈 열기 — ${issueKey}`}
+      onClick={() => void window.oneApp.openExternal(jiraIssueUrl(jiraUrl, issueKey))}
+    >
+      {issueKey}
+    </button>
+  );
 }
 
 /** 배포 미리보기 로드 상태 */
@@ -35,12 +61,15 @@ export function DeployConfirmModal({
   project,
   target,
   preview,
+  jiraUrl,
   onConfirm,
   onClose,
 }: {
   project: DeployProjectView;
   target: DeployTarget;
   preview: PreviewState;
+  /** 환경설정의 Jira 주소 — 있으면 티켓 칩이 링크가 된다 */
+  jiraUrl?: string;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -49,6 +78,10 @@ export function DeployConfirmModal({
   const prodOk = !project.production || typed.trim() === target.name;
   const r = preview.result;
   const shareText = buildShareText(r?.commits ?? []);
+  // 이번 배포에 포함된 티켓 전체 (커밋 순서 유지·중복 제거)
+  const allIssueKeys = [
+    ...new Set((r?.commits ?? []).flatMap((c) => extractIssueKeys(c.message))),
+  ];
 
   return (
     <Modal title={`${project.name} — ${target.name} 배포`} onClose={onClose}>
@@ -112,20 +145,37 @@ export function DeployConfirmModal({
               배포됩니다.
             </Banner>
           ) : (
-            <ul className="deploy__preview-list">
-              {(r.commits ?? []).map((c, i) => (
-                <li key={c.id || i}>
-                  <span className="deploy__preview-msg">
-                    {c.message.split('\n')[0]}
-                  </span>
-                  <span className="deploy__preview-meta">
-                    {c.author}
-                    {c.timestamp ? ` · ${formatTime(c.timestamp)}` : ''}
-                    {c.id ? ` · ${c.id.slice(0, 7)}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              {allIssueKeys.length > 0 && (
+                <div className="deploy__preview-issues">
+                  <span>포함 티켓 {allIssueKeys.length}건</span>
+                  {allIssueKeys.map((k) => (
+                    <IssueChip key={k} issueKey={k} jiraUrl={jiraUrl} />
+                  ))}
+                </div>
+              )}
+              <ul className="deploy__preview-list">
+                {(r.commits ?? []).map((c, i) => {
+                  const title = c.message.split('\n')[0];
+                  const keys = extractIssueKeys(c.message);
+                  return (
+                    <li key={c.id || i}>
+                      <span className="deploy__preview-row">
+                        <span className="deploy__preview-msg">{title}</span>
+                        {keys.map((k) => (
+                          <IssueChip key={k} issueKey={k} jiraUrl={jiraUrl} />
+                        ))}
+                      </span>
+                      <span className="deploy__preview-meta">
+                        {c.author}
+                        {c.timestamp ? ` · ${formatTime(c.timestamp)}` : ''}
+                        {c.id ? ` · ${c.id.slice(0, 7)}` : ''}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
       )}

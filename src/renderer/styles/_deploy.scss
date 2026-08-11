@@ -412,6 +412,26 @@
     }
   }
 
+  // 이번 배포에 포함된 티켓 요약 — 목록 위 한 줄
+  &-issues {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  // 커밋 제목 + 티켓 칩 한 줄
+  &-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
   &-msg {
     @include type-body;
     font-weight: 600;
@@ -421,6 +441,35 @@
   &-meta {
     @include type-caption;
     color: var(--text-3);
+  }
+}
+
+// Jira 티켓 칩 — 커밋 메시지의 `refs: BBJ-1234` 에서 뽑아 붙인다.
+// (미리보기 목록은 panel-dark 안이라 --accent 가 다크용으로 자동 치환된다)
+.deploy__issue-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  @include type-caption;
+  letter-spacing: normal;
+
+  &--link {
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease);
+
+    &:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent-hover);
+      color: var(--accent-hover);
+    }
   }
 }
 

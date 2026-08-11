@@ -552,6 +552,7 @@ export function DeploySection() {
               project={project}
               target={target}
               preview={preview}
+              jiraUrl={linkCfg.jiraUrl}
               onConfirm={() => void doDeploy(confirm.projectId, confirm.targetId)}
               onClose={() => setConfirm(null)}
             />
