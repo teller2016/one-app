@@ -6,6 +6,7 @@ import type {
 } from '../../../shared/types';
 import { TERMINAL_AGENT_NAMES } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
+import { setWaitingBadge } from '../../lib/dockBadge';
 import { notify } from '../notify/notify';
 import { listAgents } from './agents';
 import {
@@ -40,10 +41,10 @@ import {
   setServerEnabled,
 } from './store';
 
-// 독(Dock) 뱃지 — 입력대기 세션 수. 0 이면 반드시 비워 잔존을 막는다
+// 독(Dock) 뱃지 — 입력대기 세션 수. 0 이면 반드시 비워 잔존을 막는다.
+// 실제 setBadge 는 lib/dockBadge.ts 가 전담한다(개발 인스턴스의 'DEV' 표식과 한 자리를 나눠 쓴다)
 function updateDockBadge(sessions: TerminalSessionInfo[]) {
-  const waiting = sessions.filter((s) => s.status === 'waiting').length;
-  app.dock?.setBadge(waiting > 0 ? String(waiting) : '');
+  setWaitingBadge(sessions.filter((s) => s.status === 'waiting').length);
 }
 
 /** 터미널 관련 IPC 핸들러 등록 */

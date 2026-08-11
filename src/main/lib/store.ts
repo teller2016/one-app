@@ -10,22 +10,58 @@ const userJsonPath = (filename: string) =>
 
 // 파일 내용 캐시 — 폴링류(리마인더 30초 tick·설정 조회·MO 인증 등)가 같은 파일을
 // 반복해 동기 읽기하던 낭비를 없앤다(2026-08-07 성능 감사: 리마인더만 하루 2,880회).
-// 이 파일들의 작성자는 main 프로세스 하나뿐이라 쓰기 시 캐시를 함께 갱신하면 일관된다.
 // 파싱 결과가 아니라 원문 문자열을 캐시한다 — 호출부가 반환 객체를 변형해도
 // 캐시가 오염되지 않게 매 호출 parse 한다(파일 대비 메모리 파싱은 충분히 싸다).
-const fileCache = new Map<string, string | null>(); // null = 파일 없음/읽기 실패
+//
+// ⚠️ 개발 인스턴스와 빌드 앱이 같은 userData 를 공유하므로(devInstance.ts 참고)
+// 이 파일들의 작성자는 더 이상 한 프로세스가 아니다. 캐시를 무조건 믿으면 상대가
+// 저장한 변경을 못 보고 **오래된 값으로 통째 덮어쓴다** — 그래서 매 읽기마다 mtime·size 를
+// 확인하고 달라졌을 때만 다시 읽는다(stat 은 read 보다 훨씬 싸서 캐시 이득은 유지된다).
+type CacheEntry = {
+  raw: string | null; // null = 파일 없음/읽기 실패
+  mtimeMs: number;
+  size: number;
+};
+const fileCache = new Map<string, CacheEntry>();
+
+/** 캐시 판정용 stat — 파일이 없으면 null */
+function statOf(target: string): { mtimeMs: number; size: number } | null {
+  try {
+    const st = fs.statSync(target);
+    return { mtimeMs: st.mtimeMs, size: st.size };
+  } catch {
+    return null;
+  }
+}
 
 /** userData 아래 JSON 파일 읽기 — 없거나 손상이면 fallback 반환 */
 export function readUserJson<T>(filename: string, fallback: T): T {
-  let raw = fileCache.get(filename);
-  if (raw === undefined) {
+  const target = userJsonPath(filename);
+  const st = statOf(target);
+  const cached = fileCache.get(filename);
+  // 파일이 없는 상태(raw === null)가 캐시돼 있고 지금도 없으면 그대로 유효
+  const isFresh =
+    cached !== undefined &&
+    (st === null
+      ? cached.raw === null
+      : cached.mtimeMs === st.mtimeMs && cached.size === st.size);
+
+  let raw: string | null;
+  if (isFresh) {
+    raw = cached.raw;
+  } else {
     try {
-      raw = fs.readFileSync(userJsonPath(filename), 'utf8');
+      raw = fs.readFileSync(target, 'utf8');
     } catch {
       raw = null;
     }
-    fileCache.set(filename, raw);
+    fileCache.set(filename, {
+      raw,
+      mtimeMs: st?.mtimeMs ?? 0,
+      size: st?.size ?? 0,
+    });
   }
+
   if (raw === null) return fallback;
   try {
     return JSON.parse(raw) as T;
@@ -45,7 +81,14 @@ export function writeUserJson(filename: string, value: unknown): void {
   const tmp = `${target}.tmp`;
   fs.writeFileSync(tmp, json, 'utf8');
   fs.renameSync(tmp, target);
-  fileCache.set(filename, json);
+  // 방금 쓴 내용의 mtime·size 로 캐시를 채운다 — 이걸 빠뜨리면 바로 다음 읽기가
+  // 캐시를 무효로 보고 파일을 다시 읽는다(동작은 맞지만 캐시 이득이 사라진다)
+  const st = statOf(target);
+  fileCache.set(filename, {
+    raw: json,
+    mtimeMs: st?.mtimeMs ?? 0,
+    size: st?.size ?? 0,
+  });
 }
 
 /** 비밀 값을 safeStorage 로 암호화해 base64 로 (키체인 불가 환경은 평문 base64 폴백) */

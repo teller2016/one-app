@@ -14,7 +14,8 @@
 | `npm start` | 개발 모드 실행 (핫리로드) |
 | `npx tsc --noEmit` | 타입 검사 (커밋 전 권장) |
 | `npm run lint` | ESLint |
-| `npm run make` | 배포용 `.app`/`.dmg` 패키징 |
+| `npm run make` | `.app` + 배포용 `.zip` (macOS 는 ZIP maker 만 있다 — DMG 아님) |
+| `npm run icon:dev` | 개발용 DEV 아이콘 생성 (원본 아이콘을 바꿨을 때만) |
 
 ## 프로젝트 구조 (feature 중심 — Bulletproof React 스타일)
 ```
@@ -50,6 +51,7 @@ src/
 - **비밀/계정 정보 커밋 금지**: 비밀번호는 `safeStorage`로 암호화해 userData 에만 저장. 코드·리포에 하드코딩 X. `.env`/`settings.json`(계정) 커밋 금지.
 - **⚠️ 그룹웨어 접근은 공용 세션(`main/features/groupware/session.ts`)을 쓸 것** — 같은 계정 동시 로그인은 서버가 거부한다.
 - **⚠️ 보존할 데이터를 localStorage 에 저장하지 말 것** — 강제 종료 시 flush 안 됨(2026-07-29 실측). IPC 로 userData JSON 에 저장한다.
+- **⚠️ 개발 인스턴스(`npm start`)와 빌드 앱은 동시에 띄우는 것이 기본** — **설정(userData)은 공유**하고 포트·tmux 소켓·창 상태만 가른다(`main/lib/devInstance.ts`). `app.setName`/`setPath('userData')` 로 프로필을 가르면 **safeStorage 키체인이 달라져 저장된 계정이 전부 날아간다.** 상세는 `.claude/rules/build-packaging.md`.
 
 ## 컨벤션
 - 코드 주석·문서·대화는 **한국어**.
@@ -86,5 +88,5 @@ src/
 | `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
-**스킬**: `/commit`(커밋) · `/new-section`(새 기능 추가)
+**스킬**: `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영)
 **로드맵**: `ROADMAP.md`

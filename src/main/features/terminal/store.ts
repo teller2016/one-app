@@ -2,6 +2,7 @@
 // 토큰은 접속 자격증명이므로 safeStorage 로 암호화해 저장한다.
 import crypto from 'node:crypto';
 import type { TerminalNotifyLevel } from '../../../shared/types';
+import { IS_DEV_INSTANCE } from '../../lib/devInstance';
 import {
   decryptSecret,
   encryptSecret,
@@ -25,7 +26,12 @@ const read = (): TerminalStore =>
 
 export function getPort(): number {
   const p = read().port;
-  return Number.isInteger(p) && p > 0 && p < 65536 ? p : DEFAULT_PORT;
+  const port = Number.isInteger(p) && p > 0 && p < 65536 ? p : DEFAULT_PORT;
+  // 개발 인스턴스는 한 칸 옆 포트를 쓴다 — 설정 파일(terminal.json)은 빌드 앱과 공유하므로
+  // 그대로 두면 나중에 뜬 쪽이 EADDRINUSE 로 서버를 못 연다. 접속 URL·QR 도 이 값을 쓰므로
+  // 폰에서 개발/빌드 중 어느 쪽에 붙을지도 포트로 갈린다.
+  if (!IS_DEV_INSTANCE) return port;
+  return port < 65535 ? port + 1 : port - 1;
 }
 
 export function getServerEnabled(): boolean {

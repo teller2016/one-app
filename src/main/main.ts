@@ -26,6 +26,8 @@ import { createTray } from "./features/tray/tray";
 import { registerVpnIpc } from "./features/vpn/ipc";
 import { registerWeeklyIpc } from "./features/weekly/ipc";
 import { registerWorkspacesIpc } from "./features/workspaces/ipc";
+import { IS_DEV_INSTANCE } from "./lib/devInstance";
+import { initDockBadge } from "./lib/dockBadge";
 import {
   loadWindowState,
   trackWindowState,
@@ -95,7 +97,9 @@ const createWindow = () => {
     y: saved.y,
     minWidth: WINDOW_MIN.width,
     minHeight: WINDOW_MIN.height,
-    title: "One App",
+    // 개발 인스턴스는 제목으로도 구분한다 — 타이틀바는 숨겨져 있지만(hiddenInset)
+    // ⌘탭·Mission Control·Dock 우클릭 창 목록에는 이 이름이 그대로 뜬다
+    title: IS_DEV_INSTANCE ? "One App — DEV" : "One App",
     // macOS: 신호등 버튼만 남기고 타이틀바를 콘텐츠에 통합
     titleBarStyle: "hiddenInset",
     // 신호등을 렌더러 탑바(--titlebar-h: 44px) 세로 중앙에 맞춘다 —
@@ -117,6 +121,12 @@ const createWindow = () => {
 
   // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록
   setNotifyWindow(mainWindow);
+
+  // 개발 인스턴스의 "— DEV" 제목을 지킨다 — 페이지가 로드되면 index.html 의
+  // <title>One App</title> 이 창 제목을 덮어써서 ⌘탭 목록에서 구분이 사라진다
+  if (IS_DEV_INSTANCE) {
+    mainWindow.on("page-title-updated", (e) => e.preventDefault());
+  }
 
   // 렌더러(메일 본문 iframe 등)의 새 창 요청은 앱 안에 창을 만들지 않고 기본 브라우저로 연다
   // — 앱 내 새 창은 세션이 없어 빈 화면만 뜨므로 항상 deny
@@ -159,14 +169,18 @@ const createWindow = () => {
 
 // Electron 초기화 완료 후 창 생성
 app.on("ready", () => {
-  // 개발 모드 Dock 아이콘 — 패키징된 앱은 번들 아이콘(assets/icon.icns)을 사용
-  if (process.platform === "darwin" && !app.isPackaged) {
+  // 개발 모드 Dock 아이콘 — 패키징된 앱은 번들 아이콘(assets/icon.icns)을 사용.
+  // 개발 인스턴스는 빌드 앱과 나란히 떠 있으므로 'DEV' 밴드를 합성한 아이콘을 쓴다
+  // (assets/icon-dev.png — `npm run icon:dev` 로 생성)
+  if (process.platform === "darwin" && IS_DEV_INSTANCE) {
     try {
-      app.dock?.setIcon(path.join(app.getAppPath(), "assets", "icon.png"));
+      app.dock?.setIcon(path.join(app.getAppPath(), "assets", "icon-dev.png"));
     } catch {
       // 아이콘 파일이 없어도 실행에는 지장 없음
     }
   }
+  // Dock 뱃지 초기화 — 개발 인스턴스면 'DEV' 표식이 여기서 뜬다
+  initDockBadge();
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();

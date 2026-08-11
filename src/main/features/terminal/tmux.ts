@@ -7,8 +7,14 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
+import { IS_DEV_INSTANCE } from '../../lib/devInstance';
 
-const SOCKET_NAME = 'oneapp'; // -L — 사용자 개인 tmux 서버와 분리
+// -L — 사용자 개인 tmux 서버와 분리.
+// ⚠️ 개발 인스턴스는 **소켓부터** 가른다(세션 이름이 아니라) — 이름만 갈라도 같은 tmux
+// 서버를 공유하면 목록 질의가 서로의 세션을 보고, 무엇보다 두 앱이 한 세션에 동시 attach 하면
+// tmux 가 화면을 **가장 작은 클라이언트 크기**로 맞추고 입력이 양쪽에 미러링된다.
+// 소켓이 다르면 tmux 서버 자체가 둘이라 완전히 격리된다(conf 는 내용이 같아 공유해도 무해).
+const SOCKET_NAME = IS_DEV_INSTANCE ? 'oneapp-dev' : 'oneapp';
 const SESSION_PREFIX = 'oneapp-';
 const EXEC_TIMEOUT_MS = 5000;
 

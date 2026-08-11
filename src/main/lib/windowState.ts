@@ -1,10 +1,12 @@
 // 창 크기·위치 기억 — 다시 켰을 때 마지막으로 두었던 자리·크기에서 시작한다.
 // userData/window-state.json 에 저장한다(보존 대상이라 localStorage 를 쓰지 않는다).
+import { runtimeFile } from './devInstance';
 import { readUserJson, writeUserJson } from './store';
 import { screen } from 'electron';
 import type { BrowserWindow, Rectangle } from 'electron';
 
-const FILE = 'window-state.json';
+// 개발 인스턴스는 별도 파일 — 빌드 앱과 창이 정확히 겹쳐 떠서 어느 쪽인지 모르게 되는 걸 막는다
+const FILE = runtimeFile('window-state.json');
 
 /** 창 기본 크기·최소 크기 — createWindow 의 값과 여기가 정본이다 */
 export const WINDOW_DEFAULT = { width: 1280, height: 800 };

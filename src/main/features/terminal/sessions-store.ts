@@ -3,9 +3,12 @@
 // 생성 시 여기 기록해 두고 앱 재시작 복원 때 tmux list-sessions 결과와 대조한다.
 // 항목 제거는 tmux 세션이 실제로 죽었을 때만 — 앱 종료(detach)는 유지한다.
 import type { TerminalAgentId } from '../../../shared/types';
+import { runtimeFile } from '../../lib/devInstance';
 import { readUserJson, writeUserJson } from '../../lib/store';
 
-const FILE = 'terminal-sessions.json';
+// 개발 인스턴스는 별도 sidecar(terminal-sessions-dev.json) — tmux 소켓도 갈라져 있어
+// 서로의 세션을 '죽은 세션'으로 오해해 목록에서 지우는 일이 없다
+const FILE = runtimeFile('terminal-sessions.json');
 
 export type PersistedSession = {
   id: string;
