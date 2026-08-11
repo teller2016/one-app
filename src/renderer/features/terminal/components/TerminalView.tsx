@@ -23,6 +23,24 @@ const cssVar = (name: string) =>
 // PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
 const PTY_RESIZE_DEBOUNCE_MS = 120;
 
+// 휠 위임 주기 — 한 번의 IPC 가 tmux CLI 를 한 번 돌리므로 프레임마다 보내지 않는다
+const WHEEL_FLUSH_MS = 24;
+
+/**
+ * 휠 델타 → 스크롤할 줄 수(양수 = 위로). `deltaMode` 는 픽셀(0)·줄(1)·페이지(2) 로 오고
+ * 트랙패드는 한 틱이 1줄에 못 미치므로 소수를 그대로 반환해 호출부가 누적한다.
+ */
+const wheelLinesOf = (ev: WheelEvent, cellH: number, rows: number) => {
+  if (cellH <= 0) return 0;
+  const px =
+    ev.deltaMode === 1
+      ? ev.deltaY * cellH
+      : ev.deltaMode === 2
+        ? ev.deltaY * cellH * rows
+        : ev.deltaY;
+  return -px / cellH;
+};
+
 // xterm 의 DA(장치 속성 질의) 자동 응답 — ESC[?…c(DA1)·ESC[>…c(DA2).
 // (ESC 를 정규식 리터럴에 직접 쓰면 no-control-regex 에 걸려 문자열로 조립한다 — MO 동일)
 const DA_REPLY_RE = new RegExp(`${String.fromCharCode(27)}\\[[?>][0-9;]*c`, 'g');
@@ -171,6 +189,8 @@ export const TerminalView = memo(function TerminalView({
   fontSizeRef.current = fontSize;
   const onScrolledChangeRef = useRef(onScrolledChange);
   onScrolledChangeRef.current = onScrolledChange;
+  // tmux 백엔드면 스크롤 주인이 tmux 다 — 휠·[맨 아래로] 를 main 으로 위임한다(아래 참고)
+  const tmuxRef = useRef(false);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -314,6 +334,46 @@ export const TerminalView = memo(function TerminalView({
       }
       return true;
     });
+    // ── 휠 스크롤 ──────────────────────────────────────────────────────
+    // ⚠️ tmux 백엔드에서는 **tmux 가 스크롤백의 주인**이다 — tmux 클라이언트가 대체 화면
+    // 으로 붙어서 xterm 뷰포트에는 스크롤할 것이 아무것도 쌓이지 않는다. 그대로 두면
+    // xterm 이 "대체 화면 = 스크롤백 없음" 규칙으로 **휠을 ↑↓ 키로 바꿔 보내** 셸의
+    // 이전 명령이 롤링됐다(2026-08-11 사용자 신고). 그래서 휠을 가로채 main 으로 넘기고
+    // tmux 의 copy-mode 를 움직인다 — 마우스 트래킹을 켜지 않으므로 xterm 의 드래그 선택·
+    // 링크 클릭·⌘F 검색은 그대로다.
+    let wheelLines = 0; // 소수 누적 — 트랙패드는 한 틱이 1줄에 못 미친다
+    let wheelTimer: number | null = null;
+    let wheelBusy = false; // 왕복 중 — 겹쳐 보내지 않고 다음 flush 에 합친다
+    const flushWheel = () => {
+      wheelTimer = null;
+      const scroll = window.oneApp.terminal.scroll;
+      if (wheelBusy || !scroll) {
+        if (wheelBusy) wheelTimer = window.setTimeout(flushWheel, WHEEL_FLUSH_MS);
+        return;
+      }
+      const n = Math.trunc(wheelLines);
+      if (!n) return;
+      wheelLines -= n;
+      wheelBusy = true;
+      void scroll(id, n)
+        .then((res) => {
+          if (!disposed) onScrolledChangeRef.current(id, res.scrolledUp);
+        })
+        .finally(() => {
+          wheelBusy = false;
+        });
+    };
+    term.attachCustomWheelEventHandler((ev) => {
+      // 폴백(tmux 미설치) 세션은 xterm 에 스크롤백이 쌓이므로 기본 동작이 옳다
+      if (!tmuxRef.current) return true;
+      // ⚠️ 마우스 트래킹을 켠 앱(claude 등)에는 휠을 **그대로 넘긴다** — 그 앱들이 자체
+      // 스크롤을 갖고 있고(claude 의 Jump to bottom), 대체 화면이라 tmux 스크롤백도 없다.
+      if (term.modes.mouseTrackingMode !== 'none') return true;
+      wheelLines += wheelLinesOf(ev, host.clientHeight / term.rows, term.rows);
+      if (wheelTimer === null) wheelTimer = window.setTimeout(flushWheel, WHEEL_FLUSH_MS);
+      return false;
+    });
+
     // PTY 크기 전달은 디바운스 — 창 드래그 중엔 매 프레임 크기가 바뀌고, 그때마다
     // SIGWINCH 를 보내면 claude 같은 TUI 가 전체 리렌더를 반복해 화면이 요동친다.
     // 마지막 값만 보내면 드래그가 끝난 크기로 한 번 맞춰진다(last-claim-wins 유지).
@@ -329,6 +389,12 @@ export const TerminalView = memo(function TerminalView({
         ptyResizeTimer = null;
         window.oneApp.terminal.resize(id, cols, rows);
       }, PTY_RESIZE_DEBOUNCE_MS);
+    });
+
+    // 백엔드 확인 — tmux 면 스크롤을 위임한다(위 휠 핸들러). 조회 전에 굴린 휠은
+    // 기존 동작(xterm 기본)으로 처리되지만, 사실상 첫 프레임 안에 답이 온다.
+    void window.oneApp.terminal.backend().then((b) => {
+      if (!disposed) tmuxRef.current = b.tmux;
     });
 
     void window.oneApp.terminal
@@ -392,6 +458,7 @@ export const TerminalView = memo(function TerminalView({
       ro.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
+      if (wheelTimer !== null) window.clearTimeout(wheelTimer);
       window.removeEventListener('focus', reclaimSize);
       // detach — 안 보는 세션의 출력 방송을 멈춘다 (?. 는 구 preload 재시작 전 대비)
       window.oneApp.terminal.detach?.(id);
@@ -495,7 +562,14 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     onRegisterHandle(id, {
       openSearch,
-      scrollToBottom: () => termRef.current?.scrollToBottom(),
+      scrollToBottom: () => {
+        termRef.current?.scrollToBottom(); // 폴백 세션(xterm 스크롤백)
+        // tmux 세션은 copy-mode 를 끝내는 것이 곧 맨 아래로다
+        if (!tmuxRef.current) return;
+        void window.oneApp.terminal
+          .scrollToBottom?.(id)
+          .then(() => onScrolledChangeRef.current(id, false));
+      },
     });
     return () => onRegisterHandle(id, null);
   }, [id, onRegisterHandle, openSearch]);
@@ -524,6 +598,10 @@ export const TerminalView = memo(function TerminalView({
         .filter(Boolean)
         .join(' ')}
       style={splitStyle}
+      // 어느 세션의 pane 인지 — 분할 화면 디버깅·E2E 조준용.
+      // ⚠️ 탭이 쓰는 `data-session` 과 이름을 나눈다 — 탭바의 `overTabArea`(closest 판정)와
+      // 셀렉터가 겹치면 드롭 영역 판정을 헷갈리게 만들 수 있다.
+      data-pane-session={id}
       // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다
       onMouseDownCapture={() => onFocusPane(id)}
     >

@@ -93,7 +93,7 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 
 - **프리셋 대상 위치 = 포커스 세션의 cwd, 세션이 없으면 선택된 워크트리** — `runPreset` 은 cwd 를 받으므로(첫 세션을 프리셋으로 시작하는 흐름 유지, 2026-08-08) 그대로 동작한다. 위치가 없으면 칩 `disabled`(편집 ⚙ 는 열린다). 워크스페이스 등록 전 화면에서는 바 전체를 감춘다.
 - **검색 열기·맨 아래로는 pane 핸들 위임** — 터미널 인스턴스를 직접 만져야 해서 `TerminalView` 가 `onRegisterHandle(id, { openSearch, scrollToBottom })` 로 등록하고, 바는 **포커스 pane** 의 핸들만 부른다(`TerminalPaneHandle`). 검색 오버레이 자체는 여전히 pane 안에 뜬다(⌘F 도 focused pane 이 처리).
-- **[맨 아래로] 노출 판정은 boolean 리프트** — pane 이 `onScrolledChange(id, bool)` 로 변화시에만 올리고(스크롤 이벤트마다 아님), 언마운트 시 false 로 정리한다. tmux 백엔드는 xterm 스크롤백이 안 쌓여 실제로는 폴백 세션에서만 등장한다.
+- **[맨 아래로] 노출 판정은 boolean 리프트** — pane 이 `onScrolledChange(id, bool)` 로 변화시에만 올리고(스크롤 이벤트마다 아님), 언마운트 시 false 로 정리한다. 폴백 세션은 xterm 의 `onScroll`, tmux 세션은 **휠 위임 응답(`scrolledUp`)** 이 이 값을 만든다(아래 '휠 스크롤은 tmux copy-mode 로 위임한다').
 - 글자 크기(A±)·프리셋은 원래 섹션 소유 공유 상태라 이동만으로 끝났다. Finder 열기는 섹션이 `revealCwd(activeId)` 를 직접 부른다.
 
 ### 세션 패널은 드래그 리사이즈 + 완전 축소
@@ -126,7 +126,19 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - ⚠️ **검색바는 세로 스택이 아니라 오버레이**(absolute)다 — 한 줄을 끼우면 host 높이가 줄어 **PTY 행이 바뀌고**(62→60 실측) 검색을 열고 닫을 때마다 claude 가 전체 리플로우한다.
 
 ## ⚠️ tmux 백엔드에선 xterm 스크롤백이 쌓이지 않는다 (2026-08-05 실측)
-tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 스크롤백이 남지 않는다(`scrollHeight == clientHeight`, 슬라이더 0px). 그래서 툴바의 **[맨 아래로] 는 tmux 미설치 폴백 세션에서만 등장**하고, **화면 지우기(`term.clear()`)도 tmux 가 곧 다시 그려 영구 삭제가 아니다**. 스크롤백을 되살리려면 tmux history 시딩(`capture-pane`)이 필요하다 — 미구현.
+tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 스크롤백이 남지 않는다(`scrollHeight == clientHeight`, 슬라이더 0px). **스크롤백의 주인은 tmux**(`history-limit 10000`)이고, **화면 지우기(`term.clear()`)도 tmux 가 곧 다시 그려 영구 삭제가 아니다**.
+
+### 휠 스크롤은 tmux copy-mode 로 위임한다 (2026-08-11)
+그대로 두면 xterm 이 "대체 화면 = 스크롤백 없음" 규칙으로 **휠을 ↑↓ 키로 바꿔 보내** 셸의 이전 명령이 롤링됐다(사용자 신고: "스크롤하면 화면이 아니라 이전 입력값이 롤링된다"). `TerminalView` 의 `attachCustomWheelEventHandler` 가 휠을 가로채 `terminal:scroll` 로 넘기고, `pty.scrollSession` → `tmux.tmuxScrollPane` 이 tmux 를 움직인다.
+
+- **분기는 tmux 안에서 한다**(`if-shell -F '#{alternate_on}'` — 왕복 1회): **대체 화면(TUI)이면 방향키 n회**(기존 동작 유지 — 2026-08-11 사용자 선택), **일반 화면이면 `copy-mode -e` + `scroll-up`**. `-e` 라 아래로 되돌려 바닥에 닿으면 tmux 가 알아서 나온다.
+- ⚠️ **마우스 트래킹을 켠 앱(claude 등)에는 휠을 그대로 넘긴다**(`term.modes.mouseTrackingMode !== 'none'` → 핸들러가 `true` 반환) — 그 앱들이 자체 스크롤을 갖고 있다(위 'claude CLI 의 화면 모드' 절). tmux 미설치 폴백 세션도 마찬가지로 xterm 기본 동작을 쓴다(`terminal:backend` 로 판정).
+- ⚠️ **`mouse on` 으로 켜지 않은 이유** — tmux 기본 바인딩만으로 같은 분기가 되지만, 마우스 이벤트가 tmux 로 넘어가면서 **xterm 네이티브 드래그 선택·링크 클릭이 회귀**한다(⌥+드래그로만 선택 가능). 휠만 가로채면 그 셋이 그대로다.
+- **스크롤 중 입력이 오면 먼저 copy-mode 를 빠져나온다**(`writeSession` → `exitCopyMode`). 해제는 tmux CLI 호출이라 비동기여서, 그동안의 입력은 `pendingInput` 에 순서대로 모아 뒀다가 한 번에 흘려보낸다 — **첫 글자를 잃지 않는다**(실측: 스크롤 상태에서 `echo TYPED-OK` 전문 입력 확인). MO 입력도 같은 함수를 지나 동일하게 동작한다.
+- 휠은 고빈도라 렌더러가 **소수 누적 + 24ms flush + 왕복 중 스킵**(`wheelBusy`)으로 tmux 호출을 묶는다. pane id 는 세션에 캐시한다(pane 타깃 명령은 `=세션명` 을 못 받는다).
+- **[맨 아래로] 버튼은 이제 tmux 세션에서도 뜬다** — pane 이 스크롤 응답의 `scrolledUp` 을 올리고(`onScrolledChange`), 버튼은 `scrollToBottom` 핸들에서 `terminal:scroll-bottom`(= copy-mode `cancel`)을 부른다.
+- E2E 실측(2026-08-11): 휠 위로 → `scroll_position=25` + 화면이 `LINE 51~87` → `LINE 26~62` 로 올라감(스크린샷), 아래로 굴려 바닥 자동 종료, [맨 아래로] 클릭으로 원위치 복귀, `less`(alt=1·마우스 미사용)에서는 방향키가 전달돼 화면 전진. pane 조준은 `TerminalView` 가 붙이는 `data-pane-session` 으로 한다(탭의 `data-session` 과 이름을 나눈 이유는 탭바 `overTabArea` 판정과의 혼동 방지).
+- 남은 것: 앱 재시작 후 스크롤백은 tmux history 에 남아 있어 **스크롤로 볼 수 있다**(xterm 링버퍼와 별개). MO(폰)의 터치 스크롤은 이 경로를 쓰지 않는다 — 기존 합성 WheelEvent 방식 그대로다.
 
 ## 상태 휴리스틱
 `pty.ts` — 상수는 파일 상단, `ONEAPP_TERM_DEBUG=1` 로 전이 로그.

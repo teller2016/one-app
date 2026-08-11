@@ -164,6 +164,74 @@ export async function isTmuxAltScreen(name: string): Promise<boolean> {
 }
 
 /**
+ * 세션의 pane id (`%0` 형식) — 없으면 null.
+ * ⚠️ pane 타깃 명령(copy-mode·send-keys)은 `=세션명` 을 못 받으므로(3.7b 실측) 한 번
+ * 조회해서 캐시해 쓴다. 앱 세션은 pane 이 하나뿐이고 그 pane 이 죽으면 세션도 끝난다.
+ */
+export async function tmuxPaneId(name: string): Promise<string | null> {
+  const { ok, stdout } = await run([
+    'list-panes',
+    '-s',
+    '-t',
+    `=${name}`,
+    '-F',
+    '#{pane_id}',
+  ]);
+  const id = stdout.split('\n')[0]?.trim();
+  return ok && id ? id : null;
+}
+
+/**
+ * 휠 스크롤을 tmux 로 위임한다 — **tmux 가 스크롤백의 주인**이기 때문이다.
+ * tmux 클라이언트는 대체 화면으로 붙으므로 xterm 뷰포트엔 스크롤할 것이 없고,
+ * xterm 은 그 상태에서 휠을 ↑↓ 키로 바꿔 보내 셸 히스토리가 롤링됐다(사용자 신고).
+ *
+ * 분기는 tmux 안에서 해서 왕복을 1회로 묶는다:
+ * - **대체 화면(TUI)** → 방향키 n회 = xterm 이 하던 기존 동작 그대로 (사용자 선택)
+ * - **일반 화면** → `copy-mode -e` 로 올린다. `-e` 라 아래로 되돌려 바닥에 닿으면 자동 종료.
+ *
+ * @param lines 양수 = 위로, 음수 = 아래로
+ * @returns 스크롤 후에도 copy-mode 에 있는지(= 위로 올라가 있는지)
+ */
+export async function tmuxScrollPane(
+  paneId: string,
+  lines: number
+): Promise<{ scrolledUp: boolean }> {
+  const n = String(Math.min(Math.abs(lines), 200)); // 트랙패드 급가속 상한
+  const branch =
+    lines > 0
+      ? [
+          `send-keys -t ${paneId} -N ${n} Up`,
+          `copy-mode -e -t ${paneId} ; send-keys -X -t ${paneId} -N ${n} scroll-up`,
+        ]
+      : [
+          `send-keys -t ${paneId} -N ${n} Down`,
+          // 이미 copy-mode 일 때만 — 바닥에서 진입하면 빈 모드에 들어갔다 나올 뿐이다
+          `if-shell -F -t ${paneId} '#{pane_in_mode}' "send-keys -X -t ${paneId} -N ${n} scroll-down"`,
+        ];
+  const { ok, stdout } = await run([
+    'if-shell',
+    '-F',
+    '-t',
+    paneId,
+    '#{alternate_on}',
+    ...branch,
+    ';', // 같은 호출에서 결과 상태까지 회수 — [맨 아래로] 버튼 판정에 쓴다
+    'list-panes',
+    '-t',
+    paneId,
+    '-F',
+    '#{pane_in_mode}',
+  ]);
+  return { scrolledUp: ok && stdout.trim().startsWith('1') };
+}
+
+/** copy-mode 종료 = 맨 아래로. 모드가 아니면 실패하지만 무해하다(exit 1). */
+export async function tmuxExitCopyMode(paneId: string): Promise<void> {
+  await run(['send-keys', '-X', '-t', paneId, 'cancel']);
+}
+
+/**
  * 세션에 붙은 클라이언트 전체 리프레시 — tmux 가 자기 화면 모델로 전체를 다시 그린다.
  * SIGWINCH 토글(rows±1)과 달리 내부 앱(claude)을 건드리지 않아 이중 리플로우가 없고,
  * sync 광고와 함께면 원자적 프레임으로 온다. (refresh-client 는 target-client(tty) 만

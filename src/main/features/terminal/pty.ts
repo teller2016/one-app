@@ -36,7 +36,10 @@ import {
   refreshTmuxClients,
   sessionIdFromTmuxName,
   tmuxAttachArgs,
+  tmuxExitCopyMode,
   tmuxNewSessionArgs,
+  tmuxPaneId,
+  tmuxScrollPane,
   tmuxSessionName,
 } from './tmux';
 
@@ -93,6 +96,11 @@ type Session = {
   bellAt: number; // 마지막 bare BEL 수신 시각 (0 = 없음)
   notifiedSinceInput: boolean; // 이번 입력(턴)에 대한 waiting 알림 기회를 이미 소진했는지
   suppressNotifyUntil: number; // 이 시각 전의 waiting 전이는 알림 없이 상태만
+  // ── 휠 스크롤(tmux copy-mode) 추적값 ──
+  paneId?: string; // tmux pane id 캐시 — pane 타깃 명령은 '=세션명' 을 못 받는다
+  copyMode: boolean; // 스크롤로 copy-mode 에 올라가 있는지 (입력이 오면 먼저 빠져나온다)
+  pendingInput: string; // copy-mode 해제를 기다리는 입력 — 순서 보존용
+  exitingCopyMode: boolean; // 해제 명령 진행 중 (중복 실행 방지)
 };
 
 const sessions = new Map<string, Session>();
@@ -303,6 +311,9 @@ function makeSession(init: {
     bellAt: 0,
     notifiedSinceInput: false,
     suppressNotifyUntil: init.suppressNotifyUntil,
+    copyMode: false,
+    pendingInput: '',
+    exitingCopyMode: false,
   };
 }
 
@@ -668,7 +679,66 @@ export function writeSession(id: string, data: string): void {
   const s = sessions.get(id);
   if (!s) return;
   noteInput(s);
+  // 휠로 tmux copy-mode(스크롤 위)에 올라가 있으면 키 입력이 셸이 아니라 copy-mode 명령으로
+  // 먹힌다 — 먼저 빠져나온다. 해제는 tmux CLI 호출(비동기)이라 그동안의 입력은 순서대로
+  // 모아 뒀다가 한 번에 흘려보낸다(첫 글자를 잃지 않는다).
+  if (s.copyMode) {
+    s.pendingInput += data;
+    exitCopyMode(s);
+    return;
+  }
   s.pty.write(data);
+}
+
+/** copy-mode 해제 + 밀린 입력 flush — writeSession·scrollSessionToBottom 공용 */
+function exitCopyMode(s: Session): Promise<void> {
+  if (!s.paneId) {
+    // 스크롤을 거치지 않으면 copyMode 가 켜질 수 없다 — 방어적으로 원상복구
+    s.copyMode = false;
+    flushPendingInput(s);
+    return Promise.resolve();
+  }
+  if (s.exitingCopyMode) return Promise.resolve();
+  s.exitingCopyMode = true;
+  return tmuxExitCopyMode(s.paneId).then(() => {
+    s.exitingCopyMode = false;
+    s.copyMode = false;
+    flushPendingInput(s);
+  });
+}
+
+function flushPendingInput(s: Session) {
+  const buf = s.pendingInput;
+  s.pendingInput = '';
+  if (buf && sessions.has(s.id)) s.pty.write(buf);
+}
+
+/**
+ * 휠 스크롤 — tmux 백엔드는 **tmux 가 스크롤백의 주인**이라 xterm 이 스스로 스크롤할 수
+ * 없다(클라이언트가 대체 화면으로 붙는다). 그래서 렌더러가 휠을 가로채 이리로 보내고
+ * copy-mode 로 올린다. 대체 화면(claude 등 TUI)이면 tmux 가 방향키로 넘겨 기존 동작 유지.
+ *
+ * @param lines 양수 = 위로, 음수 = 아래로
+ * @returns 위로 올라가 있는지(= 상단 바 [맨 아래로] 노출 판정). tmux 폴백 세션은 항상 false.
+ */
+export async function scrollSession(
+  id: string,
+  lines: number
+): Promise<{ scrolledUp: boolean }> {
+  const s = sessions.get(id);
+  if (!s || !s.tmuxName || !lines) return { scrolledUp: false };
+  if (!s.paneId) s.paneId = (await tmuxPaneId(s.tmuxName)) ?? undefined;
+  if (!s.paneId) return { scrolledUp: false };
+  const res = await tmuxScrollPane(s.paneId, lines);
+  s.copyMode = res.scrolledUp;
+  return res;
+}
+
+/** 상단 바 [맨 아래로] — copy-mode 를 끝내면 tmux 가 현재 화면으로 돌아온다 */
+export async function scrollSessionToBottom(id: string): Promise<void> {
+  const s = sessions.get(id);
+  if (!s || !s.copyMode) return;
+  await exitCopyMode(s);
 }
 
 /** PTY 크기 변경 (마지막 요청 우선) — 모든 클라이언트에 resized 로 전파된다 */

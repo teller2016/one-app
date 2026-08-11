@@ -21,6 +21,8 @@ import {
   renameSession,
   resizeSession,
   restoreSessions,
+  scrollSession,
+  scrollSessionToBottom,
   writeSession,
 } from './pty';
 import { initTmux } from './tmux';
@@ -103,6 +105,15 @@ export function registerTerminalIpc() {
   );
   ipcMain.on('terminal:resize', (_e, id: string, cols: number, rows: number) =>
     resizeSession(id, cols, rows)
+  );
+  // 휠 스크롤은 tmux copy-mode 로 위임한다 — tmux 클라이언트가 대체 화면으로 붙어
+  // xterm 뷰포트엔 스크롤할 것이 없다(자세한 배경은 pty.scrollSession 주석).
+  // invoke 인 이유는 결과(위로 올라가 있는지)로 [맨 아래로] 버튼을 켜기 때문이다.
+  ipcMain.handle('terminal:scroll', (_e, id: string, lines: number) =>
+    scrollSession(id, lines)
+  );
+  ipcMain.handle('terminal:scroll-bottom', (_e, id: string) =>
+    scrollSessionToBottom(id)
   );
 
   // MO(모바일) 접속 서버 — 토글은 저장까지 겸한다 (앱 재시작 후에도 유지)

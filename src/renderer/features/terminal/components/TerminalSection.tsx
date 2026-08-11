@@ -585,7 +585,9 @@ export function TerminalSection() {
     if (activeIdRef.current)
       paneHandles.current.get(activeIdRef.current)?.scrollToBottom();
   }, []);
-  // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정(tmux 폴백 세션만 발화)
+  // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정.
+  // tmux 세션은 xterm 이 아니라 tmux copy-mode 가 스크롤 상태의 주인이라, pane 이
+  // 휠 위임 응답(scrolledUp)으로 올려 준다(TerminalView 의 '휠 스크롤' 절).
   const [scrolledUp, setScrolledUp] = useState<Record<string, boolean>>({});
   const onScrolledChange = useCallback((id: string, v: boolean) => {
     setScrolledUp((cur) => (!!cur[id] === v ? cur : { ...cur, [id]: v }));

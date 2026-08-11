@@ -331,6 +331,12 @@ declare global {
         };
         write: (id: string, data: string) => void;
         resize: (id: string, cols: number, rows: number) => void;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비 (detach 와 같은 이유)
+        scroll?: (
+          id: string,
+          lines: number,
+        ) => Promise<{ scrolledUp: boolean }>;
+        scrollToBottom?: (id: string) => Promise<void>;
         onData: (
           cb: (ev: { id: string; data: string; seq: number }) => void,
         ) => () => void;

@@ -453,6 +453,12 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.send("terminal:resize", id, cols, rows),
+    // 휠 스크롤 위임 (tmux 백엔드 전용) — 양수 = 위로. 반환값으로 [맨 아래로] 를 켠다
+    scroll: (id: string, lines: number) =>
+      ipcRenderer.invoke("terminal:scroll", id, lines),
+    // 맨 아래로 = tmux copy-mode 종료
+    scrollToBottom: (id: string) =>
+      ipcRenderer.invoke("terminal:scroll-bottom", id),
     // 세션 출력 구독 (16ms 배칭, seq 는 attach replay 와의 중복 제거 기준).
     // 멀티플렉서 경유 — pane 수만큼 ipcRenderer 리스너가 늘지 않는다. 해제 함수를 반환한다.
     onData: makeMux<{ id: string; data: string; seq: number }>("terminal:data"),
