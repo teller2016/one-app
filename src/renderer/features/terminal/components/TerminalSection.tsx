@@ -542,21 +542,6 @@ export function TerminalSection() {
     return { items, tabs };
   }, [tabSessions, groups]);
 
-  /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리 — 혼자 전체 화면으로 (2026-08-10) */
-  const detachSession = useCallback(
-    (id: string) => {
-      const key = selKeyRef.current;
-      const list = layoutsRef.current[key] ?? NO_GROUPS;
-      const next = removeFromGroups(list, id);
-      if (next === list) return; // 그룹 미소속 — 할 일 없음
-      updateGroups(key, next);
-      // '빼기'의 목적 자체가 단독 보기다 — 분리된 세션이 화면을 이어받는다
-      rememberActive(key, id);
-      setActiveId(id);
-    },
-    [updateGroups, rememberActive]
-  );
-
   /** pane 클릭 = 포커스 이동 — 분할 중 어느 터미널이 키보드·⌘F 를 받는지 정한다 */
   const focusPane = useCallback(
     (id: string) => {
@@ -676,6 +661,45 @@ export function TerminalSection() {
     setDragSession(null);
     setDropHint(null);
   }, []);
+
+  // ⚠️ **드래그가 어떻게 끝나든 드롭 존은 반드시 사라져야 한다** — `dragend` 는 드래그
+  // 소스 노드가 드롭 처리 중에 언마운트되면 오지 않는다(브라우저 공통 동작). 그러면
+  // dragSession 이 남아 드롭 존 오버레이(absolute·z-index 3)가 pane 을 덮은 채 굳고,
+  // 휠·클릭·드래그 선택이 전부 그 투명 레이어에 삼켜진다 — 2026-08-11 사용자 신고
+  // ("합쳤다가 다시 분리하면 스크롤이 안 먹는다")의 실제 원인이었다(elementFromPoint 로
+  // 휠 좌표가 .terminal__drop-zone 에 잡히는 것을 실측). 소스 탭에 의존하지 않고
+  // document 에서 한 번 더 거둔다.
+  // ⚠️ **bubble 단계여야 한다** — capture 로 잡으면 React 의 onDrop(applyDrop)이 값을
+  // 읽기 전에 dragSession 을 비워 드롭 자체가 무효가 된다.
+  useEffect(() => {
+    if (!dragSession) return;
+    const end = () => onDragEndSession();
+    document.addEventListener('dragend', end);
+    document.addEventListener('drop', end);
+    return () => {
+      document.removeEventListener('dragend', end);
+      document.removeEventListener('drop', end);
+    };
+  }, [dragSession, onDragEndSession]);
+
+  /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리 — 혼자 전체 화면으로 (2026-08-10) */
+  const detachSession = useCallback(
+    (id: string) => {
+      // 분리는 탭 구조(그룹 통탭 → 단일 탭)를 바꿔 **드래그 소스 탭이 언마운트**되는
+      // 대표 경로다 — 위 안전망과 별개로 여기서도 직접 끝낸다(그룹 미소속이라
+      // 아래에서 일찍 반환하더라도 드래그는 이미 끝난 것이다).
+      onDragEndSession();
+      const key = selKeyRef.current;
+      const list = layoutsRef.current[key] ?? NO_GROUPS;
+      const next = removeFromGroups(list, id);
+      if (next === list) return; // 그룹 미소속 — 할 일 없음
+      updateGroups(key, next);
+      // '빼기'의 목적 자체가 단독 보기다 — 분리된 세션이 화면을 이어받는다
+      rememberActive(key, id);
+      setActiveId(id);
+    },
+    [updateGroups, rememberActive, onDragEndSession]
+  );
 
   /** 존 안 포인터 위치 → X자(대각선) 판정 */
   const zoneSide = (e: ReactDragEvent<HTMLDivElement>): DropSide => {
