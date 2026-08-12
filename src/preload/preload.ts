@@ -18,6 +18,7 @@ import type {
   Project,
   SaveProjectInput,
   ApplinkInput,
+  JiraWorkPrepareInput,
   MirrorMode,
   MailListQuery,
   ChangesTarget,
@@ -171,6 +172,21 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("jira:transition", key, id),
     // 해결/완료 계열 전환 자동 선택 실행 (PR 머지 직후용)
     resolve: (key: string) => ipcRenderer.invoke("jira:resolve", key),
+    // 직접 추가한 티켓 (담당이 아닌데 작업해야 하는 이슈) — 목록은 jira:list 에 병합돼 온다
+    added: {
+      list: () => ipcRenderer.invoke("jira:added:list"),
+      // 추가 전 확인 — 주소·키에서 이슈를 찾아 제목·상태를 돌려준다
+      validate: (input: string) => ipcRenderer.invoke("jira:added:validate", input),
+      add: (input: string) => ipcRenderer.invoke("jira:added:add", input),
+      remove: (key: string) => ipcRenderer.invoke("jira:added:remove", key),
+    },
+    // 작업 시작 준비 — 티켓 본문·첨부를 내려받고 femc 실행 명령을 돌려준다.
+    // ⚠️ 반환된 command 는 이미 셸 인용이 끝난 문자열이다. 가공하지 말고 그대로
+    // terminal.create({ command }) 에 넘길 것.
+    prepareWork: (input: JiraWorkPrepareInput) =>
+      ipcRenderer.invoke("jira:prepare-work", input),
+    // 세션을 띄울 Claude 계정 후보 (Personal/Team — 로그인 이메일 포함)
+    workAccounts: () => ipcRenderer.invoke("jira:work-accounts"),
   },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회

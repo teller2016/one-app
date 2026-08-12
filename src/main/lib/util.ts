@@ -6,6 +6,13 @@ export const sleep = (ms: number) =>
 export const localDateKey = (d: Date) =>
   `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
+/**
+ * 셸 인자 안전 인용 — 작은따옴표로 감싸고 내부 작은따옴표만 탈출시킨다.
+ * 개행·따옴표·백틱이 들어간 문자열(티켓 본문에서 만든 프롬프트 등)을 명령에 끼워 넣는
+ * 유일한 경로다. ⚠️ 셸 명령 문자열 조립은 항상 main 에서 이 함수를 거칠 것.
+ */
+export const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
 /** 지정 시간 안에 끝나지 않으면 거부 — Electron 의 loadURL·executeJavaScript 무한 대기 방지 */
 export function withTimeout<T>(
   promise: Promise<T>,

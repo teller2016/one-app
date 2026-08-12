@@ -19,6 +19,7 @@ import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { setSectionNavigator } from "../lib/sectionNav";
 import { runSectionBack, useHasSectionBack } from "../lib/sectionBack";
 import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
@@ -242,6 +243,14 @@ export function App() {
     return window.oneApp.onNavigate((section) => {
       if (SECTIONS.some((s) => s.id === section)) navigate(section);
     });
+  }, [navigate]);
+
+  // 섹션 안에서 다른 섹션으로 보내는 이동(Jira [작업] → 터미널)을 위한 등록
+  useEffect(() => {
+    setSectionNavigator((section) => {
+      if (SECTIONS.some((s) => s.id === section)) navigate(section);
+    });
+    return () => setSectionNavigator(null);
   }, [navigate]);
 
   return (

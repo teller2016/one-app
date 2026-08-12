@@ -1,20 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { JiraIssue, JiraTransition } from '../../../../shared/types';
+import type {
+  JiraIssue,
+  JiraTransition,
+  TerminalSessionInfo,
+} from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
+import { Button } from '../../../components/Button';
 import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import type { IconName } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Segment } from '../../../components/Segment';
+import { StatusDot } from '../../../components/StatusDot';
+import { Tooltip } from '../../../components/Tooltip';
 import { useToast } from '../../../components/Toast';
 import { EmptyState } from '../../../components/EmptyState';
+import { openTerminalSession } from '../../../lib/sectionNav';
 import { usePolling } from '../../../lib/usePolling';
 import { useCopy } from '../../../lib/useCopy';
 
 import { isDone } from '../lib/issue';
+import { AddTicketModal } from './AddTicketModal';
 import { JiraDetailPanel } from './JiraDetailPanel';
+import { StartWorkModal } from './StartWorkModal';
+
+/** 세션 제목 앞머리의 티켓 키 (작업 시작 시 제목을 키로 준다) */
+const KEY_RE = /^[A-Z][A-Z0-9]*-\d+/;
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 
@@ -61,18 +74,28 @@ function IssueRow({
   issue,
   menu,
   transitioning,
+  workSession,
   onToggleMenu,
   onTransition,
   onCopyLink,
   onOpenDetail,
+  onStartWork,
+  onOpenSession,
+  onUnpin,
 }: {
   issue: JiraIssue;
   menu: MenuState | null; // null = 메뉴 닫힘
   transitioning: boolean;
+  /** 이 티켓으로 돌고 있는 femc 세션 (없으면 null) */
+  workSession: TerminalSessionInfo | null;
   onToggleMenu: (key: string) => void;
   onTransition: (key: string, t: JiraTransition) => void;
   onCopyLink: (issue: JiraIssue) => void;
   onOpenDetail: (key: string) => void;
+  onStartWork: (issue: JiraIssue) => void;
+  onOpenSession: (session: TerminalSessionInfo) => void;
+  /** 직접 추가한 티켓을 목록에서 빼기 (핀 클릭) */
+  onUnpin: (key: string) => void;
 }) {
   const open = (): void => {
     void window.oneApp.openExternal(issue.url);
@@ -105,6 +128,19 @@ function IssueRow({
         >
           <Icon name="copy" size={12} />
         </button>
+        {/* 직접 추가한 티켓 — 평소엔 핀, 올리면 ✕ (구분 표시와 제거를 한 자리에서) */}
+        {issue.pinned && (
+          <button
+            type="button"
+            className="icon-btn jira__pin"
+            onClick={() => onUnpin(issue.key)}
+            title={`${issue.key} — 직접 추가한 티켓 (누르면 목록에서 뺍니다)`}
+            aria-label={`${issue.key} 목록에서 빼기`}
+          >
+            <Icon name="pin" size={12} className="jira__pin-on" />
+            <Icon name="x" size={12} className="jira__pin-off" />
+          </button>
+        )}
       </span>
       {prio && (
         <span
@@ -141,6 +177,21 @@ function IssueRow({
           <span className="jira__parent-text">
             {issue.parentSummary ?? issue.parentKey}
           </span>
+        </button>
+      )}
+
+      {/* 이 티켓으로 돌고 있는 femc 세션 — 누르면 그 터미널로 간다 */}
+      {workSession && (
+        <button
+          type="button"
+          className="jira__work-chip"
+          onClick={() => onOpenSession(workSession)}
+          title={`${workSession.title} — ${
+            workSession.status === 'busy' ? '작업 중' : '입력 대기'
+          } · 터미널로 이동`}
+        >
+          <StatusDot status={workSession.status === 'busy' ? 'busy' : 'ok'} />
+          femc
         </button>
       )}
 
@@ -197,6 +248,18 @@ function IssueRow({
           </div>
         )}
       </span>
+
+      {/* 작업 시작 — 위치를 고르고 femc 세션으로 넘긴다 (행 맨 끝 고정 자리) */}
+      <Tooltip label="작업 시작">
+        <button
+          type="button"
+          className="icon-btn jira__work"
+          aria-label={`${issue.key} 작업 시작`}
+          onClick={() => onStartWork(issue)}
+        >
+          <Icon name="play" size={13} />
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -217,7 +280,50 @@ export function JiraSection() {
   // 상세 패널 — 닫을 때 detailKey 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  // 작업 시작 모달 — 대상 이슈 (닫히면 null)
+  const [workIssue, setWorkIssue] = useState<JiraIssue | null>(null);
+  // 티켓 추가 모달
+  const [addOpen, setAddOpen] = useState(false);
+  // 직접 추가한 티켓만 조회에 실패했을 때 (담당 목록은 정상)
+  const [addedError, setAddedError] = useState('');
   const toast = useToast();
+
+  // 터미널 세션 — 어떤 티켓이 이미 돌고 있는지 표시하려고 구독한다(main 이 상태까지 실어 준다)
+  const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
+  useEffect(() => {
+    const api = window.oneApp?.terminal;
+    if (!api) return;
+    void api.list().then(setSessions);
+    return api.onSessions((list) => {
+      if (list) setSessions(list);
+      else void api.list().then(setSessions); // payload 미탑재(구버전 main) 폴백
+    });
+  }, []);
+
+  /**
+   * 티켓 키 → 그 티켓으로 시작한 femc 세션.
+   * ⚠️ 매칭 기준은 **세션 제목**이다 — 사용자가 터미널에서 이름을 바꾸면 칩이 사라진다
+   * (세션 자체는 멀쩡하다). 세션 타입에 티켓 필드를 더하면 sidecar 스키마까지 번져서
+   * 표시 하나를 위해 감수할 비용이 아니라고 봤다.
+   */
+  const workByKey = useMemo(() => {
+    const map = new Map<string, TerminalSessionInfo>();
+    for (const s of sessions) {
+      if (s.agentId !== 'femc') continue;
+      const hit = KEY_RE.exec(s.title.trim().toUpperCase());
+      if (!hit) continue;
+      const cur = map.get(hit[0]);
+      // 같은 티켓 세션이 여럿이면 내 입력을 기다리는 쪽을 보여준다
+      if (!cur || (cur.status !== 'waiting' && s.status === 'waiting')) {
+        map.set(hit[0], s);
+      }
+    }
+    return map;
+  }, [sessions]);
+
+  const openSession = useCallback((s: TerminalSessionInfo) => {
+    openTerminalSession({ sessionId: s.id, cwd: s.cwd });
+  }, []);
 
   // force — 수동 새로고침은 main 의 TTL 캐시를 우회해 항상 최신을 본다
   const load = useCallback(async (force = false) => {
@@ -230,6 +336,8 @@ export function JiraSection() {
     } else {
       setError(res.error ?? '이슈를 불러오지 못했습니다.');
     }
+    // 추가 티켓 조회만 실패한 경우 — 본 목록은 살아 있으므로 따로 알린다
+    setAddedError(res.addedError ?? '');
     setLoading(false);
   }, []);
 
@@ -263,6 +371,20 @@ export function JiraSection() {
       window.removeEventListener('keydown', onKey);
     };
   }, [menuKey]);
+
+  // 직접 추가한 티켓 빼기 — 되돌리기 쉬운 동작이라 확인창 없이 바로 처리한다
+  const unpin = useCallback(
+    async (key: string) => {
+      const res = await window.oneApp.jira.added.remove(key);
+      if (!res.ok) {
+        toast(res.error ?? '목록에서 빼지 못했습니다', 'fail');
+        return;
+      }
+      toast(`${key} 를 목록에서 뺐습니다`);
+      await load(true);
+    },
+    [load, toast]
+  );
 
   // 이슈 링크 클립보드 복사
   const copy = useCopy();
@@ -316,10 +438,15 @@ export function JiraSection() {
   const open = visible.filter((it) => !isDone(it));
   const done = visible.filter(isDone);
 
+  // 직접 추가한 티켓은 타입 그룹 위 별도 그룹 — 내 담당이 아니라 성격이 다르고,
+  // 빼는 조작도 한군데 모인다. (해결되면 아래 '해결됨' 그룹으로 함께 내려간다)
+  const pinnedOpen = open.filter((it) => it.pinned);
+  const typedOpen = open.filter((it) => !it.pinned);
+
   // 타입별 그룹핑 — 그룹은 rank 순, 그룹 안은 API 정렬(최신 갱신순) 유지
   const groups = useMemo(() => {
     const map = new Map<string, JiraIssue[]>();
-    for (const it of open) {
+    for (const it of typedOpen) {
       const list = map.get(it.issueType) ?? [];
       list.push(it);
       map.set(it.issueType, list);
@@ -327,7 +454,7 @@ export function JiraSection() {
     return [...map.entries()]
       .map(([type, items]) => ({ type, items, ...typeInfo(type) }))
       .sort((a, b) => a.rank - b.rank || a.type.localeCompare(b.type));
-  }, [open]);
+  }, [typedOpen]);
 
   return (
     <div className="section jira">
@@ -337,12 +464,19 @@ export function JiraSection() {
           icon={<Icon name="clipboard-list" size={18} />}
           sub="내게 할당된 미해결 이슈입니다. 제목을 클릭하면 여기서 바로 볼 수 있어요."
         />
-        <RefreshButton
-          size={14}
-          spinning={loading}
-          onClick={() => void load(true)}
-          title="이슈 목록 새로고침"
-        />
+        <div className="jira__head-actions">
+          {/* 담당으로 안 날아온 티켓을 주소로 끌어온다 */}
+          <Button variant="ghost" size="sm" onClick={() => setAddOpen(true)}>
+            <Icon name="plus" size={13} />
+            티켓
+          </Button>
+          <RefreshButton
+            size={14}
+            spinning={loading}
+            onClick={() => void load(true)}
+            title="이슈 목록 새로고침"
+          />
+        </div>
       </div>
 
       {!configured && (
@@ -352,6 +486,10 @@ export function JiraSection() {
         </Banner>
       )}
       {configured && error && <Banner variant="danger">{error}</Banner>}
+      {/* 추가 티켓만 실패 — 담당 목록은 정상이므로 경고로 낮춰 알린다 */}
+      {addedError && (
+        <Banner variant="warning">직접 추가한 티켓을 못 불러왔습니다 — {addedError}</Banner>
+      )}
 
       {projects.length > 1 && (
         <div className="jira__tabs">
@@ -372,6 +510,37 @@ export function JiraSection() {
         <EmptyState icon="check" message="미해결 이슈가 없습니다. 깔끔하네요!" />
       ) : (
         <>
+          {/* 직접 추가한 티켓 — 담당 그룹들보다 위 */}
+          {pinnedOpen.length > 0 && (
+            <div className="jira__group">
+              <div className="jira__group-head">
+                <span className="jira__type jira__type--pinned">
+                  <Icon name="pin" size={12} />
+                </span>
+                <span className="jira__group-name">직접 추가</span>
+                <span className="jira__group-count">{pinnedOpen.length}</span>
+              </div>
+              <div className="jira__card">
+                {pinnedOpen.map((it) => (
+                  <IssueRow
+                    issue={it}
+                    key={it.key}
+                    menu={menuKey === it.key ? menuState : null}
+                    transitioning={transitioningKey === it.key}
+                    workSession={workByKey.get(it.key) ?? null}
+                    onToggleMenu={(k) => void toggleMenu(k)}
+                    onTransition={(k, t) => void handleTransition(k, t)}
+                    onCopyLink={(it2) => void copyLink(it2)}
+                    onOpenDetail={openDetail}
+                    onStartWork={setWorkIssue}
+                    onOpenSession={openSession}
+                    onUnpin={(k) => void unpin(k)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {groups.map(({ type, items, icon, tone }) => (
             <div className="jira__group" key={type}>
               <div className="jira__group-head">
@@ -388,10 +557,14 @@ export function JiraSection() {
                     key={it.key}
                     menu={menuKey === it.key ? menuState : null}
                     transitioning={transitioningKey === it.key}
+                    workSession={workByKey.get(it.key) ?? null}
                     onToggleMenu={(k) => void toggleMenu(k)}
                     onTransition={(k, t) => void handleTransition(k, t)}
                     onCopyLink={(it2) => void copyLink(it2)}
                     onOpenDetail={openDetail}
+                    onStartWork={setWorkIssue}
+                    onOpenSession={openSession}
+                    onUnpin={(k) => void unpin(k)}
                   />
                 ))}
               </div>
@@ -416,10 +589,14 @@ export function JiraSection() {
                       key={it.key}
                       menu={menuKey === it.key ? menuState : null}
                       transitioning={transitioningKey === it.key}
+                      workSession={workByKey.get(it.key) ?? null}
                       onToggleMenu={(k) => void toggleMenu(k)}
                       onTransition={(k, t) => void handleTransition(k, t)}
                       onCopyLink={(it2) => void copyLink(it2)}
                       onOpenDetail={openDetail}
+                      onStartWork={setWorkIssue}
+                      onOpenSession={openSession}
+                      onUnpin={(k) => void unpin(k)}
                     />
                   ))}
                 </div>
@@ -434,7 +611,40 @@ export function JiraSection() {
         issueKey={detailKey}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
+        onStartWork={(detail) =>
+          setWorkIssue({
+            key: detail.key,
+            projectKey: detail.key.split('-')[0],
+            summary: detail.summary,
+            status: detail.status,
+            statusCategory: detail.statusCategory,
+            issueType: detail.issueType,
+            parentKey: null,
+            parentSummary: null,
+            priority: detail.priority,
+            updatedAt: detail.updated,
+            url: detail.url,
+          })
+        }
       />
+
+      {/* 티켓 추가 — 담당으로 안 날아온 이슈를 주소·번호로 목록에 끌어온다 */}
+      {addOpen && (
+        <AddTicketModal
+          onAdded={() => void load(true)}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
+
+      {/* 작업 시작 — 위치 선택 후 femc 세션으로 (재클릭도 항상 모달) */}
+      {workIssue && (
+        <StartWorkModal
+          issueKey={workIssue.key}
+          summary={workIssue.summary}
+          projectKey={workIssue.projectKey}
+          onClose={() => setWorkIssue(null)}
+        />
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
 } from '../../../shared/types';
+import { shQuote } from '../../lib/util';
 import { getProject } from '../projects/store';
 import { agentCommand } from './agents';
 import {
@@ -404,8 +405,6 @@ function reattach(s: Session) {
   wireSession(s);
 }
 
-/** 작은따옴표 셸 인용 — 임의 명령을 sh 한 줄에 안전하게 끼워 넣는다 */
-const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
  * tmux `new-session` 에 넘길 셸 명령 — **명령을 pane 입력으로 주입하지 않고 여기서 실행**한다.

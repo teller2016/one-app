@@ -20,6 +20,8 @@ import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
+import type { TerminalFocusRequest } from '../../../lib/sectionNav';
+import { useTerminalFocusRequest } from '../../../lib/sectionNav';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
 import {
@@ -615,6 +617,28 @@ export function TerminalSection() {
     pendingRef.current = id;
     setActiveId(id);
   }, []);
+
+  // ── 다른 섹션에서 넘어온 '이 세션을 열어라' 요청 (Jira [작업] → femc 세션) ──
+  // ⚠️ 요청이 도착한 시점엔 워크스페이스·워크트리 목록이 아직 없다(섹션에 막 들어왔다).
+  // 그래서 담아 두고, 목록이 준비되면 **그 세션의 위치로 선택을 옮긴 뒤** 활성화한다 —
+  // 선택을 안 옮기면 다른 워크트리를 보던 중일 때 탭 목록에 그 세션이 없다.
+  const [focusReq, setFocusReq] = useState<TerminalFocusRequest | null>(null);
+  useTerminalFocusRequest(setFocusReq); // setState 는 identity 가 고정이라 그대로 넘긴다
+  useEffect(() => {
+    if (!focusReq) return;
+    const wtReady = workspaces.every((w) => !!worktrees[w.id]);
+    if (!wsReady || !wtReady) return; // 목록 도착까지 보류
+    const hit = workspaces.find(
+      (ws) =>
+        (worktrees[ws.id] ?? []).some((w) => w.path === focusReq.cwd) ||
+        ws.repoPath === focusReq.cwd
+    );
+    selectAndSave(
+      hit ? { kind: 'worktree', wsId: hit.id, path: focusReq.cwd } : { kind: 'other' }
+    );
+    activateSession(focusReq.sessionId);
+    setFocusReq(null);
+  }, [focusReq, wsReady, workspaces, worktrees, selectAndSave, activateSession]);
 
   // ── 살아 있는 pane — **실제로 본 적 있는 세션만** xterm 을 만든다 ──
   // 예전엔 sessions 전부를 마운트해서 터미널 섹션에 들어가는 순간 세션 수만큼

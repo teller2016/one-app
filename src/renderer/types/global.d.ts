@@ -15,6 +15,12 @@ import type {
   JiraActionResult,
   JiraDetailResult,
   JiraTransitionsResult,
+  JiraAddedResult,
+  JiraAddedTicket,
+  JiraValidateResult,
+  JiraWorkAccountInfo,
+  JiraWorkPrepareInput,
+  JiraWorkPrepareResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -166,6 +172,18 @@ declare global {
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
         resolve: (key: string) => Promise<JiraActionResult>;
+        // 직접 추가한 티켓 — 목록 자체는 jira.list 결과에 pinned 로 병합돼 온다
+        added: {
+          list: () => Promise<JiraAddedTicket[]>;
+          validate: (input: string) => Promise<JiraValidateResult>;
+          add: (input: string) => Promise<JiraAddedResult>;
+          remove: (key: string) => Promise<JiraAddedResult>;
+        };
+        // 작업 시작 준비 — 티켓 맥락 저장 + femc 실행 명령(셸 인용 완료) 반환
+        prepareWork: (
+          input: JiraWorkPrepareInput,
+        ) => Promise<JiraWorkPrepareResult>;
+        workAccounts: () => Promise<JiraWorkAccountInfo[]>;
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;

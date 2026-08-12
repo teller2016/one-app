@@ -11,6 +11,14 @@
     gap: 12px;
   }
 
+  // [+ 티켓] + 새로고침 — 제목 줄 오른쪽 묶음
+  &__head-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
   // 프로젝트 탭 (2개 이상일 때만 렌더)
   &__tabs {
     margin-bottom: 20px;
@@ -86,6 +94,11 @@
     &--epic {
       background: var(--chart-4t); // 퍼플
     }
+
+    // 직접 추가한 티켓 그룹 — 내 담당이 아니라는 뜻이라 타입 색과 겹치지 않게 중립 톤
+    &--pinned {
+      background: var(--text-3);
+    }
   }
 
   // 그룹 카드 — 행들을 담는 흰 카드 (macOS 설정 그룹 리스트)
@@ -151,6 +164,33 @@
   // 링크 복사 아이콘 (키 바로 우측) — 공용 .icon-btn 크기 사용
   &__copy {
     flex-shrink: 0;
+  }
+
+  // 직접 추가 표시 겸 제거 버튼 — 평소엔 핀, 올리면 ✕ 로 바뀐다.
+  // 두 글리프를 겹쳐 두고 표시만 바꾼다(교체 시 폭이 흔들리지 않게)
+  &__pin {
+    position: relative;
+    flex-shrink: 0;
+    color: var(--text-3);
+
+    &:hover {
+      color: var(--danger);
+    }
+
+    .jira__pin-off {
+      position: absolute;
+      opacity: 0;
+    }
+
+    &:hover .jira__pin-on,
+    &:focus-visible .jira__pin-on {
+      opacity: 0;
+    }
+
+    &:hover .jira__pin-off,
+    &:focus-visible .jira__pin-off {
+      opacity: 1;
+    }
   }
 
   // 우선순위 화살표 (Jira 스타일 — 높음=빨강 ↑, 보통=노랑 =, 낮음=파랑 ↓)
@@ -238,6 +278,35 @@
   &__status {
     position: relative;
     flex-shrink: 0;
+  }
+
+  // 진행 중 표시 — 이 티켓으로 돌고 있는 femc 세션 (누르면 그 터미널로 이동)
+  &__work-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    @include type-small;
+    cursor: pointer;
+    transition: border-color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
+
+    &:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  }
+
+  // 작업 시작 — 행 맨 끝 고정 자리 (모든 행에서 같은 위치)
+  &__work {
+    flex-shrink: 0;
+    margin-left: 2px;
   }
 
   &__status-btn {
@@ -431,5 +500,174 @@
     border: 1px solid var(--border);
     border-radius: var(--r-md);
     background: var(--bg);
+  }
+}
+
+// ── 작업 시작 모달 — 위치(저장소 ▸ 워크트리) 선택 + 시작 스킬 + 추가 지시 ──
+// 목록 문법은 터미널 LNB 와 같다: 저장소가 그룹 헤더, 워크트리가 선택 가능한 행.
+.jira-work {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  &__summary {
+    margin: 0;
+    color: var(--text-2);
+    @include type-small;
+  }
+
+  // 위치 목록 — 저장소가 많아도 모달이 커지지 않게 스크롤 상한을 둔다
+  &__list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--bg-sunken);
+  }
+
+  &__ws + &__ws {
+    margin-top: 6px;
+  }
+
+  &__ws-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px 3px;
+    color: var(--text-3);
+    @include type-small;
+  }
+
+  &__ws-name {
+    font-weight: 600;
+  }
+
+  // 이 티켓의 Jira 키와 이어진 저장소 표시 (프로젝트 레지스트리 기준)
+  &__match {
+    padding: 1px 6px;
+    border-radius: var(--r-full);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 워크트리 한 줄 = 선택지
+  &__wt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
+
+    &:hover:not(:disabled) {
+      background: var(--surface-2);
+    }
+
+    &--on {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+
+  // 체크 자리 — 선택 여부와 무관하게 폭을 차지해 행이 흔들리지 않게
+  &__wt-mark {
+    display: inline-flex;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+  }
+
+  &__wt-name {
+    flex-shrink: 0;
+  }
+
+  &__wt-branch {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  // 미커밋 변경 — 남의 작업 위에 새 티켓을 얹지 않도록 경고색으로
+  &__wt-dirty {
+    flex-shrink: 0;
+    color: var(--warning);
+    font-variant-numeric: tabular-nums;
+    @include type-small;
+  }
+
+  &__wt-count {
+    flex-shrink: 0;
+    color: var(--text-3);
+    @include type-small;
+  }
+}
+
+// ── 티켓 추가 모달 — 주소·번호 입력 후 확인 카드를 보고 확정 ──
+.jira-add {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  // 확인 결과 — 무엇을 추가하는지 눈으로 확인시키는 카드
+  &__found {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--bg-sunken);
+  }
+
+  &__found-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &__found-icon {
+    color: var(--ok);
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  &__found-key {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__found-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  &__found-meta {
+    margin-top: 4px;
+    @include type-small;
+    color: var(--text-3);
   }
 }

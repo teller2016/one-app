@@ -1,14 +1,24 @@
 // Jira Cloud 내 이슈 조회·상태 전환 — 환경설정의 주소·이메일·API 토큰(Basic Auth)으로 REST v3 호출
 import type {
   JiraActionResult,
+  JiraAddedResult,
+  JiraAddedTicket,
   JiraComment,
   JiraDetailResult,
   JiraIssue,
   JiraListResult,
   JiraTransition,
   JiraTransitionsResult,
+  JiraValidateResult,
 } from '../../../shared/types';
 import { getJiraApiConfig } from '../settings/store';
+import {
+  addTicket,
+  isAdded,
+  listAddedTickets,
+  normalizeIssueKey,
+  removeTicket,
+} from './store';
 import { sanitizeHtml } from '../../lib/sanitize';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 // (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
@@ -70,7 +80,78 @@ export async function fetchMyIssues(force = false): Promise<JiraListResult> {
   return listInFlight;
 }
 
-/** 내게 할당된 미해결 이슈 목록 (최신 갱신 순, 최대 50개) — 실제 REST 호출 */
+/** REST 응답 이슈 → 앱 타입. pinned 는 직접 추가한 티켓 표시 */
+function mapIssue(it: RawIssue, baseUrl: string, pinned: boolean): JiraIssue {
+  const catKey = it.fields.status?.statusCategory?.key;
+  return {
+    key: it.key,
+    // project 필드가 없으면 이슈 키 접두(BBJ-123 → BBJ)로 폴백
+    projectKey: it.fields.project?.key ?? it.key.split('-')[0],
+    summary: it.fields.summary ?? '(제목 없음)',
+    status: it.fields.status?.name ?? '—',
+    statusCategory:
+      catKey === 'done' ? 'done' : catKey === 'indeterminate' ? 'indeterminate' : 'new',
+    issueType: it.fields.issuetype?.name ?? '',
+    parentKey: it.fields.parent?.key ?? null,
+    parentSummary: it.fields.parent?.fields?.summary ?? null,
+    priority: it.fields.priority?.name ?? null,
+    updatedAt: it.fields.updated ?? '',
+    url: `${baseUrl}/browse/${it.key}`,
+    ...(pinned ? { pinned: true } : {}),
+  };
+}
+
+/** 검색 1회 결과 — 다른 결과 타입들과 같은 `{ ok, …, error }` 모양으로 맞춘다 */
+type SearchOutcome = { ok: boolean; issues: RawIssue[]; error?: string };
+
+/**
+ * JQL 검색 1회 — 신형 엔드포인트 우선, 구형 서버면 기존 `search` 로 폴백.
+ *
+ * ⚠️ 자체 AbortController 를 쓰지 않는다 — signal 을 직접 넘기면 `fetchWithTimeout` 의
+ * 타임아웃·네트워크 오류 재시도가 통째로 비활성화된다(호출부 signal 이 우선하므로).
+ * 회사 VPN 터널이 순간 끊겼을 때 재시도로 흡수되는 것이 이 목록 폴링에 특히 중요하다.
+ */
+async function searchJql(
+  baseUrl: string,
+  headers: Record<string, string>,
+  jql: string,
+): Promise<SearchOutcome> {
+  const query = `jql=${encodeURIComponent(jql)}&maxResults=50&fields=${FIELDS}`;
+  try {
+    let res = await fetch(
+      `${baseUrl}/rest/api/3/search/jql?${query}`,
+      { headers },
+      JIRA_TIMEOUT_MS
+    );
+    if (res.status === 404) {
+      res = await fetch(`${baseUrl}/rest/api/3/search?${query}`, { headers }, JIRA_TIMEOUT_MS);
+    }
+    if (res.status === 401 || res.status === 403) {
+      return {
+        ok: false,
+        issues: [],
+        error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.',
+      };
+    }
+    if (!res.ok) {
+      return { ok: false, issues: [], error: `Jira 응답 오류 (HTTP ${res.status})` };
+    }
+    const data = (await res.json()) as { issues?: RawIssue[] };
+    return { ok: true, issues: data.issues ?? [] };
+  } catch (err) {
+    const message = (err as Error).message;
+    return {
+      ok: false,
+      issues: [],
+      // 타임아웃 메시지는 fetchWithTimeout 이 이미 사람이 읽을 문장으로 바꿔 던진다
+      error: message.includes('시간 초과')
+        ? `Jira 응답이 없습니다 — ${message}`
+        : `Jira 에 연결할 수 없습니다 — ${message}`,
+    };
+  }
+}
+
+/** 내게 할당된 미해결 이슈 + 직접 추가한 티켓 — 실제 REST 호출 */
 async function fetchMyIssuesRemote(): Promise<JiraListResult> {
   const cfg = getJiraApiConfig();
   if (!cfg) {
@@ -83,71 +164,100 @@ async function fetchMyIssuesRemote(): Promise<JiraListResult> {
 
   const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
   const headers = { Authorization: `Basic ${auth}`, Accept: 'application/json' };
-  const query = `jql=${encodeURIComponent(JQL)}&maxResults=50&fields=${FIELDS}`;
+  const addedKeys = listAddedTickets().map((t) => t.key);
 
-  // ⚠️ 자체 AbortController 를 쓰지 않는다 — signal 을 직접 넘기면 `fetchWithTimeout` 의
-  // 타임아웃·네트워크 오류 재시도가 통째로 비활성화된다(호출부 signal 이 우선하므로).
-  // 회사 VPN 터널이 순간 끊겼을 때 재시도로 흡수되는 것이 이 목록 폴링에 특히 중요하다.
+  // ⚠️ 추가 티켓을 기존 JQL 에 `OR key IN (…)` 로 얹지 않는다 — 삭제됐거나 권한이 빠진
+  // 키가 하나라도 섞이면 Jira 가 400 으로 **쿼리 전체를 거절**해 내 담당 목록까지 사라진다.
+  // 따로 부르면 추가분만 실패하고 본 목록은 살아남는다(실패는 addedError 로 알린다).
+  const [mine, extra] = await Promise.all([
+    searchJql(cfg.url, headers, JQL),
+    addedKeys.length > 0
+      ? searchJql(cfg.url, headers, `key IN (${addedKeys.join(',')}) ORDER BY updated DESC`)
+      : Promise.resolve<SearchOutcome>({ ok: true, issues: [] }),
+  ]);
+
+  if (!mine.ok) return { ok: false, configured: true, error: mine.error };
+
+  // 담당·추가에 모두 있으면 하나로 합치고 핀만 붙인다(핀은 전부 한 그룹에 모인다)
+  const byKey = new Map<string, JiraIssue>();
+  for (const it of mine.issues) byKey.set(it.key, mapIssue(it, cfg.url, false));
+  if (extra.ok) {
+    for (const it of extra.issues) {
+      const cur = byKey.get(it.key);
+      byKey.set(it.key, cur ? { ...cur, pinned: true } : mapIssue(it, cfg.url, true));
+    }
+  }
+  const issues = [...byKey.values()].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt)
+  );
+  return {
+    ok: true,
+    configured: true,
+    issues,
+    addedError: extra.ok ? undefined : extra.error,
+  };
+}
+
+// ── 직접 추가한 티켓 관리 (store 위임 + 목록 캐시 무효화) ──
+
+/** 추가 전 확인 — 주소·키에서 이슈를 찾아 무엇을 추가하는지 보여준다 */
+export async function validateAddedTicket(input: string): Promise<JiraValidateResult> {
+  const key = normalizeIssueKey(input);
+  if (!key) {
+    return { ok: false, error: 'Jira 주소나 티켓 번호(예: BBJ-1234)를 넣어주세요.' };
+  }
+  const cfg = getJiraApiConfig();
+  if (!cfg) return { ok: false, error: 'Jira 연동이 설정되지 않았습니다.' };
+  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
   try {
-    // 신형 검색 엔드포인트 우선, 구형 서버면 기존 search 로 폴백
-    let res = await fetch(
-      `${cfg.url}/rest/api/3/search/jql?${query}`,
-      { headers },
-      JIRA_TIMEOUT_MS
+    const res = await fetch(
+      `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,issuetype,status,reporter`,
+      { headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' } },
+      JIRA_TIMEOUT_MS,
     );
     if (res.status === 404) {
-      res = await fetch(
-        `${cfg.url}/rest/api/3/search?${query}`,
-        { headers },
-        JIRA_TIMEOUT_MS
-      );
+      return { ok: false, error: `${key} 를 찾을 수 없습니다 — 키 또는 권한을 확인하세요.` };
     }
     if (res.status === 401 || res.status === 403) {
-      return {
-        ok: false,
-        configured: true,
-        error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.',
-      };
+      return { ok: false, error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.' };
     }
-    if (!res.ok) {
-      return {
-        ok: false,
-        configured: true,
-        error: `Jira 응답 오류 (HTTP ${res.status})`,
-      };
-    }
-
-    const data = (await res.json()) as { issues?: RawIssue[] };
-    const issues: JiraIssue[] = (data.issues ?? []).map((it) => {
-      const catKey = it.fields.status?.statusCategory?.key;
-      return {
-        key: it.key,
-        // project 필드가 없으면 이슈 키 접두(BBJ-123 → BBJ)로 폴백
-        projectKey: it.fields.project?.key ?? it.key.split('-')[0],
-        summary: it.fields.summary ?? '(제목 없음)',
-        status: it.fields.status?.name ?? '—',
-        statusCategory:
-          catKey === 'done' ? 'done' : catKey === 'indeterminate' ? 'indeterminate' : 'new',
-        issueType: it.fields.issuetype?.name ?? '',
-        parentKey: it.fields.parent?.key ?? null,
-        parentSummary: it.fields.parent?.fields?.summary ?? null,
-        priority: it.fields.priority?.name ?? null,
-        updatedAt: it.fields.updated ?? '',
-        url: `${cfg.url}/browse/${it.key}`,
-      };
-    });
-    return { ok: true, configured: true, issues };
-  } catch (err) {
-    const message = (err as Error).message;
-    return {
-      ok: false,
-      configured: true,
-      // 타임아웃 메시지는 fetchWithTimeout 이 이미 사람이 읽을 문장으로 바꿔 던진다
-      error: message.includes('시간 초과')
-        ? `Jira 응답이 없습니다 — ${message}`
-        : `Jira 에 연결할 수 없습니다 — ${message}`,
+    if (!res.ok) return { ok: false, error: `Jira 응답 오류 (HTTP ${res.status})` };
+    const data = (await res.json()) as RawIssue & {
+      fields: { reporter?: { displayName?: string } };
     };
+    return {
+      ok: true,
+      key,
+      summary: data.fields.summary ?? '(제목 없음)',
+      issueType: data.fields.issuetype?.name ?? '',
+      status: data.fields.status?.name ?? '',
+      reporter: data.fields.reporter?.displayName ?? '',
+      already: isAdded(key),
+    };
+  } catch (err) {
+    return { ok: false, error: `Jira 에 연결할 수 없습니다 — ${(err as Error).message}` };
   }
+}
+
+/** 목록에 추가 — 캐시를 비워 다음 조회가 즉시 반영되게 한다 */
+export function addTicketToList(input: string): JiraAddedResult {
+  const key = normalizeIssueKey(input);
+  if (!key) return { ok: false, error: '티켓 번호를 알아볼 수 없습니다.' };
+  const added = addTicket(key);
+  invalidateListCache();
+  return { ok: true, added };
+}
+
+export function removeTicketFromList(key: string): JiraAddedResult {
+  const normalized = normalizeIssueKey(key);
+  if (!normalized) return { ok: false, error: '티켓 번호를 알아볼 수 없습니다.' };
+  const added = removeTicket(normalized);
+  invalidateListCache();
+  return { ok: true, added };
+}
+
+export function listAdded(): JiraAddedTicket[] {
+  return listAddedTickets();
 }
 
 // ── 이슈 상세 (본문·댓글 — 앱 내 패널 표시용) ──

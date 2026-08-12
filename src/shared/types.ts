@@ -78,6 +78,8 @@ export type JiraIssue = {
   priority: string | null;
   updatedAt: string; // ISO
   url: string; // 브라우저로 열 이슈 링크
+  /** 담당이 아닌데 직접 추가한 티켓 (핀) — 목록 맨 위 '직접 추가' 그룹으로 간다 */
+  pinned?: boolean;
 };
 
 export type JiraListResult = {
@@ -85,9 +87,35 @@ export type JiraListResult = {
   configured: boolean; // 주소·이메일·토큰이 모두 설정됐는지
   issues?: JiraIssue[];
   error?: string;
+  /** 직접 추가한 티켓 조회만 실패했을 때 — 담당 목록은 정상이다(부분 실패 안내용) */
+  addedError?: string;
 };
 
 export type JiraActionResult = { ok: boolean; error?: string };
+
+// ── 직접 추가한 티켓 (담당이 아닌데 내가 작업해야 하는 이슈) ──
+
+/** 직접 추가한 티켓 하나 — 키만 저장하고 내용은 매 조회 때 Jira 에서 받는다 */
+export type JiraAddedTicket = { key: string; addedAt: number };
+
+/** 추가 전 확인 결과 — 존재·권한을 검사하고 무엇을 추가하는지 보여준다 */
+export type JiraValidateResult = {
+  ok: boolean;
+  key?: string;
+  summary?: string;
+  issueType?: string;
+  status?: string;
+  reporter?: string;
+  already?: boolean; // 이미 추가돼 있는 티켓
+  error?: string;
+};
+
+/** 추가·제거 결과 — 갱신된 전체 목록을 함께 준다 */
+export type JiraAddedResult = {
+  ok: boolean;
+  added?: JiraAddedTicket[];
+  error?: string;
+};
 
 /** 이슈에서 지금 실행 가능한 상태 전환 하나 (name = 목적지 상태 이름) */
 export type JiraTransition = { id: string; name: string };
@@ -125,6 +153,50 @@ export type JiraIssueDetail = {
 export type JiraDetailResult = {
   ok: boolean;
   detail?: JiraIssueDetail;
+  error?: string;
+};
+
+// ── Jira 작업 시작 (티켓 맥락을 femc 세션으로 넘기기) ──
+
+/**
+ * 작업을 시작할 femc 스킬.
+ * 'auto' = 이슈 타입으로 판정(버그 계열 → /bugfix, 그 외 → /dev), 'none' = 스킬 없이 일반 프롬프트.
+ */
+export type JiraWorkSkill = "auto" | "bugfix" | "dev" | "qa" | "none";
+
+/**
+ * femc 를 띄울 Claude 계정 — 원래 `~/.zshrc` 의 femc()/claude() 함수가 물어보던 선택이다.
+ * 앱은 그 셸 함수를 우회(`command femc`)하므로 `CLAUDE_CONFIG_DIR` 을 직접 정해 넘긴다.
+ */
+export type JiraWorkAccount = "personal" | "team";
+
+/** 계정 선택지 하나 — 로그인돼 있으면 이메일이 함께 온다 */
+export type JiraWorkAccountInfo = {
+  id: JiraWorkAccount;
+  label: string; // Personal · Team
+  dir: string; // CLAUDE_CONFIG_DIR 경로
+  email?: string; // 그 프로필에 로그인된 계정 (없으면 미로그인)
+};
+
+export type JiraWorkPrepareInput = {
+  key: string;
+  skill: JiraWorkSkill;
+  note?: string; // 모달의 '추가 지시' (선택)
+  account?: JiraWorkAccount; // 기본 personal
+};
+
+/**
+ * 작업 준비 결과 — 티켓 맥락을 디스크에 만들어 두고 **실행 명령·붙여넣기 문구**를 돌려준다.
+ * ⚠️ 셸 인용은 main 이 끝낸 상태다. 렌더러는 `command` 를 가공하지 말고 그대로
+ * `terminal.create({ command })` 에 넘길 것.
+ */
+export type JiraWorkPrepareResult = {
+  ok: boolean;
+  command?: string; // 새 세션용 — femc --add-dir <티켓폴더> "<프롬프트>"
+  paste?: string; // 이미 떠 있는 femc 세션에 넣을 한 줄 프롬프트
+  title?: string; // 세션 표시명 (티켓 키)
+  dir?: string; // 티켓 맥락 폴더 (안내·디버깅용)
+  attachments?: number; // 내려받은 첨부 수
   error?: string;
 };
 

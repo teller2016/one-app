@@ -102,10 +102,13 @@ export function JiraDetailPanel({
   issueKey,
   open,
   onClose,
+  onStartWork,
 }: {
   issueKey: string | null;
   open: boolean;
   onClose: () => void;
+  /** 티켓 내용을 확인한 자리에서 바로 작업 시작 (위치 선택 모달로) */
+  onStartWork: (detail: JiraIssueDetail) => void;
 }) {
   const [state, setState] = useState<DetailState>({ kind: 'idle' });
   const panelRef = useRef<HTMLElement>(null);
@@ -213,6 +216,10 @@ export function JiraDetailPanel({
               )}
             </div>
             <div className="jira-view__actions">
+              <Button size="sm" onClick={() => onStartWork(state.detail)}>
+                <Icon name="play" size={13} />
+                작업 시작
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
