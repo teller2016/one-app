@@ -398,6 +398,9 @@ export const TerminalView = memo(function TerminalView({
       if (!tmuxRef.current) return true;
       // ⚠️ 마우스 트래킹을 켠 앱(claude 등)에는 휠을 **그대로 넘긴다** — 그 앱들이 자체
       // 스크롤을 갖고 있고(claude 의 Jump to bottom), 대체 화면이라 tmux 스크롤백도 없다.
+      // 단 claude 는 리렌더마다 모드를 껐다 켜서 이 판정이 순간적으로 'none' 일 수 있다
+      // (2026-08-12 실측) — 그 틈에 위임된 휠은 tmuxScrollPane 의 마우스 플래그 분기가
+      // SGR 휠 주입으로 받아내므로 여기서 추가로 방어할 필요는 없다.
       if (term.modes.mouseTrackingMode !== 'none') return true;
       wheelLines += wheelLinesOf(ev, host.clientHeight / term.rows, term.rows);
       if (wheelTimer === null) wheelTimer = window.setTimeout(flushWheel, WHEEL_FLUSH_MS);

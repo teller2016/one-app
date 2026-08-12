@@ -193,7 +193,14 @@ export async function tmuxPaneId(name: string): Promise<string | null> {
  * xterm 은 그 상태에서 휠을 ↑↓ 키로 바꿔 보내 셸 히스토리가 롤링됐다(사용자 신고).
  *
  * 분기는 tmux 안에서 해서 왕복을 1회로 묶는다:
- * - **대체 화면(TUI)** → 방향키 n회 = xterm 이 하던 기존 동작 그대로 (사용자 선택)
+ * - **마우스 트래킹 pane(claude 등)** → SGR 휠 이벤트를 주입해 앱이 자체 스크롤한다.
+ *   렌더러도 마우스 앱이면 휠을 xterm 에 그대로 넘기지만, claude 는 **리렌더마다
+ *   마우스 모드를 껐다 켜서**(2026-08-12 attach 스트림 캡처 실측) xterm 이 순간적으로
+ *   'none' 으로 보는 틈에 휠이 이 경로로 넘어온다. 그때 방향키를 보내면 claude 가
+ *   프롬프트 히스토리(History N/N)를 롤링한다 — "스크롤하면 이전 작성 내역이 나온다"
+ *   신고의 정체. pane 의 마우스 플래그는 tmux 가 아는 진실이라 여기서 판정하면
+ *   흔들리지 않는다.
+ * - **대체 화면(TUI, 마우스 없음)** → 방향키 n회 = less·vim 의 관례적 휠 에뮬레이션
  * - **일반 화면** → `copy-mode -e` 로 올린다. `-e` 라 아래로 되돌려 바닥에 닿으면 자동 종료.
  *
  * @param lines 양수 = 위로, 음수 = 아래로
@@ -203,25 +210,34 @@ export async function tmuxScrollPane(
   paneId: string,
   lines: number
 ): Promise<{ scrolledUp: boolean }> {
-  const n = String(Math.min(Math.abs(lines), 200)); // 트랙패드 급가속 상한
-  const branch =
-    lines > 0
-      ? [
-          `send-keys -t ${paneId} -N ${n} Up`,
-          `copy-mode -e -t ${paneId} ; send-keys -X -t ${paneId} -N ${n} scroll-up`,
-        ]
-      : [
-          `send-keys -t ${paneId} -N ${n} Down`,
-          // 이미 copy-mode 일 때만 — 바닥에서 진입하면 빈 모드에 들어갔다 나올 뿐이다
-          `if-shell -F -t ${paneId} '#{pane_in_mode}' "send-keys -X -t ${paneId} -N ${n} scroll-down"`,
-        ];
+  const count = Math.min(Math.abs(lines), 200); // 트랙패드 급가속 상한
+  const n = String(count);
+  const up = lines > 0;
+  // SGR 휠 리포트 `ESC[<64|65;1;1M` — 좌표 1;1 은 pane 크기와 무관하게 항상 유효하고,
+  // claude 의 트랜스크립트 스크롤은 좌표를 가리지 않는다(2026-08-12 주입 실측).
+  const wheelBtn = up ? '36 34' : '36 35'; // '64' = 휠업, '65' = 휠다운
+  const wheelHex = Array(count).fill(`1b 5b 3c ${wheelBtn} 3b 31 3b 31 4d`).join(' ');
+  // ⚠️ SGR(1006)을 요청한 앱에만 주입 — 1006 없이 1000/1002/1003 만 켠 앱은 X10
+  // 인코딩을 기대해 SGR 바이트를 오파싱하므로 기존 분기(방향키/copy-mode)로 보낸다.
+  // mouse_any_flag 는 1000/1002/1003 의 OR 집계다(std=0·btn=0·all=1 에서 any=1 실측).
+  const fallback = up
+    ? [
+        `send-keys -t ${paneId} -N ${n} Up`,
+        `copy-mode -e -t ${paneId} ; send-keys -X -t ${paneId} -N ${n} scroll-up`,
+      ]
+    : [
+        `send-keys -t ${paneId} -N ${n} Down`,
+        // 이미 copy-mode 일 때만 — 바닥에서 진입하면 빈 모드에 들어갔다 나올 뿐이다
+        `if-shell -F -t ${paneId} "#{pane_in_mode}" "send-keys -X -t ${paneId} -N ${n} scroll-down"`,
+      ];
   const { ok, stdout } = await run([
     'if-shell',
     '-F',
     '-t',
     paneId,
-    '#{alternate_on}',
-    ...branch,
+    '#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}',
+    `send-keys -t ${paneId} -H ${wheelHex}`,
+    `if-shell -F -t ${paneId} '#{alternate_on}' '${fallback[0]}' '${fallback[1]}'`,
     ';', // 같은 호출에서 결과 상태까지 회수 — [맨 아래로] 버튼 판정에 쓴다
     'list-panes',
     '-t',

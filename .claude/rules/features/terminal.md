@@ -150,8 +150,10 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 ### 휠 스크롤은 tmux copy-mode 로 위임한다 (2026-08-11)
 그대로 두면 xterm 이 "대체 화면 = 스크롤백 없음" 규칙으로 **휠을 ↑↓ 키로 바꿔 보내** 셸의 이전 명령이 롤링됐다(사용자 신고: "스크롤하면 화면이 아니라 이전 입력값이 롤링된다"). `TerminalView` 의 `attachCustomWheelEventHandler` 가 휠을 가로채 `terminal:scroll` 로 넘기고, `pty.scrollSession` → `tmux.tmuxScrollPane` 이 tmux 를 움직인다.
 
-- **분기는 tmux 안에서 한다**(`if-shell -F '#{alternate_on}'` — 왕복 1회): **대체 화면(TUI)이면 방향키 n회**(기존 동작 유지 — 2026-08-11 사용자 선택), **일반 화면이면 `copy-mode -e` + `scroll-up`**. `-e` 라 아래로 되돌려 바닥에 닿으면 tmux 가 알아서 나온다.
+- **분기는 tmux 안에서 한다**(왕복 1회, 3단 — 2026-08-12 개정): ①**마우스 트래킹 pane**(`#{&&:#{mouse_any_flag},#{mouse_sgr_flag}}`)이면 **SGR 휠 리포트(`ESC[<64|65;1;1M`) n회 주입** — 앱이 자체 스크롤 ②**대체 화면(TUI, 마우스 없음)이면 방향키 n회**(less·vim 관례) ③**일반 화면이면 `copy-mode -e` + `scroll-up`**. `-e` 라 아래로 되돌려 바닥에 닿으면 tmux 가 알아서 나온다.
 - ⚠️ **마우스 트래킹을 켠 앱(claude 등)에는 휠을 그대로 넘긴다**(`term.modes.mouseTrackingMode !== 'none'` → 핸들러가 `true` 반환) — 그 앱들이 자체 스크롤을 갖고 있다(위 'claude CLI 의 화면 모드' 절). tmux 미설치 폴백 세션도 마찬가지로 xterm 기본 동작을 쓴다(`terminal:backend` 로 판정).
+- ⚠️ **위 pass-through 판정은 순간적으로 틀릴 수 있다** — claude 2.1.228 은 **리렌더마다 마우스 모드를 껐다 켜서**(attach 스트림 캡처로 `?1003l→h` 토글 버스트 실측, 2026-08-12) IPC 청크 경계에 걸리면 xterm 이 잠깐 'none' 으로 본다. 그 틈의 휠이 tmux 위임으로 넘어왔을 때 예전처럼 방향키를 보내면 **claude 가 프롬프트 히스토리(History N/N)를 롤링**하고 "Scroll wheel is sending arrow keys" 배너를 띄웠다(사용자 신고: "가끔 스크롤하면 이전 작성 내역이 나온다" — 재현이 불규칙했던 이유가 이 타이밍 의존). 그래서 ①의 SGR 주입 분기가 최우선이다 — pane 플래그는 tmux 가 아는 진실이라 흔들리지 않는다. 검증: claude 에 주입 시 History 안 뜨고 트랜스크립트만 이동(위/아래), zsh 는 copy-mode(`pane_in_mode=1`), less 는 방향키로 10줄 이동 — 셋 다 실측(2026-08-12).
+- ⚠️ SGR 주입은 **1006(SGR 인코딩)을 켠 앱에만** — 1000/1002/1003 만 켠 앱은 X10 인코딩을 기대해 오파싱한다. `mouse_any_flag` 는 1000/1002/1003 의 OR 집계다(std=0·btn=0·all=1 에서 any=1 실측).
 - ⚠️ **`mouse on` 으로 켜지 않은 이유** — tmux 기본 바인딩만으로 같은 분기가 되지만, 마우스 이벤트가 tmux 로 넘어가면서 **xterm 네이티브 드래그 선택·링크 클릭이 회귀**한다(⌥+드래그로만 선택 가능). 휠만 가로채면 그 셋이 그대로다.
 - **스크롤 중 입력이 오면 먼저 copy-mode 를 빠져나온다**(`writeSession` → `exitCopyMode`). 해제는 tmux CLI 호출이라 비동기여서, 그동안의 입력은 `pendingInput` 에 순서대로 모아 뒀다가 한 번에 흘려보낸다 — **첫 글자를 잃지 않는다**(실측: 스크롤 상태에서 `echo TYPED-OK` 전문 입력 확인). MO 입력도 같은 함수를 지나 동일하게 동작한다.
 - 휠은 고빈도라 렌더러가 **소수 누적 + 24ms flush + 왕복 중 스킵**(`wheelBusy`)으로 tmux 호출을 묶는다. pane id 는 세션에 캐시한다(pane 타깃 명령은 `=세션명` 을 못 받는다).
@@ -195,6 +197,8 @@ FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재�
 
 ## claude CLI 의 화면 모드
 **claude CLI 는 대체 화면(`?1049h`) + 전체 마우스 트래킹(`?1000/1002/1003/1006h`)을 세션 내내 유지**한다(2026-08 실측). 그래서 ①터미널 스크롤백이 존재하지 않고 ②휠은 앱으로 전달돼 **claude 가 자체 스크롤**한다(자체 `Jump to bottom` 표시). 즉 터미널 쪽에서 스크롤을 흉내내면 안 되고 **휠 이벤트를 그대로 넘겨야** 한다.
+
+- ⚠️ "유지"는 정적이 아니다 — **리렌더마다 모드 4종을 일괄 껐다 켠다**(2.1.228, 2026-08-12 attach 캡처 실측: 유휴 2초에도 `l→h` 버스트 다수). xterm 의 `term.modes` 는 이 토글을 그대로 따라가므로 **순간적으로 'none'** 일 수 있고, 그 틈의 휠 위임은 tmux 쪽 마우스 플래그 분기가 받아낸다(위 '휠 스크롤' 절).
 
 ## ⚠️ xterm 6 함정 3가지 (전부 2026-08 실측)
 1. **네이티브 스크롤 영역이 없다** — 5.x 의 `.xterm-scroll-area` 가 사라져 `viewport.scrollTop` 조작이 안 먹는다. 스크롤백 스크롤은 `term.scrollLines(n)`·`scrollToBottom()`, 위치 판정은 `buffer.active.viewportY >= baseY`, 변화 감지는 `term.onScroll`.
