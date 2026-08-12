@@ -258,6 +258,7 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
           type: 'attached',
           id: attachId,
           replay: res.replay ?? '',
+          alt: res.alt ?? false,
           seq: res.seq ?? 0,
           cols: res.cols ?? 0,
           rows: res.rows ?? 0,

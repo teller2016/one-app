@@ -396,10 +396,14 @@ export const TerminalView = memo(function TerminalView({
         !ev.metaKey &&
         !ev.ctrlKey &&
         !ev.altKey &&
-        !ev.isComposing && // 한글 조합 확정용 Enter 는 IME 에 맡긴다
         term.buffer.active.type === 'alternate'
       ) {
-        if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x1b\r');
+        // 한글 조합 중(isComposing)이면 줄바꿈을 보내지 않고 차단만 한다 — xterm 에
+        // 넘기면 CompositionHelper 가 '조합 확정 + \r 전송'으로 처리해 메시지가 그대로
+        // 제출됐다(2026-08-12). 조합 확정은 IME/compositionend 가 알아서 하고,
+        // 줄바꿈은 조합이 끝난 다음 누름에서 들어간다.
+        if (!ev.isComposing && ev.type === 'keydown')
+          window.oneApp.terminal.write(id, '\x1b\r');
         return false; // keydown 외 keypress·keyup 도 막아야 xterm 이 \r 를 덧보내지 않는다
       }
       return true;
@@ -474,6 +478,11 @@ export const TerminalView = memo(function TerminalView({
       .attach(id, term.cols, term.rows)
       .then((res) => {
         if (disposed || !res.ok) return;
+        // 대체 화면(TUI) 세션은 replay 가 생략되므로(잔상 방지) 새 xterm 은 화면 전환
+        // 시퀀스(?1049h)를 영영 못 본다 — buffer 타입이 'normal' 로 남아 Shift+Enter
+        // 줄바꿈 게이트가 꺼졌다(다른 섹션에 갔다 오면 제출로 새던 버그, 2026-08-12).
+        // tmux 가 알려준 실제 상태를 합성해 모델을 맞춘다. 내용은 이어지는 리드로가 채운다.
+        if (res.alt) term.write('\x1b[?1049h');
         if (res.replay) term.write(res.replay);
         attachSeq = res.seq ?? 0;
         for (const ev of queue) {

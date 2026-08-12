@@ -757,6 +757,11 @@ export type VacationInput = {
   handovers: VacationHandover[]; // 본문 '인수인계'
   /** 일정등록 캘린더 문구 조각 — 비우면 기본값(부재공유) */
   calendarText?: string;
+  /** 시차·반차 사용 시간대 "HH:MM" — 제목의 (00:00~00:00) 표기 (표기 표준) */
+  useStartTime?: string;
+  useEndTime?: string;
+  /** 대체휴가의 근거 휴일근무일 "YYYY-MM-DD" — 제목의 (휴일근무일: 00/00) 표기 */
+  holidayWorkDate?: string;
 };
 
 export type VacationResult = {
@@ -996,6 +1001,7 @@ export type TerminalAttachResult = {
   ok: boolean;
   replay?: string;
   seq?: number; // 이 값 이하의 라이브 출력 이벤트는 replay 에 이미 포함 (중복 제거 기준)
+  alt?: boolean; // 세션이 대체 화면(TUI)이라 replay 를 생략함 — 클라이언트가 ?1049h 를 합성해 xterm 모델을 맞춘다
   cols?: number;
   rows?: number;
   error?: string;

@@ -68,6 +68,7 @@ export type TermServerMsg =
       type: 'attached'; // attach 응답 — replay 는 스크롤백, seq 이하 data 는 중복이라 버린다
       id: string;
       replay: string;
+      alt?: boolean; // 대체 화면(TUI)이라 replay 생략 — 클라이언트가 ?1049h 를 합성한다
       seq: number;
       cols: number;
       rows: number;

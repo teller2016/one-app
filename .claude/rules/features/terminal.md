@@ -131,7 +131,9 @@ Finder 파일을 pane 에 끌어다 놓으면 **경로를 셸 입력으로** 넣
 - 세션 행은 래퍼 `div` + `[선택 button][닫기 button]` 형제다 — 예전엔 닫기가 선택 버튼 **안**의 `span[role=button]` 이라 마크업이 유효하지 않고 키보드로 종료할 수 없었다. 활성 표시는 `aria-current`.
 - 세션 이름은 행 **더블클릭 → 인라인 편집**(`terminal:rename` → sidecar 반영이라 재시작 후에도 남는다). 진입 시 `select()` 로 전체 선택하지 않으면 타이핑이 기존 이름에 덧붙는다.
 - 단축키: `⌘T` 새 세션 · `⌘1..9` 전환 · `⌃Tab`/`⌃⇧Tab` 순환 · `⌘⇧W` 종료 · `⌘F` 검색. 탭 **가운데 클릭**도 종료다(브라우저 탭 관례, `onAuxClick` — 2026-08-10). **capture 단계에서 `stopPropagation`** 으로 잡는다(bubble 로 잡으면 xterm textarea 가 먼저 처리해 같은 키가 셸에도 간다). ⚠️ `⌘W`(창 닫기)·`⌘+/-`(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다. 입력창(`INPUT`)에 포커스가 있으면 전부 넘긴다.
-- **Shift+Enter = TUI 줄바꿈** (superset 동일) — `attachCustomKeyEventHandler` 가 `\x1b\r`(ESC+CR)로 바꿔 보내면 ink 기반 TUI(claude 등)가 meta+return = 줄바꿈으로 해석한다(Option+Enter 와 같은 경로). ⚠️ **대체 화면일 때만 개입** — 일반 화면(zsh)에선 ESC+CR 이 개행이 안 되고 그 줄이 그대로 실행됐다(2026-08-06 실측). 핸들러는 keydown 외 keypress·keyup 도 `false` 로 막아야 xterm 이 `\r` 를 덧보내지 않고, `isComposing`(한글 조합 확정 Enter)은 IME 에 넘긴다.
+- **Shift+Enter = TUI 줄바꿈** (superset 동일) — `attachCustomKeyEventHandler` 가 `\x1b\r`(ESC+CR)로 바꿔 보내면 ink 기반 TUI(claude 등)가 meta+return = 줄바꿈으로 해석한다(Option+Enter 와 같은 경로). ⚠️ **대체 화면일 때만 개입** — 일반 화면(zsh)에선 ESC+CR 이 개행이 안 되고 그 줄이 그대로 실행됐다(2026-08-06 실측). 핸들러는 keydown 외 keypress·keyup 도 `false` 로 막아야 xterm 이 `\r` 를 덧보내지 않는다.
+  - ⚠️ **'대체 화면' 판정은 xterm 이 `?1049h` 를 봤느냐에 달려 있다** — 그 시퀀스는 tmux 클라이언트 시작 때 **딱 한 번** 나온다(attach 캡처 실측). TUI 세션은 attach replay 를 생략하므로(잔상 방지) **재마운트된 pane(섹션 이동 복귀·앱 재시작·livePanes 축출 복귀)은 buffer 를 'normal' 로 오판해 게이트가 꺼지고 Shift+Enter 가 그대로 제출**됐다(2026-08-12 사용자 신고 — "다른 메뉴 갔다 오면 재현"). 지금은 `attachSession` 이 `alt`(= `isTmuxAltScreen` 결과)를 응답에 실어 주고, 데스크톱(`TerminalView`)·MO(`mobile.ts`) 가 **`?1049h` 를 합성 write** 해 모델을 실제 상태와 맞춘다. cat -v E2E 로 재마운트 후 `^[^M` 전달 확인.
+  - ⚠️ **한글 조합 중(isComposing) Enter 를 xterm 에 넘기면 '조합 확정 + `\r` 전송'이 된다**(`CompositionHelper.keydown` — keyCode 13 이면 finalize 후 계속 처리) — 조합 중 Shift+Enter 로 메시지가 제출되던 두 번째 원인. 지금은 조합 중이면 `return false` 로 차단만 한다(조합 확정은 compositionend 가 처리, 줄바꿈은 다음 누름). 합성 composition E2E 로 `\r` 미전송 + 확정 글자 전달 확인(2026-08-12).
 - **⌘←/⌘→ = 줄 처음/끝** (macOS 관례, 2026-08-12) — **xterm 은 meta+화살표를 아예 버린다**(`Keyboard.ts` 의 `if (ev.metaKey) break` — 시퀀스를 안 만들고 종료). 그래서 Karabiner 로 Cmd+U/O → ⌘←/→ 를 매핑해 둔 사용자 입력이 셸에 전혀 안 갔다(사용자 신고로 발견). 같은 커스텀 키 핸들러가 `Ctrl+A(\x01)`/`Ctrl+E(\x05)` 로 바꿔 PTY 에 보낸다 — zsh(emacs 모드)·claude 둘 다 표준. ⚠️ Home/End 시퀀스(`ESC[H/F`)를 쓰지 않은 이유: 맨 zsh 는 Home/End 를 안 묶는 경우가 많다. ⇧ 동반 조합(텍스트 선택)은 터미널에 대응 개념이 없어 개입하지 않는다.
 
 ## xterm addon 구성 (2026-08-05)
@@ -193,7 +195,7 @@ FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재�
 - ⚠️ 되돌리지 말 것 — 여백을 host 로 다시 옮기면 그 순간 같은 버그가 재발한다. 여백 값을 조정할 일이 있으면 `.terminal__host .xterm` 의 padding 을 고친다.
 
 ## attach 프로토콜
-세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다.
+세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다. replay 를 생략한 대체 화면 세션은 응답에 **`alt: true`** 가 실리고, 클라이언트(데스크톱·MO)가 `?1049h` 를 합성 write 해 xterm buffer 타입을 실제와 맞춘다(Shift+Enter 게이트·휠 방향키 변환이 이 판정을 쓴다 — 2026-08-12).
 
 ### 데스크톱 terminal:data 게이트 (2026-08-07)
 `terminal:ipc.ts` 가 **pane 이 attach 한 세션 id 만** `terminal:data` 를 broadcast 한다 — `TerminalView` cleanup 이 `terminal:detach`(fire-and-forget) 를 보내고, 렌더러 리로드·창 파괴는 sender 의 `destroyed`/`did-navigate` 에서 전체 clear 로 회수한다. 터미널 섹션을 떠나 있는 동안의 출력은 IPC 로 오지 않지만 **링버퍼·tmux 에 남아 재attach replay 로 복원**되므로 유실이 아니다. preload 의 `onData`/`onResized` 는 **멀티플렉서**(ipcRenderer 리스너 채널당 1개 + 콜백 Set)라 pane 수만큼 리스너가 늘지 않는다 — 새 고빈도 구독 채널을 추가할 때도 `makeMux` 를 쓸 것. MO(WS)는 이 게이트와 무관하게 `server.ts` 의 `attachedId` 필터를 그대로 쓴다.

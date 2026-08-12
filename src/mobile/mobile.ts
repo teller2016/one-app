@@ -433,6 +433,9 @@ function handleMessage(msg: TermServerMsg) {
       attachSeq = msg.seq;
       localStorage.setItem(LAST_SESSION_KEY, msg.id);
       term.reset();
+      // 대체 화면(TUI) 세션은 replay 가 생략된다 — 전환 시퀀스를 합성해 xterm 의
+      // buffer 타입을 실제 상태와 맞춘다(터치 스크롤의 방향키 변환 등이 이 판정을 쓴다)
+      if (msg.alt) term.write('\x1b[?1049h');
       if (msg.replay) term.write(msg.replay);
       syncBottomBtn();
       if (
