@@ -2,15 +2,21 @@ import type { DeployStatus } from '../../../../shared/types';
 import { formatDuration, formatRelative, formatTime } from '../lib/format';
 import { Badge } from '../../../components/Badge';
 
-/** 빌드중 진행률 — 경과 시간과 예상 소요 대비 진행바 (예상치 없으면 경과만) */
+/**
+ * 빌드중 진행률 — 경과 시간과 예상 소요 대비 진행바 (예상치 없으면 경과만).
+ * ⚠️ 시작 시각·예상치가 아직 없어도 **빈 트랙을 그려 자리를 유지**한다 —
+ * 트랙을 안 그리면 보조 줄에서 [중지] 를 밀어주던 요소가 사라져 버튼이 좌측으로 쏠린다.
+ */
 export function BuildProgress({ status }: { status: DeployStatus }) {
-  if (status.state !== 'building' || !status.startedAt) return null;
-  const elapsed = Date.now() - status.startedAt;
-  if (elapsed < 0) return null;
+  if (status.state !== 'building') return null;
+  // 시작 시각을 아직 못 받았거나(트리거 직후) 시계가 어긋난 경우 = 진행률 미상
+  const raw = status.startedAt ? Date.now() - status.startedAt : -1;
+  const elapsed = raw >= 0 ? raw : null;
   // 예상보다 오래 걸려도 바가 넘치지 않게 97%에서 멈춘다
-  const pct = status.estimatedMs
-    ? Math.min(97, Math.round((elapsed / status.estimatedMs) * 100))
-    : null;
+  const pct =
+    elapsed != null && status.estimatedMs
+      ? Math.min(97, Math.round((elapsed / status.estimatedMs) * 100))
+      : 0;
   return (
     <span
       className="deploy__build-progress"
@@ -20,14 +26,15 @@ export function BuildProgress({ status }: { status: DeployStatus }) {
           : undefined
       }
     >
-      {pct != null && (
-        <span className="progress">
-          <span className="progress__fill" style={{ width: `${pct}%` }} />
-        </span>
-      )}
+      <span className="progress">
+        <span className="progress__fill" style={{ width: `${pct}%` }} />
+      </span>
       <span className="deploy__build-progress-text">
-        {formatDuration(elapsed)}
-        {status.estimatedMs ? ` / 약 ${formatDuration(status.estimatedMs)}` : ' 경과'}
+        {elapsed == null
+          ? '시작 중…'
+          : status.estimatedMs
+            ? `${formatDuration(elapsed)} / 약 ${formatDuration(status.estimatedMs)}`
+            : `${formatDuration(elapsed)} 경과`}
       </span>
     </span>
   );
