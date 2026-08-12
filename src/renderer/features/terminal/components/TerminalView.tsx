@@ -374,6 +374,22 @@ export const TerminalView = memo(function TerminalView({
         if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x15');
         return false; // keypress·keyup 도 막는다 (Shift+Enter 와 같은 이유)
       }
+      // ⌘←/⌘→ = 줄 처음/끝 (macOS 관례) — xterm 은 meta+화살표를 아예 버려서
+      // (Keyboard.ts `if (ev.metaKey) break`) 셸에 아무것도 가지 않는다. Home/End
+      // 시퀀스(ESC[H/F)는 맨 zsh 가 안 묶는 경우가 많아, zsh(emacs 모드)·claude 가
+      // 모두 아는 Ctrl+A(\x01)/Ctrl+E(\x05)로 바꿔 보낸다.
+      if (
+        ev.metaKey &&
+        !ev.ctrlKey &&
+        !ev.altKey &&
+        !ev.shiftKey &&
+        !ev.isComposing &&
+        (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')
+      ) {
+        if (ev.type === 'keydown')
+          window.oneApp.terminal.write(id, ev.key === 'ArrowLeft' ? '\x01' : '\x05');
+        return false;
+      }
       if (
         ev.key === 'Enter' &&
         ev.shiftKey &&
