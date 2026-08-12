@@ -60,6 +60,14 @@ const wheelLinesOf = (ev: WheelEvent, cellH: number, rows: number) => {
   return -px / cellH;
 };
 
+/**
+ * 드롭한 파일 경로를 셸 입력용으로 인용한다 — Finder 경로엔 공백·괄호가 흔해서
+ * 그대로 넣으면 단어가 갈라진다. 안전한 문자뿐이면 원문 유지(읽기 좋게),
+ * 아니면 작은따옴표로 감싸고 내부 ' 는 `'\''` 로 잇는다(POSIX 관례 — Terminal.app 동일 취지).
+ */
+const shellQuotePath = (p: string) =>
+  /^[A-Za-z0-9_\-./~+@%,:]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`;
+
 // xterm 의 DA(장치 속성 질의) 자동 응답 — ESC[?…c(DA1)·ESC[>…c(DA2).
 // (ESC 를 정규식 리터럴에 직접 쓰면 no-control-regex 에 걸려 문자열로 조립한다 — MO 동일)
 const DA_REPLY_RE = new RegExp(`${String.fromCharCode(27)}\\[[?>][0-9;]*c`, 'g');
@@ -214,6 +222,8 @@ export const TerminalView = memo(function TerminalView({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState({ index: -1, count: 0 });
+  // Finder 파일을 끌어와 있는 동안만 true — 드롭 안내 오버레이 표시용
+  const [fileDragOver, setFileDragOver] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -640,6 +650,39 @@ export const TerminalView = memo(function TerminalView({
       data-pane-session={id}
       // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다
       onMouseDownCapture={() => onFocusPane(id)}
+      // ── 파일 드래그 앤 드롭 = 경로 입력 (Terminal.app 관례) ──────────────
+      // capture 단계로 받는다 — xterm 의 canvas/textarea 가 이벤트를 삼키는 문제를
+      // 세션 탭 드래그는 투명 드롭 존 오버레이로 피하지만(features/terminal.md), 파일
+      // 드래그는 상시 기능이라 오버레이를 미리 깔 수 없다. 판정은 `Files` 타입 여부라
+      // 세션 탭 드래그(커스텀 타입)와 겹치지 않고, 숨은 pane 은 pointer-events: none
+      // 이라 이벤트 자체가 오지 않는다.
+      onDragOverCapture={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault(); // 드롭 허용 표시 — 없으면 drop 이 발화하지 않는다
+        e.dataTransfer.dropEffect = 'copy';
+        // dragover 는 고빈도 — 동일값이면 setState 를 건너뛴다 (WorkspaceNav 와 같은 규칙)
+        if (!fileDragOver) setFileDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!fileDragOver) return;
+        // 자식(xterm·오버레이)으로의 이동은 leave 가 아니다 — 창 밖·드래그 취소만 거둔다
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setFileDragOver(false);
+      }}
+      onDropCapture={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault(); // 기본 동작 = 창이 file:// 로 내비게이션 — 반드시 막는다
+        setFileDragOver(false);
+        // 경로는 preload 의 webUtils 경유 — 렌더러의 File 객체엔 경로가 없다(Electron 32+)
+        const paths = Array.from(e.dataTransfer.files)
+          .map((f) => window.oneApp.getPathForFile?.(f) ?? '')
+          .filter(Boolean);
+        if (!paths.length) return;
+        // 말미 공백 — 경로에 이어서 바로 타이핑할 수 있게 (여러 개는 공백 연결)
+        window.oneApp.terminal.write(id, paths.map(shellQuotePath).join(' ') + ' ');
+        onFocusPane(id); // 경로를 넣었으니 이어서 입력할 곳도 이 pane 이다
+        termRef.current?.focus();
+      }}
     >
       {searchOpen && (
         <div className="terminal__search">
@@ -696,6 +739,12 @@ export const TerminalView = memo(function TerminalView({
               <Icon name="x" size={14} />
             </button>
           </Tooltip>
+        </div>
+      )}
+
+      {fileDragOver && (
+        <div className="terminal__file-drop">
+          <span className="terminal__file-drop-label">놓으면 경로 입력</span>
         </div>
       )}
 

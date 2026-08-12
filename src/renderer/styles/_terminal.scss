@@ -969,6 +969,32 @@
     z-index: 3;
   }
 
+  // 파일 드롭 안내 — Finder 파일을 끌어와 있는 동안 pane 전체를 덮는 표시.
+  // pointer-events: none — dragover/drop 은 아래 pane 루트가 계속 받아야 한다.
+  // 테두리는 box-shadow(inset) — 콘텐츠 위에 뜨는 오버레이라 자식에 덮이지 않는다.
+  &__file-drop {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-glow);
+    box-shadow: inset 0 0 0 1px var(--accent-on-dark);
+  }
+
+  // 다크 host 위에 뜨는 라벨이라 다크 패널 토큰을 쓴다
+  &__file-drop-label {
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    background: var(--surface-dark);
+    color: var(--on-dark);
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    box-shadow: 0 0 0 1px var(--border-dark);
+  }
+
   // 드롭 프리뷰 — 분할될 반쪽(중앙 드롭이면 pane 전체)을 액센트로 미리 보여준다
   &__drop-hint {
     position: absolute;

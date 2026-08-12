@@ -39,7 +39,7 @@ import type {
   OvertimeSubmitInput,
   VacationInput,
 } from "../shared/types";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 // 고빈도 채널 멀티플렉서 — 세션 pane 수만큼 구독되는 채널(terminal:data 등)에
 // ipcRenderer 리스너를 채널당 1개만 걸고 콜백 Set 으로 fan-out 한다.
@@ -526,6 +526,10 @@ contextBridge.exposeInMainWorld("oneApp", {
   testNotification: () => ipcRenderer.invoke("notify:test"),
   // 기본 브라우저로 링크 열기 (http/https 만 허용)
   openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
+  // 드래그 앤 드롭된 File 객체의 실제 경로 — 렌더러에서는 File.path 를 읽을 수 없고
+  // (Electron 32 에서 제거) webUtils 는 preload 에서만 접근 가능하다.
+  // File 을 contextBridge 함수 인자로 넘기는 것이 공식 문서의 패턴이다.
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   // 알림 클릭 등으로 특정 섹션으로 이동하라는 신호 구독. 해제 함수를 반환한다.
   onNavigate: (cb: (section: string) => void) => {
     const listener = (_e: unknown, section: string) => cb(section);

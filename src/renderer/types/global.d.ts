@@ -384,6 +384,9 @@ declare global {
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;
       testNotification: () => Promise<{ ok: boolean }>;
       openExternal: (url: string) => Promise<{ ok: boolean }>;
+      // 드롭된 File 의 실제 경로 (preload 의 webUtils.getPathForFile 경유).
+      // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+      getPathForFile?: (file: File) => string;
       onNavigate: (cb: (section: string) => void) => () => void;
       onHistoryNav: (cb: (dir: 'back' | 'forward') => void) => () => void;
     };

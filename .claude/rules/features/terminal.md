@@ -106,6 +106,13 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - 앱은 `/Applications`·`~/Applications` 에서 **번들을 직접 찾는다**(`workspaces:editor-info`) — 없으면 `available:false` 가 와서 버튼을 아예 그리지 않는다. 번들 안의 CLI(`Contents/Resources/app/bin/antigravity-ide`)는 사용자가 PATH 에 설치했을 때만 쓸 수 있어 기대하지 않는다.
 - `shell.openPath()` 로는 못 한다 — 폴더를 **Finder** 로 여는 API 다. 그래서 `execFile('open', ['-a', …])` 를 쓴다.
 
+### 파일 드래그 앤 드롭 = 경로 입력 (2026-08-12)
+Finder 파일을 pane 에 끌어다 놓으면 **경로를 셸 입력으로** 넣는다(Terminal.app 관례). `TerminalView` 가 pane 루트에서 **capture 단계**(`onDragOverCapture`/`onDropCapture`)로 받는다 — xterm 이 이벤트를 삼키는 문제를 세션 탭 드래그는 투명 드롭 존 오버레이로 피하지만, 파일 드래그는 상시 기능이라 오버레이를 미리 깔 수 없다. 판정은 `dataTransfer.types` 의 `Files` 여부라 세션 탭 드래그(커스텀 타입)와 겹치지 않고, 숨은 pane 은 `pointer-events: none` 이라 분할 중에도 **떨어뜨린 pane 의 세션**에만 들어간다.
+
+- **경로 획득은 preload 의 `getPathForFile`(webUtils) 경유** — 렌더러의 `File.path` 는 Electron 32 에서 제거됐고 `webUtils` 는 preload 전용이다. File 객체를 contextBridge 함수 인자로 넘기는 것이 공식 문서 패턴.
+- 인용은 `shellQuotePath` — 안전 문자뿐이면 원문, 아니면 작은따옴표 + 내부 `'` 는 `'\''`(POSIX). 여러 파일은 공백 연결, 말미 공백 1개(이어서 타이핑용). 드롭한 pane 이 포커스를 가져간다.
+- ⚠️ **`renderer.tsx` 의 전역 가드를 지우지 말 것** — 파일이 pane 밖에 떨어지면 Chromium 기본 동작이 창을 file:// 로 **내비게이션**시켜 앱 화면이 통째로 사라진다. window 레벨에서 Files 드래그만 `preventDefault` + `dropEffect='none'`(놓을 수 없음 커서) 처리하되, **`defaultPrevented` 인 이벤트는 건드리지 않는다** — window 는 bubble 의 마지막이라 dropEffect 를 덮어쓰면 pane 의 copy 커서가 죽는다.
+
 ### 세션 패널은 드래그 리사이즈 + 완전 축소
 `.terminal__side` 폭은 `TerminalSection` 이 인라인으로 준다(SCSS 값은 첫 페인트용). 우측 `terminal__side-grip` 을 끌어 조절하고 **`SIDE_SNAP_W`(140) 아래로 끌면 축소**(48px), grip 더블클릭·Enter·Space 로도 토글한다 — 앱 사이드바(`Sidebar.tsx`)와 같은 규칙이라 그쪽을 고치면 여기도 함께 볼 것. 저장은 `localStorage`(`terminal:sideWidth`·`terminal:sideCollapsed`)에 **놓는 순간 1회**.
 
