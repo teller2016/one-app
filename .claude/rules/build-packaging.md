@@ -16,6 +16,23 @@ paths:
 - `packagerConfig.asar.unpack` 으로 **통째 unpack** 해야 한다 — macOS 의 `spawn-helper` 는 확장자가 없어 AutoUnpackNatives 의 `*.node` 글롭에 안 걸리고, asar 안에 갇히면 PTY 생성이 전부 실패한다.
 - `postPackage` 는 앱 서명 **전에** unpacked 바이너리를 같은 identity 로 선서명하는데, **Mach-O 만** 서명할 것 — 함께 담긴 win32 prebuild(PE)를 서명하면 codesign 이 서명을 `com.apple.cs.*` 확장 속성으로 붙이고 그게 detritus 로 잡혀 앱 `--deep` 서명이 실패한다(2026-08 실측).
 
+## ⚠️ iCloud 동기화 폴더에서 빌드하면 서명이 레이스로 실패한다 (2026-08-11 실측)
+이 프로젝트는 `~/Desktop` 아래에 있고, macOS 의 **"데스크탑 및 문서 폴더" iCloud 동기화**가 켜져 있으면
+`~/Desktop` 이 File Provider 관리 대상이 된다(`xattr -l ~/Desktop` 에 `com.apple.file-provider-domain-id`).
+
+- **증상**: `npm run package` 가 `postPackage` 에서 멈춘다 —
+  `codesign … : resource fork, Finder information, or similar detritus not allowed`.
+- **원인**: `xattr -cr` 로 지운 직후 `fileproviderd` 가 `.app` 번들과 Helper 앱들에
+  `com.apple.FinderInfo`·`com.apple.fileprovider.fpfs#P` 를 **다시 붙인다**. 정리와 서명 사이의 순수 레이스라
+  같은 명령을 다시 돌리면 통과한다.
+- **대응**: `postPackage` 가 '정리 → 서명' 을 **최대 5회 재시도**한다(대기 800ms → 1.6s → … 백오프).
+  실측은 **3회차에 통과**했다 — 빌드 직후 `fileproviderd` 가 새 파일을 스캔하는 동안 계속 실패하므로,
+  재시도 횟수를 줄이지 말 것.
+- ⚠️ **`out/` 안에서는 `codesign --verify --deep --strict` 가 계속 실패할 수 있다** — 서명 자체는 유효하고,
+  속성이 다시 붙었을 뿐이다. **판정은 File Provider 밖으로 옮긴 뒤에 한다**:
+  `/Applications` 로 복사 → `xattr -cr` → 재서명 → `--verify --deep --strict` 통과 확인(= `/build` 스킬 5·6단계).
+- 남는 `com.apple.provenance` 는 지워지지 않지만 codesign 이 문제 삼지 않는다.
+
 ## ⚠️ Vite 엔트리별 cacheDir 분리
 렌더러 엔트리가 3개(`main_window`·`mobile_window`·`mobile_app_window`)인데 Vite 의존성 캐시 기본값(`node_modules/.vite`)을 공유하면 한 서버의 재최적화가 다른 서버 페이지의 URL 을 무효화해 **dev 모드에서 빈 화면(`504 Outdated Optimize Dep`)** 이 된다. 그래서 각 설정에 **`cacheDir` 을 분리**해 뒀다(`.vite-mobile`·`.vite-mobile-app`). **엔트리를 더 추가할 때도 반드시 분리할 것.** 그래도 빈 화면이 나면 `rm -rf node_modules/.vite*` 후 재시작.
 

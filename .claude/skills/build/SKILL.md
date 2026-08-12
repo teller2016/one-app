@@ -60,6 +60,11 @@ codesign -dv --verbose=2 "out/One App-darwin-arm64/One App.app" 2>&1 | grep -E "
   원인은 보통 키체인에 인증서가 없는 것: `security find-identity -v -p codesigning | grep "One App Sign"`
   으로 확인하고, 없으면 사용자에게 알린다(교체를 강행하면 저장된 계정 정보가 날아간다).
 
+⚠️ **이 단계에서 `--verify --deep --strict` 로 판정하지 말 것** — `out/` 은 iCloud 동기화 폴더
+(`~/Desktop`) 안이라 `fileproviderd` 가 `com.apple.FinderInfo` 를 계속 다시 붙여 detritus 로 실패한다.
+서명 자체는 유효하다. 엄격 검증은 File Provider 밖(`/Applications`)으로 옮긴 6단계에서 한다.
+상세는 `.claude/rules/build-packaging.md`.
+
 ### 4. 실행 중인 빌드 앱 종료
 ```bash
 pgrep -fl "/Applications/One App.app/Contents/MacOS/One App"
@@ -71,19 +76,24 @@ osascript -e 'quit app "One App"'
 - 터미널 세션은 tmux 가 들고 있어 앱을 껐다 켜도 살아남는다(안심하고 종료해도 된다).
 - ⚠️ `pkill -f "One App"` 처럼 넓은 패턴을 쓰지 말 것 — 개발 인스턴스나 무관한 프로세스까지 잡는다.
 
-### 5. 교체
+### 5. 교체 + 재서명
+`/Applications` 는 File Provider 밖이라 여기서 정리한 확장 속성은 **다시 붙지 않는다.**
+정리 후 한 번 더 서명해 깨끗한 상태로 확정한다.
 ```bash
 rm -rf "/Applications/One App.app"
 cp -R "out/One App-darwin-arm64/One App.app" "/Applications/"
 xattr -cr "/Applications/One App.app"
+codesign --force --deep --sign "One App Sign" "/Applications/One App.app"
 ```
 
 ### 6. 결과 확인
 ```bash
 defaults read "/Applications/One App.app/Contents/Info.plist" CFBundleShortVersionString
 codesign -dv --verbose=2 "/Applications/One App.app" 2>&1 | grep Authority
+codesign --verify --deep --strict "/Applications/One App.app" && echo "✅ 검증 통과"
 ```
-버전과 서명(`One App Sign`)을 사용자에게 보고한다.
+버전·서명(`One App Sign`)·엄격 검증 통과를 사용자에게 보고한다.
+엄격 검증이 여기서도 실패하면 **실행하지 말고** 보고한다.
 
 ### 7. 실행 (`--no-launch` 가 아니면)
 ```bash

@@ -93,9 +93,27 @@ const config: ForgeConfig = {
             { stdio: 'inherit' }
           );
         }
-        // 확장 속성 정리는 앱 서명 직전에 — 위 개별 서명이 남긴 속성까지 함께 걷어낸다
-        execSync(`xattr -cr "${appPath}" 2>/dev/null; true`, { shell: '/bin/zsh' });
-        execSync(`codesign --force --deep --sign "${identity}" "${appPath}"`, { stdio: 'inherit' });
+        // 확장 속성 정리는 앱 서명 직전에 — 위 개별 서명이 남긴 속성까지 함께 걷어낸다.
+        // ⚠️ 프로젝트가 iCloud Drive 동기화 폴더(~/Desktop·~/Documents) 안에 있으면
+        // fileproviderd 가 정리 직후 `com.apple.FinderInfo` 를 다시 붙이고, codesign 이
+        // 그것을 detritus 로 보고 거부한다(2026-08-11 실측). 순수 레이스이므로
+        // '정리 → 서명' 을 재시도한다 — 빌드 직후 fileproviderd 가 새 파일을 스캔하는 동안
+        // 계속 실패하므로, 대기 시간을 점점 늘려(백오프) 스캔이 잦아들 시간을 준다.
+        // 실측(2026-08-11)은 3회차에 통과했다 — 여유를 두고 5회까지 시도한다.
+        const MAX_SIGN_ATTEMPTS = 5;
+        let signed = false;
+        for (let attempt = 1; attempt <= MAX_SIGN_ATTEMPTS && !signed; attempt++) {
+          execSync(`xattr -cr "${appPath}" 2>/dev/null; true`, { shell: '/bin/zsh' });
+          try {
+            execSync(`codesign --force --deep --sign "${identity}" "${appPath}"`, { stdio: 'inherit' });
+            signed = true;
+          } catch (err) {
+            if (attempt === MAX_SIGN_ATTEMPTS) throw err;
+            // eslint-disable-next-line no-console
+            console.warn(`[forge] 서명 실패 — 확장 속성 재정리 후 재시도 (${attempt}/${MAX_SIGN_ATTEMPTS})`);
+            await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+          }
+        }
         // eslint-disable-next-line no-console
         console.log(`[forge] "${identity}" 로 서명 완료: ${appPath}`);
       }
