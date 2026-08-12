@@ -294,9 +294,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  // 좌측 여백은 '신호등 예약폭'과 '사이드바 폭' 중 큰 쪽 —
-  // 접으면 신호등 오른쪽에서, 펼치면 콘텐츠 컬럼에 맞춰 컨트롤이 시작한다
-  padding-left: max(var(--titlebar-safe), calc(var(--sidebar-w) + 16px));
+  // 좌측 여백은 신호등 예약폭으로 고정 — 사이드바 폭을 바꾸거나 접어도
+  // 뒤로/앞으로·제목이 항상 신호등 바로 오른쪽 같은 자리에서 시작한다
+  padding-left: var(--titlebar-safe);
   padding-right: 16px;
   background: var(--frost);
   backdrop-filter: blur(20px) saturate(180%);
