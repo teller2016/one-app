@@ -181,7 +181,7 @@ export type JiraWorkAccountInfo = {
 export type JiraWorkPrepareInput = {
   key: string;
   skill: JiraWorkSkill;
-  note?: string; // 모달의 '추가 지시' (선택)
+  note?: string; // 모달의 '부가 설명' (선택)
   account?: JiraWorkAccount; // 기본 personal
 };
 

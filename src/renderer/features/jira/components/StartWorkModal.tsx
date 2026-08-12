@@ -310,7 +310,7 @@ export function StartWorkModal({
           />
         </FormRow>
 
-        <FormRow label="추가 지시 (선택)" column>
+        <FormRow label="부가 설명 (선택)" column>
           <Input
             value={note}
             placeholder="예: 어드민만 보면 돼"

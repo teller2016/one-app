@@ -446,7 +446,7 @@ export async function prepareJiraWork(
   if (hasAttachments) {
     lines.push(`- 첨부(이미지 포함, 본문에서 참조): ${attachmentsDir}`);
   }
-  if (note) lines.push('', `추가 지시: ${note}`);
+  if (note) lines.push('', `부가 설명: ${note}`);
   const prompt = lines.join('\n');
 
   // 이미 떠 있는 femc 에 넣을 문구는 **한 줄**이어야 한다 — TUI 에 그대로 쓰면
@@ -455,7 +455,7 @@ export async function prepareJiraWork(
     `${head} 티켓을 작업해줘.`,
     `티켓 파일을 먼저 읽어줘: ${ticketPath}`,
     hasAttachments ? `첨부: ${attachmentsDir}` : '',
-    note ? `추가 지시: ${note}` : '',
+    note ? `부가 설명: ${note}` : '',
   ]
     .filter(Boolean)
     .join(' · ');
