@@ -45,11 +45,14 @@ export const SessionTabs = memo(function SessionTabs({
   canCreate,
   changesOpen,
   moRunning,
+  editorName,
+  canOpenEditor,
   onSelect,
   onClose,
   onNew,
   onToggleChanges,
   onOpenMo,
+  onOpenEditor,
   onDragStartSession,
   onDragEndSession,
   onDetachSession,
@@ -63,11 +66,16 @@ export const SessionTabs = memo(function SessionTabs({
   canCreate: boolean;
   changesOpen: boolean;
   moRunning: boolean;
+  /** 워크트리를 열 IDE 이름 — 미설치면 null 이고 버튼 자체를 그리지 않는다 */
+  editorName: string | null;
+  /** 워크트리가 선택돼 있을 때만 열 수 있다 (canCreate 와 같은 조건) */
+  canOpenEditor: boolean;
   onSelect: (id: string) => void;
   onClose: (s: TerminalSessionInfo) => void;
   onNew: () => void;
   onToggleChanges: () => void;
   onOpenMo: () => void;
+  onOpenEditor: () => void;
   onDragStartSession: (id: string) => void;
   onDragEndSession: () => void;
   /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리(혼자 보기) */
@@ -312,6 +320,25 @@ export const SessionTabs = memo(function SessionTabs({
       </div>
 
       <div className="terminal__tabs-actions">
+        {editorName && (
+          <Tooltip
+            label={
+              canOpenEditor
+                ? `선택한 워크트리를 ${editorName} 로 열기`
+                : `워크트리를 선택하면 ${editorName} 로 열 수 있습니다`
+            }
+          >
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`${editorName} 로 열기`}
+              disabled={!canOpenEditor}
+              onClick={onOpenEditor}
+            >
+              <Icon name="code-xml" size={16} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip label="변경사항 — 선택한 워크트리의 git 상태·커밋·푸시">
           <button
             type="button"

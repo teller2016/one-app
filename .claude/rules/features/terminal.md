@@ -99,6 +99,13 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - **[맨 아래로] 노출 판정은 boolean 리프트** — pane 이 `onScrolledChange(id, bool)` 로 변화시에만 올리고(스크롤 이벤트마다 아님), 언마운트 시 false 로 정리한다. 폴백 세션은 xterm 의 `onScroll`, tmux 세션은 **휠 위임 응답(`scrolledUp`)** 이 이 값을 만든다(아래 '휠 스크롤은 tmux copy-mode 로 위임한다').
 - 글자 크기(A±)·프리셋은 원래 섹션 소유 공유 상태라 이동만으로 끝났다. Finder 열기는 섹션이 `revealCwd(activeId)` 를 직접 부른다.
 
+### 탭바 우측 액션 = `[</> IDE][± 변경사항][📱 MO]` (2026-08-12)
+맨 왼쪽 `</>` 버튼이 **선택한 워크트리 폴더를 Antigravity 로 연다**(`workspaces:open-editor` → `open -a "Antigravity IDE.app" <워크트리>`). 워크트리 단위로 작업하는 화면이라 **세션 cwd 가 아니라 워크트리 루트**를 열고, 워크트리가 선택되지 않았으면(`기타 세션`) `disabled` 다.
+
+- ⚠️ **경로는 렌더러가 넘긴 것을 그대로 쓰지 않는다** — `listWorktrees()` 결과와 대조한 뒤에만 연다(워크트리 제거와 같은 규칙). 채널은 `ipcMain.handle` 이라 MO 에도 안 열린다.
+- 앱은 `/Applications`·`~/Applications` 에서 **번들을 직접 찾는다**(`workspaces:editor-info`) — 없으면 `available:false` 가 와서 버튼을 아예 그리지 않는다. 번들 안의 CLI(`Contents/Resources/app/bin/antigravity-ide`)는 사용자가 PATH 에 설치했을 때만 쓸 수 있어 기대하지 않는다.
+- `shell.openPath()` 로는 못 한다 — 폴더를 **Finder** 로 여는 API 다. 그래서 `execFile('open', ['-a', …])` 를 쓴다.
+
 ### 세션 패널은 드래그 리사이즈 + 완전 축소
 `.terminal__side` 폭은 `TerminalSection` 이 인라인으로 준다(SCSS 값은 첫 페인트용). 우측 `terminal__side-grip` 을 끌어 조절하고 **`SIDE_SNAP_W`(140) 아래로 끌면 축소**(48px), grip 더블클릭·Enter·Space 로도 토글한다 — 앱 사이드바(`Sidebar.tsx`)와 같은 규칙이라 그쪽을 고치면 여기도 함께 볼 것. 저장은 `localStorage`(`terminal:sideWidth`·`terminal:sideCollapsed`)에 **놓는 순간 1회**.
 

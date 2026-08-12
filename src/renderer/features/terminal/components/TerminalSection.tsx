@@ -586,6 +586,38 @@ export function TerminalSection() {
     if (res && !res.ok) toast('위치를 열지 못했습니다.', 'fail');
   }, [toast]);
 
+  // ── 워크트리를 IDE(Antigravity)로 열기 — 탭바 우측 액션 ──
+  // 설치 여부는 한 번만 묻고, 미설치면 이름이 null 이라 버튼이 그려지지 않는다.
+  const [editorName, setEditorName] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const api = window.oneApp?.workspaces;
+    if (!api) return;
+    // 조회 실패는 미설치와 같게 다룬다 — 버튼을 안 그리면 그만이다
+    api
+      .editorInfo()
+      .then((info): void => {
+        if (alive && info.available) setEditorName(info.name);
+      })
+      .catch((): void => setEditorName(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const openInEditor = useCallback(async (): Promise<void> => {
+    if (selection?.kind !== 'worktree') return;
+    try {
+      const res = await window.oneApp.workspaces.openEditor(
+        selection.wsId,
+        selection.path
+      );
+      if (!res.ok) toast(res.error || '열지 못했습니다.', 'fail');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '열지 못했습니다.', 'fail');
+    }
+  }, [selection, toast]);
+
   // 방금 만든 세션 — 목록 브로드캐스트가 아직 안 왔으면 보정 효과가 첫 탭으로 되돌리므로,
   // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관).
   // selectTab 경유 — 분할 중이면 새 세션이 포커스된 슬롯을 이어받는다(탭 클릭과 동일 의미론)
@@ -1339,11 +1371,14 @@ export function TerminalSection() {
           canCreate={canCreate}
           changesOpen={changesOpen}
           moRunning={moRunning}
+          editorName={editorName}
+          canOpenEditor={canCreate}
           onSelect={selectTab}
           onClose={closeSessionFromTab}
           onNew={openNewSession}
           onToggleChanges={toggleChanges}
           onOpenMo={openMoModal}
+          onOpenEditor={openInEditor}
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}

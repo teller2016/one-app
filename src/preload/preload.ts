@@ -403,6 +403,11 @@ contextBridge.exposeInMainWorld("oneApp", {
     reorder: (ids: string[]) => ipcRenderer.invoke("workspaces:reorder", ids),
     // 저장소 폴더를 Finder 로 열기
     reveal: (id: string) => ipcRenderer.invoke("workspaces:reveal", id),
+    // 워크트리를 열 IDE(Antigravity) 설치 여부 — 버튼 노출 판단
+    editorInfo: () => ipcRenderer.invoke("workspaces:editor-info"),
+    // 워크트리 폴더를 IDE 로 열기 — main 이 워크트리 목록과 대조한다
+    openEditor: (id: string, worktreePath: string) =>
+      ipcRenderer.invoke("workspaces:open-editor", id, worktreePath),
     // 폴더 선택 다이얼로그 — 워크스페이스 등록·워크트리 위치 선택 공용
     pickDir: (title?: string) => ipcRenderer.invoke("workspaces:pick-dir", title),
     // 워크트리 목록 + 워크트리별 미커밋 변경량 (+N −M)

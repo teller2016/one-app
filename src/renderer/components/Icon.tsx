@@ -64,7 +64,8 @@ export type IconName =
   | "asterisk"
   | "maximize"
   | "git-commit"
-  | "arrow-up-to-line";
+  | "arrow-up-to-line"
+  | "code-xml";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -372,6 +373,13 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M5 3h14" />
       <path d="m18 13-6-6-6 6" />
       <path d="M12 7v14" />
+    </>
+  ),
+  "code-xml": (
+    <>
+      <path d="m18 16 4-4-4-4" />
+      <path d="m6 8-4 4 4 4" />
+      <path d="m14.5 4-5 16" />
     </>
   ),
 };

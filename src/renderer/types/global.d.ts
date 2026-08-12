@@ -310,6 +310,11 @@ declare global {
         delete: (id: string) => Promise<TerminalWorkspace[]>;
         reorder: (ids: string[]) => Promise<TerminalWorkspace[]>;
         reveal: (id: string) => Promise<{ ok: boolean; error?: string }>;
+        editorInfo: () => Promise<{ available: boolean; name: string }>;
+        openEditor: (
+          id: string,
+          worktreePath: string,
+        ) => Promise<{ ok: boolean; error?: string }>;
         pickDir: (title?: string) => Promise<{ path?: string }>;
         worktrees: (id: string) => Promise<WorktreeInfo[]>;
         addWorktree: (input: WorktreeAddInput) => Promise<WorktreeActionResult>;
