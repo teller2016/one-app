@@ -65,7 +65,7 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - **그룹에서 빼기 = 멤버 탭을 탭바의 빈 영역에 드롭** — 빈 영역에서만 `--detach` 하이라이트("놓으면 그룹에서 분리" 라벨)가 켜지고, 분리된 세션이 혼자 전체 화면을 이어받는다. ⚠️ **탭(또는 그룹 장) 위에서는 dragover 에 preventDefault 를 하지 않는다**(`overTabArea` — `data-session`/`.terminal__tab-pack` 판정) — 탭 하버는 스프링 로딩(그 화면 열기)의 영역이고, 탭 위에서도 분리 하이라이트가 바 전체를 accent 로 칠하던 문제(2026-08-10 사용자 지적)와 제자리 드롭 오인을 함께 막는다.
 - **드래그 중 다른 탭 위에 머물면 그 화면이 열린다(스프링 로딩, `HOVER_OPEN_MS` 180ms)** — 자기 화면의 탭을 끌면 놓을 곳이 자기뿐이라, 원하는 상대 탭을 하버로 열어 두고 아래 pane 에 놓아 분할한다(2026-08-10 사용자 요청 — 처음 구현한 '드래그 시작 시 이웃 탭 자동 전환'은 사용자가 이 방식으로 교체). 탭은 드롭 대상이 아니라 **화면만** 바꾼다(`onSelect` 경유 — 그룹 멤버면 그 그룹이 열림). ⚠️ 탭바를 벗어나면(`dragleave`) 대기 타이머를 버릴 것 — 안 버리면 pane 을 조준하는 사이 발화해 화면이 밑에서 바뀐다.
 - **탭바 = 가라앉은 선반 + '장' 탭, 그룹 = 통탭(장을 세그먼트로 나눔)** — 시안 10종 비교 끝에 사용자가 ⑧을 선택(2026-08-10). **모든 탭이 같은 장 기하**(1px 테두리 + 윗라운드 + 45% `--bg` 톤, 높이 29·폭 150 고정 — 넘치면 리스트 스크롤)이고 그룹은 장이 넓어 세그먼트가 여럿일 뿐이다. 활성 표시는 그룹 안팎 동일한 **accent-soft 틴트 한 겹**(`background-image` 레이어 — 바탕색 위에 겹치기 위해). ⚠️ 활성 탭이 바닥선을 뚫고 아래 면과 이어지는 '연결형'은 상태마다 모양·높이가 갈라져 보여 폐기(스크린샷 실측) — 장들은 `tabs-list` 의 `padding-bottom: 1px` 로 바닥선 **위에** 얹힌다. 바는 `--bg-sunken` 선반이고 바닥 경계선은 border 가 아니라 **inset box-shadow** — 자식이 위에 그려져 활성 탭/활성 그룹의 `--bg` 배경이 선을 국소적으로 덮으며 아래 면(공용 바)과 이어진다. 그룹(`tab-pack`)은 항상 테두리 있는 한 장(비활성은 자기 box-shadow 로 경계선을 다시 그린다)이고, 멤버가 활성이면 장 전체가 연결되고 활성 멤버만 안에서 액센트 틴트. `tabView`(TerminalSection)가 `TabItem[]`(single | group)을 만들고 멤버는 일반 탭과 **완전히 같은 마크업**(`renderTab` 공용). ⚠️ 반려된 안들 — 세그먼트+장식(채움·연결선·라운드 끝·여백·브래킷 캡), 칩+박스 — 로 돌아가지 말 것. ⌘1..9·⌃Tab 순회는 평탄화된 **표시 순서**(`tabView.tabs`)를 따른다.
-- **active 는 visible(다중)/focused(단일)로 분리됐다** — 크기 주장(`visibleRef`)·fit·아틀라스 복구는 보이는 pane 전부(서로 **다른 세션**이라 크기 주장이 충돌하지 않는다), `term.focus()`·⌘F 는 focused(=activeId) 하나만. ⚠️ visible effect 에서 `focus()` 를 부르면 분할 드롭 순간 새 pane 이 포커스를 훔친다 — 그래서 effect 가 둘로 나뉘어 있다.
+- **active 는 visible(다중)/focused(단일)로 분리됐다** — 크기 주장(`visibleRef`)·fit·전체 리드로(`refresh`)는 보이는 pane 전부(서로 **다른 세션**이라 크기 주장이 충돌하지 않는다), `term.focus()`·⌘F 는 focused(=activeId) 하나만. ⚠️ visible effect 에서 `focus()` 를 부르면 분할 드롭 순간 새 pane 이 포커스를 훔친다 — 그래서 effect 가 둘로 나뉘어 있다.
 - ⚠️ **한 세션은 그룹 전체를 통틀어 1회만** — main 의 attach 추적(`desktopAttached`)이 `Set<세션id>` 라 같은 세션의 pane 이 둘이면 한쪽 detach 가 다른 쪽의 `terminal:data` 방송까지 끊는다. `moveSession`·`removeFromGroups`(선제 제거)·`replaceSession`(그룹 안이면 swap)·`sanitizeLayout`(중복 제거)이 지키고, **main 은 무변경**이다.
 - **드롭 존은 드래그 중에만 pane 위에 덮는 투명 오버레이**(`terminal__drop-zone`) — xterm 의 canvas/textarea 가 dragover 를 삼키는 문제를 원천 회피한다. dragover 는 고빈도라 `setDropHint` 는 동일값 조기 반환(WorkspaceNav 와 같은 규칙).
   - ⚠️ **드래그가 어떻게 끝나든 `dragSession` 을 반드시 비울 것** — 남으면 그 오버레이(absolute·`z-index: 3`)가 pane 을 덮은 채 굳어 **휠·클릭·드래그 선택이 전부 삼켜진다.** 2026-08-11 사용자 신고("합쳤다가 다시 분리하면 스크롤이 안 먹는다")의 진짜 원인이 이것이었다 — 휠 위임 코드는 멀쩡했고, `elementFromPoint(pane 중앙)` 이 `.terminal__drop-zone` 을 반환하는 것으로 실측했다(정상이면 `xterm-link-layer`).
@@ -127,6 +127,15 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - OSC 8 링크는 `linkHandler`, 평문 URL 은 `web-links` — 둘 다 `window.oneApp.openExternal` 로 보낸다(앱 창에서 열면 워크스페이스가 깨진다). ⚠️ `app:openExternal` 은 http(s) 만 허용하므로 **Finder 열기는 `terminal:reveal-cwd`**(세션 id 만 받아 main 이 cwd 를 해석 — 임의 경로 열기 방지).
 - 검색 하이라이트는 `#RRGGBB` 만 받는다(알파 불가) → 액센트를 패널 배경에 **미리 합성**해 쓴다(`mixHex`). ⚠️ 비활성 22% / 활성 85% 처럼 **크게 벌려야 한다** — xterm 이 현재 일치에 선택 틴트까지 겹쳐 그려서, 비활성 색을 선택 틴트(액센트 35%)와 비슷하게 잡으면 셋이 똑같이 보여 몇 번째를 보고 있는지 알 수 없다. 밝은 경고색(노랑)을 배경으로 쓰면 그 위 밝은 글자가 안 읽힌다.
 - ⚠️ **검색바는 세로 스택이 아니라 오버레이**(absolute)다 — 한 줄을 끼우면 host 높이가 줄어 **PTY 행이 바뀌고**(62→60 실측) 검색을 열고 닫을 때마다 claude 가 전체 리플로우한다.
+
+### ⚠️ 텍스처 아틀라스는 **pane 사이 공유물**이다 — 개별 pane 이 비우면 안 된다 (2026-08-12)
+같은 폰트·크기의 xterm 들은 **하나의 `TextureAtlas` 를 나눠 쓴다**(xterm 의 `acquireTextureAtlas` 캐시). 그런데 `clearTextureAtlas()` 는 **호출한 pane 의 model 만** 비우고 전체를 다시 그릴 뿐, 같은 아틀라스를 쓰는 **다른 pane 에는 아무 통지도 하지 않는다** — addon-webgl 의 `TextureAtlas.clearTexture()` 가 페이지·캐시맵만 비우고 `_requestClearModel` 을 세우지 않기 때문이다. 그래서 pane 하나가 부르면 나머지 pane 들은 **무효가 된 옛 글리프 좌표로 계속 샘플링해 글자가 겹쳐 그려진다.**
+
+- 증상: 탭을 옮겼다 돌아오면 화면이 겹쳐 깨져 있고 **리사이즈나 재전환으로만 복구**된다(2026-08-12 사용자 신고). **claude 의 선택지 대기처럼 출력이 완전히 멈춘 화면에서만 눈에 띈다** — 스피너가 도는 동안엔 다음 프레임이 곧바로 덮어써서 안 보일 뿐, 깨짐 자체는 늘 일어나고 있었다.
+- 원인은 `TerminalView` 가 **pane 마다** `document.fonts.ready` 에서 아틀라스를 버리던 것이다. 탭을 처음 옮기면 그 세션의 pane 이 새로 마운트되므로(`livePanes`) **탭 전환 한 번마다** 보고 있던 화면이 깨졌고, 두 번째부터는 pane 이 재사용돼 멀쩡했다(사용자가 관찰한 "다시 전환하면 정상"의 정체).
+- 지금은 **마운트 시점에 번들 폰트가 아직 안 왔을 때만** 버린다(`monoFontLoaded` = `document.fonts.check` 로 스택 첫 후보만 판정). 폰트가 준비된 뒤 생기는 pane 은 애초에 제 폰트로 셀을 쟀으므로 다시 구울 이유가 없다.
+- ⚠️ **보이게 된 pane 에서 `clearTextureAtlas()` 를 부르지 말 것** — 2026-08-06 에 "숨어 있는 동안 아틀라스가 깨진다"며 넣었던 그 clear 는 해결이 아니라 **깨짐을 옆 pane 으로 옮기는 것**이었다(그 시절 증상의 진짜 원인도 위의 pane 별 clear 였다). 복구는 `term.refresh(0, rows-1)` 로 충분하다.
+- ⚠️ **`refresh()` 는 조용히 무시될 수 있다** — `RenderService.refreshRows()` 는 `synchronizedOutput`(DEC 2026 — tmux conf 의 `sync` feature 로 켜 둔 그것)이 켜져 있는 동안엔 렌더 대신 **범위만 버퍼링**하고 돌아간다(`_isPaused` 도 같은 자리에서 걸러낸다). 출력이 멈춘 화면에는 그 버퍼를 흘려보낼 다음 프레임이 없으므로, 복귀 시 refresh 는 **rAF 로 한 번 더** 건다.
 
 ## ⚠️ tmux 백엔드에선 xterm 스크롤백이 쌓이지 않는다 (2026-08-05 실측)
 tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 스크롤백이 남지 않는다(`scrollHeight == clientHeight`, 슬라이더 0px). **스크롤백의 주인은 tmux**(`history-limit 10000`)이고, **화면 지우기(`term.clear()`)도 tmux 가 곧 다시 그려 영구 삭제가 아니다**.
@@ -197,7 +206,7 @@ FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재�
 - **xterm 은 `lineHeight < 1` 을 거부한다**(`_sanitizeAndValidateOption` 이 throw) — 이 폰트에서 가능한 최소가 1.0 이고 그때 셀이 **1:2.22** 다. 블록 문자 그림의 정사각 픽셀(1:2)은 이 폰트로는 도달할 수 없다(Menlo 는 1.0 에서 1:2.0).
 - 실측값(fontSize 15 기준): `1.0 → 9x20px(1:2.22)` · `1.1 → 9x22(1:2.44)` · `1.2 → 9x24(1:2.67)`.
 - 셀 크기를 잴 때는 `.xterm-screen` 의 `clientWidth/Height ÷ term.cols/rows` 를 쓴다(캔버스 렌더러라 DOM 행이 없다).
-- 폰트 로드 완료(`document.fonts.ready`) 후 `clearTextureAtlas()` + `fit()` 를 한 번 더 돌린다 — 폴백 폰트 폭으로 셀을 재고 굳으면 커서·박스 드로잉이 어긋난다.
+- 폰트 로드 완료(`document.fonts.ready`) 후 `fit()` 을 한 번 더 돌린다 — 폴백 폰트 폭으로 셀을 재고 굳으면 커서·박스 드로잉이 어긋난다. ⚠️ 함께 돌리던 `clearTextureAtlas()` 는 **그 pane 이 폰트보다 먼저 마운트됐을 때만** 한다(위 '텍스처 아틀라스는 pane 사이 공유물' 절 — 무조건 부르면 살아 있는 다른 pane 을 깨뜨린다).
 
 ### ⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)
 **Claude Code 는 `TMUX` 환경변수가 있으면 트루컬러를 포기하고 256색 팔레트로 폴백한다**(2026-08-06 실측). 그래서 시작 로고가 브랜드 코랄(`#d77757`) 대신 팔레트 174번(`#d78787`)으로 나와 **분홍빛으로 보였다**.

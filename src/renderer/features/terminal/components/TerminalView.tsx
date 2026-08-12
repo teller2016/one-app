@@ -20,6 +20,25 @@ import { Tooltip } from '../../../components/Tooltip';
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+/**
+ * 번들 모노 폰트가 **이미 로드돼 있는지** — 폰트 스택의 첫 후보만 본다
+ * (뒤의 시스템 폰트는 항상 available 이라 스택 전체를 넘기면 판정이 무의미해진다).
+ *
+ * ⚠️ 이 판정이 필요한 이유는 **텍스처 아틀라스가 pane 사이 공유물**이기 때문이다 —
+ * 같은 폰트·크기의 xterm 들은 하나의 `TextureAtlas` 를 나눠 쓰는데,
+ * `clearTextureAtlas()` 는 **호출한 pane 의 model 만** 다시 그리고 나머지 pane 에는
+ * 알리지 않는다(addon-webgl 의 `clearTexture()` 가 `_requestClearModel` 을 세우지 않는다).
+ * 그래서 pane 하나가 부르면 살아 있던 다른 pane 들이 **무효가 된 옛 글리프 좌표로**
+ * 계속 그려 글자가 겹쳐 보인다(2026-08-12 사용자 신고).
+ */
+const monoFontLoaded = (stack: string, size: number) => {
+  try {
+    return document.fonts.check(`${size}px ${stack.split(',')[0].trim()}`);
+  } catch {
+    return false; // check 가 파싱에 실패하면 보수적으로 '아직 아니다'
+  }
+};
+
 // PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
 const PTY_RESIZE_DEBOUNCE_MS = 120;
 
@@ -201,8 +220,12 @@ export const TerminalView = memo(function TerminalView({
     if (!host) return;
 
     let disposed = false;
+    const fontFamily = cssVar('--font-mono') || 'ui-monospace, Menlo, monospace';
+    // 마운트 시점에 번들 폰트가 와 있었는지 — 아래 아틀라스 재굽기 판정에 쓴다(선언 위치 주의:
+    // term 생성이 폰트를 '쓰기 시작'하는 지점이라 그 전에 재 둬야 한다).
+    const fontWasReady = monoFontLoaded(fontFamily, fontSizeRef.current);
     const term = new Terminal({
-      fontFamily: cssVar('--font-mono') || 'ui-monospace, Menlo, monospace',
+      fontFamily,
       fontSize: fontSizeRef.current, // 앱 본문(type-body)과 같은 13px 기본 + 툴바로 조절
       // ⚠️ xterm 의 lineHeight 는 **fontSize 가 아니라 폰트의 자연 줄높이에 곱해진다** —
       // 그 값이 폰트마다 달라서(13px 기준 실측: JetBrains Mono 17.5px = 1.346배,
@@ -259,9 +282,16 @@ export const TerminalView = memo(function TerminalView({
     // `font-display: block`(_base.scss)이 폴백 렌더 자체를 막지만 측정 시점이 로드보다
     // 앞설 수 있어, 로드 완료 후 한 번 다시 잰다. WebGL 렌더러는 글리프를 아틀라스에
     // 캐시하므로 함께 버려야 옛 폰트로 구운 글리프가 남지 않는다.
+    //
+    // ⚠️ 단, 아틀라스 버리기는 **폰트가 아직 안 온 상태로 마운트됐을 때만** 한다 —
+    // 아틀라스는 pane 사이 공유물이라(`monoFontLoaded` 주석) 이미 폰트가 준비된 뒤에 생기는
+    // pane 이 부르면 **살아 있던 다른 pane 들의 화면을 통째로 깨뜨린다.** 탭을 처음 옮길 때
+    // 그 세션의 pane 이 새로 마운트되므로(livePanes), 예전엔 **탭 전환 한 번마다** 보고 있던
+    // claude 화면이 겹쳐 그려졌다(2026-08-12 사용자 신고 — 출력이 멈춘 선택지 화면에서 특히
+    // 눈에 띄었다). 늦게 생긴 pane 은 애초에 제 폰트로 셀을 쟀으므로 다시 구울 이유도 없다.
     void document.fonts.ready.then(() => {
       if (disposed) return;
-      term.clearTextureAtlas();
+      if (!fontWasReady) term.clearTextureAtlas();
       fit.fit();
     });
 
@@ -493,19 +523,22 @@ export const TerminalView = memo(function TerminalView({
     if (!visible) return;
     fitRef.current?.fit();
     reclaimRef.current?.();
-    // ⚠️ 숨어 있는 동안 WebGL 텍스처 아틀라스가 깨진 채 남을 수 있다(글자가 조각나거나
-    // 엉뚱한 위치에 그려짐 — 2026-08-06 사용자 보고, 리사이즈로만 복구되던 증상).
-    // 활성화 때 아틀라스를 버리고 전체를 다시 그려 리사이즈와 같은 복구를 강제한다
-    // (아틀라스는 lazy 재생성이라 비용은 첫 프레임 글리프 다시 굽기 정도).
+    // 숨어 있는 동안 들어온 출력이 그리다 만 프레임으로 남아 있을 수 있어 전체를 다시 그린다.
+    //
+    // ⚠️ 여기서 `clearTextureAtlas()` 를 부르면 안 된다 — 아틀라스는 pane 사이 공유물이라
+    // 탭을 옮길 때마다 **나머지 pane 을 전부 깨뜨린다**(`monoFontLoaded` 주석). 2026-08-06 에
+    // 이 자리에 넣었던 clear 는 증상의 해결이 아니라 **깨짐을 옆 pane 으로 옮기는 것**이었다.
+    //
+    // ⚠️ refresh 한 번으로는 부족할 수 있다 — `RenderService.refreshRows()` 는 동기화 출력
+    // (DEC 2026, tmux conf 의 `sync` feature)이 켜져 있는 동안엔 렌더 대신 범위만 버퍼링하고
+    // 조용히 돌아간다. claude 의 선택지 대기처럼 **출력이 완전히 멈춘 화면**에서는 그 버퍼를
+    // 흘려보낼 다음 출력이 없어 깨진 프레임이 그대로 남는다. 다음 프레임에 한 번 더 건다.
     const term = termRef.current;
-    if (term) {
-      try {
-        term.clearTextureAtlas();
-      } catch {
-        // WebGL 폴백(DOM 렌더러) 상태면 no-op — 아래 refresh 만으로 충분
-      }
-      term.refresh(0, term.rows - 1);
-    }
+    if (!term) return;
+    const redraw = () => term.refresh(0, term.rows - 1);
+    redraw();
+    const raf = requestAnimationFrame(redraw);
+    return () => cancelAnimationFrame(raf);
   }, [visible]);
 
   // 포커스 pane 이 된 순간 — 키보드 입력을 이 xterm 으로 (분할 중에도 항상 하나만)
