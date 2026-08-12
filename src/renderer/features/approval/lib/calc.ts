@@ -98,13 +98,40 @@ const dayText = (d: string) => {
   return m ? `${Number(m[2])}월 ${Number(m[3])}일` : d;
 };
 
+/** "YYYY-MM-DD" → "07/24" — 대체휴가 제목의 휴일근무일 표기 */
+const shortDayText = (d: string) => {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}/${m[3]}` : d;
+};
+
 /** 신청자 정보를 아직 모를 때 제목 미리보기에 넣는 자리표시 */
-export const APPLICANT_PLACEHOLDER = '이름_소속';
+export const APPLICANT_PLACEHOLDER = '성명';
+
+/** 제목 앞 태그 — 표기 표준: 시차_1시간·시차_2시간 → 시차, 오전·오후반차 → 반차 */
+export const titleTag = (attDivName: string) =>
+  /시차/.test(attDivName) ? '시차' : /반차/.test(attDivName) ? '반차' : attDivName;
+
+/** 시차·반차 — 제목에 사용 시간대 (00:00~00:00) 를 명시해야 하는 종류 */
+export const isTimedKind = (attDivName: string) => /반차|시차/.test(attDivName);
+
+/** 대체휴가 — 제목에 휴일근무일을 명시해야 하는 종류 */
+export const isSubstituteKind = (attDivName: string) => attDivName === '대체휴가';
+
+/** 근태구분별 사용 시간대 기본값 [시작, 종료] — 시차는 출근(09:00) 기준, 반차는 점심 포함 */
+export const defaultTimeRange = (attDivName: string): [string, string] => {
+  if (attDivName === '오전반차') return ['09:00', '14:00'];
+  if (attDivName === '오후반차') return ['14:00', '18:00'];
+  if (attDivName === '시차_2시간') return ['09:00', '11:00'];
+  return ['09:00', '10:00']; // 시차_1시간
+};
 
 /**
  * 휴가신청서 제목 기본값 — main 의 formatVacationTitle 과 같은 형식.
- *   [휴가_연차] 정수범_FE_플랫폼서비스사업부문 [7월 24일]
- * 신청자 이름·소속은 그룹웨어 화면에서만 알 수 있다. 모를 때는 자리표시를 넣어
+ * 휴가 신청서 작성 표기 표준: 제목에 성명·사용 날짜를 적고, 시차·반차는 정확한
+ * 시간대를, 대체휴가는 휴일근무일을 함께 명시한다.
+ *   [연차] 정수범_8월 12일 · [반차] 정수범_8월 12일 (09:00~14:00)
+ *   [대체휴가] 정수범_8월 12일 (휴일근무일: 08/09)
+ * 신청자 이름은 그룹웨어 화면에서만 알 수 있다. 모를 때는 자리표시를 넣어
  * 형태를 보여주고, 실제 제목은 main 이 채운다(사용자가 고치지 않은 경우).
  */
 export const vacationTitle = (opts: {
@@ -112,17 +139,21 @@ export const vacationTitle = (opts: {
   fromDate: string;
   toDate: string;
   name?: string;
-  chapter?: string;
-  division?: string;
+  useStartTime?: string;
+  useEndTime?: string;
+  holidayWorkDate?: string;
 }) => {
   const period =
     opts.fromDate === opts.toDate
       ? dayText(opts.fromDate)
       : `${dayText(opts.fromDate)}~${dayText(opts.toDate)}`;
-  const who =
-    [opts.name, opts.chapter, opts.division].filter(Boolean).join('_') ||
-    APPLICANT_PLACEHOLDER;
-  return `[휴가_${opts.attDivName}] ${who} [${period}]`;
+  const extra =
+    isTimedKind(opts.attDivName) && opts.useStartTime && opts.useEndTime
+      ? ` (${opts.useStartTime}~${opts.useEndTime})`
+      : isSubstituteKind(opts.attDivName) && opts.holidayWorkDate
+        ? ` (휴일근무일: ${shortDayText(opts.holidayWorkDate)})`
+        : '';
+  return `[${titleTag(opts.attDivName)}] ${opts.name || APPLICANT_PLACEHOLDER}_${period}${extra}`;
 };
 
 /** 반차·시차는 하루짜리라 종료일자를 시작일자에 고정한다 */

@@ -41,27 +41,46 @@ export function parseApplicant(text: string): { name: string; chapter: string } 
 }
 
 /**
- * 제목 문구 — 사용자가 쓰던 형식 그대로.
- *   [휴가_연차] 정수범_FE_플랫폼서비스사업부문 [7월 24일]
- * 기간이 여러 날이면 끝 날짜를 함께 적는다 — [7월 24일~7월 25일]
+ * 제목 문구 — 휴가 신청서 작성 표기 표준(렌더러 calc.ts 의 vacationTitle 과 같은 형식).
+ * 제목에 성명·사용 날짜를 적고, 시차·반차는 정확한 시간대를, 대체휴가는 휴일근무일을 명시한다.
+ *   [연차] 정수범_8월 12일 · [반차] 정수범_8월 12일 (09:00~14:00)
+ *   [대체휴가] 정수범_8월 12일 (휴일근무일: 08/09)
+ * 기간이 여러 날이면 끝 날짜를 함께 적는다 — 8월 12일~8월 13일
  */
 export function formatVacationTitle(opts: {
   attDivName: string;
   name: string;
-  chapter: string;
-  division: string;
   fromDate: string;
   toDate: string;
+  useStartTime?: string;
+  useEndTime?: string;
+  holidayWorkDate?: string;
 }): string {
   const dayText = (d: string) => {
     const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? `${Number(m[2])}월 ${Number(m[3])}일` : d;
   };
+  // "YYYY-MM-DD" → "08/09" (휴일근무일 표기)
+  const shortDayText = (d: string) => {
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[2]}/${m[3]}` : d;
+  };
+  const tag = /시차/.test(opts.attDivName)
+    ? '시차'
+    : /반차/.test(opts.attDivName)
+      ? '반차'
+      : opts.attDivName;
   const period =
     opts.fromDate === opts.toDate
       ? dayText(opts.fromDate)
       : `${dayText(opts.fromDate)}~${dayText(opts.toDate)}`;
-  return `[휴가_${opts.attDivName}] ${opts.name}_${opts.chapter}_${opts.division} [${period}]`;
+  const extra =
+    /반차|시차/.test(opts.attDivName) && opts.useStartTime && opts.useEndTime
+      ? ` (${opts.useStartTime}~${opts.useEndTime})`
+      : opts.attDivName === '대체휴가' && opts.holidayWorkDate
+        ? ` (휴일근무일: ${shortDayText(opts.holidayWorkDate)})`
+        : '';
+  return `[${tag}] ${opts.name}_${period}${extra}`;
 }
 
 /** 양식 로드 대기 — 신청자·제목·콤보 위젯이 모두 준비될 때까지 */
@@ -616,16 +635,17 @@ export async function runVacationDraft(
 
     step('양식 작성 중…');
     const applicantText = await readApplicant(page);
-    const { name, chapter } = parseApplicant(applicantText);
+    const { name } = parseApplicant(applicantText);
     const title =
       input.title.trim() ||
       formatVacationTitle({
         attDivName: input.attDivName,
         name,
-        chapter,
-        division: WORKER_DIVISION,
         fromDate: input.fromDate,
         toDate: input.toDate,
+        useStartTime: input.useStartTime,
+        useEndTime: input.useEndTime,
+        holidayWorkDate: input.holidayWorkDate,
       });
 
     await setText(page, sel.title, title);

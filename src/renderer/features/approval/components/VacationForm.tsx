@@ -5,6 +5,7 @@ import { DatePicker } from '../../../components/DatePicker';
 import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
 import { Select } from '../../../components/Select';
+import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
@@ -14,7 +15,10 @@ import {
   APPLICANT_PLACEHOLDER,
   ATT_DIV_NAMES,
   DOC_REASONS,
+  defaultTimeRange,
   isSingleDayKind,
+  isSubstituteKind,
+  isTimedKind,
   today,
   vacationTitle,
 } from '../lib/calc';
@@ -43,6 +47,9 @@ export function VacationForm() {
   const [attDivName, setAttDivName] = useState(ATT_DIV_NAMES[0]);
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
+  const [useStartTime, setUseStartTime] = useState('09:00');
+  const [useEndTime, setUseEndTime] = useState('10:00');
+  const [holidayWorkDate, setHolidayWorkDate] = useState('');
   const [remark, setRemark] = useState('');
   const [titleEdited, setTitleEdited] = useState(false);
   const [title, setTitle] = useState('');
@@ -69,12 +76,21 @@ export function VacationForm() {
   }, []);
 
   const singleDay = isSingleDayKind(attDivName);
+  const timed = isTimedKind(attDivName);
+  const substitute = isSubstituteKind(attDivName);
   // 반차·시차는 하루짜리라 종료일자를 시작일자에 맞춰 둔다
   useEffect(() => {
     if (singleDay && toDate !== fromDate) setToDate(fromDate);
   }, [singleDay, fromDate, toDate]);
+  // 시차·반차 사용 시간대 — 근태구분을 바꾸면 그 종류의 기본 시간대로 리셋한다
+  useEffect(() => {
+    if (!timed) return;
+    const [s, e] = defaultTimeRange(attDivName);
+    setUseStartTime(s);
+    setUseEndTime(e);
+  }, [timed, attDivName]);
 
-  // 제목 미리보기 — 이름·소속은 [조회] 로 그룹웨어에서 읽어 오면 그때부터 실제 값이 들어간다
+  // 제목 미리보기 — 이름은 [조회] 로 그룹웨어에서 읽어 오면 그때부터 실제 값이 들어간다
   const titlePreview = useMemo(
     () =>
       vacationTitle({
@@ -82,17 +98,32 @@ export function VacationForm() {
         fromDate,
         toDate: singleDay ? fromDate : toDate,
         name: status?.name,
-        chapter: status?.chapter,
-        division: status?.division,
+        useStartTime: timed ? useStartTime : undefined,
+        useEndTime: timed ? useEndTime : undefined,
+        holidayWorkDate: substitute ? holidayWorkDate : undefined,
       }),
-    [attDivName, fromDate, toDate, singleDay, status],
+    [
+      attDivName,
+      fromDate,
+      toDate,
+      singleDay,
+      status,
+      timed,
+      useStartTime,
+      useEndTime,
+      substitute,
+      holidayWorkDate,
+    ],
   );
 
   const reasonOk = reason !== '기타' || !!reasonEtc.trim();
+  const timeOk = !timed || (!!useStartTime && !!useEndTime && useStartTime < useEndTime);
   const valid =
     !!fromDate &&
     !!toDate &&
     fromDate <= toDate &&
+    timeOk &&
+    (!substitute || !!holidayWorkDate) &&
     reasonOk &&
     !!emergencyContact.trim();
 
@@ -112,6 +143,10 @@ export function VacationForm() {
       attDivName,
       fromDate,
       toDate: singleDay ? fromDate : toDate,
+      // 제목 표기 표준 — 시차·반차는 시간대, 대체휴가는 휴일근무일이 제목에 들어간다
+      useStartTime: timed ? useStartTime : undefined,
+      useEndTime: timed ? useEndTime : undefined,
+      holidayWorkDate: substitute ? holidayWorkDate : undefined,
       // 사용자가 직접 고친 제목만 보낸다 — 비우면 main 이 신청자 이름까지 넣어 만든다.
       // 자리표시가 남아 있으면 고치다 만 것이므로 main 에 맡긴다(그대로 올라가면 곤란하다).
       title: titleEdited && !title.includes(APPLICANT_PLACEHOLDER) ? title.trim() : '',
@@ -216,6 +251,38 @@ export function VacationForm() {
           </p>
         </div>
       </FormRow>
+
+      {timed && (
+        <FormRow label="사용 시간대">
+          <div className="approval-form__stack">
+            <div className="approval-form__times">
+              <TimePicker value={useStartTime} onChange={setUseStartTime} disabled={busy} />
+              <span className="approval-form__tilde">~</span>
+              <TimePicker value={useEndTime} onChange={setUseEndTime} disabled={busy} />
+            </div>
+            <p className="hint">
+              {timeOk
+                ? '표기 표준 — 제목에 (시작~종료) 로 들어갑니다.'
+                : '종료 시각이 시작 시각보다 빠릅니다.'}
+            </p>
+          </div>
+        </FormRow>
+      )}
+
+      {substitute && (
+        <FormRow label="휴일근무일">
+          <div className="approval-form__stack">
+            <DatePicker
+              value={holidayWorkDate}
+              onChange={setHolidayWorkDate}
+              disabled={busy}
+            />
+            <p className="hint">
+              대체휴가의 근거가 된 휴일근무일 — 제목에 (휴일근무일: 00/00) 로 들어갑니다.
+            </p>
+          </div>
+        </FormRow>
+      )}
 
       <FormRow label="제목">
         <div className="approval-form__stack">
