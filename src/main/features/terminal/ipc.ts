@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -153,7 +154,9 @@ export function registerTerminalIpc() {
   // 입력대기 알림 — 뱃지(사이드바·독)는 sessions 브로드캐스트가 담당하고, 여기선 강도별 추가 신호만
   onAgentWaiting((info) => {
     const level = getNotifyLevel();
-    if (level === 'sound') shell.beep();
+    // 시스템 경고음(shell.beep) 대신 전용 알림음 — 다른 앱 경고음과 구분된다
+    if (level === 'sound')
+      execFile('afplay', ['/System/Library/Sounds/Blow.aiff'], () => {});
     if (level === 'alert') {
       void notify({
         title: '⏳ 입력 대기',
