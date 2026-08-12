@@ -157,6 +157,15 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 
 더불어 세션 패널 도입으로 생긴 래퍼 `.terminal__main` 에는 **`min-width/min-height: 0` + `overflow: hidden` 이 필수** — flex 아이템의 기본 `min-*: auto` 는 콘텐츠 기반이라 xterm 이 커지면 래퍼가 늘고 host(flex:1)도 커져 fit→resize→더 큰 xterm 무한 성장 루프가 된다.
 
+### ⚠️ 여백은 **`.xterm` 이 갖는다** — 마운트 부모에 padding 을 주면 마지막 행이 잘린다 (2026-08-12 실측)
+FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재는데, 이 앱은 전역이 `box-sizing: border-box`(`_base.scss`)라 **Chromium 이 그 값에 padding 을 포함해 돌려준다**(스펙의 content-box 가 아니다 — Firefox 와 다른 지점). 그래서 마운트 부모(`.terminal__host`)에 여백을 두면 fit 이 그만큼 더 있다고 믿고 **행·열을 하나씩 더 잡아 마지막 행이 화면 밖으로 잘렸다**(사용자 신고: "좌측 하단이 잘린다, 특히 폰트 14").
+
+- 실측(창 1200x800·dpr 2): host 콘텐츠 **725px** 인데 fit 은 **741px**(= 725 + 상하 8px) 로 계산 → 폰트 13 은 셀 17px 에 6px 넘침(아랫부분만 깎여 눈에 덜 띔), **폰트 14 는 셀 18px 에 13px 넘쳐 글자의 72% 가 깎였다.** 좌우도 18px 과대라 열이 남았다.
+- **반대로 `.xterm` 자신의 padding 은 FitAddon 이 정확히 뺀다**(`proposeDimensions` 가 element 의 4방향 padding 을 읽는다) — 그래서 여백을 그 자리로 옮겼다. `.xterm-viewport` 는 `position:absolute; inset:0` 이라 스크롤바만 여백 위에 겹치고, 글자를 그리는 `.xterm-screen` 은 여백 안쪽에 놓인다.
+- MO(`src/mobile/mobile.css` 의 `#term`)도 같은 구조라 같이 옮겼다 — 폰에서도 세로 8px·가로 8px 을 과대 계산하고 있었다.
+- 검증: 폰트 9~22 전 구간 + 컨테이너 높이/폭 조합 84종에서 `.xterm-screen` 이 콘텐츠 박스를 **한 번도 넘지 않음**(최대 0px). 회귀 확인은 `screen.getBoundingClientRect().bottom - (xterm.rect.bottom - paddingBottom) ≤ 0` 로 잰다.
+- ⚠️ 되돌리지 말 것 — 여백을 host 로 다시 옮기면 그 순간 같은 버그가 재발한다. 여백 값을 조정할 일이 있으면 `.terminal__host .xterm` 의 padding 을 고친다.
+
 ## attach 프로토콜
 세션별 **링버퍼(512KB, chunk 단위)** 를 replay 로 보내 스크롤백을 복원하고, **현재 화면의 진실은 SIGWINCH redraw** 가 담당한다(크기가 다르면 resize 자체가, 같으면 `rows+1` → 40ms 후 원복 토글 → TUI 가 전체 리렌더). 출력은 **16ms 배칭** + `seq` 를 실어 보내고, 클라이언트는 `seq ≤ attach 시점 seq` 를 버려 replay 와 라이브 출력의 중복을 막는다.
 

@@ -225,14 +225,20 @@ body {
 #term {
   flex: 1;
   min-height: 0;
-  padding: 4px 2px 4px 6px;
   position: relative; /* '맨 아래로' 버튼 기준 */
   /* 세로 드래그는 mobile.ts 가 scrollLines() 로 직접 처리한다 — 브라우저 제스처에 안 넘김 */
   touch-action: none;
 }
 
+/* ⚠️ 여백은 `#term` 이 아니라 `.xterm` 이 가진다 — FitAddon 은 부모의
+   getComputedStyle().height 를 가용 높이로 쓰는데 `box-sizing: border-box` 라
+   브라우저가 그 값에 padding 을 포함해 돌려준다. 부모에 여백을 두면 fit 이 세로 8px·
+   가로 8px 을 더 있다고 믿고 행·열을 하나씩 더 잡아 **마지막 행이 잘린다**.
+   `.xterm` 자신의 padding 은 FitAddon 이 정확히 빼도록 설계돼 있다
+   (데스크톱도 같은 이유로 옮겼다 — features/terminal.md, 2026-08-12). */
 #term .xterm {
   height: 100%;
+  padding: 4px 2px 4px 6px;
 }
 
 /* 한글 조합 중인 글자 — 자모가 결합돼야 한 글자가 되므로 조합 자체는 없앨 수 없다

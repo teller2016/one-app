@@ -1106,11 +1106,20 @@
     border: 0;
     @include panel-dark;
     border-radius: 0;
-    padding: 8px 6px 8px 12px; // 우측은 스크롤바 자리라 좁게
     overflow: hidden;
 
+    // ⚠️ **여백은 host 가 아니라 `.xterm` 이 가진다** — FitAddon 은 부모의
+    // `getComputedStyle().height` 를 가용 높이로 쓰는데, 전역이 `box-sizing: border-box`
+    // (_base.scss)라 **Chromium 은 그 값에 padding 을 포함**해 돌려준다. 그래서 host 에
+    // 여백을 두면 fit 이 상하 16px·좌우 18px 을 더 있다고 믿고 행·열을 하나씩 더 잡아
+    // **마지막 행이 잘렸다**(2026-08-12 사용자 신고 — 실측: host 콘텐츠 725px 인데 fit 은
+    // 741px 로 계산, 폰트 14px 에서 13px 넘쳐 글자의 72% 가 깎였다. 13px 은 6px 이라
+    // 아랫부분만 살짝 깎여 눈에 덜 띄었을 뿐 같은 버그다).
+    // 반대로 **`.xterm` 자신의 padding 은 FitAddon 이 정확히 빼도록 설계돼 있다**
+    // (proposeDimensions 가 element 의 padding 4방향을 읽는다) — 그래서 여기로 옮겼다.
     .xterm {
       height: 100%;
+      padding: 8px 6px 8px 12px; // 우측은 스크롤바 자리라 좁게
     }
 
     // xterm 번들 CSS 가 뷰포트 배경을 #000 으로 하드코딩해 둬서 테마를 안 따른다 —
