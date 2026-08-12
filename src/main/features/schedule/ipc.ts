@@ -7,7 +7,9 @@ import { getCredentials } from '../settings/store';
 import { readUserJson, writeUserJson } from '../../lib/store';
 import {
   SCHEDULE_DEFAULT_START_TIME,
+  SCHEDULE_START_CONFIG_DEFAULT,
   type ScheduleRunPayload,
+  type ScheduleStartConfig,
   type ScheduleWorkItem,
   type ScheduleWorklog,
 } from '../../../shared/types';
@@ -19,8 +21,29 @@ let currentPage: Page | null = null;
 // (2026-07-29 실측: 쓰기 후 45초에도 leveldb 미커밋) userData JSON 에 즉시 저장한다.
 const WORKLOG_FILE = 'worklog.json';
 
+// 요일별 기준 시작 시각 (재택/출근) — 등록 전 확인의 기준값
+const START_CONFIG_FILE = 'schedule-start.json';
+
 const isTime = (v: unknown): v is string =>
   typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v);
+
+/** 기준 시작 시각 저장본 보정 — 형식이 어긋난 필드는 기본값으로 되돌린다 */
+function normalizeStartConfig(raw: unknown): ScheduleStartConfig {
+  const source = (raw as Partial<ScheduleStartConfig>) ?? {};
+  return {
+    remoteDays: Array.isArray(source.remoteDays)
+      ? source.remoteDays.filter(
+          (d): d is number => typeof d === 'number' && d >= 1 && d <= 5,
+        )
+      : SCHEDULE_START_CONFIG_DEFAULT.remoteDays,
+    remoteStart: isTime(source.remoteStart)
+      ? source.remoteStart
+      : SCHEDULE_START_CONFIG_DEFAULT.remoteStart,
+    officeStart: isTime(source.officeStart)
+      ? source.officeStart
+      : SCHEDULE_START_CONFIG_DEFAULT.officeStart,
+  };
+}
 
 /** 저장본 정규화 — 항목만 담던 예전 배열 형식도 읽어 객체로 승격한다 */
 function normalizeWorklog(raw: unknown): ScheduleWorklog {
@@ -149,6 +172,19 @@ export function registerScheduleIpc() {
     writeUserJson(WORKLOG_FILE, normalizeWorklog(worklog));
     return { ok: true };
   });
+
+  ipcMain.handle('schedule:start-config:get', () =>
+    normalizeStartConfig(readUserJson<unknown>(START_CONFIG_FILE, null)),
+  );
+
+  ipcMain.handle(
+    'schedule:start-config:set',
+    (_event, config: ScheduleStartConfig) => {
+      const normalized = normalizeStartConfig(config);
+      writeUserJson(START_CONFIG_FILE, normalized);
+      return normalized;
+    },
+  );
 
   ipcMain.handle('schedule:cancel', () => {
     if (currentPage) {

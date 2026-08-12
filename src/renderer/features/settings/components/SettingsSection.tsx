@@ -11,11 +11,13 @@ import { TextLink } from '../../../components/TextLink';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
-import type {
-  ReminderConfig,
-  DayReminderConfig,
-  TerminalNotifyLevel,
-  ThemePref,
+import {
+  SCHEDULE_START_CONFIG_DEFAULT,
+  type ReminderConfig,
+  type DayReminderConfig,
+  type ScheduleStartConfig,
+  type TerminalNotifyLevel,
+  type ThemePref,
 } from '../../../../shared/types';
 
 const DAY_LABELS: Record<number, string> = {
@@ -52,6 +54,9 @@ export function SettingsSection() {
   const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatMinutes, setRepeatMinutes] = useState('10');
+  const [schedStart, setSchedStart] = useState<ScheduleStartConfig>(
+    SCHEDULE_START_CONFIG_DEFAULT,
+  );
   const [termNotify, setTermNotify] = useState<TerminalNotifyLevel>('sound');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,7 +86,17 @@ export function SettingsSection() {
         setRepeatMinutes(String(r.repeat.minutes));
       }
     });
+    window.oneApp?.schedule.getStartConfig().then(setSchedStart);
   }, []);
+
+  // 재택 요일 토글 — 오름차순 유지
+  const toggleRemoteDay = (day: number, on: boolean) =>
+    setSchedStart((prev) => ({
+      ...prev,
+      remoteDays: on
+        ? [...prev.remoteDays, day].sort((a, b) => a - b)
+        : prev.remoteDays.filter((d) => d !== day),
+    }));
 
   // 특정 요일의 출근/퇴근 슬롯 수정
   const updateSlot = (
@@ -134,6 +149,9 @@ export function SettingsSection() {
             minutes: Number(repeatMinutes) || 10,
           },
         });
+      const savedSchedStart =
+        await window.oneApp.schedule.setStartConfig(schedStart);
+      setSchedStart(savedSchedStart);
       const auto = await window.oneApp.setAutostart(autostart);
       setAutostart(auto.enabled);
       setHasPassword(res.hasPassword);
@@ -418,6 +436,49 @@ export function SettingsSection() {
           />
           <span>분마다 계속 알림</span>
         </div>
+      </Collapsible>
+
+      <Collapsible
+        title="일정 등록"
+        icon={<Icon name="calendar" size={14} />}
+        storageKey="settings:group:schedule"
+      >
+        <p className="hint settings__group-desc">
+          요일별 기준 시작 시각 — [일정 등록] 실행 시 시작 시각이 기준과 다르면
+          한 번 더 확인합니다.
+        </p>
+        <FormRow label="재택 요일">
+          <div className="settings__days-row">
+            {[1, 2, 3, 4, 5].map((day) => (
+              <Checkbox
+                key={day}
+                checked={schedStart.remoteDays.includes(day)}
+                onChange={(e) => toggleRemoteDay(day, e.target.checked)}
+                disabled={loading}
+                label={DAY_LABELS[day]}
+              />
+            ))}
+          </div>
+        </FormRow>
+        <FormRow label="재택 시작">
+          {/* small 금지 — .picker--time-sm 은 flex:1 이라 FormRow 에서 행 전체로 늘어난다 */}
+          <TimePicker
+            value={schedStart.remoteStart}
+            onChange={(remoteStart) =>
+              setSchedStart((prev) => ({ ...prev, remoteStart }))
+            }
+            disabled={loading}
+          />
+        </FormRow>
+        <FormRow label="출근 시작">
+          <TimePicker
+            value={schedStart.officeStart}
+            onChange={(officeStart) =>
+              setSchedStart((prev) => ({ ...prev, officeStart }))
+            }
+            disabled={loading}
+          />
+        </FormRow>
       </Collapsible>
 
       <div className="form-actions">

@@ -60,6 +60,8 @@ const formatDuration = (mins: number): string => {
 const formatHours = (mins: number): string =>
   `${Math.round((mins / 60) * 10) / 10}h`;
 
+const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
 // 노션에 붙여넣는 형식 그대로 — "종료시간 일정명" 줄 목록 (매크로 입력과 동일)
 const buildNotionText = (items: WorkItem[]): string =>
   items
@@ -230,6 +232,33 @@ export function ScheduleSection() {
   const copyNotion = () =>
     copy(buildNotionText(items), { success: '노션용 텍스트를 복사했습니다' });
 
+  // 등록 대상 날짜 — main 의 resolveBaseDate 와 같은 규칙 (오늘/어제/직접 입력)
+  const resolveTargetDate = (): Date | null => {
+    if (dateType === 'date') {
+      const m = customDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    }
+    const d = new Date();
+    if (dateType === 'yesterday') d.setDate(d.getDate() - 1);
+    return d;
+  };
+
+  // 시작 시각 검사 — 대상 날짜 요일의 기준(재택/출근, 환경설정)과 다르면 한 번 확인.
+  // 요일이 바뀌어도 저장된 시작 시각이 그대로 남는 구조라 깜빡 오등록을 여기서 걸러낸다.
+  const confirmStartTime = async (): Promise<boolean> => {
+    const day = resolveTargetDate()?.getDay();
+    if (day === undefined || day < 1 || day > 5) return true; // 주말은 기준 없음
+    const cfg = await window.oneApp.schedule.getStartConfig();
+    const remote = cfg.remoteDays.includes(day);
+    const expected = remote ? cfg.remoteStart : cfg.officeStart;
+    if (expected === startTime) return true;
+    return confirm({
+      title: '시작 시각 확인',
+      message: `${DAY_NAMES[day]}요일은 ${remote ? '재택' : '출근'}일이라 보통 ${expected} 시작인데, 지금은 ${startTime}입니다. 이대로 등록할까요?`,
+      confirmLabel: '이대로 등록',
+    });
+  };
+
   const run = async (testMode: boolean) => {
     if (!window.oneApp?.schedule) {
       setLog('[오류] 앱 연결(preload)이 되지 않았습니다.\n');
@@ -244,6 +273,8 @@ export function ScheduleSection() {
       setLog('[경고] 날짜를 선택하세요.\n');
       return;
     }
+    // 실제 등록만 검사 (테스트 모드는 등록하지 않으므로 제외)
+    if (!testMode && !(await confirmStartTime())) return;
     setLog('');
     setDone(false);
     setRunning(true);

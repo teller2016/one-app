@@ -4,6 +4,7 @@ import type {
   ScheduleRunResult,
   ScheduleOutputChunk,
   ScheduleDoneInfo,
+  ScheduleStartConfig,
   ScheduleWorklog,
   AppSettingsView,
   SaveSettingsInput,
@@ -112,6 +113,10 @@ declare global {
         cancel: () => Promise<{ ok: boolean }>;
         getWorklog: () => Promise<ScheduleWorklog>;
         setWorklog: (worklog: ScheduleWorklog) => Promise<{ ok: boolean }>;
+        getStartConfig: () => Promise<ScheduleStartConfig>;
+        setStartConfig: (
+          config: ScheduleStartConfig,
+        ) => Promise<ScheduleStartConfig>;
         onOutput: (cb: (chunk: ScheduleOutputChunk) => void) => () => void;
         onDone: (cb: (info: ScheduleDoneInfo) => void) => () => void;
       };

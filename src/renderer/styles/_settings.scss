@@ -67,3 +67,10 @@
 .settings__group-desc {
   margin: 0 0 12px;
 }
+
+// 일정 등록 — 재택 요일 체크박스 행 (월~금 가로 나열)
+.settings__days-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

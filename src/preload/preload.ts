@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
   ScheduleRunPayload,
+  ScheduleStartConfig,
   ScheduleWorklog,
   SaveSettingsInput,
   ThemePref,
@@ -73,6 +74,10 @@ contextBridge.exposeInMainWorld("oneApp", {
     getWorklog: () => ipcRenderer.invoke("schedule:worklog:get"),
     setWorklog: (worklog: ScheduleWorklog) =>
       ipcRenderer.invoke("schedule:worklog:set", worklog),
+    // 요일별 기준 시작 시각 (재택/출근) — 등록 전 확인용, 환경설정에서 관리
+    getStartConfig: () => ipcRenderer.invoke("schedule:start-config:get"),
+    setStartConfig: (config: ScheduleStartConfig) =>
+      ipcRenderer.invoke("schedule:start-config:set", config),
     // 실행 로그(stdout/stderr/info) 구독. 해제 함수를 반환한다.
     onOutput: (cb: (chunk: { stream: string; data: string }) => void) => {
       const listener = (_e: unknown, chunk: { stream: string; data: string }) =>

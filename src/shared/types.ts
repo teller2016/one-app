@@ -37,6 +37,24 @@ export type ScheduleWorklog = {
   startTime: string; // "HH:MM" — 타임라인 계산의 기준
 };
 
+/**
+ * 일정 등록 — 요일별 기준 시작 시각 (userData/schedule-start.json).
+ * 재택 요일이냐 아니냐로 기준 시각을 나누고, 등록 실행 시 시작 시각이
+ * 기준과 다르면 확인 다이얼로그를 한 번 거친다 (오등록 방지).
+ */
+export type ScheduleStartConfig = {
+  remoteDays: number[]; // 재택 요일 (1=월 … 5=금, JS Date.getDay 기준)
+  remoteStart: string; // 재택 요일 시작 시각 "HH:MM"
+  officeStart: string; // 출근 요일 시작 시각 "HH:MM"
+};
+
+/** 기준 시작 시각 기본값 — main 저장본 보정과 렌더러 초기값의 단일 소스 */
+export const SCHEDULE_START_CONFIG_DEFAULT: ScheduleStartConfig = {
+  remoteDays: [1, 5], // 월·금 재택
+  remoteStart: "09:00",
+  officeStart: SCHEDULE_DEFAULT_START_TIME,
+};
+
 // ── 환경설정 ──
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
 export type ThemePref = "system" | "light" | "dark";
