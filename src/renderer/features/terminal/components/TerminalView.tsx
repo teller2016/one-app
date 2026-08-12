@@ -360,6 +360,20 @@ export const TerminalView = memo(function TerminalView({
     // ⚠️ 대체 화면(TUI)에서만 개입한다 — 일반 화면(zsh 프롬프트)에서는 ESC+CR 이 개행이
     // 되지 않고 그 줄이 그대로 실행됐다(2026-08-06 실측). 셸은 기본 Enter 동작 유지.
     term.attachCustomKeyEventHandler((ev) => {
+      // ⌘⌫ = 줄 지우기 (macOS 관례) — xterm 은 Backspace 에서 meta 를 무시해 한 글자만
+      // 지워진다. VS Code·iTerm 처럼 Ctrl+U(\x15)로 바꿔 보내면 zsh(kill-whole-line)·
+      // claude 입력줄 모두 커서가 있는 줄 전체를 지운다.
+      if (
+        ev.key === 'Backspace' &&
+        ev.metaKey &&
+        !ev.ctrlKey &&
+        !ev.altKey &&
+        !ev.shiftKey &&
+        !ev.isComposing
+      ) {
+        if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x15');
+        return false; // keypress·keyup 도 막는다 (Shift+Enter 와 같은 이유)
+      }
       if (
         ev.key === 'Enter' &&
         ev.shiftKey &&
