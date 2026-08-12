@@ -19,10 +19,8 @@ import type { OvertimeSubmitResult } from '../../../../shared/types';
  */
 export function OvertimeForm({
   onBusyChange,
-  onDone,
 }: {
   onBusyChange?: (busy: boolean) => void;
-  onDone?: () => void;
 }) {
   const toast = useToast();
   const [date, setDate] = useState(today);
@@ -81,21 +79,7 @@ export function OvertimeForm({
         icon="check"
         title={done.title ?? ''}
         hint="열린 창에 작성돼 있습니다. 내용을 확인하고 [상신]을 눌러 마무리하세요. (앱이 상신까지 하지는 않습니다)"
-      >
-        <Button
-          variant="primary"
-          onClick={() => {
-            void window.oneApp.approval.closeWindow();
-            if (onDone) onDone();
-            else setDone(null);
-          }}
-        >
-          창 닫기
-        </Button>
-        <Button variant="ghost" onClick={() => setDone(null)}>
-          창 그대로 두고 계속
-        </Button>
-      </DoneCard>
+      />
     );
   }
 

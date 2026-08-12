@@ -27,6 +27,8 @@ export const AUTOMATION_PARTITION = {
   attendance: 'gw-attendance',
   schedule: 'gw-schedule',
   weekly: 'gw-weekly',
+  // 결재 완료 후 여는 전자결재 문서함 — 작성 창(approval)과 동시에 살아 있으므로 분리해야 한다
+  eaBox: 'gw-ea-box',
 } as const;
 
 const DEFAULT_PARTITION = AUTOMATION_PARTITION.approval;

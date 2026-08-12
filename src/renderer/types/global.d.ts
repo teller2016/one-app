@@ -224,7 +224,7 @@ declare global {
           status?: VacationStatus;
           error?: string;
         }>;
-        closeWindow: () => Promise<{ closed: boolean }>;
+        openEaBox: () => Promise<{ ok: boolean; error?: string }>;
         onProgress: (cb: (progress: ApprovalProgress) => void) => () => void;
       };
       weekly: {

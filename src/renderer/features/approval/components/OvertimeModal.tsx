@@ -17,7 +17,7 @@ export function OvertimeModal({ onClose }: { onClose: () => void }) {
         if (!busy) onClose();
       }}
     >
-      <OvertimeForm onBusyChange={setBusy} onDone={onClose} />
+      <OvertimeForm onBusyChange={setBusy} />
     </Modal>
   );
 }

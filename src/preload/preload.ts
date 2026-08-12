@@ -265,8 +265,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("approval:vacation:submit", input),
     // 연차 현황 조회 (총·사용·잔여)
     vacationStatus: () => ipcRenderer.invoke("approval:vacation:status"),
-    // 사용자에게 남겨둔 자동화 창 닫기
-    closeWindow: () => ipcRenderer.invoke("approval:close-window"),
+    // 전자결재 상신함 창 열기 (작성 창과 별개 — 세션 주입으로 로그인 화면 없음)
+    openEaBox: () => ipcRenderer.invoke("approval:open-ea-box"),
     // 진행 단계 구독 (양식 열기 → 작성 → 상신). 해제 함수를 반환한다.
     onProgress: (cb: (progress: ApprovalProgress) => void) => {
       const listener = (_e: unknown, progress: ApprovalProgress) =>

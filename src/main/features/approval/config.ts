@@ -16,6 +16,30 @@ export const GW_CONFIG = {
 /** 근무자 표·기안부서의 '소속' 칸 문구 (기안부서 select 값 "FE" 대신 전체 소속 표기) */
 export const WORKER_DEPT = '플랫폼서비스사업부문 FE';
 
+/**
+ * 전자결재 상신함 — 결재 작성을 마친 뒤 "내가 올린 문서" 를 확인하러 가는 링크.
+ * 작성과 달리 자동화하지 않고, 세션만 붙여 창을 그대로 사용자에게 넘긴다.
+ *
+ * ⚠️ **URL 로 바로 갈 수 없다**(2026-08-12 실측) — 문서함은 포털 셸(bizbox.do) 안
+ * `iframe#_content` 로 열리고, 셸에 `menu_no` 를 붙여도 포털 홈(userMain.do)으로 되돌려진다.
+ * 그래서 [전자결재] 상단 메뉴 → [상신함] 좌측 메뉴를 **클릭**해 들어간다.
+ */
+export const EA_BOX_CONFIG = {
+  selectors: {
+    eaMenu: '#topMenu2000000000', // 상단 [전자결재]
+    /** 좌측 [상신함] — id 가 숫자로 시작해 CSS 선택자로 못 쓴다(getElementById 로 찾을 것) */
+    draftBoxAnchorId: '2002010000_anchor',
+    contentFrame: 'iframe#_content', // 문서함이 열리는 프레임
+  },
+  /** 상신함이 열렸다고 판정하는 프레임 URL 조각 */
+  listUrlMark: 'EaDocList.do',
+  /**
+   * 셸 진입에 실패했을 때의 폴백 — 목록만 뜬다(문서함 이동 메뉴 없음).
+   * 창을 아예 못 여는 것보다는 낫다.
+   */
+  listUrl: 'https://gw.forbiz.co.kr/eap/ea/eadoc/EaDocList.do?menu_no=2002010000',
+};
+
 /** 야근 결재 — 전자결재 '연장근무내역서' (EAAppDocPop.do?form_id=41) */
 export const OVERTIME_CONFIG = {
   // 양식 팝업 — 로그인 세션만 있으면 직접 URL 로 열린다

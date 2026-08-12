@@ -151,20 +151,7 @@ export function VacationForm() {
               ? `전자결재 본문(종류·사유·기간·비상연락망·인수인계·작성일자)까지 채워 창에 띄웠습니다. 확인하고 [상신]을 눌러 마무리하세요.${spent ? ` (${spent})` : ''}`
               : `신청내역은 저장됐지만 전자결재 창을 자동으로 마무리하지 못했습니다. 창에서 확인하고 [상신]을 눌러 주세요.${spent ? ` (${spent})` : ''}`
         }
-      >
-        <Button
-          variant="primary"
-          onClick={() => {
-            void window.oneApp.approval.closeWindow();
-            setDone(null);
-          }}
-        >
-          창 닫기
-        </Button>
-        <Button variant="ghost" onClick={() => setDone(null)}>
-          창 그대로 두고 계속
-        </Button>
-      </DoneCard>
+      />
     );
   }
 

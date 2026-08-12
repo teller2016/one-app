@@ -87,20 +87,7 @@ export function ExpendForm() {
         icon="check"
         title={`항목 ${done.added}건 작성 완료`}
         hint="지출결의서 창에 그대로 떠 있습니다. 첨부파일을 넣고 [결재상신]을 눌러 마무리하세요. (앱이 상신까지 하지는 않습니다)"
-      >
-        <Button
-          variant="primary"
-          onClick={() => {
-            void window.oneApp.approval.closeWindow();
-            setDone(null);
-          }}
-        >
-          지출결의서 창 닫기
-        </Button>
-        <Button variant="ghost" onClick={() => setDone(null)}>
-          창 그대로 두고 계속
-        </Button>
-      </DoneCard>
+      />
     );
   }
 

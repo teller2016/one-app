@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
+import { openEaBox } from './eaBox';
 import { runExpendDraft } from './expend';
-import { closeKeptPage } from './keeper';
 import { runOvertimeDraft } from './overtime';
 import {
   getExpendDefaults,
@@ -121,6 +121,17 @@ export function registerApprovalIpc() {
     },
   );
 
-  // 남겨둔 자동화 창 닫기 — 페이지 이탈 가드로 창이 안 닫힐 때의 확실한 경로
-  ipcMain.handle('approval:close-window', () => closeKeptPage());
+  // 전자결재 상신함 열기 — 작성 후 "내가 올린 문서" 확인 경로 (작성 창과 별개 창)
+  ipcMain.handle(
+    'approval:open-ea-box',
+    async (): Promise<{ ok: boolean; error?: string }> => {
+      if (!getCredentials()) return { ok: false, error: NO_ACCOUNT };
+      try {
+        await openEaBox();
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
 }
