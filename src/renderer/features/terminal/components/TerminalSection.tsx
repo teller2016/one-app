@@ -188,7 +188,9 @@ const NO_GROUPS: LayoutNode[] = [];
 const FULL_RECT: PaneRect = { left: 0, top: 0, width: 100, height: 100 };
 const SINGLE_PANEL_ID = '__single__';
 
-export function TerminalSection() {
+/** active=false 는 keep-alive 로 숨은 상태(App 이 언마운트 대신 visibility 로 숨긴다) —
+ *  pane 숨김(크기 주장 중지)·폴링 중지·전역 단축키 해제·포털 모달 닫기가 걸린다 */
+export function TerminalSection({ active = true }: { active?: boolean }) {
   const confirm = useConfirm();
   const toast = useToast();
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
@@ -213,6 +215,24 @@ export function TerminalSection() {
   // 분할 그룹(트리 배열) — selKey 별. 파생값·갱신·영속화는 아래 '분할 그룹' 블록
   const [layouts, setLayouts] = useState<Record<string, LayoutNode[]>>(savedLayouts);
   const available = !!terminalApi();
+
+  // keep-alive 로 숨는 순간의 뒷정리 —
+  // ① body 포털 모달(Modal)·전체화면 오버레이는 섹션을 visibility 로 숨겨도 화면 위에
+  //    그대로 남으므로 닫는다(섹션이 언마운트되던 예전 동작과 동일).
+  // ② 숨은 xterm(textarea)이 포커스를 쥔 채 남으면 다른 섹션에서의 타이핑이 그대로
+  //    PTY 로 들어간다(⌘[ 같은 키보드 이동은 포커스를 옮기지 않는다) — 회수한다.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (active) return;
+    setNewWsOpen(false);
+    setWorktreeFor(null);
+    setNewSessionOpen(false);
+    setPresetsOpen(false);
+    setMoOpen(false);
+    setChangesFullOpen(false);
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && rootRef.current?.contains(el)) el.blur();
+  }, [active]);
 
   const [fontSize, setFontSize] = useState(savedFontSize);
   // pane 들이 memo 로 묶여 있으므로 내려보내는 콜백은 전부 참조가 고정돼야 한다
@@ -263,14 +283,17 @@ export function TerminalSection() {
     );
   }, []);
   useEffect(() => {
+    // keep-alive 로 숨은 동안은 조회하지 않는다 — 복귀(active) 시 이 effect 가 1회 따라잡는다
+    if (!active) return;
     void refreshWorktrees();
-  }, [workspaces, refreshWorktrees]);
+  }, [active, workspaces, refreshWorktrees]);
   // ⚠️ 인라인 화살표 금지(renderer-ui 규칙) — identity 가 매 렌더 바뀌면 인터벌이
   // 계속 리셋돼 10초 폴링이 한 번도 발화하지 않았다(2026-08-07 성능 감사에서 발견).
   const pollWorktrees = useCallback(() => {
     void refreshWorktrees();
   }, [refreshWorktrees]);
-  usePolling(pollWorktrees, WORKTREE_POLL_MS, { immediate: false });
+  // 섹션이 보일 때만 — 숨은 채로 워크스페이스마다 git 조회를 돌릴 이유가 없다
+  usePolling(pollWorktrees, WORKTREE_POLL_MS, { immediate: false, enabled: active });
 
   // ── 세션 목록·상태 — main 이 payload 로 push, 재조회는 최초 1회뿐 ──
   useEffect(() => {
@@ -1098,6 +1121,9 @@ export function TerminalSection() {
   // 핸들러가 먼저 처리해 같은 키가 셸에도 전달된다(⌃Tab 이 특히 그렇다).
   // ⚠️ ⌘W(창 닫기)·⌘+/-(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다.
   useEffect(() => {
+    // keep-alive 로 숨은 동안은 바인딩 자체를 걷는다 — 안 걷으면 다른 섹션에서 누른
+    // ⌘T·⌘⇧W 가 보이지 않는 터미널의 세션을 만들고 죽인다
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       // 이름 편집·검색 입력 중에는 넘긴다 (xterm 의 입력은 textarea 라 여기 안 걸린다)
       if ((document.activeElement as HTMLElement | null)?.tagName === 'INPUT') return;
@@ -1137,6 +1163,7 @@ export function TerminalSection() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [
+    active,
     tabView,
     activeId,
     activeSession,
@@ -1300,6 +1327,7 @@ export function TerminalSection() {
     // 축소 시엔 섹션 좌측 여백도 줄인다 — 아이콘 폭(48)보다 패딩(28)이 도드라져
     // 접었는데도 왼쪽이 비어 보였다(2026-08-06 사용자 지적)
     <div
+      ref={rootRef}
       className={'terminal' + (sideCollapsed ? ' terminal--side-collapsed' : '')}
     >
       <aside
@@ -1489,8 +1517,11 @@ export function TerminalSection() {
                 <TerminalView
                   key={s.id}
                   sessionId={s.id}
-                  visible={layoutRects ? !!pane : s.id === activeId}
-                  focused={s.id === activeId}
+                  // 섹션이 keep-alive 로 숨으면 pane 전부를 '숨은 pane' 으로 내린다 —
+                  // 크기 주장 중지(visibleRef)·⌘F 해제(focused)가 기존 게이트 그대로 걸리고,
+                  // 복귀 시 visible/focused effect 가 fit·재주장·리드로·포커스를 복원한다
+                  visible={active && (layoutRects ? !!pane : s.id === activeId)}
+                  focused={active && s.id === activeId}
                   rectLeft={pane?.rect.left}
                   rectTop={pane?.rect.top}
                   rectW={pane?.rect.width}
@@ -1608,8 +1639,9 @@ export function TerminalSection() {
             key={selection?.kind === 'other' ? `s:${activeId}` : selKey}
             target={changesTarget}
             onExpand={() => setChangesFullOpen(true)}
-            // 오버레이가 떠 있는 동안 드로어 폴링 중지 — 같은 대상 이중 git 조회 방지
-            polling={!changesFullOpen}
+            // 오버레이가 떠 있는 동안(이중 git 조회 방지)과 섹션이 keep-alive 로
+            // 숨어 있는 동안(안 보는 diff 폴링은 낭비)은 드로어 폴링 중지
+            polling={active && !changesFullOpen}
           />
         </aside>
       )}

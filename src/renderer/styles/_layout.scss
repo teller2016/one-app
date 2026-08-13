@@ -328,4 +328,24 @@
   padding-top: var(--titlebar-h);
   overflow: auto;
   min-height: 0;
+
+  // 터미널 keep-alive 래퍼 — 섹션을 떠나도 언마운트하지 않고 숨긴다(App.tsx).
+  // 숨김은 visibility — display:none 은 크기가 0 이 되어 복귀 때 xterm 이 80x24 를
+  // 거치며 TUI 가 두 번 리플로우한다(숨은 pane 과 같은 규칙, features/terminal.md).
+  // absolute 의 기준은 .content(relative)라 top 을 .main 의 padding-top 과 같은 값으로
+  // 잡는다 — 숨어서도 활성일 때와 같은 크기여야 전환 시 PTY 리사이즈가 0 이다.
+  &__keep {
+    height: 100%;
+    min-height: 0;
+
+    &--hidden {
+      visibility: hidden;
+      position: absolute;
+      inset: var(--titlebar-h) 0 0 0;
+      // ⚠️ 기반 클래스의 height:100% 를 풀어야 한다 — absolute 에서 top+height 가
+      // bottom:0 을 이기므로(over-constrained) 래퍼가 .content 아래로 44px 삐져나가
+      // 숨은 크기 ≠ 활성 크기가 된다(E2E 실측 859→903). auto 면 inset 이 크기를 정한다.
+      height: auto;
+    }
+  }
 }

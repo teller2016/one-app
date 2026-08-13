@@ -36,7 +36,8 @@ const SECTIONS: AppSection[] = [
     id: "terminal",
     label: "터미널",
     icon: <Icon name="terminal" size={16} />,
-    render: () => <TerminalSection />,
+    // 터미널은 keep-alive — <main> 이 직접 상주 마운트한다 (App 렌더의 main__keep 참고)
+    render: () => null,
   },
   {
     id: "jira",
@@ -114,6 +115,13 @@ const loadSeenKeys = (): string[] => {
 
 export function App() {
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
+  // 터미널 keep-alive — 한 번 방문하면 섹션을 떠나도 언마운트하지 않고 숨긴다(visibility).
+  // xterm·attach 가 살아 있어 복귀가 즉시이고(재attach 왕복·TUI 전체 리드로 없음),
+  // 재마운트가 만들던 버그 부류(alt 게이트 오판·링버퍼 DA 재응답)가 아예 생기지 않는다.
+  const [termVisited, setTermVisited] = useState(SECTIONS[0].id === "terminal");
+  useEffect(() => {
+    if (activeId === "terminal") setTermVisited(true);
+  }, [activeId]);
   // 섹션 방문 히스토리 — 뒤로(⌘[ · 스와이프 오른쪽 · 마우스 뒤로)/앞으로(⌘] · 반대 방향)
   const backStack = useRef<string[]>([]);
   const fwdStack = useRef<string[]>([]);
@@ -326,9 +334,26 @@ export function App() {
 
             {/* 메인 영역 — 섹션마다 별도 경계(key)라 다른 섹션으로 옮기면 오류 상태도 초기화된다 */}
             <main className="main">
-              <ErrorBoundary key={active.id} label={active.label}>
-                {active.render()}
-              </ErrorBoundary>
+              {/* 터미널 — 상주(keep-alive). 숨김은 언마운트가 아니라 visibility 다(근태
+                  위젯과 같은 규칙). 경계에 key 가 없어 섹션 이동으로 오류가 초기화되지
+                  않는다 — 복구는 폴백 화면의 [다시 시도]가 담당. */}
+              {termVisited && (
+                <div
+                  className={
+                    "main__keep" +
+                    (activeId === "terminal" ? "" : " main__keep--hidden")
+                  }
+                >
+                  <ErrorBoundary label="터미널">
+                    <TerminalSection active={activeId === "terminal"} />
+                  </ErrorBoundary>
+                </div>
+              )}
+              {activeId !== "terminal" && (
+                <ErrorBoundary key={active.id} label={active.label}>
+                  {active.render()}
+                </ErrorBoundary>
+              )}
             </main>
           </section>
         </div>

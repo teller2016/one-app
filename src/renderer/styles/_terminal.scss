@@ -180,7 +180,11 @@
     &--open {
       grid-template-rows: 1fr;
       opacity: 1;
-      visibility: visible;
+      // ⚠️ `visible` 이 아니라 `inherit` — visibility 는 자식의 명시값이 조상을 이기므로,
+      // visible 로 두면 keep-alive 로 숨긴 섹션(main__keep--hidden)에서 이 목록만
+      // 다른 섹션 위로 계속 보인다(2026-08-13 사용자 신고). inherit 는 섹션이 보일 때
+      // visible 로 계산돼 동작이 같고, 숨으면 함께 숨는다.
+      visibility: inherit;
       // 펼칠 때는 즉시 보여야 하므로 visibility 지연을 없앤다
       transition:
         grid-template-rows var(--dur-2) var(--ease),
