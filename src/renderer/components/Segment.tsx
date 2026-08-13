@@ -1,6 +1,9 @@
+import type { ReactNode } from 'react';
+
 /**
  * 세그먼트 토글 — 배경 승격 방식(트랙 위 활성 항목이 표면으로 떠오름).
  * 일정 등록의 오늘/어제/직접 입력 등 소수 옵션 전환에 사용.
+ * label 은 ReactNode 라 텍스트 뒤에 개수 뱃지 같은 보조 표시를 붙일 수 있다(메일 리더 모달).
  */
 export function Segment<T extends string>({
   options,
@@ -8,7 +11,7 @@ export function Segment<T extends string>({
   onChange,
   disabled = false,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: ReactNode }[];
   value: T;
   onChange: (value: T) => void;
   disabled?: boolean;

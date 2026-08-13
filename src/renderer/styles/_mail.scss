@@ -167,6 +167,21 @@
     margin-bottom: 10px;
   }
 
+  // 세그먼트 라벨 뒤 안읽음 개수 — 탭을 전환하기 전에 어느 편지함에 안읽은 메일이
+  // 있는지 알린다(0 이면 렌더하지 않는다). 사이드바 위젯 뱃지(mail-nav__count)와 같은 규칙.
+  &__seg-count {
+    min-width: 16px;
+    padding: 0 5px;
+    border-radius: var(--r-full);
+    background: var(--accent-btn);
+    color: var(--on-accent);
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    text-align: center;
+  }
+
   // 본문 패널 — 목록 배치는 그대로 두고 오른쪽에서 떠오르는 레이어.
   // 닫힘 애니메이션을 위해 항상 마운트 — visibility 는 슬라이드가 끝난 뒤에 꺼진다.
   &__view {

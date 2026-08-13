@@ -73,6 +73,8 @@ T/OT 규칙: 하루 8시간까지 T, 초과분 OT, MM=시간÷8÷20.6. 전체 MM
 
 목록 하단에 공용 `Pagination` — `getMailList.do` 의 `page`/`pageSize`(30) 서버 페이징으로 **과거 메일까지 열람**(전체 건수는 `TotalRecordCount`). 조회 조건은 `MailListQuery`({folder, page, pageSize}) 객체로 전달하며, 응답의 `page` 를 요청 순번과 대조해 빠르게 넘길 때 **뒤늦은 응답을 버린다**.
 
+리더 모달 세그먼트의 두 탭에는 **폴더별 안읽음 개수 뱃지**가 붙는다(0 이면 안 붙는다 — 탭을 전환하기 전에 어느 편지함에 새 메일이 있는지 알 수 있게). 값은 `getInbox` 응답의 `folderUnread`({inbox, spam})로, **이미 호출하는 `getMailBoxCount` 의 `mailboxList[].unseen` 에서 뽑으므로 추가 왕복이 없다**. 갱신은 목록을 조회하는 시점(모달 열림·폴더 전환·페이지 이동·새로고침)뿐이고, 안읽은 메일을 열면 해당 폴더 카운트를 로컬에서 −1 한다. 이를 위해 공용 `Segment` 의 `label` 이 `ReactNode` 로 넓어졌다(`.seg` 는 `inline-flex`+`gap` — 텍스트만 있는 기존 사용처는 렌더 결과 동일). ⚠️ 스팸은 도착 시점부터 읽음 상태로 들어와 이 뱃지가 대개 0 이다(아래 실측 참고) — 뱃지가 안 보이는 게 정상 동작일 수 있다.
+
 **뱃지 안읽음 수는 폴더별 `unseen` 합**(받은편지함+스팸, 보낸·임시·휴지통 제외 — `config.ts` 의 `unreadExcludedBoxes`)으로 직접 계산한다. ⚠️ 서버의 `allunseen`/`allexist` 집계는 스팸·휴지통·임시보관을 **제외**하며(2026-07-30 실측: `allexist` = INBOX+SENT), 스팸 메일은 도착 시점부터 **읽음 상태로 들어와** 실질적으로 뱃지에 잡히지 않는다.
 
 본문은 main 의 `sanitizeHtml`(script/iframe/on* 제거) + **sandbox iframe(srcDoc)** 이중 방어로 렌더하고, 링크는 기본 브라우저로만 나간다(열면 그룹웨어에서도 읽음 처리). 계정은 비즈박스 공용, 자체 파일 저장 없음.

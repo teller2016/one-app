@@ -775,6 +775,12 @@ input.input--sm {
 }
 
 .seg {
+  // 라벨이 ReactNode 라 텍스트 뒤에 개수 뱃지가 올 수 있다 — flex 로 세로 중앙 정렬 + 간격 확보
+  // (텍스트만 있는 기존 사용처는 렌더 결과가 동일하다)
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 0 12px;
   border: 1px solid transparent;
   background: transparent;

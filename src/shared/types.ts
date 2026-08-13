@@ -900,11 +900,15 @@ export type MailItem = {
   size: number; // 바이트
 };
 
+/** 폴더별 안읽음 수 — 리더 모달 세그먼트에서 탭 전환 없이 안읽음 유무를 알리는 용도 */
+export type MailFolderUnread = Record<MailFolder, number>;
+
 /** 메일 목록 조회 결과 — 안읽은 수(뱃지) + 해당 페이지 목록 */
 export type MailInboxResult = {
   ok: boolean;
   configured: boolean; // 비즈박스 계정(환경설정) 설정 여부
   unreadCount: number; // 안읽은 메일 총 수 (받은편지함 + 스팸, 보낸·임시·휴지통 제외)
+  folderUnread?: MailFolderUnread; // 폴더별 안읽음 수 (getMailBoxCount 의 unseen — 추가 왕복 없음)
   items?: MailItem[];
   total?: number; // 폴더 전체 건수 (TotalRecordCount) — 페이지 수 계산용
   page?: number; // 이 응답의 페이지 (요청과 대조해 뒤늦은 응답 무시)

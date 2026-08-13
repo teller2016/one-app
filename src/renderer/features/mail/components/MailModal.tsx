@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MailBody, MailFolder, MailItem } from '../../../../shared/types';
+import type {
+  MailBody,
+  MailFolder,
+  MailFolderUnread,
+  MailItem,
+} from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
@@ -55,6 +60,8 @@ export function MailModal({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
+  // 폴더별 안읽음 수 — 탭을 전환하기 전에 어느 편지함에 안읽은 메일이 있는지 알리는 용도
+  const [unread, setUnread] = useState<MailFolderUnread>({ inbox: 0, spam: 0 });
   const [selected, setSelected] = useState<number | null>(null);
   const [body, setBody] = useState<BodyState>({ kind: 'idle' });
   // 패널 표시 여부 — 닫을 때 body 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
@@ -76,6 +83,8 @@ export function MailModal({
     if (res.ok && res.items) {
       setItems(res.items);
       setTotal(res.total ?? res.items.length);
+      // 폴더별 안읽음은 목록과 같은 응답에 실려 온다(추가 왕복 없음)
+      if (res.folderUnread) setUnread(res.folderUnread);
       setListError('');
     } else {
       setListError(res.error ?? '메일을 불러오지 못했습니다.');
@@ -111,15 +120,19 @@ export function MailModal({
     setSelected(item.muid);
     setViewOpen(true);
     setBody({ kind: 'loading', muid: item.muid });
-    const unread = !item.seen;
-    const res = await window.oneApp.mail.getBody(item.muid, unread);
+    const wasUnread = !item.seen;
+    const res = await window.oneApp.mail.getBody(item.muid, wasUnread);
     if (res.ok && res.body) {
       setBody({ kind: 'ok', body: res.body });
-      if (unread) {
-        // 로컬 목록·사이드바 뱃지를 즉시 읽음으로 반영
+      if (wasUnread) {
+        // 로컬 목록·세그먼트 뱃지·사이드바 뱃지를 즉시 읽음으로 반영
         setItems((prev) =>
           prev.map((m) => (m.muid === item.muid ? { ...m, seen: true } : m)),
         );
+        setUnread((prev) => ({
+          ...prev,
+          [folder]: Math.max(0, prev[folder] - 1),
+        }));
         onRead(item.muid);
       }
     } else {
@@ -137,6 +150,21 @@ export function MailModal({
     setViewOpen(false);
   };
 
+  /** 세그먼트 라벨 — 안읽은 메일이 있는 폴더에만 개수 뱃지를 붙인다(세 자리는 99+ 로 클램프) */
+  const folderLabel = (f: MailFolder, text: string) => {
+    const n = unread[f];
+    return (
+      <>
+        {text}
+        {n > 0 && (
+          <span className="mail-modal__seg-count" title={`안읽은 메일 ${n}통`}>
+            {n > 99 ? '99+' : n}
+          </span>
+        )}
+      </>
+    );
+  };
+
   return (
     <Modal
       title={
@@ -152,10 +180,10 @@ export function MailModal({
         {/* 메일 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
         <div className="mail-modal__list">
           <div className="mail-modal__list-head">
-            <Segment
+            <Segment<MailFolder>
               options={[
-                { value: 'inbox', label: '받은편지함' },
-                { value: 'spam', label: '스팸메일함' },
+                { value: 'inbox', label: folderLabel('inbox', '받은편지함') },
+                { value: 'spam', label: folderLabel('spam', '스팸메일함') },
               ]}
               value={folder}
               onChange={changeFolder}

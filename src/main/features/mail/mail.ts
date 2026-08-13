@@ -14,6 +14,7 @@ import type {
   MailBody,
   MailBodyResult,
   MailFolder,
+  MailFolderUnread,
   MailInboxResult,
   MailItem,
   MailListQuery,
@@ -116,10 +117,17 @@ function sumUnread(boxes: NonNullable<BoxCountResp['mailboxList']>): number {
     .reduce((acc, m) => acc + (Number(m.unseen) || 0), 0);
 }
 
-/** 폴더별 개수 조회 — 안읽음 수(뱃지)와 폴더별(받은편지함·스팸) mboxSeq 를 함께 반환 */
-async function fetchBoxCount(
-  s: MailSession,
-): Promise<{ unreadCount: number; inboxSeq: number; spamSeq: number }> {
+/**
+ * 폴더별 개수 조회 — 안읽음 수(뱃지)·폴더별 mboxSeq·폴더별 안읽음 수를 함께 반환.
+ * 폴더별 안읽음(`folderUnread`)은 이미 받은 mailboxList 에서 뽑으므로 추가 왕복이 없다
+ * (리더 모달 세그먼트에서 탭을 전환하기 전에 안읽음 유무를 보여주는 용도).
+ */
+async function fetchBoxCount(s: MailSession): Promise<{
+  unreadCount: number;
+  inboxSeq: number;
+  spamSeq: number;
+  folderUnread: MailFolderUnread;
+}> {
   const countRes = await mailPost(
     s.cookie,
     MAIL_CONFIG.endpoints.boxCount,
@@ -127,15 +135,19 @@ async function fetchBoxCount(
   );
   const count = await parseJson<BoxCountResp>(countRes);
   const boxes = count.mailboxList ?? [];
-  const findSeq = (name: string, fallback: number) =>
-    Number(
-      boxes.find((m) => m.name?.toUpperCase() === name)?.mboxSeq ?? fallback,
-    );
+  const findBox = (name: string) =>
+    boxes.find((m) => m.name?.toUpperCase() === name);
+  const inbox = findBox(MAIL_CONFIG.inboxName);
+  const spam = findBox(MAIL_CONFIG.spamName);
   return {
     // 폴더 목록이 비어 오면(응답 형식 변경 등) 서버 집계값으로 폴백
     unreadCount: boxes.length ? sumUnread(boxes) : Number(count.allunseen ?? 0),
-    inboxSeq: findSeq(MAIL_CONFIG.inboxName, MAIL_CONFIG.inboxSeqFallback),
-    spamSeq: findSeq(MAIL_CONFIG.spamName, MAIL_CONFIG.spamSeqFallback),
+    inboxSeq: Number(inbox?.mboxSeq ?? MAIL_CONFIG.inboxSeqFallback),
+    spamSeq: Number(spam?.mboxSeq ?? MAIL_CONFIG.spamSeqFallback),
+    folderUnread: {
+      inbox: Number(inbox?.unseen) || 0,
+      spam: Number(spam?.unseen) || 0,
+    },
   };
 }
 
@@ -185,8 +197,9 @@ export async function getInbox(
 
   try {
     return await withSession(async (s) => {
-      // 1) 폴더별 개수 — 안읽음 합(뱃지) + 폴더 mboxSeq
-      const { unreadCount, inboxSeq, spamSeq } = await fetchBoxCount(s);
+      // 1) 폴더별 개수 — 안읽음 합(뱃지) + 폴더 mboxSeq + 폴더별 안읽음
+      const { unreadCount, inboxSeq, spamSeq, folderUnread } =
+        await fetchBoxCount(s);
 
       // 2) 대상 폴더의 해당 페이지 목록
       const listRes = await mailPost(
@@ -210,6 +223,7 @@ export async function getInbox(
         ok: true,
         configured: true,
         unreadCount,
+        folderUnread,
         items,
         total: Number(list.TotalRecordCount ?? items.length) || items.length,
         page,
