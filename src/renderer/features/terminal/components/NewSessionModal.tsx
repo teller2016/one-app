@@ -7,6 +7,7 @@ import { FormRow } from '../../../components/FormRow';
 import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
+import { terminalBackend } from '../lib/backend';
 
 export function NewSessionModal({
   cwd,
@@ -33,8 +34,7 @@ export function NewSessionModal({
       // 주 사용 사례가 claude 세션 — 설치돼 있으면 기본 선택
       if (list.some((a) => a.id === 'claude' && a.installed)) setAgentId('claude');
     });
-    // ?.() — dev HMR 로 구 preload(backend 없음) 위에서 렌더될 때 죽지 않게
-    void window.oneApp?.terminal.backend?.().then((b) => setTmux(b.tmux));
+    void terminalBackend().then((b) => setTmux(b.tmux));
   }, []);
 
   const create = async () => {

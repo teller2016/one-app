@@ -9,14 +9,29 @@ import type { Project } from '../../shared/types';
 export function MoChangesView() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectId, setProjectId] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    void window.oneApp.projects.list().then((list) => {
-      setProjects(list);
-      setProjectId((cur) => cur || list[0]?.id || '');
-    });
+    // ⚠️ catch 가 없으면 조회 중 RPC 가 끊겼을 때(onclose 가 pending 을 reject) 화면이
+    // 영영 빈 채로 굳는다 — 폰은 잠금·앱 전환으로 소켓이 수시로 끊긴다
+    void window.oneApp.projects
+      .list()
+      .then((list) => {
+        setProjects(list);
+        setProjectId((cur) => cur || list[0]?.id || '');
+      })
+      .catch((err: Error) => setError(err.message));
   }, []);
 
+  if (error) {
+    return (
+      <EmptyState
+        icon="alert-triangle"
+        message="프로젝트 목록을 불러오지 못했습니다"
+        hint={`${error} — 연결이 돌아오면 탭을 다시 여세요.`}
+      />
+    );
+  }
   if (!projects) return null; // 목록 로딩 중 — 한 순간이라 스피너 없이 비워둔다
   if (projects.length === 0) {
     return (

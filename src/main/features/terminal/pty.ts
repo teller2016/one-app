@@ -22,6 +22,7 @@ import { getProject } from '../projects/store';
 import { agentCommand } from './agents';
 import {
   listPersisted,
+  flushPersistedSizes,
   removePersisted,
   savePersisted,
   updatePersistedSize,
@@ -188,10 +189,10 @@ const hasBareBel = (chunk: string) =>
  * 돌아오고 알림은 notifiedSinceInput 이 막으므로 잠깐의 상태 출렁임만 남는다.
  * ⚠️ redraw 를 grace 로 걸러내면 안 된다 — 터미널 섹션을 열어둔 채 세션을 만들면
  * 즉시 attach 되어 첫 렌더(계정 선택 등)가 통째로 grace 에 먹히고 영영 idle 에 갇힌다(2026-08 실측). */
-function noteOutput(s: Session, chunk: string) {
+function noteOutput(s: Session, chunk: string, bytes: number) {
   const now = Date.now();
   s.lastOutputAt = now;
-  s.bytesSinceInput += Buffer.byteLength(chunk, 'utf8');
+  s.bytesSinceInput += bytes;
   if (s.agentId !== 'shell' && hasBareBel(chunk)) s.bellAt = now;
   if (s.status !== 'busy') setStatus(s, 'busy', 'output');
 }
@@ -245,9 +246,16 @@ function flush(s: Session) {
   if (!s.pending) return;
   const chunk = s.pending;
   s.pending = '';
-  noteOutput(s, chunk);
+  const bytes = Buffer.byteLength(chunk, 'utf8'); // 적산·링 상한이 함께 쓴다 (1회만 스캔)
+  noteOutput(s, chunk, bytes);
+  // ⚠️ 대체 화면(TUI) 구간을 링버퍼에서 빼려고 **출력에서 `?1049h/l` 을 감지하지 말 것** —
+  // tmux 클라이언트 자신이 attach 하면서 대체 화면에 들어간다(그래서 detach 하면 바깥 셸
+  // 화면이 돌아온다). TUI 를 하나도 안 띄운 순수 셸 세션도 링버퍼 **맨 앞 오프셋 0 이
+  // `?1049h`** 이고 `?1049l` 은 오지 않는다(2026-08-13 실측). 그걸로 게이트를 걸면 모든
+  // tmux 세션이 영구히 '대체 화면'으로 잡혀 스크롤백 replay 가 통째로 사라진다(실측: 2.2KB → 0B).
+  // attach 의 `isTmuxAltScreen()` 은 pane 을 직접 질의하는 것이라 판정 대상 자체가 다르다.
   s.ring.push(chunk);
-  s.ringBytes += Buffer.byteLength(chunk, 'utf8');
+  s.ringBytes += bytes;
   while (s.ringBytes > RING_MAX_BYTES && s.ring.length > 1) {
     s.ringBytes -= Buffer.byteLength(s.ring.shift() as string, 'utf8');
   }
@@ -791,6 +799,7 @@ export function killSession(id: string): void {
  */
 export function disposeAll(): void {
   disposing = true;
+  flushPersistedSizes(); // 디바운스 대기 중인 마지막 크기를 놓치지 않는다
   for (const s of sessions.values()) {
     if (s.flushTimer) clearTimeout(s.flushTimer);
     try {

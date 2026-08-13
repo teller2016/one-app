@@ -1,11 +1,7 @@
 // 워크스페이스 LNB·프리셋 공용 헬퍼 — 선택 상태 타입·이니셜·색 인덱스·프리셋 스코프.
 // (TerminalSection·WorkspaceNav·SessionTabs·TerminalView 가 함께 쓴다)
 import type { IconName } from '../../../components/Icon';
-import type {
-  TerminalPreset,
-  TerminalSessionInfo,
-  WorktreeInfo,
-} from '../../../../shared/types';
+import type { TerminalPreset, WorktreeInfo } from '../../../../shared/types';
 import { agentIdFromCommand } from '../../../../shared/types';
 
 /**
@@ -54,14 +50,6 @@ export function worktreeName(wt: WorktreeInfo): string {
   if (wt.isMain) return 'local';
   const segs = wt.path.split('/').filter(Boolean);
   return segs[segs.length - 1] ?? wt.path;
-}
-
-/** 세션이 이 워크트리 소속인가 — 시작 cwd 정확 일치 기준 */
-export function sessionsOf(
-  sessions: TerminalSessionInfo[],
-  worktreePath: string
-): TerminalSessionInfo[] {
-  return sessions.filter((s) => s.cwd === worktreePath);
 }
 
 // 프리셋 스코프·에이전트 태깅 판정은 MO(src/mobile)와 공유해야 해서 shared 로 옮겼다 —

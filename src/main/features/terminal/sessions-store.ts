@@ -36,6 +36,7 @@ export function savePersisted(meta: PersistedSession): void {
 }
 
 export function removePersisted(id: string): void {
+  pendingSizes.delete(id); // 죽은 세션의 크기를 되살려 쓰지 않는다
   const all = read();
   if (!(id in all)) return;
   delete all[id];
@@ -50,10 +51,35 @@ export function updatePersistedTitle(id: string, title: string): void {
   writeUserJson(FILE, { ...all, [id]: { ...meta, title } });
 }
 
-/** 크기만 갱신 — 리사이즈마다 불리므로 변화 없으면 쓰지 않는다 */
+// ── 크기 저장은 트레일링 디바운스 ──
+// 창·패널 드래그 중 초당 수십 번 불리는데 writeUserJson 은 동기 쓰기(write+rename+stat)라
+// 그대로 두면 메인 이벤트 루프(PTY flush·IPC 와 같은 루프)를 그만큼 막는다. 이 값은 복원
+// attach 크기용이라 마지막 것만 남으면 충분하다.
+const SIZE_SAVE_DELAY_MS = 1000;
+const pendingSizes = new Map<string, { cols: number; rows: number }>();
+let sizeTimer: NodeJS.Timeout | null = null;
+
+/** 크기만 갱신 — 리사이즈마다 불리므로 모아 뒀다가 한 번에 쓴다(변화 없으면 안 쓴다) */
 export function updatePersistedSize(id: string, cols: number, rows: number): void {
+  pendingSizes.set(id, { cols, rows });
+  if (!sizeTimer) sizeTimer = setTimeout(flushPersistedSizes, SIZE_SAVE_DELAY_MS);
+}
+
+/** 대기 중인 크기를 즉시 파일에 반영한다 — 앱 종료(disposeAll) 직전에도 부른다 */
+export function flushPersistedSizes(): void {
+  if (sizeTimer) {
+    clearTimeout(sizeTimer);
+    sizeTimer = null;
+  }
+  if (pendingSizes.size === 0) return;
   const all = read();
-  const meta = all[id];
-  if (!meta || (meta.cols === cols && meta.rows === rows)) return;
-  writeUserJson(FILE, { ...all, [id]: { ...meta, cols, rows } });
+  let dirty = false;
+  for (const [id, size] of pendingSizes) {
+    const meta = all[id];
+    if (!meta || (meta.cols === size.cols && meta.rows === size.rows)) continue;
+    all[id] = { ...meta, cols: size.cols, rows: size.rows };
+    dirty = true;
+  }
+  pendingSizes.clear();
+  if (dirty) writeUserJson(FILE, all);
 }

@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
+import { terminalBackend } from '../lib/backend';
 
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -470,7 +471,8 @@ export const TerminalView = memo(function TerminalView({
 
     // 백엔드 확인 — tmux 면 스크롤을 위임한다(위 휠 핸들러). 조회 전에 굴린 휠은
     // 기존 동작(xterm 기본)으로 처리되지만, 사실상 첫 프레임 안에 답이 온다.
-    void window.oneApp.terminal.backend().then((b) => {
+    // (앱 수명 동안 불변이라 `terminalBackend` 가 IPC 를 1회만 왕복한다)
+    void terminalBackend().then((b) => {
       if (!disposed) tmuxRef.current = b.tmux;
     });
 

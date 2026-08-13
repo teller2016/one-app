@@ -6,6 +6,8 @@ import { Button } from '../../../components/Button';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
+import { useToast } from '../../../components/Toast';
+import { Tooltip } from '../../../components/Tooltip';
 import { useCopy } from '../../../lib/useCopy';
 import { useEffect, useState } from 'react';
 import type { TerminalServerStatus } from '../../../../shared/types';
@@ -13,6 +15,7 @@ import type { TerminalServerStatus } from '../../../../shared/types';
 export function MoAccessModal({ onClose }: { onClose: () => void }) {
   const confirm = useConfirm();
   const copy = useCopy();
+  const toast = useToast();
   const [status, setStatus] = useState<TerminalServerStatus | null>(null);
   const [qr, setQr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -34,11 +37,14 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
     void QRCode.toDataURL(firstUrl, { margin: 1, width: 240 }).then(setQr);
   }, [firstUrl]);
 
+  // IPC 실패는 토스트로 알린다 — 삼키면 버튼만 원래대로 돌아와 아무 일도 없어 보인다
   const toggle = async () => {
     if (!status) return;
     setBusy(true);
     try {
       setStatus(await window.oneApp.terminal.server.setEnabled(!status.running));
+    } catch (err) {
+      toast(`서버 ${status.running ? '끄기' : '켜기'} 실패: ${(err as Error).message}`, 'fail');
     } finally {
       setBusy(false);
     }
@@ -51,7 +57,12 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
       confirmLabel: '재발급',
       danger: true,
     });
-    if (ok) setStatus(await window.oneApp.terminal.server.regenToken());
+    if (!ok) return;
+    try {
+      setStatus(await window.oneApp.terminal.server.regenToken());
+    } catch (err) {
+      toast(`토큰 재발급 실패: ${(err as Error).message}`, 'fail');
+    }
   };
 
   return (
@@ -92,14 +103,16 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
               {status.urls.map((url) => (
                 <li key={url}>
                   <code>{url}</code>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    title="복사"
-                    onClick={() => void copy(url)}
-                  >
-                    <Icon name="copy" size={14} />
-                  </button>
+                  <Tooltip label="복사">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="접속 주소 복사"
+                      onClick={() => void copy(url)}
+                    >
+                      <Icon name="copy" size={14} />
+                    </button>
+                  </Tooltip>
                 </li>
               ))}
             </ul>
@@ -116,14 +129,16 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
                 <ul className="terminal-mo__urls">
                   <li>
                     <code>{status.terminalUrls[0]}</code>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      title="복사"
-                      onClick={() => void copy(status.terminalUrls[0])}
-                    >
-                      <Icon name="copy" size={14} />
-                    </button>
+                    <Tooltip label="복사">
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label="터미널 주소 복사"
+                        onClick={() => void copy(status.terminalUrls[0])}
+                      >
+                        <Icon name="copy" size={14} />
+                      </button>
+                    </Tooltip>
                   </li>
                 </ul>
               </>

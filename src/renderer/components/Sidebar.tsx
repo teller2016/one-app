@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { beginPointerDrag } from '../lib/pointerDrag';
 
 /**
  * 사이드바가 접혀 있는지 — 안쪽 위젯이 축소 상태에 맞춰 동작을 바꿀 때 쓴다.
@@ -78,38 +79,30 @@ export function Sidebar({
     // 그대로 두면 320px 로 넓혀 뒀던 사람이 한 번 접었다 펴는 순간 180px 을 얻는다 →
     // 접힌 채로 끝나면 '펼쳤을 때 폭'은 드래그 시작 시점 값으로 되돌린다.
     const keepW = widthRef.current;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-
-    const move = (ev: PointerEvent) => {
-      const raw = startW + (ev.clientX - startX);
-      if (raw < SNAP_W) {
-        collapsedRef.current = true;
-        setCollapsed(true);
-        return;
-      }
-      collapsedRef.current = false;
-      setCollapsed(false);
-      const w = Math.min(MAX_W, Math.max(MIN_W, raw));
-      widthRef.current = w;
-      setWidth(w);
-    };
-
-    const up = () => {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      if (collapsedRef.current) {
-        widthRef.current = keepW;
-        setWidth(keepW);
-      }
-      localStorage.setItem('sidebar:width', String(widthRef.current));
-      localStorage.setItem('sidebar:collapsed', collapsedRef.current ? '1' : '0');
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    beginPointerDrag(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        const raw = startW + (ev.clientX - startX);
+        if (raw < SNAP_W) {
+          collapsedRef.current = true;
+          setCollapsed(true);
+          return;
+        }
+        collapsedRef.current = false;
+        setCollapsed(false);
+        const w = Math.round(Math.min(MAX_W, Math.max(MIN_W, raw)));
+        widthRef.current = w;
+        setWidth(w);
+      },
+      onEnd: () => {
+        if (collapsedRef.current) {
+          widthRef.current = keepW;
+          setWidth(keepW);
+        }
+        localStorage.setItem('sidebar:width', String(widthRef.current));
+        localStorage.setItem('sidebar:collapsed', collapsedRef.current ? '1' : '0');
+      },
+    });
   };
 
   /** 키보드로도 접거나 펼 수 있어야 한다 — grip 은 포커스를 받는 separator 다 */

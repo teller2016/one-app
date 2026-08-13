@@ -156,7 +156,9 @@ export function registerTerminalIpc() {
     const level = getNotifyLevel();
     // 시스템 경고음(shell.beep) 대신 전용 알림음 — 다른 앱 경고음과 구분된다
     if (level === 'sound')
-      execFile('afplay', ['/System/Library/Sounds/Blow.aiff'], () => {});
+      execFile('afplay', ['/System/Library/Sounds/Blow.aiff'], () => {
+        // 재생 실패는 무시 — 소리가 안 나도 뱃지·알럿은 그대로 동작한다
+      });
     if (level === 'alert') {
       void notify({
         title: '⏳ 입력 대기',

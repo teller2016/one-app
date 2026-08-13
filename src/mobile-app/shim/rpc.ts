@@ -117,6 +117,11 @@ function connect() {
     // 답을 못 받은 호출은 실패로 정리 — UI 가 재조회하도록(폴링 훅이 이미 그 구조)
     for (const [, p] of pending) p.reject(new Error('연결이 끊겼습니다'));
     pending.clear();
+    // ⚠️ 아직 못 보낸 프레임도 함께 버린다 — 남기면 재연결 때 흘러나가 서버에서 뒤늦게
+    // 실행되는데, 호출자는 이미 위에서 실패로 처리했다. `/rpc` 에는 부수효과 채널
+    // (changes:push·attendance:stamp·deploy:trigger)이 있어 사용자가 실패를 보고 다시
+    // 누르면 이중 실행이 된다. 구독은 onopen 이 `listeners` 로 다시 걸므로 잃지 않는다.
+    queue.length = 0;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       connect();

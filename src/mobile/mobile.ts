@@ -25,18 +25,31 @@ import type {
 // handleShared 라 이미 폰에 열려 있고(그게 MO 화이트리스트 선언이다 — mo-app.md),
 // 그 통로가 rpc 다. 프로토콜·서버를 건드리지 않으므로 로직 중복이 0 이다.
 // shim 은 순수 브라우저 WS 클라이언트라 앱 셸과 그대로 공유한다.
-import { call as rpcCall, startRpc } from '../mobile-app/shim/rpc';
+import { call as rpcRawCall, startRpc } from '../mobile-app/shim/rpc';
 import {
   TERMINAL_AGENT_NAMES,
   agentIdFromCommand,
   presetsForWorkspace,
 } from '../shared/types';
 
+// `/rpc` 소켓은 변경사항(±) 조회에만 쓴다 — 터미널만 보는 동안 상시 열어 두면 30초 ping
+// 왕복이 배터리를 갉는다. 처음 필요할 때 열고, 그 뒤 재연결은 shim 이 맡는다.
+let rpcStarted = false;
+function rpcCall(channel: string, args: unknown[]): Promise<unknown> {
+  if (!rpcStarted) {
+    rpcStarted = true;
+    startRpc();
+  }
+  return rpcRawCall(channel, args); // 연결 전 호출은 shim 의 큐가 받아 둔다
+}
+
 const LAST_SESSION_KEY = 'mo:lastSession';
 // 선택한 작업 영역(워크트리) — 데스크톱 LNB 선택에 해당한다
 const SCOPE_KEY = 'mo:scope';
 
-// 데스크톱 TerminalView 의 TERM_THEME 과 동일 팔레트
+// MO 전용 다크 팔레트 — 폰은 항상 다크다.
+// ⚠️ 데스크톱(TerminalView 의 `buildTheme()`)은 `_base.scss` 토큰에서 읽으므로 여기와 다르다
+// (전경·커서·white 계열이 이미 갈라져 있다). "같다"고 가정하고 한쪽만 고치지 말 것.
 const TERM_THEME = {
   background: '#1e1e20',
   foreground: '#e8e8ea',
@@ -346,35 +359,50 @@ const STATUS_GLYPHS: Record<TerminalSessionInfo['status'], string> = {
   idle: '○',
 };
 
+/** <option> 표시 문자열 — 상태 글리프 + 제목 + 에이전트 */
+function optionLabel(s: TerminalSessionInfo): string {
+  const glyph = STATUS_GLYPHS[s.status] ?? '○';
+  const agent =
+    s.agentId && s.agentId !== 'shell' ? ` (${TERMINAL_AGENT_NAMES[s.agentId]})` : '';
+  return `${glyph} ${s.title}${agent}`;
+}
+
+/** 마지막으로 그린 목록 — 같은 내용이면 다시 그리지 않는다(아래 renderSessions) */
+let lastSessionsSig = '';
+
 function renderSessions() {
   const list = visibleSessions();
-  selectEl.innerHTML = '';
-  for (const s of list) {
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    const glyph = STATUS_GLYPHS[s.status] ?? '○';
-    const agent = s.agentId && s.agentId !== 'shell' ? ` (${TERMINAL_AGENT_NAMES[s.agentId]})` : '';
-    opt.textContent = `${glyph} ${s.title}${agent}`;
-    selectEl.appendChild(opt);
-  }
   // 보고 있는 세션이 작업 영역 밖이면(다른 영역에서 이어보는 중) 목록에도 남겨둔다 —
   // 없으면 select 가 엉뚱한 세션을 가리켜 손만 대도 화면이 바뀐다
   const attached = attachedId ? sessions.find((s) => s.id === attachedId) : null;
+  const rows = list.map((s) => ({ value: s.id, label: optionLabel(s) }));
   if (attached && !list.some((s) => s.id === attached.id)) {
-    const opt = document.createElement('option');
-    opt.value = attached.id;
-    opt.textContent = `${STATUS_GLYPHS[attached.status] ?? '○'} ${attached.title} (다른 영역)`;
-    selectEl.appendChild(opt);
+    rows.push({ value: attached.id, label: `${optionLabel(attached)} (다른 영역)` });
   }
-  if (!selectEl.options.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = scope
-      ? '이 작업 영역에 세션 없음 — ＋ 로 시작'
-      : '세션 없음 — 새 세션을 만드세요';
-    selectEl.appendChild(opt);
+  if (rows.length === 0) {
+    rows.push({
+      value: '',
+      label: scope
+        ? '이 작업 영역에 세션 없음 — ＋ 로 시작'
+        : '세션 없음 — 새 세션을 만드세요',
+    });
   }
-  if (attachedId) selectEl.value = attachedId;
+  // 그릴 내용이 이전과 같으면 건너뛴다 — 세션 목록 브로드캐스트는 상태 전이마다(초 단위)
+  // 오는데 대부분은 이 select 에 안 보이는 변화다(프로젝트 공통 규칙: 같으면 이전 유지)
+  const sig = `${attachedId ?? ''}${rows
+    .map((r) => `${r.value} ${r.label}`)
+    .join('')}`;
+  if (sig !== lastSessionsSig) {
+    lastSessionsSig = sig;
+    selectEl.innerHTML = '';
+    for (const r of rows) {
+      const opt = document.createElement('option');
+      opt.value = r.value;
+      opt.textContent = r.label;
+      selectEl.appendChild(opt);
+    }
+    if (attachedId) selectEl.value = attachedId;
+  }
   // 종료는 붙어 있는 세션이 있을 때만 — 없으면 누를 대상이 없다.
   // (변경사항 ± 은 작업 영역만 골라 둬도 볼 수 있어 항상 띄운다 — index.html 주석 참고)
   closeBtn.hidden = !attached;
@@ -389,7 +417,15 @@ closeBtn.addEventListener('click', () => {
   sendMsg({ type: 'kill', id: s.id });
 });
 
+/** attach 응답(`attached`)을 기다리는 세션 — 대기 중 같은 요청을 또 보내지 않는다 */
+let pendingAttachId: string | null = null;
+
 function attach(id: string) {
+  // ⚠️ 응답 전에 sessions 브로드캐스트(상태 전이마다 온다)가 또 attach 를 부르면 같은
+  // 세션에 두 번 붙어 term.reset()+replay+전체 리드로를 두 번 겪는다. 셀룰러·릴레이
+  // 경로는 왕복이 수백 ms 라 실제로 겹친다.
+  if (pendingAttachId === id) return;
+  pendingAttachId = id;
   fit.fit();
   sendMsg({ type: 'attach', id, cols: term.cols, rows: term.rows });
 }
@@ -414,8 +450,6 @@ function handleMessage(msg: TermServerMsg) {
     case 'cwds':
       cwdOptions = msg.items;
       break;
-    case 'agents':
-      break; // 새 세션은 에이전트 대신 셸+프리셋으로 고른다 — 이 목록은 더 쓰지 않는다
     case 'workspaces':
       workspaceTree = msg.items;
       if (sheetMode === 'scope') renderScopeSheet(); // 열려 있으면 즉시 채운다
@@ -429,6 +463,7 @@ function handleMessage(msg: TermServerMsg) {
       attach(msg.id);
       break;
     case 'attached':
+      pendingAttachId = null;
       attachedId = msg.id;
       attachSeq = msg.seq;
       localStorage.setItem(LAST_SESSION_KEY, msg.id);
@@ -486,6 +521,7 @@ function handleMessage(msg: TermServerMsg) {
       //    ≡·＋·⚡·세션 select 를 전부 비활성화한다. attach 실패 한 번처럼 소켓과
       //    무관한 오류에도 폰 UI 가 통째로 잠겨 "아무것도 안 된다"가 된다
       //    (2026-08-08 프리셋 디버깅 중 발견). 연결은 멀쩡하므로 알림만 띄운다.
+      pendingAttachId = null; // attach 실패였다면 다시 시도할 수 있어야 한다
       notice(msg.message);
       break;
   }
@@ -524,6 +560,7 @@ function connect() {
     if (ws !== sock) return;
     ws = null;
     attachedId = null; // 재접속 시 재attach
+    pendingAttachId = null; // 못 받은 응답을 기다리며 재attach 를 막으면 안 된다
     setStatus('연결 끊김 — 재연결 중…', false);
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -569,7 +606,18 @@ term.onData((raw) => {
   }
   sendMsg({ type: 'input', data });
 });
-term.onResize(({ cols, rows }) => sendMsg({ type: 'resize', cols, rows }));
+// PTY 리사이즈는 디바운스한다(데스크톱 TerminalView 와 같은 규칙) — 핀치 글자조절은
+// touchmove 마다, iOS 키보드 애니메이션은 프레임마다 fit 을 부르는데, 그때마다 SIGWINCH 를
+// 보내면 claude 같은 TUI 가 스텝 수만큼 전체 리렌더를 한다. 마지막 값만 보내면 한 번이다.
+const PTY_RESIZE_DEBOUNCE_MS = 120;
+let ptyResizeTimer: number | null = null;
+term.onResize(({ cols, rows }) => {
+  if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
+  ptyResizeTimer = window.setTimeout(() => {
+    ptyResizeTimer = null;
+    sendMsg({ type: 'resize', cols, rows });
+  }, PTY_RESIZE_DEBOUNCE_MS);
+});
 
 // 키바 — pointerdown preventDefault 로 xterm 포커스(=키보드)를 유지한 채 입력
 const KEY_SEQ: Record<string, string> = {
@@ -634,7 +682,7 @@ selectEl.addEventListener('change', () => {
 });
 // 바텀시트는 하나를 돌려 쓴다 — 작업 영역 트리 · 새 세션(위치→에이전트) · 프리셋.
 // 좁은 화면이라 상시 UI 를 늘리지 않고 버튼 하나 + 시트로 처리한다(2026-08-08 사용자 요청).
-type SheetMode = 'scope' | 'cwd' | 'start' | 'changes' | null;
+type SheetMode = 'scope' | 'cwd' | 'start' | null;
 let sheetMode: SheetMode = null;
 let pendingCwd: string | undefined;
 
@@ -1001,27 +1049,53 @@ async function loadDiff(f: ChangedFile, pre: HTMLElement) {
   }
 }
 
+// 한 번에 그리는 줄 수 — 서버 상한(512KB ≈ 1만 줄)을 통째로 DOM 화하면 폰이 멈춘다.
+// 데스크톱도 같은 이유로 청크 렌더를 쓴다(UnifiedDiff 1200줄).
+const DIFF_CHUNK_LINES = 1000;
+
 /** unified diff 색칠 — 줄 단위로 +/-/@@ 만 구분한다(폰에서 과한 하이라이트는 오히려 안 읽힌다) */
 function paintDiff(pre: HTMLElement, diff: string, truncated: boolean) {
   pre.textContent = '';
-  const frag = document.createDocumentFragment();
-  for (const line of diff.split('\n')) {
-    const span = document.createElement('span');
-    if (line.startsWith('@@')) span.className = 'd-hunk';
-    else if (line.startsWith('+++') || line.startsWith('---')) span.className = 'd-meta';
-    else if (line.startsWith('+')) span.className = 'd-add';
-    else if (line.startsWith('-')) span.className = 'd-del';
-    else if (line.startsWith('diff ') || line.startsWith('index ')) span.className = 'd-meta';
-    span.textContent = `${line}\n`;
-    frag.appendChild(span);
-  }
-  if (truncated) {
-    const more = document.createElement('span');
-    more.className = 'd-meta';
-    more.textContent = '\n(표시 상한을 넘어 잘렸습니다 — 데스크톱에서 전체를 보세요)\n';
-    frag.appendChild(more);
-  }
-  pre.appendChild(frag);
+  const lines = diff.split('\n');
+  let shown = 0;
+
+  const moreBtn = document.createElement('button');
+  moreBtn.type = 'button';
+  moreBtn.className = 'd-more';
+  moreBtn.addEventListener('click', () => drawChunk());
+
+  const drawChunk = () => {
+    moreBtn.remove(); // 다음 청크 뒤로 다시 붙인다
+    const end = Math.min(lines.length, shown + DIFF_CHUNK_LINES);
+    const frag = document.createDocumentFragment();
+    for (let i = shown; i < end; i++) {
+      const line = lines[i];
+      const span = document.createElement('span');
+      if (line.startsWith('@@')) span.className = 'd-hunk';
+      else if (line.startsWith('+++') || line.startsWith('---')) span.className = 'd-meta';
+      else if (line.startsWith('+')) span.className = 'd-add';
+      else if (line.startsWith('-')) span.className = 'd-del';
+      else if (line.startsWith('diff ') || line.startsWith('index '))
+        span.className = 'd-meta';
+      span.textContent = `${line}\n`;
+      frag.appendChild(span);
+    }
+    shown = end;
+    pre.appendChild(frag);
+    if (shown < lines.length) {
+      moreBtn.textContent = `··· ${lines.length - shown}줄 더 보기`;
+      pre.appendChild(moreBtn);
+      return;
+    }
+    if (truncated) {
+      const note = document.createElement('span');
+      note.className = 'd-meta';
+      note.textContent = '\n(표시 상한을 넘어 잘렸습니다 — 데스크톱에서 전체를 보세요)\n';
+      pre.appendChild(note);
+    }
+  };
+
+  drawChunk();
 }
 
 chgPush.addEventListener('click', () => void doPush());
@@ -1133,7 +1207,10 @@ cwdBackdrop.addEventListener('click', closeSheet);
 //   · 일반 화면    → xterm 이 스크롤백을 스크롤
 //   · 마우스 트래킹 켜진 TUI(claude 등) → xterm 이 마우스 이벤트로 인코딩해 앱에 전달
 //     (claude 는 대체 화면이라 스크롤백이 없다 — scrollLines 를 부르면 아무 일도 안 일어난다)
-const wheelTarget = () => termEl.querySelector<HTMLElement>('.xterm-screen') ?? termEl;
+// `.xterm-screen` 은 term.open() 이후 바뀌지 않는다 — touchmove 마다 다시 찾을 이유가 없다
+let wheelTargetEl: HTMLElement | null = null;
+const wheelTarget = () =>
+  (wheelTargetEl ??= termEl.querySelector<HTMLElement>('.xterm-screen')) ?? termEl;
 
 let dragY = 0;
 let dragging = false;
@@ -1276,7 +1353,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-startRpc(); // 변경사항 조회용 (/rpc) — 터미널 스트림(/term)과 별개 소켓이다
 renderScope(); // 저장된 작업 영역을 첫 페인트부터 반영 (세션 목록은 sessions 수신 때 그린다)
 baseViewportH = viewportH(); // 첫 관측이 '키보드 없는 높이' 기준이 된다
 syncKeybar(); // 고정 설정을 반영 — 기본(비고정)이면 키보드가 뜰 때까지 접혀 있다

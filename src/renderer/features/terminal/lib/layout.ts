@@ -43,10 +43,10 @@ export type LayoutGrip = {
 /** 동시 표시 pane 상한 — MAX_LIVE_PANES(8, WebGL 전역 컨텍스트 제한) 안에서
  *  숨은 pane 여유(탭 전환 즉시 복원)를 남기는 값 */
 export const MAX_SPLIT_PANES = 4;
-export const RATIO_MIN = 0.15;
-export const RATIO_MAX = 0.85;
+const RATIO_MIN = 0.15;
+const RATIO_MAX = 0.85;
 /** 중앙 데드존 — 정규화 좌표(|nx|,|ny| < 0.3)면 분할이 아니라 교체 */
-export const CENTER_DEADZONE = 0.3;
+const CENTER_DEADZONE = 0.3;
 /** localStorage 키 — selKey → 직렬화 트리 맵 (terminal:lastActive 와 같은 방식) */
 export const LAYOUT_STORAGE_KEY = 'terminal:layout';
 
@@ -59,7 +59,7 @@ export function sessionIdsOf(root: LayoutNode): string[] {
   return panelsOf(root).map((p) => p.sessionId);
 }
 
-export function findPanel(root: LayoutNode, panelId: string): PanelNode | null {
+function findPanel(root: LayoutNode, panelId: string): PanelNode | null {
   if (root.kind === 'panel') return root.id === panelId ? root : null;
   return findPanel(root.a, panelId) ?? findPanel(root.b, panelId);
 }
@@ -109,7 +109,7 @@ export function splitAt(
  * ⚠️ 승격된 서브트리의 노드 id 는 보존한다 — 진행 중인 드롭 제스처의 panelId 참조가
  * 제거 후에도 유효해야 한다(moveSession 이 제거 → 재분할 순서로 쓴다).
  */
-export function removeSession(root: LayoutNode, sessionId: string): LayoutNode | null {
+function removeSession(root: LayoutNode, sessionId: string): LayoutNode | null {
   if (root.kind === 'panel') return root.sessionId === sessionId ? null : root;
   const a = removeSession(root.a, sessionId);
   const b = removeSession(root.b, sessionId);

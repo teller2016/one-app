@@ -18,7 +18,6 @@ import type { TerminalServerStatus } from '../../../shared/types';
 import { listProjects } from '../projects/store';
 import { listWorktrees } from '../workspaces/git';
 import { listPresets, listWorkspaces } from '../workspaces/store';
-import { listAgents } from './agents';
 import {
   attachSession,
   createSession,
@@ -129,23 +128,32 @@ function serveStatic(
   const raw = stripPrefix ? pathname.slice(stripPrefix.length) : pathname;
   const rel = raw === '' || raw === '/' ? 'index.html' : raw.replace(/^\/+/, '');
   const filePath = path.normalize(path.join(rootDir, rel));
-  if (!filePath.startsWith(rootDir)) {
+  // ⚠️ 구분자까지 비교한다 — `startsWith(rootDir)` 만으로는 접두사가 같은 형제 폴더
+  // (`…/renderer/mobile_window-something`)가 통과한다
+  if (filePath !== rootDir && !filePath.startsWith(rootDir + path.sep)) {
     res.writeHead(400);
     res.end();
     return;
   }
-  try {
-    const buf = fs.readFileSync(filePath);
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
-      'Cache-Control': 'no-store',
-      ...extraHeaders,
-    });
-    res.end(buf);
-  } catch {
-    res.writeHead(404, extraHeaders);
-    res.end('Not Found');
-  }
+  // `assets/*` 는 Vite 가 파일명에 콘텐츠 해시를 박아 두므로(JS·CSS·woff2 전부) 영구 캐시가
+  // 안전하다 — 폰이 열 때마다 번들과 폰트(75KB×2)를 다시 받던 것을 없앤다. 내용이 바뀌면
+  // 파일명이 바뀐다. 나머지(index.html·manifest·아이콘)는 새 배포를 즉시 반영해야 한다.
+  const hashed = rel.startsWith('assets/');
+  // ⚠️ 동기 읽기(readFileSync)를 쓰지 말 것 — 여기는 PTY flush·IPC 와 같은 이벤트 루프다
+  fs.promises.readFile(filePath).then(
+    (buf) => {
+      res.writeHead(200, {
+        'Content-Type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
+        'Cache-Control': hashed ? 'public, max-age=31536000, immutable' : 'no-store',
+        ...extraHeaders,
+      });
+      res.end(buf);
+    },
+    () => {
+      res.writeHead(404, extraHeaders);
+      res.end('Not Found');
+    }
+  );
 }
 
 function proxyToDevServer(
@@ -217,18 +225,12 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
   const state = socketState.get(ws);
   if (!state) return;
   switch (msg.type) {
-    case 'list':
-      send(ws, { type: 'sessions', sessions: listSessions() });
-      break;
     case 'cwds':
       // 새 세션 위치 후보 — 데스크톱과 같은 출처(프로젝트 중앙 레지스트리)
       send(ws, {
         type: 'cwds',
         items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
       });
-      break;
-    case 'agents':
-      void listAgents().then((items) => send(ws, { type: 'agents', items }));
       break;
     case 'workspaces':
       // 데스크톱 LNB 와 같은 트리 — 워크스페이스마다 git 을 부르므로 **요청 시에만**
@@ -266,9 +268,6 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       });
       break;
     }
-    case 'detach':
-      state.attachedId = null;
-      break;
     case 'input':
       if (state.attachedId) writeSession(state.attachedId, msg.data);
       break;
@@ -413,7 +412,13 @@ export async function startServer(): Promise<TerminalServerStatus> {
       } catch {
         return;
       }
-      handleMessage(ws, msg);
+      // ⚠️ 처리도 try 로 감싼다 — 형이 어긋난 프레임(`{type:'input', data:123}`)이면
+      // pty.write 가 동기 throw 하고, main 에 uncaughtException 핸들러가 없어 앱이 죽는다.
+      try {
+        handleMessage(ws, msg);
+      } catch (err) {
+        console.error('[term:ws] 메시지 처리 실패', err);
+      }
     });
     ws.on('close', () => socketState.delete(ws));
     send(ws, { type: 'sessions', sessions: listSessions() });
@@ -421,7 +426,6 @@ export async function startServer(): Promise<TerminalServerStatus> {
       type: 'cwds',
       items: listProjects().map((p) => ({ name: p.name, path: p.localPath })),
     });
-    void listAgents().then((items) => send(ws, { type: 'agents', items }));
     // 프리셋은 파일 한 번 읽기라 미리 보낸다 — 폰이 붙자마자 ⚡ 버튼을 쓸 수 있게.
     // (workspaces 는 git 을 돌리므로 시트를 열 때만 — 위 handleMessage 참고)
     send(ws, { type: 'presets', items: listPresets() });

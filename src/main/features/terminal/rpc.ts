@@ -75,8 +75,3 @@ export function stopRpcBridge(): void {
   for (const ws of sockets.keys()) ws.terminate();
   sockets.clear();
 }
-
-/** 죽은 소켓 회수용 — server.ts 의 ping 루프가 함께 관리한다 */
-export function rpcSockets(): WebSocket[] {
-  return [...sockets.keys()];
-}

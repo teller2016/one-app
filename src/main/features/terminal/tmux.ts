@@ -92,7 +92,7 @@ async function detect(): Promise<string | null> {
 }
 
 /** 클라이언트 spawn 용 공통 인자 — 서버가 없으면 이 conf 로 새로 뜬다 */
-export const tmuxBaseArgs = () => ['-L', SOCKET_NAME, '-f', confPath()];
+const tmuxBaseArgs = () => ['-L', SOCKET_NAME, '-f', confPath()];
 
 /** 새 세션 생성+attach 인자 (-A: 이미 있으면 attach — 재시도에 안전) */
 export const tmuxNewSessionArgs = (

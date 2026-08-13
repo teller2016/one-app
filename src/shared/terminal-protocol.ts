@@ -1,12 +1,7 @@
 // 모바일(MO) 터미널 WS 프로토콜 — main 의 server.ts 와 브라우저의 mobile.ts 가 공용.
 // 전부 JSON 텍스트 프레임: node-pty onData 가 UTF-8 경계를 처리한 string 을 주므로
 // 바이너리 프레임이 필요 없고, xterm.write(string) 과 바로 연결된다.
-import type {
-  TerminalAgentId,
-  TerminalAgentInfo,
-  TerminalPreset,
-  TerminalSessionInfo,
-} from './types';
+import type { TerminalAgentId, TerminalPreset, TerminalSessionInfo } from './types';
 
 /** 새 세션을 열 수 있는 위치 후보 (프로젝트 레지스트리 파생 — MO 의 위치 선택용) */
 export type TermCwdOption = { name: string; path: string };
@@ -31,13 +26,10 @@ export type TermWorkspaceNode = {
 
 /** 클라이언트(모바일) → 서버 */
 export type TermClientMsg =
-  | { type: 'list' } // 세션 목록 요청
   | { type: 'cwds' } // 새 세션 위치 후보 요청
-  | { type: 'agents' } // 에이전트 후보 요청 (설치 감지 결과 포함)
   | { type: 'workspaces' } // 작업 영역 트리 요청 (git 조회라 시트를 열 때만)
   | { type: 'presets' } // 프리셋 목록 요청
   | { type: 'attach'; id: string; cols: number; rows: number }
-  | { type: 'detach' }
   | { type: 'input'; data: string } // attach 된 세션에 키 입력
   | { type: 'resize'; cols: number; rows: number }
   // cwd 없으면 홈 디렉터리. command/title 은 프리셋 실행용 — 데스크톱 프리셋 칩과
@@ -60,7 +52,6 @@ export type TermClientMsg =
 export type TermServerMsg =
   | { type: 'sessions'; sessions: TerminalSessionInfo[] }
   | { type: 'cwds'; items: TermCwdOption[] }
-  | { type: 'agents'; items: TerminalAgentInfo[] }
   | { type: 'workspaces'; items: TermWorkspaceNode[] }
   | { type: 'presets'; items: TerminalPreset[] }
   | { type: 'created'; id: string } // create 응답 — 클라이언트가 이어서 attach
