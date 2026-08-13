@@ -216,6 +216,27 @@ FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재�
 
 - ⚠️ "유지"는 정적이 아니다 — **리렌더마다 모드 4종을 일괄 껐다 켠다**(2.1.228, 2026-08-12 attach 캡처 실측: 유휴 2초에도 `l→h` 버스트 다수). xterm 의 `term.modes` 는 이 토글을 그대로 따라가므로 **순간적으로 'none'** 일 수 있고, 그 틈의 휠 위임은 tmux 쪽 마우스 플래그 분기가 받아낸다(위 '휠 스크롤' 절).
 
+## 클립보드 — ⌘C/⌘V 가 조용히 죽는 두 경로 (2026-08-13 실측)
+"터미널에서 가끔 복사·붙여넣기가 안 된다"는 신고의 정체는 **원인이 다른 두 문제**였다. 텍스트는 대개 되고 이미지는 늘 안 되니 섞여서 '가끔'으로 체감됐다.
+
+**① 이미지 = ⌘V 로는 100% 실패했다 (구조적)**
+- xterm 의 `handlePasteEvent`(`@xterm/xterm/src/browser/Clipboard.ts`)는 `clipboardData.getData('text/plain')` **한 줄만** 읽고 그 문자열을 그대로 `triggerDataEvent` 한다. 빈 문자열이면 PTY 에 0바이트가 가고 **오류도 로그도 없다.**
+- Snipaste 캡처 직후 `osascript -e 'clipboard info'` 실측: `«class PNGf», AVIF, 8BPS, GIF picture, jp2, JPEG picture, TIFF picture, BMP, TPIC` — **평문 타입이 하나도 없다.** 그러니 `getData('text/plain')` 은 항상 `''`.
+- 사용자는 "앱 종료하고 다시 켰을 때 살아난 터미널에서" 안 된다고 신고했지만 **세션 상태와 무관**하다 — 새로 만든 세션도 똑같이 실패한다. 재시작 조건을 쫓지 말 것.
+- ✅ **`Ctrl+V`(0x16)는 그대로 동작한다**(사용자 실측 확인) — Claude Code 가 키 시퀀스를 받고 **시스템 클립보드를 직접 읽어** 이미지를 첨부하는 경로다. 터미널이 이미지를 나를 필요가 없다. 그래서 ⌘V 를 이 경로로 넘기는 것으로 해결했다(pane 루트 `onPasteCapture`) — main IPC·임시 파일 저장 없이 렌더러만으로 끝난다.
+  - ⚠️ **대체 화면일 때만 위임한다** — 일반 셸에서 `0x16` 은 zsh 의 `quoted-insert` 라 다음 키가 리터럴로 먹혀 입력이 깨진다. 셸 세션에서 이미지 ⌘V 는 그대로 무반응(이미지를 넣을 자리가 없으므로 의도된 동작).
+  - 텍스트가 함께 있는 클립보드는 개입하지 않는다 — 그때는 텍스트가 사용자의 의도다.
+
+**② 텍스트 = 포커스가 xterm 밖이면 무반응 (조건부)**
+- `main.ts` 에 `setApplicationMenu` 가 없어 ⌘C/⌘V 는 **Electron 기본 메뉴의 role:copy/paste** = `webContents.copy()/paste()` 가 처리한다. 이건 **포커스된 편집 요소**에만 작동하고, xterm 은 클립보드 리스너를 자기 `element`·`textarea` 에만 건다(`CoreBrowserTerminal.ts` `_initGlobal`). 포커스가 그 밖이면 이벤트 자체가 오지 않는다.
+- 포커스 반환 코드는 pane 의 `useEffect(..., [focused, visible])` 뿐이었다 — **값이 바뀔 때만** 돌므로 `focused` 가 true 로 유지된 채 버튼에 포커스를 빼앗기면 영영 안 돌아온다. 반환이 있던 곳은 검색 닫기·파일 드롭 둘뿐.
+- 실패 경로: 같은 탭 재클릭(activeId 불변) · 상단 공용 바 버튼 · 세션 패널 행 · 워크스페이스 클릭 · 모달 닫은 직후 · 다른 앱에서 복사 후 사이드바를 클릭해 창 활성화.
+- 5초 판별법: pane 안 클릭 직후 ⌘V(됨) vs 탭·툴바 버튼 클릭 직후 ⌘V(안 됨).
+- 해결 = 섹션 루트 `onClick` 의 **포커스 안전망**. ⚠️ 다음 네 가지를 다 걸러야 한다: 실제 DOM 포함 관계(portal 은 React 트리로 버블링돼 온다) · **rAF 지연**(버튼 기본 포커스·모달 autoFocus 가 핸들러보다 뒤에 확정된다) · 떠 있는 `.modal-overlay`/`.picker__pop` · **`getSelection()` 이 비어 있지 않으면 skip**(변경사항 diff 를 선택해 ⌘C 하려는 순간 선택이 날아간다).
+- 이 안전망이 없으면 ①의 이미지 위임도 함께 죽는다 — paste 이벤트도 포커스가 있어야 온다.
+
+**환경 (재현에 관여)**: Maccy `pasteByDefault = 1` 이라 항목 선택 시 **⌘V 를 합성해 직전 앱에 쏜다** → One App 활성화 직후 포커스 위치에 좌우된다. `enabledPasteboardTypes` 에 `public.png`·`public.tiff` 가 켜져 있어 히스토리에서 고른 항목이 이미지면 ①에 해당. Karabiner 는 무관(매핑은 `Cmd+IJKL = 화살표` 하나).
+
 ## ⚠️ xterm 6 함정 3가지 (전부 2026-08 실측)
 1. **네이티브 스크롤 영역이 없다** — 5.x 의 `.xterm-scroll-area` 가 사라져 `viewport.scrollTop` 조작이 안 먹는다. 스크롤백 스크롤은 `term.scrollLines(n)`·`scrollToBottom()`, 위치 판정은 `buffer.active.viewportY >= baseY`, 변화 감지는 `term.onScroll`.
 2. **스크롤바도 자체 구현**(`.xterm-scrollable-element > .scrollbar > .slider`)이라 전역 `::-webkit-scrollbar` 규칙이 안 먹는다.

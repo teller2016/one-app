@@ -159,6 +159,9 @@ const searchDecorations = () => {
 export type TerminalPaneHandle = {
   openSearch: () => void;
   scrollToBottom: () => void;
+  /** 키보드 포커스 회수 — 섹션 안 버튼에 포커스를 빼앗겼을 때 되돌린다
+   *  (TerminalSection 의 '포커스 안전망' 절 — ⌘C/⌘V 가 무반응이 되는 것을 막는다) */
+  focus: () => void;
 };
 
 /**
@@ -649,6 +652,7 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     onRegisterHandle(id, {
       openSearch,
+      focus: () => termRef.current?.focus(),
       scrollToBottom: () => {
         termRef.current?.scrollToBottom(); // 폴백 세션(xterm 스크롤백)
         // tmux 세션은 copy-mode 를 끝내는 것이 곧 맨 아래로다
@@ -691,6 +695,26 @@ export const TerminalView = memo(function TerminalView({
       data-pane-session={id}
       // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다
       onMouseDownCapture={() => onFocusPane(id)}
+      // ── 이미지 붙여넣기 = Ctrl+V 위임 ──────────────────────────────────
+      // ⌘V 는 Electron 기본 메뉴의 role:paste 로 처리돼 xterm 의 paste 핸들러에 닿는데,
+      // xterm 은 `clipboardData.getData('text/plain')` **한 줄만** 읽는다(Clipboard.ts).
+      // 캡처 이미지 클립보드는 평문 타입이 아예 없어(실측: PNGf·TIFF·JPEG… 뿐) 빈 문자열이
+      // 그대로 흘러 **아무 일도 일어나지 않았다** — 오류도 로그도 없다(2026-08-13 사용자 신고).
+      // Claude Code 는 `Ctrl+V`(0x16)를 받으면 시스템 클립보드를 직접 읽어 이미지를 첨부하므로
+      // ⌘V 를 그 경로로 넘긴다. capture 단계라 xterm(element·textarea) 리스너보다 먼저다.
+      onPasteCapture={(e) => {
+        const items = Array.from(e.clipboardData?.items ?? []);
+        if (!items.some((it) => it.kind === 'file' && it.type.startsWith('image/')))
+          return;
+        // 텍스트가 함께 있으면 그것이 사용자의 의도다 — 기존 경로(xterm)에 그대로 맡긴다
+        if (e.clipboardData?.getData('text/plain')) return;
+        // ⚠️ 대체 화면(TUI)에서만 개입한다 — 일반 셸에서 0x16 은 zsh 의 quoted-insert 라
+        // 다음 키가 리터럴로 먹혀 입력이 깨진다. Shift+Enter 게이트와 같은 조건이다.
+        if (termRef.current?.buffer.active.type !== 'alternate') return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.oneApp.terminal.write(id, '\x16');
+      }}
       // ── 파일 드래그 앤 드롭 = 경로 입력 (Terminal.app 관례) ──────────────
       // capture 단계로 받는다 — xterm 의 canvas/textarea 가 이벤트를 삼키는 문제를
       // 세션 탭 드래그는 투명 드롭 존 오버레이로 피하지만(features/terminal.md), 파일

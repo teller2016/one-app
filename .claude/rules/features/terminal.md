@@ -80,6 +80,13 @@ paths:
   - ⚠️ 한글 조합 중(isComposing) Enter 는 xterm 에 넘기지 말고 `return false` — 넘기면 '조합 확정 + `\r` 제출'이 된다(확정은 compositionend 가 처리).
 - **⌘←/⌘→ = `\x01`/`\x05`**(줄 처음/끝) — xterm 은 meta+화살표를 아예 버린다. Home/End 시퀀스는 맨 zsh 가 안 묶어 미사용. ⇧ 동반 조합은 개입하지 않는다.
 
+## 클립보드 (2026-08-13)
+- ⚠️ **⌘C/⌘V 는 앱이 처리하지 않는다** — `setApplicationMenu` 가 없어 **Electron 기본 메뉴의 role:copy/paste** 가 처리하고, 그건 **포커스된 편집 요소**에만 작동한다(xterm 은 리스너를 자기 `element`·`textarea` 에만 건다). 그래서 섹션 루트 `onClick` = **포커스 안전망**이 필수다 — 없으면 탭·툴바 버튼을 누른 뒤 복사·붙여넣기가 조용히 죽는다(오류·로그 없음).
+  - 안전망은 **rAF 로 미루고**(버튼 기본 포커스·모달 autoFocus 가 뒤에 확정된다) 실제 DOM 포함 관계·떠 있는 `.modal-overlay`/`.picker__pop`·입력 요소·**`getSelection()` 비어 있음**을 다 확인한 뒤에만 회수한다. ⚠️ 선택 검사를 빼면 변경사항 diff 를 드래그해 ⌘C 하는 순간 선택이 날아간다.
+- **이미지 ⌘V = `0x16`(Ctrl+V) 위임** — xterm 은 `text/plain` 한 줄만 읽어(`Clipboard.ts`) 캡처 이미지 클립보드(평문 타입 0개)는 빈 문자열이 흘러 **무반응**이었다. Claude Code 가 `0x16` 에서 시스템 클립보드를 직접 읽으므로 pane 루트 `onPasteCapture` 가 넘긴다(main 무변경).
+  - ⚠️ **대체 화면일 때만** — 일반 셸의 `0x16` 은 zsh `quoted-insert` 라 다음 키가 깨진다. 텍스트가 함께 있는 클립보드는 개입하지 않는다.
+  - ⚠️ "앱 재시작 후 살아난 세션에서만"처럼 보이는 신고가 오지만 **세션 상태와 무관**하다 — 재시작 조건을 쫓지 말 것.
+
 ## 파일 드래그 앤 드롭 (경로 입력)
 - pane 루트 **capture 단계**(`onDragOverCapture`/`onDropCapture`)로 받는다. 판정은 `dataTransfer.types` 의 `Files`(세션 탭 드래그와 안 겹침). 숨은 pane 은 `pointer-events: none`.
 - 경로는 **preload 의 `getPathForFile`(webUtils)** — 렌더러 `File.path` 는 Electron 32 에서 제거됨. 인용은 `shellQuotePath`(POSIX 작은따옴표), 말미 공백 1개.

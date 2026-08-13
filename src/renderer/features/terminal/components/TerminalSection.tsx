@@ -2,7 +2,10 @@
 // (Superset 스타일 오케스트레이터). 세션은 main 프로세스 소유라 탭·창을 닫아도 유지되고,
 // MO(모바일)와 같은 세션을 공유한다. 워크트리를 고르면 탭바가 그 위치(cwd)의 세션들로 바뀐다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import type {
   ChangesTarget,
   TerminalPreset,
@@ -538,6 +541,34 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     if (activeIdRef.current)
       paneHandles.current.get(activeIdRef.current)?.scrollToBottom();
   }, []);
+  // ── 포커스 안전망 — 섹션 안을 클릭했으면 키보드 포커스를 pane 으로 되돌린다 ────────
+  // ⌘C/⌘V 는 이 앱이 처리하지 않는다 — Electron 기본 메뉴의 role:copy/paste 라
+  // **포커스된 편집 요소**에만 작동하고, xterm 은 클립보드 리스너를 자기 element·textarea
+  // 에만 건다. 그래서 탭·툴바 버튼이 포커스를 쥐고 있으면 복사·붙여넣기가 조용히
+  // 무반응이 된다(2026-08-13 '가끔 안 된다'의 정체 — 이미지 붙여넣기 위임도 함께 죽는다).
+  // pane 의 포커스 복원 effect 는 `focused` 값이 **바뀔 때만** 도므로, 같은 탭을 다시
+  // 누르는 것처럼 값이 그대로인 경로에서는 포커스가 영영 돌아오지 않았다.
+  const reclaimFocus = useCallback((e: ReactMouseEvent) => {
+    // 모달·피커 팝오버는 body portal 이라 DOM 상 섹션 밖이지만 **React 트리로는** 여기까지
+    // 버블링된다 — 실제 DOM 포함 관계로 걸러야 모달 안 클릭을 건드리지 않는다.
+    if (!(e.target instanceof Node) || !rootRef.current?.contains(e.target)) return;
+    // ⚠️ rAF 로 미룬다 — 클릭이 만드는 포커스 이동(버튼 기본 포커스, 방금 열린 모달의
+    // autoFocus)이 이 핸들러보다 **뒤에** 확정된다. 즉시 부르면 그것들을 빼앗는다.
+    requestAnimationFrame(() => {
+      // portal 이 떠 있으면 포커스 주인은 그쪽이다
+      if (document.querySelector('.modal-overlay, .picker__pop')) return;
+      // ⚠️ 텍스트를 드래그 선택한 직후면 손대지 않는다 — 변경사항 diff 를 선택해
+      // ⌘C 하려는 순간 포커스를 옮기면 선택이 날아간다.
+      if (window.getSelection()?.toString()) return;
+      const el = document.activeElement as HTMLElement | null;
+      // 입력 중이면 그대로 둔다(검색·이름 편집·커밋 메시지). xterm 의 입력도 TEXTAREA 라
+      // 이 판정에 걸리는데, 그때는 이미 포커스가 터미널이므로 할 일이 없다.
+      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return;
+      if (el?.isContentEditable) return;
+      if (activeIdRef.current)
+        paneHandles.current.get(activeIdRef.current)?.focus();
+    });
+  }, []);
   // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정.
   // tmux 세션은 xterm 이 아니라 tmux copy-mode 가 스크롤 상태의 주인이라, pane 이
   // 휠 위임 응답(scrolledUp)으로 올려 준다(TerminalView 의 '휠 스크롤' 절).
@@ -938,6 +969,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     <div
       ref={rootRef}
       className={'terminal' + (sideCollapsed ? ' terminal--side-collapsed' : '')}
+      // 섹션 안 버튼을 눌러 xterm 이 포커스를 잃으면 되돌린다 — 위 '포커스 안전망' 절
+      onClick={reclaimFocus}
     >
       <aside
         className={
