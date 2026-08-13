@@ -98,9 +98,6 @@ export function ApprovalSection() {
             <Icon name="clipboard-list" size={16} />
             전자결재 상신함 열기
           </Button>
-          <p className="approval-eabox__hint">
-            이미 올린 문서의 진행 상태를 확인합니다.
-          </p>
         </div>
         <Banner variant="info">
           작성은 앱이 대신하지만 <strong>결재(승인)는 언제나 직접</strong> 하셔야
