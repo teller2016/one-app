@@ -722,6 +722,19 @@
     }
   }
 
+  // 순서 변경 삽입선 — 놓을 자리를 아이템 좌/우에 액센트 선으로 (LNB 워크스페이스 행의
+  // --drop-before/after 와 같은 문법, 방향만 세로다). 탭은 채움을 background-image 레이어로
+  // 칠하므로 box-shadow 와 겹치지 않는다 — 활성 틴트를 지우지 않고 선만 얹힌다.
+  &__tab--drop-before,
+  &__tab-pack--drop-before {
+    box-shadow: -2px 0 0 0 var(--accent);
+  }
+
+  &__tab--drop-after,
+  &__tab-pack--drop-after {
+    box-shadow: 2px 0 0 0 var(--accent);
+  }
+
   // 분할 그룹 = **탭 한 장**을 멤버 세그먼트로 나눠 쓴다 (시안 ⑧ 통탭).
   // 장의 기하(테두리·라운드·톤)는 단일 탭과 동일 — 폭만 멤버 수만큼 넓다.
   &__tab-pack {

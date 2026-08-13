@@ -1,6 +1,7 @@
 // 상단 세션 탭바 — 선택된 워크트리의 세션들 + [+] 새 세션 (Superset 스타일).
 // 탭 더블클릭 = 이름 인라인 편집(main 의 sidecar 에 반영 — 재시작 후에도 유지).
 // 탭을 끌어 pane 위에 놓으면 화면이 분할된다(드롭 존·판정은 TerminalSection 소유).
+// 탭을 끌어 **다른 탭의 좌우 가장자리**에 놓으면 탭 순서가 바뀐다(아래 REORDER_EDGE).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
 import { memo, useEffect, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
@@ -31,6 +32,11 @@ const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
 // 0 이면 탭바를 가로지르기만 해도 화면이 연쇄 전환되고, 길면 굼떠 보인다.
 const HOVER_OPEN_MS = 180;
 
+// 순서 변경 존 — 아이템(단일 탭·그룹 통탭) 좌우 이 비율 안쪽이 '앞/뒤에 삽입'이고,
+// 가운데는 기존 스프링 로딩(그 화면 열기) 영역이다. pane 드롭의 중앙 데드존과 같은 개념:
+// 한 제스처에 두 뜻을 담되 조준 위치로 가른다. 탭 폭이 150px 고정이라 0.3 = 45px 씩.
+const REORDER_EDGE = 0.3;
+
 // memo — 패널 드래그(프레임마다 상태 변경)·pane 리렌더에 탭바가 끌려가지 않게.
 // 상위가 콜백을 useCallback 으로 안정화하고 sessions 는 useMemo 파생값이라 실제로 유지된다.
 /** 탭바 표시 항목 — 단일 세션 또는 분할 그룹(멤버들이 하나의 박스로 묶인다) */
@@ -56,6 +62,7 @@ export const SessionTabs = memo(function SessionTabs({
   onDragStartSession,
   onDragEndSession,
   onDetachSession,
+  onReorder,
 }: {
   /** 표시 항목(순서 = 표시 순서) — 그룹은 멤버 칩들을 tab-pack 박스로 감싼다 */
   items: TabItem[];
@@ -80,6 +87,8 @@ export const SessionTabs = memo(function SessionTabs({
   onDragEndSession: () => void;
   /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리(혼자 보기) */
   onDetachSession: (id: string) => void;
+  /** 탭 순서 변경 — 새 순서의 세션 id 배열(그룹 멤버는 인접한 채로 함께 옮겨진다) */
+  onReorder: (ids: string[]) => void;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 탭을 더블클릭하면 제목이 입력창으로 바뀐다
@@ -87,6 +96,8 @@ export const SessionTabs = memo(function SessionTabs({
   const [draft, setDraft] = useState('');
   // 분리 드롭 존 표시 — 그룹 멤버를 끌어 탭바 위에 올렸을 때만
   const [detachHover, setDetachHover] = useState(false);
+  // 순서 변경 삽입선 — 놓을 자리(아이템 인덱스 + 그 앞/뒤)
+  const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   // 끌리는 탭이 그룹 멤버일 때만 탭바가 '분리' 드롭 존이 된다
   const detachable =
     !!draggingId &&
@@ -122,10 +133,84 @@ export const SessionTabs = memo(function SessionTabs({
       }, HOVER_OPEN_MS),
     };
   };
-  // 드래그가 끝나면(드롭·취소 모두 draggingId 가 비워진다) 대기 중인 전환을 버린다
+  // 드래그가 끝나면(드롭·취소 모두 draggingId 가 비워진다) 대기 중인 전환·삽입선을 버린다
   useEffect(() => {
-    if (!draggingId) clearHoverOpen();
+    if (!draggingId) {
+      clearHoverOpen();
+      setDropAt(null);
+    }
   }, [draggingId]);
+
+  // ── 순서 변경 — 탭을 끌어 다른 아이템의 좌우 가장자리에 놓으면 표시 순서가 바뀐다.
+  // 이동 단위는 **탭바 아이템**(단일 탭 또는 그룹 통탭 전체)이다 — 그룹 안 멤버 순서는
+  // 분할 트리가 소유하므로(pane 드롭이 바꾼다) 여기서는 그룹을 통째로 옮긴다.
+  /** 끌리는 세션이 속한 아이템 위치 — 그룹 멤버를 끌면 그 그룹이 이동 단위가 된다 */
+  const fromIndex = !draggingId
+    ? -1
+    : items.findIndex((it) =>
+        it.kind === 'single'
+          ? it.session.id === draggingId
+          : it.members.some((m) => m.id === draggingId)
+      );
+
+  /** 놓아도 순서가 그대로인 자리(자기 앞·자기 뒤) — 표시도 드롭도 만들지 않는다 */
+  const noopDrop = (index: number, after: boolean) => {
+    const to = index + (after ? 1 : 0);
+    return to === fromIndex || to === fromIndex + 1;
+  };
+
+  /** 아이템 위 dragover — 가장자리면 삽입선을 세우고, 가운데면 스프링 로딩에 양보한다.
+   *  반환 true = 순서를 조준하는 중(호출부는 화면 전환 타이머를 걸지 않는다) */
+  const onItemDragOver = (e: ReactDragEvent, index: number): boolean => {
+    if (fromIndex < 0) return false;
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const after = x > 1 - REORDER_EDGE;
+    if (!after && x >= REORDER_EDGE) {
+      setDropAt(null);
+      return false; // 가운데 — 그 화면 열기(스프링 로딩) 영역
+    }
+    clearHoverOpen(); // 순서를 조준하는 동안 화면이 밑에서 바뀌지 않게
+    if (noopDrop(index, after)) {
+      setDropAt(null);
+      return true;
+    }
+    e.preventDefault(); // 없으면 drop 이 발화하지 않는다 — 이 자리에서만 성립시킨다
+    e.dataTransfer.dropEffect = 'move';
+    // dragover 는 고빈도 — 같은 값이면 setState 를 만들지 않는다
+    setDropAt((cur) =>
+      cur?.index === index && cur.after === after ? cur : { index, after }
+    );
+    return true;
+  };
+
+  /** 삽입선 자리대로 새 순서(평탄한 세션 id 배열)를 만들어 올린다 */
+  const applyReorder = (e: ReactDragEvent) => {
+    e.preventDefault();
+    // ⚠️ 탭바 컨테이너의 '그룹에서 분리' 드롭까지 함께 발화하면 안 된다 — 그룹을 옮기려고
+    // 멤버 탭을 끌었을 때 순서 변경과 분리가 동시에 일어난다.
+    e.stopPropagation();
+    const at = dropAt;
+    setDropAt(null);
+    // ⚠️ 위 stopPropagation 이 document 안전망(dragSession 회수)까지 막으므로 직접 끝낸다 —
+    // 남기면 드롭 존 오버레이가 pane 을 덮은 채 굳어 휠·클릭이 전부 삼켜진다
+    // (terminal.md '분할 그룹' 절 — detachSession 이 같은 이유로 직접 정리한다).
+    onDragEndSession();
+    if (!at || fromIndex < 0) return;
+    // 아이템 = 블록(단일은 1개, 그룹은 멤버 전원) — 블록째로 옮기고 평탄화한다
+    const blocks = items.map((it) =>
+      it.kind === 'single' ? [it.session.id] : it.members.map((m) => m.id)
+    );
+    const [moved] = blocks.splice(fromIndex, 1);
+    const to = at.index + (at.after ? 1 : 0);
+    // splice 로 소스를 이미 뺐으므로 뒤쪽으로 옮길 때는 자리를 하나 당긴다
+    blocks.splice(to > fromIndex ? to - 1 : to, 0, moved);
+    onReorder(blocks.flat());
+  };
+
+  /** 삽입선 클래스 — LNB 워크스페이스 행(--drop-before/after)과 같은 문법, 방향만 세로 */
+  const dropClass = (index: number, base: string) =>
+    dropAt?.index === index ? ` ${base}--drop-${dropAt.after ? 'after' : 'before'}` : '';
 
   // Enter·blur 공용 — 빈 값이나 변경 없음이면 조용히 닫는다(main 도 같은 판정을 한다)
   const commitRename = async () => {
@@ -153,8 +238,10 @@ export const SessionTabs = memo(function SessionTabs({
 
   /** 탭 칩 하나 — 단일 탭과 그룹 멤버가 같은 마크업을 쓴다(그룹은 pack 박스가 감쌀 뿐).
    *  래퍼 span + [선택 button][닫기 button] 형제 — 중첩 인터랙티브 금지.
-   *  드래그 = 분할 드롭 소스 (WorkspaceNav 의 dragSource 와 같은 규칙) */
-  const renderTab = (s: TerminalSessionInfo) => {
+   *  드래그 = 분할 드롭 소스 (WorkspaceNav 의 dragSource 와 같은 규칙)
+   *  `item` 은 **단일 탭일 때만** 온다 — 그 경우 칩 자신이 아이템이라 순서 변경 드롭까지
+   *  받는다(그룹 멤버는 감싸는 tab-pack 이 아이템이라 그쪽이 받는다). */
+  const renderTab = (s: TerminalSessionInfo, item?: { index: number }) => {
     if (editingId === s.id)
       return (
         <span key={s.id} className="terminal__tab terminal__tab--edit">
@@ -179,13 +266,15 @@ export const SessionTabs = memo(function SessionTabs({
       <span
         key={s.id}
         data-session={s.id}
-        className={[
-          'terminal__tab',
-          s.id === activeId ? 'terminal__tab--active' : '',
-          s.id === draggingId ? 'terminal__tab--dragging' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        className={
+          [
+            'terminal__tab',
+            s.id === activeId ? 'terminal__tab--active' : '',
+            s.id === draggingId ? 'terminal__tab--dragging' : '',
+          ]
+            .filter(Boolean)
+            .join(' ') + (item ? dropClass(item.index, 'terminal__tab') : '')
+        }
         draggable
         onDragStart={(e: ReactDragEvent) => {
           e.dataTransfer.effectAllowed = 'move';
@@ -193,7 +282,12 @@ export const SessionTabs = memo(function SessionTabs({
           onDragStartSession(s.id);
         }}
         onDragEnd={onDragEndSession} // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
-        onDragOver={() => onTabDragOver(s.id)} // 스프링 로딩 — 위 주석 참고
+        onDragOver={(e: ReactDragEvent) => {
+          // 가장자리(순서 조준)면 스프링 로딩을 걸지 않는다 — 두 뜻이 겹치지 않게
+          if (item && onItemDragOver(e, item.index)) return;
+          onTabDragOver(s.id); // 스프링 로딩 — 위 주석 참고
+        }}
+        onDrop={item ? applyReorder : undefined}
         // 가운데 클릭 = 종료 (브라우저 탭 관례 — 2026-08-10 사용자 요청).
         // 래퍼에 걸어 제목·상태점 어디를 눌러도 닫힌다.
         onAuxClick={(e) => {
@@ -207,7 +301,7 @@ export const SessionTabs = memo(function SessionTabs({
           aria-selected={s.id === activeId}
           title={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
             STATUS_LABELS[s.status]
-          }${i < 9 ? ` (⌘${i + 1})` : ''}\n더블클릭: 이름 변경 · 가운데 클릭: 종료`}
+          }${i < 9 ? ` (⌘${i + 1})` : ''}\n더블클릭: 이름 변경 · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
           onClick={() => onSelect(s.id)}
           onDoubleClick={() => {
             setDraft(s.title);
@@ -272,8 +366,10 @@ export const SessionTabs = memo(function SessionTabs({
       onDragLeave={() => {
         setDetachHover(false);
         // 탭바를 벗어나면 대기 중인 스프링 로딩도 버린다 — 안 버리면 pane 을 조준하는
-        // 사이 타이머가 발화해 화면이 밑에서 바뀐다
+        // 사이 타이머가 발화해 화면이 밑에서 바뀐다. 삽입선도 함께 거둔다(안 거두면
+        // pane 을 조준하는 동안 탭바에 놓을 자리 표시가 남는다).
         clearHoverOpen();
+        setDropAt(null);
       }}
       onDrop={(e) => {
         if (!detachable) return;
@@ -284,24 +380,32 @@ export const SessionTabs = memo(function SessionTabs({
       }}
     >
       <div className="terminal__tabs-list" role="tablist" aria-label="터미널 세션">
-        {items.map((it) =>
+        {items.map((it, idx) =>
           it.kind === 'single' ? (
-            renderTab(it.session)
+            renderTab(it.session, { index: idx })
           ) : (
             /* 분할 그룹 = 탭 한 장(통탭) — 멤버는 일반 탭과 같은 마크업(클릭·더블클릭·
                드래그·가운데 클릭 전부 동일)이고, 장이 활성(멤버 중 하나가 activeId)이면
-               --active 로 아래 면과 이어진다(스타일은 SCSS __tab-pack) */
+               --active 로 아래 면과 이어진다(스타일은 SCSS __tab-pack).
+               순서 변경 드롭은 **장 전체**가 받는다 — 멤버 위 dragover 도 여기로 버블하므로
+               판정 기준(rect)은 장의 좌우 끝이고, 옮겨질 단위도 그룹 전체다. */
             <span
               key={`pack:${it.members[0].id}`}
-              className={`terminal__tab-pack${
-                it.members.some((m) => m.id === activeId)
-                  ? ' terminal__tab-pack--active'
-                  : ''
-              }`}
+              className={
+                `terminal__tab-pack${
+                  it.members.some((m) => m.id === activeId)
+                    ? ' terminal__tab-pack--active'
+                    : ''
+                }` + dropClass(idx, 'terminal__tab-pack')
+              }
               role="group"
               aria-label={`분할 그룹 — ${it.members.map((m) => m.title).join(', ')}`}
+              onDragOver={(e) => {
+                onItemDragOver(e, idx);
+              }}
+              onDrop={applyReorder}
             >
-              {it.members.map(renderTab)}
+              {it.members.map((m) => renderTab(m))}
             </span>
           )
         )}

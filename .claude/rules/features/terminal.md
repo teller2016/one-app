@@ -53,7 +53,8 @@ paths:
 - `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + ratio)가 그룹 상태. **pane 들은 `__panes` 의 플랫 형제 유지** — React 재부모화 = xterm 언마운트라 트리 모양대로 중첩 금지. 렌더는 `computeLayout` 의 %rect 인라인.
 - **화면은 activeId 의 함수** — 포커스 세션이 속한 그룹 전체가 보이고, 아니면 단독 전체 화면. 탭 클릭·⌘1..9·⌃Tab·새 세션은 **화면 전환만**, 그룹 생성·변경은 **드롭만** 한다. ⚠️ '탭 클릭 = 포커스 슬롯 교체'(VS Code 식)는 분할을 덮어써 폐기 — 되돌리지 말 것.
 - 드롭 판정 X자(`|nx|>|ny|`), 중앙 데드존 0.3 = 그 pane 세션 교체. 그룹당 `MAX_SPLIT_PANES`(4). 다른 그룹 세션 드롭 시 먼저 `removeFromGroups`. pane 1개 남는 그룹은 해체.
-- 그룹에서 빼기 = 탭바 **빈 영역** 드롭. ⚠️ 탭·그룹 장 위에서는 dragover 에 preventDefault 하지 않는다(`overTabArea`) — 탭 하버는 스프링 로딩(180ms, ⚠️ 탭바 이탈 시 타이머 파기) 영역이다.
+- 그룹에서 빼기 = 탭바 **빈 영역** 드롭. ⚠️ 탭·그룹 장 위에서는 dragover 에 preventDefault 하지 않는다(`overTabArea`) — 탭 하버는 스프링 로딩(180ms, ⚠️ 탭바 이탈 시 타이머 파기) 영역이다. 단 **탭 좌우 가장자리 30%(`REORDER_EDGE`)는 순서 변경 존**이라 거기서만 preventDefault 한다.
+- 탭 순서 변경 = 아이템(단일 탭 · 그룹 통탭) 가장자리 드롭 — 저장은 localStorage `terminal:tabOrder`(selKey → id 배열), 정렬은 `tabSessions` 한 곳에서만(⚠️ `sessions` 는 정렬하지 않는다 — pane DOM 순서가 흔들린다). 이동 단위는 **아이템 블록**이라 그룹은 통째로 옮겨지고 그룹 **내부** 순서는 그대로 분할 트리 소유다. ⚠️ 순서 드롭 핸들러는 `stopPropagation`(안 하면 탭바의 '분리' 드롭이 함께 발화) + **`onDragEndSession()` 직접 호출**(stopPropagation 이 document 안전망까지 막는다 — 안 하면 드롭 존 오버레이가 굳는다).
 - ⚠️ **한 세션은 그룹 전체 통틀어 pane 1개만** — main 의 `desktopAttached` 가 `Set<세션id>` 라 둘이면 한쪽 detach 가 다른 쪽 방송까지 끊는다. `removeFromGroups`·`replaceSession`(그룹 안 swap)·`sanitizeLayout` 이 지키고 **main 은 무변경**.
 - **드롭 존은 드래그 중에만 pane 을 덮는 투명 오버레이**(xterm 이 dragover 를 삼키는 문제 회피). ⚠️ **드래그가 어떻게 끝나든 `dragSession` 을 반드시 비울 것** — 남으면 오버레이가 굳어 휠·클릭·선택이 전부 삼켜진다. 그룹 분리는 소스 탭이 언마운트돼 `dragend` 가 안 오므로 `detachSession` 이 직접 정리 + document 안전망(⚠️ **bubble 단계** — capture 면 드롭 자체가 무효).
 - active 는 **visible(다중)/focused(단일)** 분리 — 크기 주장·fit·refresh 는 visible 전부, `term.focus()`·⌘F 는 focused 만. ⚠️ visible effect 에서 `focus()` 금지(드롭 순간 포커스 강탈).

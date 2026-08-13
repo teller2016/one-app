@@ -118,6 +118,26 @@ function savedExpanded(): string[] {
   }
 }
 
+/** 탭 표시 순서 — 화면(selKey)별 세션 id 배열. 화면 취향이라 분할 레이아웃과 같이 localStorage */
+const TAB_ORDER_KEY = 'terminal:tabOrder';
+
+function savedTabOrders(): Record<string, string[]> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    const out: Record<string, string[]> = {};
+    for (const [key, v] of Object.entries(raw)) {
+      const ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+      if (ids.length > 0) out[key] = ids;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 function savedSelection(): WorkspaceSelection | null {
   try {
     const v = JSON.parse(localStorage.getItem('terminal:wsSelection') ?? 'null');
@@ -141,6 +161,12 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const [worktrees, setWorktrees] = useState<Record<string, WorktreeInfo[]>>({});
   const [expanded, setExpanded] = useState<string[]>(savedExpanded);
   const [selection, setSelection] = useState<WorkspaceSelection | null>(savedSelection);
+  // 탭 순서 — 사용자가 탭을 끌어 정한 표시 순서(화면별). 없는 화면·새 세션은 생성 순서
+  const [tabOrders, setTabOrders] = useState<Record<string, string[]>>(savedTabOrders);
+  useEffect(() => {
+    if (Object.keys(tabOrders).length > 0)
+      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(tabOrders));
+  }, [tabOrders]);
 
   const [newWsOpen, setNewWsOpen] = useState(false);
   const [worktreeFor, setWorktreeFor] = useState<TerminalWorkspace | null>(null);
@@ -307,23 +333,35 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [sessions, allPaths]
   );
 
+  // 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션이 전부 이 키로 갈린다
+  const selKey = !selection
+    ? ''
+    : selection.kind === 'other'
+      ? 'other'
+      : `${selection.wsId}:${selection.path}`;
+
+  // 탭 목록 — 이 화면의 세션들을 **사용자가 정한 순서**로. 순서에 없는 세션(새로 만든 것)은
+  // 뒤에 원래 순서(생성 순)대로 남는다.
   const tabSessions = useMemo(() => {
-    if (!selection) return [];
-    if (selection.kind === 'other') return otherSessions;
-    return sessions.filter((s) => s.cwd === selection.path);
-  }, [selection, sessions, otherSessions]);
+    const base = !selection
+      ? []
+      : selection.kind === 'other'
+        ? otherSessions
+        : sessions.filter((s) => s.cwd === selection.path);
+    const order = tabOrders[selKey];
+    if (!order || base.length < 2) return base;
+    const rank = new Map(order.map((id, i) => [id, i]));
+    // ⚠️ 미지정은 MAX_SAFE_INTEGER — Infinity 로 두면 둘 다 미지정일 때 차가 NaN 이 되어
+    // 비교가 무의미해진다(같은 값이면 0 이어야 안정 정렬이 원래 순서를 지킨다).
+    const at = (id: string) => rank.get(id) ?? Number.MAX_SAFE_INTEGER;
+    return [...base].sort((a, b) => at(a.id) - at(b.id));
+  }, [selection, sessions, otherSessions, tabOrders, selKey]);
 
   const selectedWt: WorktreeInfo | null =
     selection?.kind === 'worktree'
       ? (worktrees[selection.wsId] ?? []).find((w) => w.path === selection.path) ?? null
       : null;
   const canCreate = selection?.kind === 'worktree' && !selectedWt?.missing;
-
-  const selKey = !selection
-    ? ''
-    : selection.kind === 'other'
-      ? 'other'
-      : `${selection.wsId}:${selection.path}`;
 
   const selectAndSave = useCallback((sel: WorkspaceSelection | null) => {
     setSelection(sel);
@@ -428,6 +466,16 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       setActiveId(id);
     },
     [rememberActive, selKey]
+  );
+
+  /** 탭 드래그로 정한 새 순서 — 이 화면(selKey)만 기억한다(다른 워크트리는 그대로).
+   *  받은 배열이 지금 탭 목록 전체라 죽은 세션 id 는 재정렬할 때마다 자연히 정리된다.
+   *  ⚠️ 참조가 고정돼야 한다 — SessionTabs 가 memo 라 콜백이 바뀌면 탭바가 매번 리렌더된다. */
+  const reorderTabs = useCallback(
+    (ids: string[]) => {
+      setTabOrders((cur) => ({ ...cur, [selKeyRef.current]: ids }));
+    },
+    [selKeyRef]
   );
 
   // ── 탭바 표시 구조 — 단일 세션 | 분할 그룹(멤버 배열) 아이템 목록 ──
@@ -966,6 +1014,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
+          onReorder={reorderTabs}
         />
 
         {/* 상단 공용 바 — pane 마다 있던 툴바를 탭바 아래 하나로 고정(2026-08-10 사용자
