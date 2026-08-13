@@ -19,6 +19,11 @@
     flex-shrink: 0;
   }
 
+  // 화면 전환 탭 (내 이슈 / 주간) — 헤더 바로 아래, 프로젝트 탭보다 좁은 간격
+  &__views {
+    margin: 4px 0 16px;
+  }
+
   // 프로젝트 탭 (2개 이상일 때만 렌더)
   &__tabs {
     margin-bottom: 20px;
@@ -669,5 +674,183 @@
     margin-top: 4px;
     @include type-small;
     color: var(--text-3);
+  }
+}
+
+// ===== 주간 활동 (Jira 섹션의 '주간' 화면) =====
+// 한 주(월~일) 동안 내가 손댄 티켓 — 관여도 마크 + 필터 + 펼침 이력.
+// 키·제목·복사 아이콘은 `.jira__key`·`.jira__title`·`.jira__copy` 를 그대로 재사용한다
+// (이 화면이 `.jira` 섹션 안에 렌더되므로 스코프가 닿는다).
+.jira-week {
+  // 주 이동 줄 — [◀] 8.10(월) ~ 8.16(일) [▶] [이번 주] ······ [새로고침]
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  // 주 표시 — 폭을 고정해 주를 옮겨도 화살표가 흔들리지 않게
+  &__label {
+    min-width: 176px;
+    text-align: center;
+    @include type-body;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__nav-gap {
+    flex: 1;
+  }
+
+  // 관여도 필터 + 프로젝트 분포
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    margin-bottom: 16px;
+  }
+
+  // 툴바 오른쪽 묶음 — 프로젝트 분포 + 링크 복사
+  &__toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__projects {
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 행 카드 — 상태 전환 드롭다운이 없는 화면이라 overflow 로 라운딩을 처리한다
+  &__card {
+    @include card-surface;
+    overflow: hidden;
+  }
+
+  &__item + &__item {
+    border-top: 1px solid var(--border);
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    color: var(--text);
+  }
+
+  // 관여도 마크 — 해결(초록 체크) · 진행(노랑 재생) · 연관(회색 원)
+  &__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--r-full);
+
+    &--resolved {
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+
+    &--progressed {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    &--touched {
+      background: var(--overlay-track);
+      color: var(--text-3);
+    }
+
+    // 이력을 못 받아 검색 갈래로 추정한 판정 — 확신 정도를 흐리게 표시
+    &--guess {
+      opacity: 0.6;
+    }
+  }
+
+  // 내 마지막 변경 시각 (요일 + 시:분)
+  &__when {
+    flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 이력 펼침 토글 — 펼치면 화살표가 돈다
+  &__toggle {
+    flex-shrink: 0;
+    color: var(--text-3);
+    transition: transform var(--dur-1) var(--ease);
+
+    &--on {
+      transform: rotate(180deg);
+    }
+
+    &:disabled {
+      opacity: 0.25;
+      cursor: default;
+    }
+  }
+
+  // 펼친 이력 — 관여도 마크 폭만큼 들여쓰고, 배경을 한 톤 낮춰 다음 행과 구분한다
+  // (구분이 없으면 이력 줄이 아래 티켓 행처럼 읽힌다 — 2026-08-13 실측 화면에서 확인)
+  &__events {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 14px 8px 44px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--border);
+  }
+
+  &__event {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    @include type-small;
+    color: var(--text-2);
+  }
+
+  &__event-time {
+    flex-shrink: 0;
+    width: 58px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__event-field {
+    flex-shrink: 0;
+    min-width: 54px;
+    color: var(--text-2);
+  }
+
+  // 값 변경 — 긴 값(설명·제목)은 잘라 두고 전문은 title 로 본다
+  &__event-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    color: var(--text-3);
+  }
+
+  &__event-from,
+  &__event-to {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__event-to {
+    color: var(--text);
   }
 }

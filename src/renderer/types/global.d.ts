@@ -14,6 +14,7 @@ import type {
   MirrorActionResult,
   JiraListResult,
   JiraActionResult,
+  JiraActivityResult,
   JiraDetailResult,
   JiraTransitionsResult,
   JiraAddedResult,
@@ -189,6 +190,12 @@ declare global {
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
         resolve: (key: string) => Promise<JiraActionResult>;
+        /** 기간(YYYY-MM-DD)에 내가 작업한 티켓 — 관여도·내 변경 이력 포함 */
+        activity: (
+          start: string,
+          end: string,
+          force?: boolean,
+        ) => Promise<JiraActivityResult>;
         // 직접 추가한 티켓 — 목록 자체는 jira.list 결과에 pinned 로 병합돼 온다
         added: {
           list: () => Promise<JiraAddedTicket[]>;

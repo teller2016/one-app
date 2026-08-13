@@ -207,6 +207,40 @@ html.mo {
     max-width: 80vw;
   }
 
+  // 주간 활동 행도 단일 flex(마크·키·제목·시각·상태·토글)라 폰에서 제목이 눌린다
+  // → 내 이슈 행과 같은 규칙으로 제목을 첫 줄 전폭에 올린다
+  .jira-week__row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 10px 12px;
+  }
+
+  .jira-week__row .jira__title {
+    flex: 1 1 100%;
+    order: -1;
+    white-space: normal;
+  }
+
+  // 주 표시 폭 고정(176px)은 데스크톱 기준 — 좁은 화면에서는 남는 만큼만 쓴다
+  .jira-week__label {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .jira-week__events {
+    padding-left: 24px; // 마크 폭만큼의 들여쓰기는 폰에서 과하다
+  }
+
+  .jira-week__event {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .jira-week__event-from,
+  .jira-week__event-to {
+    max-width: 60vw;
+  }
+
   // ── PR ──
   // ⚠️ 2026-08-08 개편(저장소 탭 + 마스터-디테일)으로 클래스가 통째로 바뀌었다 —
   //    예전 오버라이드(`prs__meta`·`prs__quick-row`·`prs__main`·`prs__title`)는 가리키는

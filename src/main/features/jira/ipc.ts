@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import type { JiraWorkPrepareInput } from '../../../shared/types';
 import { handleShared } from '../../lib/moIpc';
+import { fetchMyActivity } from './activity';
 import {
   addTicketToList,
   fetchIssueDetail,
@@ -29,6 +30,12 @@ export function registerJiraIpc() {
   );
   // PR 머지 직후 원클릭 해결 처리 — 해결/완료 계열 전환 자동 선택
   handleShared('jira:resolve', (key: string) => resolveIssue(key));
+
+  // 주간 활동 — 기간(YYYY-MM-DD) 안에 내가 작업한 티켓 + 관여도 + 내 변경 이력.
+  // ⚠️ 날짜가 JQL 문자열에 들어가므로 형식 검증은 `activity.ts` 진입부에서 한다.
+  handleShared('jira:activity', (start: string, end: string, force?: boolean) =>
+    fetchMyActivity(String(start), String(end), force === true),
+  );
 
   // 직접 추가한 티켓 — 담당이 아닌데 내가 작업해야 하는 이슈를 목록에 끌어온다.
   // 키 문자열만 오가고 파일 경로가 없어 폰(MO)에 열어도 안전하다.

@@ -22,6 +22,7 @@ const SPEC: Spec = {
     getTransitions: { ch: 'jira:transitions' },
     transition: { ch: 'jira:transition' },
     resolve: { ch: 'jira:resolve' },
+    activity: { ch: 'jira:activity' },
   },
   prs: {
     fetch: { ch: 'prs:fetch' },

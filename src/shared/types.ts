@@ -111,6 +111,17 @@ export type JiraListResult = {
 
 export type JiraActionResult = { ok: boolean; error?: string };
 
+/**
+ * 해결 상태 판별 (main·렌더러 공용 — 렌더러 쪽 진입점은 `features/jira` 의 `isDone`).
+ * 카테고리가 done 이거나 이름이 해결·완료 계열이면 해결로 본다.
+ * (이 팀 워크플로우는 '해결됨' 상태가 카테고리상 '진행 중'이라 이름 휴리스틱을 병행한다)
+ */
+export function isDoneStatus(status: string, statusCategory?: string): boolean {
+  return (
+    statusCategory === "done" || /해결|완료|resolved|done|closed/i.test(status)
+  );
+}
+
 // ── 직접 추가한 티켓 (담당이 아닌데 내가 작업해야 하는 이슈) ──
 
 /** 직접 추가한 티켓 하나 — 키만 저장하고 내용은 매 조회 때 Jira 에서 받는다 */
@@ -172,6 +183,50 @@ export type JiraDetailResult = {
   ok: boolean;
   detail?: JiraIssueDetail;
   error?: string;
+};
+
+// ── Jira 주간 활동 (기간 기준 — 내가 그 주에 작업한 티켓) ──
+
+/**
+ * 그 기간에 내가 티켓에 얼마나 관여했는지 — 목록 아이콘·필터 기준.
+ * - resolved: 내가 그 기간에 상태를 해결·완료 계열로 전환했다
+ * - progressed: 내가 상태를 바꿨지만 완료까지는 아니다
+ * - touched: 상태 전환 없이 담당·워크로그·필드 변경만 있다
+ */
+export type JiraEngagement = "resolved" | "progressed" | "touched";
+
+/** 어느 조회 갈래에서 나온 티켓인지 (근거 표시·판정 폴백용) */
+export type JiraActivitySource = "assignee" | "status" | "worklog";
+
+/** 그 기간 안의 내 변경 한 건 (Jira changelog 항목) */
+export type JiraActivityEvent = {
+  at: string; // ISO
+  field: string; // 표시용 필드명 (상태·담당자·우선순위 …)
+  from: string | null;
+  to: string | null;
+};
+
+/** 주간 활동 목록의 티켓 한 줄 — 내 이슈 목록과 같은 형태 + 관여도·이력 */
+export type JiraActivityIssue = JiraIssue & {
+  engagement: JiraEngagement;
+  sources: JiraActivitySource[];
+  /** 그 기간 안의 내 변경만, 시간순 (이력을 못 받았으면 빈 배열) */
+  events: JiraActivityEvent[];
+  /**
+   * 이력을 못 받아온 티켓 — changelog 조회 실패·상한 초과.
+   * 관여도가 검색 갈래에 기반한 추정이라는 표시다.
+   */
+  historyMissing?: boolean;
+};
+
+export type JiraActivityResult = {
+  ok: boolean;
+  configured: boolean; // 주소·이메일·토큰이 모두 설정됐는지
+  range?: { start: string; end: string }; // YYYY-MM-DD (요청 그대로 — 표시 대조용)
+  issues?: JiraActivityIssue[];
+  error?: string;
+  /** 일부 조회 갈래만 실패했을 때 안내 (본 목록은 유효 — 부분 성공) */
+  warnings?: string[];
 };
 
 // ── Jira 작업 시작 (티켓 맥락을 femc 세션으로 넘기기) ──

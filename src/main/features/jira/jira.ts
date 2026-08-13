@@ -25,7 +25,7 @@ import { sanitizeHtml } from '../../lib/sanitize';
 import { fetchWithTimeout as fetch } from '../../lib/http';
 
 /** Jira REST 응답의 이슈 형태 (필요 필드만) */
-interface RawIssue {
+export interface RawIssue {
   key: string;
   fields: {
     summary?: string;
@@ -39,6 +39,36 @@ interface RawIssue {
     priority?: { name?: string };
     updated?: string;
   };
+  /** `expand=changelog` 로 요청했을 때만 온다 (주간 활동 — activity.ts) */
+  changelog?: RawChangelog;
+}
+
+/** 변경 이력 한 사람의 한 번 편집 (여러 필드가 items 로 묶여 온다) */
+export interface RawHistory {
+  id?: string;
+  created?: string; // ISO
+  // 계정 식별자는 인스턴스에 따라 다르다 — Cloud 는 accountId, Server/DC 는 name/key
+  author?: {
+    accountId?: string;
+    emailAddress?: string;
+    displayName?: string;
+    name?: string;
+    key?: string;
+  };
+  items?: {
+    field?: string;
+    fieldId?: string;
+    fromString?: string | null;
+    toString?: string | null;
+  }[];
+}
+
+/** 이력 묶음 — 검색 응답에 실려 오면 잘릴 수 있어 total 을 함께 본다 */
+export interface RawChangelog {
+  startAt?: number;
+  maxResults?: number;
+  total?: number;
+  histories?: RawHistory[];
 }
 
 // resolution 만 보면 워크플로우 빈틈에 빠진다:
@@ -80,8 +110,27 @@ export async function fetchMyIssues(force = false): Promise<JiraListResult> {
   return listInFlight;
 }
 
+/**
+ * Basic 인증 정보 — 환경설정의 주소·이메일·토큰. 미설정이면 null.
+ * (Jira 를 부르는 모든 곳이 공유한다 — 헤더 조립을 중복하지 말 것)
+ */
+export function jiraAuth(): {
+  url: string;
+  authorization: string;
+  headers: Record<string, string>;
+} | null {
+  const cfg = getJiraApiConfig();
+  if (!cfg) return null;
+  const authorization = `Basic ${Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64')}`;
+  return {
+    url: cfg.url,
+    authorization,
+    headers: { Authorization: authorization, Accept: 'application/json' },
+  };
+}
+
 /** REST 응답 이슈 → 앱 타입. pinned 는 직접 추가한 티켓 표시 */
-function mapIssue(it: RawIssue, baseUrl: string, pinned: boolean): JiraIssue {
+export function mapIssue(it: RawIssue, baseUrl: string, pinned: boolean): JiraIssue {
   const catKey = it.fields.status?.statusCategory?.key;
   return {
     key: it.key,
@@ -102,7 +151,7 @@ function mapIssue(it: RawIssue, baseUrl: string, pinned: boolean): JiraIssue {
 }
 
 /** 검색 1회 결과 — 다른 결과 타입들과 같은 `{ ok, …, error }` 모양으로 맞춘다 */
-type SearchOutcome = { ok: boolean; issues: RawIssue[]; error?: string };
+export type SearchOutcome = { ok: boolean; issues: RawIssue[]; error?: string };
 
 /**
  * JQL 검색 1회 — 신형 엔드포인트 우선, 구형 서버면 기존 `search` 로 폴백.
@@ -111,12 +160,20 @@ type SearchOutcome = { ok: boolean; issues: RawIssue[]; error?: string };
  * 타임아웃·네트워크 오류 재시도가 통째로 비활성화된다(호출부 signal 이 우선하므로).
  * 회사 VPN 터널이 순간 끊겼을 때 재시도로 흡수되는 것이 이 목록 폴링에 특히 중요하다.
  */
-async function searchJql(
+export async function searchJql(
   baseUrl: string,
   headers: Record<string, string>,
   jql: string,
+  // 주간 활동(activity.ts)은 이력을 함께 받으려고 expand·개수를 조정한다
+  opts: { maxResults?: number; expand?: string } = {},
 ): Promise<SearchOutcome> {
-  const query = `jql=${encodeURIComponent(jql)}&maxResults=50&fields=${FIELDS}`;
+  const params = new URLSearchParams({
+    jql,
+    maxResults: String(opts.maxResults ?? 50),
+    fields: FIELDS,
+  });
+  if (opts.expand) params.set('expand', opts.expand);
+  const query = params.toString();
   try {
     let res = await fetch(
       `${baseUrl}/rest/api/3/search/jql?${query}`,
@@ -153,8 +210,8 @@ async function searchJql(
 
 /** 내게 할당된 미해결 이슈 + 직접 추가한 티켓 — 실제 REST 호출 */
 async function fetchMyIssuesRemote(): Promise<JiraListResult> {
-  const cfg = getJiraApiConfig();
-  if (!cfg) {
+  const auth = jiraAuth();
+  if (!auth) {
     return {
       ok: false,
       configured: false,
@@ -162,17 +219,16 @@ async function fetchMyIssuesRemote(): Promise<JiraListResult> {
     };
   }
 
-  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
-  const headers = { Authorization: `Basic ${auth}`, Accept: 'application/json' };
+  const { url: baseUrl, headers } = auth;
   const addedKeys = listAddedTickets().map((t) => t.key);
 
   // ⚠️ 추가 티켓을 기존 JQL 에 `OR key IN (…)` 로 얹지 않는다 — 삭제됐거나 권한이 빠진
   // 키가 하나라도 섞이면 Jira 가 400 으로 **쿼리 전체를 거절**해 내 담당 목록까지 사라진다.
   // 따로 부르면 추가분만 실패하고 본 목록은 살아남는다(실패는 addedError 로 알린다).
   const [mine, extra] = await Promise.all([
-    searchJql(cfg.url, headers, JQL),
+    searchJql(baseUrl, headers, JQL),
     addedKeys.length > 0
-      ? searchJql(cfg.url, headers, `key IN (${addedKeys.join(',')}) ORDER BY updated DESC`)
+      ? searchJql(baseUrl, headers, `key IN (${addedKeys.join(',')}) ORDER BY updated DESC`)
       : Promise.resolve<SearchOutcome>({ ok: true, issues: [] }),
   ]);
 
@@ -180,11 +236,11 @@ async function fetchMyIssuesRemote(): Promise<JiraListResult> {
 
   // 담당·추가에 모두 있으면 하나로 합치고 핀만 붙인다(핀은 전부 한 그룹에 모인다)
   const byKey = new Map<string, JiraIssue>();
-  for (const it of mine.issues) byKey.set(it.key, mapIssue(it, cfg.url, false));
+  for (const it of mine.issues) byKey.set(it.key, mapIssue(it, baseUrl, false));
   if (extra.ok) {
     for (const it of extra.issues) {
       const cur = byKey.get(it.key);
-      byKey.set(it.key, cur ? { ...cur, pinned: true } : mapIssue(it, cfg.url, true));
+      byKey.set(it.key, cur ? { ...cur, pinned: true } : mapIssue(it, baseUrl, true));
     }
   }
   const issues = [...byKey.values()].sort((a, b) =>
@@ -206,13 +262,12 @@ export async function validateAddedTicket(input: string): Promise<JiraValidateRe
   if (!key) {
     return { ok: false, error: 'Jira 주소나 티켓 번호(예: BBJ-1234)를 넣어주세요.' };
   }
-  const cfg = getJiraApiConfig();
-  if (!cfg) return { ok: false, error: 'Jira 연동이 설정되지 않았습니다.' };
-  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
+  const auth = jiraAuth();
+  if (!auth) return { ok: false, error: 'Jira 연동이 설정되지 않았습니다.' };
   try {
     const res = await fetch(
-      `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,issuetype,status,reporter`,
-      { headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' } },
+      `${auth.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,issuetype,status,reporter`,
+      { headers: auth.headers },
       JIRA_TIMEOUT_MS,
     );
     if (res.status === 404) {
@@ -352,18 +407,18 @@ async function inlineJiraImages(
 
 /** 이슈 상세 조회 — 본문·댓글을 Jira 가 렌더한 HTML(expand=renderedFields)로 받는다 */
 export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
-  const cfg = getJiraApiConfig();
-  if (!cfg) {
+  const auth = jiraAuth();
+  if (!auth) {
     return {
       ok: false,
       error: '환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하세요.',
     };
   }
-  const authHeader = `Basic ${Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64')}`;
+  const { url: baseUrl, authorization: authHeader } = auth;
   try {
     const res = await fetch(
-      `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=${DETAIL_FIELDS}&expand=renderedFields`,
-      { headers: { Authorization: authHeader, Accept: 'application/json' } },
+      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}?fields=${DETAIL_FIELDS}&expand=renderedFields`,
+      { headers: auth.headers },
     );
     if (res.status === 401 || res.status === 403) {
       return { ok: false, error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.' };
@@ -392,7 +447,7 @@ export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
 
     const [descriptionHtml, ...commentHtmls] = await inlineJiraImages(
       [sanitizeHtml(rendered.description ?? ''), ...comments.map((c) => c.html)],
-      cfg.url,
+      baseUrl,
       authHeader,
     );
 
@@ -414,7 +469,7 @@ export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
         updated: rendered.updated ?? data.fields.updated ?? '',
         descriptionHtml,
         comments: comments.map((c, i) => ({ ...c, html: commentHtmls[i] })),
-        url: `${cfg.url}/browse/${issueKey}`,
+        url: `${baseUrl}/browse/${issueKey}`,
       },
     };
   } catch (err) {
@@ -427,16 +482,11 @@ export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
 
 /** 이슈별 전환 API 요청 준비 (설정 없으면 null) */
 function transitionRequest(key: string) {
-  const cfg = getJiraApiConfig();
-  if (!cfg) return null;
-  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64');
+  const auth = jiraAuth();
+  if (!auth) return null;
   return {
-    url: `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}/transitions`,
-    headers: {
-      Authorization: `Basic ${auth}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    url: `${auth.url}/rest/api/3/issue/${encodeURIComponent(key)}/transitions`,
+    headers: { ...auth.headers, 'Content-Type': 'application/json' },
   };
 }
 
