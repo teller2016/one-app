@@ -370,7 +370,17 @@ export async function fetchAllBranchNames(
   return names;
 }
 
-/** base 대비 head 가 가진 커밋 목록 (PR 제목/본문 자동 생성용, 최신순) */
+/**
+ * base 대비 head 가 가진 커밋 목록 (PR 제목/본문 자동 생성용).
+ *
+ * ⚠️ 반환 순서는 **오래된 순**이다 — compare API 응답이 최신순이라 `reverse()` 로 뒤집는다
+ * (PR 본문 불릿을 작업 순서대로 읽히게 하려는 것). 예전 주석이 "최신순"이라 적혀 있어
+ * `commits[0]` 을 최신 커밋으로 오해하기 쉬웠다.
+ *
+ * 응답의 `parents` 로 머지 커밋을 표시해 준다(부모 2개 이상) — 브랜치에 `develop` 을
+ * 끌어온 머지 커밋이 목록 맨 앞에 오면 그게 PR 제목이 돼 버렸다(실측: PR #1223).
+ * 메시지 패턴(`Merge branch …`)으로 추측하면 한국어 머지 메시지를 놓치므로 부모 수로 본다.
+ */
 export async function fetchBranchCommits(
   giteaUrl: string,
   token: string | null,
@@ -396,6 +406,7 @@ export async function fetchBranchCommits(
     commits?: {
       sha?: string;
       commit?: { message?: string; author?: { name?: string; date?: string } };
+      parents?: { sha?: string }[];
       files?: { filename?: string; status?: string }[];
       stats?: { additions?: number; deletions?: number };
     }[];
@@ -408,6 +419,7 @@ export async function fetchBranchCommits(
       message: (c.commit?.message ?? '').trim(),
       author: c.commit?.author?.name ?? '',
       timestamp: c.commit?.author?.date ? Date.parse(c.commit.author.date) : undefined,
+      isMerge: (c.parents?.length ?? 0) > 1,
     }))
     .reverse();
 

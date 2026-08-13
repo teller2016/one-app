@@ -315,6 +315,11 @@ export type DeployCommit = {
   message: string; // 제목+본문 전체
   author: string;
   timestamp?: number; // epoch ms
+  /**
+   * 머지 커밋(부모 2개 이상)인지 — PR 제목·본문 자동 생성에서 제외하는 데 쓴다.
+   * 젠킨스 경로는 부모 정보가 없어 채우지 않는다(undefined = 알 수 없음).
+   */
+  isMerge?: boolean;
 };
 
 /** 빌드 상세 — 커밋 내역 표시용 */

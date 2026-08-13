@@ -14,6 +14,7 @@ import { Select } from '../../../components/Select';
 import { Textarea } from '../../../components/Textarea';
 import { FormRow } from '../../../components/FormRow';
 import { baseTagOf, needsBaseConfirm, sortBaseOptions } from '../lib/baseBranches';
+import { draftPr } from '../lib/prDraft';
 import { rel } from '../lib/relTime';
 
 /**
@@ -137,13 +138,11 @@ export function CreatePrModal({
       setCommits(list);
       setFiles(res.files ?? []);
       setStats(res.stats ?? null);
-      // 제목 = [브랜치명(타입 접두사 제외)] 첫 커밋 · 본문 = 커밋 내역 불릿
-      const label = branchLabelOf(head);
-      const firstTitle = list[0]?.message.split('\n')[0] ?? '';
-      if (!titleDirty.current)
-        setTitle(`[${label}]${firstTitle ? ` ${firstTitle}` : ''}`.slice(0, 100));
-      if (!bodyDirty.current)
-        setBody(list.map((c) => `- ${c.message.split('\n')[0]}`).join('\n'));
+      // 제목 = [브랜치명(타입 접두사 제외)] 대표 커밋 · 본문 = 커밋 내역 불릿
+      // (둘 다 머지 커밋을 걸러낸다 — 규칙은 lib/prDraft.ts)
+      const draft = draftPr(branchLabelOf(head), list);
+      if (!titleDirty.current) setTitle(draft.title);
+      if (!bodyDirty.current) setBody(draft.body);
     });
     return () => {
       alive = false;
