@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '../../../components/Button';
 import { Icon, type IconName } from '../../../components/Icon';
-import { useToast } from '../../../components/Toast';
+import { useEaBox } from '../lib/useEaBox';
 
 /**
  * 결재 작업 완료 화면 — 아이콘 + 제목 + 안내 + [전자결재 상신함 열기].
@@ -18,16 +18,8 @@ export function DoneCard({
   title: string;
   hint: ReactNode;
 }) {
-  const toast = useToast();
-  const [opening, setOpening] = useState(false);
-
-  // 전자결재 상신함 — 올린 문서의 진행 상태를 확인하는 경로 (작성 창과 별개 창)
-  const openEaBox = async () => {
-    setOpening(true);
-    const res = await window.oneApp.approval.openEaBox();
-    setOpening(false);
-    if (!res.ok) toast(res.error ?? '전자결재 상신함을 열지 못했습니다.', 'fail');
-  };
+  // 상신함 열기는 결재 홈과 공유한다 (lib/useEaBox)
+  const { opening, openEaBox } = useEaBox();
 
   return (
     <div className={`approval-done approval-done--${tone}`}>

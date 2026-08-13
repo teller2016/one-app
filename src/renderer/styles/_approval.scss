@@ -76,6 +76,21 @@
   }
 }
 
+// 상신함 열기 — 작성(카드)과 성격이 다른 보조 액션이라 목록 아래에 따로 둔다
+.approval-eabox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+
+  &__hint {
+    @include type-caption;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-3);
+  }
+}
+
 // 각 결재 폼 공통
 .approval-form {
   display: flex;

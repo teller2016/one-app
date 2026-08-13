@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Banner } from '../../../components/Banner';
+import { Button } from '../../../components/Button';
 import { Icon, type IconName } from '../../../components/Icon';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Tooltip } from '../../../components/Tooltip';
 import { setSectionBack } from '../../../lib/sectionBack';
+import { useEaBox } from '../lib/useEaBox';
 import { ExpendForm } from './ExpendForm';
 import { OvertimeForm } from './OvertimeForm';
 import { VacationForm } from './VacationForm';
@@ -41,6 +43,8 @@ const KINDS: {
  */
 export function ApprovalSection() {
   const [kind, setKind] = useState<ApprovalKind | null>(null);
+  // 완료 화면(DoneCard)과 같은 상신함 열기 — 작성 없이 진행 상태만 볼 때도 필요하다
+  const { opening, openEaBox } = useEaBox();
 
   // 앱 뒤로가기(탑바·⌘[·마우스·스와이프)를 섹션 안에서 먼저 소비한다 —
   // 폼에 있을 때 뒤로 누르면 다른 섹션이 아니라 결재 목록으로 돌아간다
@@ -84,6 +88,19 @@ export function ApprovalSection() {
               </span>
             </button>
           ))}
+        </div>
+        <div className="approval-eabox">
+          <Button
+            variant="ghost"
+            loading={opening}
+            onClick={() => void openEaBox()}
+          >
+            <Icon name="clipboard-list" size={16} />
+            전자결재 상신함 열기
+          </Button>
+          <p className="approval-eabox__hint">
+            이미 올린 문서의 진행 상태를 확인합니다.
+          </p>
         </div>
         <Banner variant="info">
           작성은 앱이 대신하지만 <strong>결재(승인)는 언제나 직접</strong> 하셔야
