@@ -16,6 +16,7 @@ import {
   ATT_DIV_NAMES,
   DOC_REASONS,
   defaultTimeRange,
+  expectedDayCount,
   isSingleDayKind,
   isSubstituteKind,
   isTimedKind,
@@ -114,6 +115,13 @@ export function VacationForm() {
       substitute,
       holidayWorkDate,
     ],
+  );
+
+  // 예상 신청일수 — 연차 1일·반차 0.5일·시차 0.125일 식 (확정은 그룹웨어 계산)
+  const expectedDays = expectedDayCount(
+    attDivName,
+    fromDate,
+    singleDay ? fromDate : toDate,
   );
 
   const reasonOk = reason !== '기타' || !!reasonEtc.trim();
@@ -244,10 +252,10 @@ export function VacationForm() {
           </div>
           <p className="hint">
             {singleDay
-              ? `${attDivName}는 하루만 신청합니다.`
+              ? `${attDivName}는 하루만 신청합니다 — 예상 신청일수 ${expectedDays}일.`
               : fromDate > toDate
                 ? '종료일이 시작일보다 빠릅니다.'
-                : '신청일수·연차차감은 그룹웨어가 계산합니다.'}
+                : `예상 신청일수 ${expectedDays ?? '-'}일 (주말 제외) — 확정은 그룹웨어가 공휴일까지 반영해 계산합니다.`}
           </p>
         </div>
       </FormRow>

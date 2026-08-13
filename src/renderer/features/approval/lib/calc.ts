@@ -160,6 +160,42 @@ export const vacationTitle = (opts: {
 export const isSingleDayKind = (attDivName: string) =>
   /반차|시차/.test(attDivName);
 
+/** "YYYY-MM-DD" → 로컬 Date (형식이 어긋나면 null) */
+const parseDay = (d: string): Date | null => {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+};
+
+/** 근태구분별 하루 환산 계수 — 반차 0.5일, 시차는 8시간 근무 기준 0.125·0.25일 */
+const KIND_DAY_FACTOR: Record<string, number> = {
+  오전반차: 0.5,
+  오후반차: 0.5,
+  시차_1시간: 0.125,
+  시차_2시간: 0.25,
+};
+
+/**
+ * 예상 신청일수 — 기간을 입력하는 즉시 연차 1일·반차 0.5일·시차 0.125일 식으로 보여준다.
+ * 주말(토·일)은 제외하지만 공휴일은 앱이 모르므로 어디까지나 표시용이다 —
+ * 확정값(신청일수·연차차감)은 그룹웨어가 계산한다(main 의 waitCalculated).
+ */
+export const expectedDayCount = (
+  attDivName: string,
+  fromDate: string,
+  toDate: string,
+): number | null => {
+  const factor = KIND_DAY_FACTOR[attDivName];
+  if (factor !== undefined) return factor; // 반차·시차는 하루짜리 고정
+  const from = parseDay(fromDate);
+  const to = parseDay(toDate);
+  if (!from || !to || from.getTime() > to.getTime()) return null;
+  let days = 0;
+  for (const d = new Date(from); d.getTime() <= to.getTime(); d.setDate(d.getDate() + 1)) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) days += 1;
+  }
+  return days;
+};
+
 /** 전자결재 본문 '사유' 체크 항목 — 문구는 그룹웨어 화면과 같아야 한다 */
 export const DOC_REASONS = [
   '휴식',

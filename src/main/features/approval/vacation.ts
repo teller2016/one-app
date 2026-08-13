@@ -336,10 +336,22 @@ function todayDocText(): string {
   );
 }
 
+/** 근태구분별 하루 환산 — 렌더러 calc.ts 의 KIND_DAY_FACTOR 와 같은 값을 유지할 것 */
+const KIND_DAY_FACTOR: Record<string, number> = {
+  오전반차: 0.5,
+  오후반차: 0.5,
+  시차_1시간: 0.125,
+  시차_2시간: 0.25,
+};
+
 /** 폼 입력 + 그룹웨어가 계산한 신청일수 → 본문에 넣을 문구들 */
 export function buildDocBody(input: VacationInput, dayCount: string): DocBody {
   const mapped = VACATION_CONFIG.attDivToDocKind[input.attDivName];
   const isEtcReason = input.reason === '기타';
+  // 그룹웨어 신청일수(#dayCnt)는 반차·시차도 달력 기준 1일로 세므로, 환산 계수가 있는
+  // 종류는 환산값(0.5·0.125·0.25)으로 바꿔 적는다 — 휴가 신청서 작성 표기 표준
+  const docDays =
+    KIND_DAY_FACTOR[input.attDivName]?.toString() ?? (dayCount || '1');
   return {
     // 표에 없는 근태구분(공가 등)은 '기타' 에 체크하고 괄호에 원래 문구를 넣는다
     kind: mapped ?? '기타',
@@ -348,7 +360,7 @@ export function buildDocBody(input: VacationInput, dayCount: string): DocBody {
     reasonEtc: isEtcReason ? (input.reasonEtc ?? '').trim() : '',
     period:
       `${docDateText(input.fromDate)} 부터  ${docDateText(input.toDate)} 까지 ` +
-      `( ${dayCount || '1'} 일간)`,
+      `( ${docDays} 일간)`,
     emergency: input.emergencyContact.trim(),
     handovers: input.handovers
       .filter((h) => h.project.trim() || h.members.trim())
@@ -718,7 +730,8 @@ export async function runVacationDraft(
     return {
       ok: true,
       title,
-      dayCount: calc.dayCount,
+      // 완료 카드 표시도 본문 기간 문구와 같은 환산값으로 — 그룹웨어 #dayCnt 는 반차·시차도 1일
+      dayCount: KIND_DAY_FACTOR[input.attDivName]?.toString() ?? calc.dayCount,
       useDayCount: calc.useDayCount,
       eaReady: prepared.ready,
       missed: prepared.missed.length ? prepared.missed : undefined,
