@@ -162,6 +162,15 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("mail:body", muid, unread),
     // 브라우저로 비즈박스 메일함 바로 열기
     openWeb: () => ipcRenderer.invoke("mail:open-web"),
+
+    // 팀 공용 계정 인증코드(피그마) — 계정 등록·비밀 정보를 다루므로 폰에는 열지 않는다
+    authCodeAccounts: () => ipcRenderer.invoke("mail:authcode:accounts"),
+    saveAuthCodeAccount: (loginId: string, password: string) =>
+      ipcRenderer.invoke("mail:authcode:save-account", loginId, password),
+    removeAuthCodeAccount: (loginId: string) =>
+      ipcRenderer.invoke("mail:authcode:remove-account", loginId),
+    getAuthCode: (loginId: string) =>
+      ipcRenderer.invoke("mail:authcode:fetch", loginId),
   },
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)

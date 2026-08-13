@@ -3,11 +3,19 @@
 import { MAIL_CONFIG } from './config';
 import {
   AuthError,
+  mailBoxCountParams,
   mailGet,
+  mailListParams,
   mailPost,
   withSession,
   type MailSession,
 } from './session';
+import {
+  decodeEntities,
+  looksLikeLogin,
+  parseDate,
+  parseJson,
+} from './parse';
 import { getCredentials } from '../settings/store';
 import { sanitizeHtml } from '../../lib/sanitize';
 import type {
@@ -20,22 +28,6 @@ import type {
   MailListQuery,
   MailUnreadCountResult,
 } from '../../../shared/types';
-
-/** 응답 텍스트가 로그인 페이지(세션 만료)인지 — 그러면 재로그인 유도 */
-function looksLikeLogin(text: string): boolean {
-  return /egovLoginUsr|actionLogin|<title>[^<]*로그인/i.test(text);
-}
-
-/** JSON 응답 파싱 (text/plain 로 오는 경우 포함). 로그인 페이지면 AuthError */
-async function parseJson<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    if (looksLikeLogin(text)) throw new AuthError('세션이 만료되었습니다.');
-    throw new Error('메일 서버 응답을 해석하지 못했습니다.');
-  }
-}
 
 type BoxCountResp = {
   allunseen?: number | string;
@@ -58,50 +50,6 @@ type MailListResp = {
     rfc822date?: string;
   }[];
 };
-
-/** getMailList 파라미터 — seen=false&flag=false 가 빠지면 서버가 빈 목록을 반환한다(정찰 확인) */
-function listParams(
-  s: MailSession,
-  mboxSeq: number,
-  page: number,
-  pageSize: number,
-): string {
-  return [
-    `page=${page}`,
-    `pageSize=${pageSize}`,
-    'sortField=',
-    'sortType=',
-    'seen=false',
-    'flag=false',
-    `id=${encodeURIComponent(s.id)}`,
-    `domain=${encodeURIComponent(s.domain)}`,
-    `mboxSeq=${mboxSeq}`,
-    'sort=',
-    'listType=',
-    'showType=',
-    'externalSeq=undefined',
-  ].join('&');
-}
-
-/** 그룹웨어가 HTML 이스케이프해 내려주는 텍스트 필드 복원 — "&lt;a@b&gt;" → "<a@b>" */
-function decodeEntities(raw: string): string {
-  return raw
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&'); // 이중 이스케이프(&amp;lt;)가 원문으로 남도록 마지막에
-}
-
-/** "2026-07-21 10:21:16" → epoch ms (실패 시 0) */
-function parseDate(raw?: string): number {
-  if (!raw) return 0;
-  const ms = Date.parse(raw.replace(' ', 'T'));
-  return Number.isNaN(ms) ? Date.parse(raw) || 0 : ms;
-}
 
 /**
  * 뱃지 안읽음 수 — 폴더별 unseen 합(보낸·임시·휴지통 제외, **스팸 포함**).
@@ -131,7 +79,7 @@ async function fetchBoxCount(s: MailSession): Promise<{
   const countRes = await mailPost(
     s.cookie,
     MAIL_CONFIG.endpoints.boxCount,
-    `id=${encodeURIComponent(s.id)}&domain=${encodeURIComponent(s.domain)}&isExternal=false&isApproval=false`,
+    mailBoxCountParams(s),
   );
   const count = await parseJson<BoxCountResp>(countRes);
   const boxes = count.mailboxList ?? [];
@@ -205,7 +153,12 @@ export async function getInbox(
       const listRes = await mailPost(
         s.cookie,
         MAIL_CONFIG.endpoints.list,
-        listParams(s, folder === 'spam' ? spamSeq : inboxSeq, page, pageSize),
+        mailListParams(
+          s,
+          folder === 'spam' ? spamSeq : inboxSeq,
+          page,
+          pageSize,
+        ),
       );
       const list = await parseJson<MailListResp>(listRes);
       const items: MailItem[] = (list.Records ?? []).map((r) => ({

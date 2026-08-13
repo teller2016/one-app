@@ -69,6 +69,9 @@ import type {
   MailInboxResult,
   MailBodyResult,
   MailUnreadCountResult,
+  AltMailAccount,
+  AltMailAccountsResult,
+  AuthCodeResult,
   ChangesTarget,
   ChangesDiffFile,
   ChangesDiffScope,
@@ -169,6 +172,15 @@ declare global {
         getInbox: (query?: MailListQuery) => Promise<MailInboxResult>;
         getBody: (muid: number, unread: boolean) => Promise<MailBodyResult>;
         openWeb: () => Promise<{ ok: boolean }>;
+        authCodeAccounts: () => Promise<AltMailAccount[]>;
+        saveAuthCodeAccount: (
+          loginId: string,
+          password: string,
+        ) => Promise<AltMailAccountsResult>;
+        removeAuthCodeAccount: (
+          loginId: string,
+        ) => Promise<AltMailAccountsResult>;
+        getAuthCode: (loginId: string) => Promise<AuthCodeResult>;
       };
       jira: {
         // force=true 는 수동 새로고침·전환 직후 — main 의 TTL 캐시 우회

@@ -945,6 +945,33 @@ export type MailBodyResult = {
   error?: string;
 };
 
+/**
+ * 팀 공용 메일 계정 (피그마 인증코드 조회용) — 비밀번호는 main 에만 있고 렌더러로 오지 않는다.
+ * 환경설정의 비즈박스 계정과는 별개다.
+ */
+export type AltMailAccount = {
+  loginId: string;
+};
+
+/** 계정 등록·삭제 결과 (갱신된 목록을 함께 돌려준다) */
+export type AltMailAccountsResult = {
+  ok: boolean;
+  accounts?: AltMailAccount[];
+  error?: string;
+};
+
+/** 인증코드 조회 결과 */
+export type AuthCodeResult = {
+  ok: boolean;
+  /** ⚠️ 문자열이다 — 코드가 0으로 시작할 수 있어(실측 `0432458`) 숫자로 다루면 깨진다 */
+  code?: string;
+  receivedAt?: number; // 메일 도착 시각 (epoch ms)
+  subject?: string;
+  /** 유효 시간(10분)을 넘긴 코드 — 값은 주되 UI 에서 만료 가능성을 알린다 */
+  stale?: boolean;
+  error?: string;
+};
+
 // ── 터미널 (앱 내 터미널 — 메인 프로세스가 PTY 소유, 데스크톱·MO 가 같은 세션 공유) ──
 
 /** 세션에서 자동 실행하는 AI 에이전트 CLI — 'shell' 은 순수 셸(자동 실행 없음) */

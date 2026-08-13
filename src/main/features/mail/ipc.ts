@@ -1,6 +1,12 @@
 import { ipcMain, shell } from 'electron';
 import { handleShared } from '../../lib/moIpc';
 import { getBody, getInbox, getUnreadCount } from './mail';
+import { forgetAltSession, getAuthCode } from './authcode';
+import {
+  listAltAccounts,
+  removeAltAccount,
+  saveAltAccount,
+} from './altAccounts';
 import { MAIL_CONFIG } from './config';
 import type { MailListQuery } from '../../../shared/types';
 
@@ -42,4 +48,32 @@ export function registerMailIpc() {
     await shell.openExternal(MAIL_CONFIG.webUrl);
     return { ok: true };
   });
+
+  // ── 팀 공용 계정 인증코드 (피그마) ──
+  // ⚠️ 여기부터는 `handleShared` 가 아니다 — 계정 등록(쓰기)과 비밀 정보를 다루므로
+  //    MO(폰) 셸에는 열지 않는다.
+  ipcMain.handle('mail:authcode:accounts', () => listAltAccounts());
+
+  ipcMain.handle(
+    'mail:authcode:save-account',
+    (_e, loginId: string, password: string) => {
+      try {
+        const accounts = saveAltAccount(loginId, password);
+        // 비밀번호가 바뀌었을 수 있으니 캐시된 세션을 버린다
+        forgetAltSession(loginId);
+        return { ok: true, accounts };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  ipcMain.handle('mail:authcode:remove-account', (_e, loginId: string) => {
+    forgetAltSession(loginId);
+    return { ok: true, accounts: removeAltAccount(loginId) };
+  });
+
+  ipcMain.handle('mail:authcode:fetch', (_e, loginId: string) =>
+    getAuthCode(loginId),
+  );
 }

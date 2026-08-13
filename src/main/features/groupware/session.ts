@@ -51,21 +51,24 @@ export function isLoginUrl(url: string): boolean {
   return url.includes('egovLoginUsr');
 }
 
-/** 로그인 → 도메인·경로가 붙은 쿠키 목록 확보 (숨긴 BrowserWindow) */
-async function login(): Promise<GroupwareSession> {
-  const cred = getCredentials();
-  if (!cred) {
-    throw new Error(
-      '비즈박스 계정이 없습니다 — 환경설정에서 ID·비밀번호를 입력하세요.',
-    );
-  }
+/**
+ * 로그인 → 도메인·경로가 붙은 쿠키 목록 확보 (숨긴 BrowserWindow).
+ *
+ * 계정·파티션을 인자로 받는다 — 내 계정(공용 세션)뿐 아니라 **팀 공용 계정**의 메일함을
+ * 볼 때도(피그마 인증코드) 같은 절차를 쓰기 때문이다. 파티션을 가르는 이유는
+ * `openPage` 가 열 때 그 파티션의 쿠키를 비워서, 같은 파티션을 쓰면 서로의 세션을 지운다.
+ */
+async function login(
+  cred: { id: string; password: string },
+  partition: string,
+): Promise<GroupwareSession> {
   const { selectors: sel } = GROUPWARE_CONFIG;
 
   // 다른 경로(일정 매크로 등)의 로그인과 겹치면 서버가 한쪽을 거부하므로 큐를 경유한다
   return withGroupwareLogin(async () => {
     // 로그인 전용 파티션 — openPage 가 쿠키를 비우고 시작하므로 늘 새 로그인이다
     const page = await openPage(false, {
-      partition: AUTOMATION_PARTITION.login,
+      partition,
       title: '그룹웨어 로그인',
     });
     try {
@@ -122,6 +125,8 @@ async function login(): Promise<GroupwareSession> {
       }
 
       // 포털 메인 방문 — 세션 안정화 (로그인 페이지로 튕기면 실패)
+      // ⚠️ 메일 전용 계정(팀 공용 피그마 계정)은 여기서 `bizboxMailEx.do` 로 리다이렉트된다.
+      //    로그인 화면으로 튕기는 것은 아니므로 아래 판정은 그대로 통과한다 — 2026-08-13 실측.
       await goto(page, GROUPWARE_CONFIG.mainUrl);
       if (isLoginUrl(page.wc.getURL())) {
         throw new Error(
@@ -176,7 +181,13 @@ export async function getGroupwareSession(
     return cached;
   }
   if (inFlight) return inFlight;
-  inFlight = login()
+  const cred = getCredentials();
+  if (!cred) {
+    throw new Error(
+      '비즈박스 계정이 없습니다 — 환경설정에서 ID·비밀번호를 입력하세요.',
+    );
+  }
+  inFlight = login(cred, AUTOMATION_PARTITION.login)
     .then((s) => {
       cached = s;
       return s;
@@ -185,6 +196,20 @@ export async function getGroupwareSession(
       inFlight = null;
     });
   return inFlight;
+}
+
+/**
+ * **임의 계정**으로 1회 로그인해 쿠키만 얻는다 — 공용 세션 캐시(`cached`)와 완전히 분리된다.
+ * 팀 공용 계정의 메일함을 볼 때(피그마 인증코드) 쓴다.
+ *
+ * ⚠️ 여기서는 캐시하지 않는다 — 어느 계정의 세션인지는 호출부만 알기 때문이다.
+ * 로그인은 무거우니 호출부가 계정별로 세션을 보관할 책임을 진다.
+ */
+export async function loginWithAccount(cred: {
+  id: string;
+  password: string;
+}): Promise<GroupwareSession> {
+  return login(cred, AUTOMATION_PARTITION.altLogin);
 }
 
 /** 세션 무효화 — 서버에서 만료됐다고 판단되면 호출해 다음 요청에 재로그인 */

@@ -13,9 +13,16 @@ import { Pagination } from '../../../components/Pagination';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { Segment } from '../../../components/Segment';
 import { mailTime, senderName } from '../lib/format';
+import { AuthCodePanel } from './AuthCodePanel';
 
 /** 한 페이지 메일 건수 */
 const PAGE_SIZE = 30;
+
+/**
+ * 리더 모달의 탭 — 폴더 두 개 + '인증코드'.
+ * 인증코드는 폴더가 아니므로 `MailFolder` 에 섞지 않는다(목록 조회 파라미터가 오염된다).
+ */
+type Tab = MailFolder | 'authcode';
 
 /** 본문 조회 상태 — 선택한 메일의 로딩/성공/실패 */
 type BodyState =
@@ -54,6 +61,7 @@ export function MailModal({
   /** 안읽은 메일을 열어 읽음 처리됐을 때 (사이드바 뱃지 즉시 갱신용) */
   onRead: (muid: number) => void;
 }) {
+  const [tab, setTab] = useState<Tab>('inbox');
   const [folder, setFolder] = useState<MailFolder>('inbox');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<MailItem[]>([]);
@@ -105,6 +113,19 @@ export function MailModal({
     setTotal(0);
     setSelected(null);
     setViewOpen(false);
+  };
+
+  /**
+   * 탭 전환 — '인증코드' 는 폴더가 아니라서 목록 조회를 건드리지 않는다.
+   * 폴더 탭으로 돌아오면 이미 불러온 목록이 그대로 보인다(불필요한 재조회 없음).
+   */
+  const changeTab = (next: Tab) => {
+    if (next === tab) return;
+    setTab(next);
+    // 어느 탭으로 가든 떠 있는 본문 패널은 닫는다
+    setSelected(null);
+    setViewOpen(false);
+    if (next !== 'authcode') changeFolder(next);
   };
 
   // 페이지 이동 — 목록 스크롤을 맨 위로 되돌리고 열린 본문은 닫는다
@@ -180,81 +201,97 @@ export function MailModal({
         {/* 메일 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
         <div className="mail-modal__list">
           <div className="mail-modal__list-head">
-            <Segment<MailFolder>
+            <Segment<Tab>
               options={[
                 { value: 'inbox', label: folderLabel('inbox', '받은편지함') },
                 { value: 'spam', label: folderLabel('spam', '스팸메일함') },
+                { value: 'authcode', label: '인증코드' },
               ]}
-              value={folder}
-              onChange={changeFolder}
+              value={tab}
+              onChange={changeTab}
             />
-            <RefreshButton
-              size={13}
-              spinning={loading}
-              onClick={() => void loadList(folder, page)}
-              title="목록 새로고침"
-            />
+            {/* 인증코드 탭은 목록이 없다 — 새로고침 버튼도 함께 감춘다 */}
+            {tab !== 'authcode' && (
+              <RefreshButton
+                size={13}
+                spinning={loading}
+                onClick={() => void loadList(folder, page)}
+                title="목록 새로고침"
+              />
+            )}
           </div>
 
-          {listError && <Banner variant="danger">{listError}</Banner>}
-
-          {loading && items.length === 0 ? (
-            <p className="hint">불러오는 중...</p>
-          ) : items.length === 0 && !listError ? (
-            <div className="empty-state">
-              <span className="empty-state__icon">
-                <Icon name="mail" size={20} />
-              </span>
-              <p>
-                {folder === 'spam'
-                  ? '스팸 메일이 없습니다.'
-                  : '받은 메일이 없습니다.'}
-              </p>
-            </div>
+          {tab === 'authcode' ? (
+            <AuthCodePanel />
           ) : (
-            <ul className="mail-list" ref={listRef}>
-              {items.map((m) => (
-                <li key={m.muid}>
-                  <button
-                    type="button"
-                    className={
-                      'mail-list__item' +
-                      (m.muid === selected ? ' mail-list__item--active' : '') +
-                      (m.seen ? '' : ' mail-list__item--unread')
-                    }
-                    onClick={() => void openMail(m)}
-                  >
-                    <span className="mail-list__dot" aria-hidden="true" />
-                    <span className="mail-list__main">
-                      <span className="mail-list__top">
-                        <span className="mail-list__from">
-                          {senderName(m.from)}
-                        </span>
-                        <span className="mail-list__time">
-                          {mailTime(m.date)}
-                        </span>
-                      </span>
-                      <span className="mail-list__subject">
-                        {m.hasAttach && (
-                          <Icon name="paperclip" size={11} className="mail-list__clip" />
-                        )}
-                        {m.subject}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+            <>
+              {listError && <Banner variant="danger">{listError}</Banner>}
 
-          {/* 과거 메일 — 서버 페이징(폴더 전체 건수 기준) */}
-          <Pagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={total}
-            onChange={changePage}
-            disabled={loading}
-          />
+              {loading && items.length === 0 ? (
+                <p className="hint">불러오는 중...</p>
+              ) : items.length === 0 && !listError ? (
+                <div className="empty-state">
+                  <span className="empty-state__icon">
+                    <Icon name="mail" size={20} />
+                  </span>
+                  <p>
+                    {folder === 'spam'
+                      ? '스팸 메일이 없습니다.'
+                      : '받은 메일이 없습니다.'}
+                  </p>
+                </div>
+              ) : (
+                <ul className="mail-list" ref={listRef}>
+                  {items.map((m) => (
+                    <li key={m.muid}>
+                      <button
+                        type="button"
+                        className={
+                          'mail-list__item' +
+                          (m.muid === selected
+                            ? ' mail-list__item--active'
+                            : '') +
+                          (m.seen ? '' : ' mail-list__item--unread')
+                        }
+                        onClick={() => void openMail(m)}
+                      >
+                        <span className="mail-list__dot" aria-hidden="true" />
+                        <span className="mail-list__main">
+                          <span className="mail-list__top">
+                            <span className="mail-list__from">
+                              {senderName(m.from)}
+                            </span>
+                            <span className="mail-list__time">
+                              {mailTime(m.date)}
+                            </span>
+                          </span>
+                          <span className="mail-list__subject">
+                            {m.hasAttach && (
+                              <Icon
+                                name="paperclip"
+                                size={11}
+                                className="mail-list__clip"
+                              />
+                            )}
+                            {m.subject}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* 과거 메일 — 서버 페이징(폴더 전체 건수 기준) */}
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                onChange={changePage}
+                disabled={loading}
+              />
+            </>
+          )}
         </div>
 
         {/* 본문 패널 — 오른쪽에서 슬라이드 인 (닫힘 애니메이션을 위해 항상 마운트) */}

@@ -55,27 +55,97 @@ export async function mailGet(cookie: string, url: string): Promise<Response> {
   return fetch(url, { method: 'GET', headers: headers(cookie, false) });
 }
 
-/** 공용 세션 확보 → 이메일 파악(portlet) → /mail2/ 부트스트랩까지 한 번에 수립 */
-async function establish(force: boolean): Promise<MailSession> {
-  const gw = await getGroupwareSession(force);
-  const cookie = gw.header;
+/** `getMailBoxCount.do` 파라미터 — 빈 id·domain 을 주면 폴더 목록이 오지 않는다(2026-08-13 실측) */
+export function mailBoxCountParams(identity: MailIdentity): string {
+  return (
+    `id=${encodeURIComponent(identity.id)}` +
+    `&domain=${encodeURIComponent(identity.domain)}` +
+    '&isExternal=false&isApproval=false'
+  );
+}
 
-  // 내 메일 주소 파악 — portlet 은 부트스트랩 없이 동작한다
-  const pr = await mailPost(cookie, MAIL_CONFIG.endpoints.portlet, 'count=1&seen=N');
-  const pj = (await pr.json()) as { email?: string };
-  const email = pj.email ?? '';
+/**
+ * `getMailList.do` 파라미터 — 내 계정(`mail.ts`)과 팀 공용 계정(`authcode.ts`)이 함께 쓴다.
+ * ⚠️ `seen=false&flag=false` 가 빠지면 서버가 **빈 목록**을 반환한다(정찰 확인).
+ */
+export function mailListParams(
+  identity: MailIdentity,
+  mboxSeq: number,
+  page: number,
+  pageSize: number,
+): string {
+  return [
+    `page=${page}`,
+    `pageSize=${pageSize}`,
+    'sortField=',
+    'sortType=',
+    'seen=false',
+    'flag=false',
+    `id=${encodeURIComponent(identity.id)}`,
+    `domain=${encodeURIComponent(identity.domain)}`,
+    `mboxSeq=${mboxSeq}`,
+    'sort=',
+    'listType=',
+    'showType=',
+    'externalSeq=undefined',
+  ].join('&');
+}
+
+/** 메일 계정 식별 정보 — id·domain 은 mail2 엔드포인트 파라미터로 계속 쓰인다 */
+export type MailIdentity = { email: string; id: string; domain: string };
+
+/** "id@domain" 을 쪼갠다 (형식이 아니면 null) */
+function splitEmail(email: string): MailIdentity | null {
   const at = email.indexOf('@');
-  if (at < 0) {
-    throw new Error('메일 계정 정보를 확인하지 못했습니다.');
+  if (at <= 0 || at === email.length - 1) return null;
+  return { email, id: email.slice(0, at), domain: email.slice(at + 1) };
+}
+
+/** portlet(포털 위젯 API)으로 계정의 메일 주소를 얻는다 — 권한이 없는 계정은 null */
+async function emailFromPortlet(cookie: string): Promise<string | null> {
+  try {
+    const res = await mailPost(
+      cookie,
+      MAIL_CONFIG.endpoints.portlet,
+      'count=1&seen=N',
+    );
+    const json = JSON.parse(await res.text()) as { email?: string };
+    return json.email || null;
+  } catch {
+    return null; // JSON 이 아니면(HTML 응답) 이 계정은 portlet 을 못 쓴다 — 아래 폴백으로
   }
-  const id = email.slice(0, at);
-  const domain = email.slice(at + 1);
+}
+
+/**
+ * 쿠키로 메일 SPA 를 부트스트랩하고 그 계정의 메일 주소를 파악한다.
+ * 내 계정(공용 세션)과 팀 공용 계정(인증코드 조회)이 함께 쓴다.
+ *
+ * ⚠️ 이메일 파악이 두 갈래인 이유 — **메일 전용 계정은 `portletEmailList.do` 가 JSON 대신
+ * HTML 을 준다**(포털 위젯 권한이 없다, 2026-08-13 실측). 그래서 부트스트랩 응답 HTML 에서
+ * 주소를 뽑는 폴백을 둔다. 왕복 수는 기존과 같다(portlet 1 + bootstrap 1).
+ */
+export async function bootstrapMail(cookie: string): Promise<MailIdentity> {
+  const viaPortlet = await emailFromPortlet(cookie);
 
   // 메일 SPA 세션 부트스트랩 — 이 GET 이후에야 mail2 엔드포인트가 동작한다
-  await mailGet(cookie, MAIL_CONFIG.endpoints.bootstrap);
+  const res = await mailGet(cookie, MAIL_CONFIG.endpoints.bootstrap);
+  // portlet 으로 이미 알아냈으면 본문을 읽지 않는다(200KB 넘는 SPA HTML 이다)
+  const html = viaPortlet ? '' : await res.text();
 
+  const email = viaPortlet ?? html.match(MAIL_CONFIG.emailInHtml)?.[0] ?? '';
+  const identity = splitEmail(email);
+  if (!identity) {
+    throw new Error('메일 계정 정보를 확인하지 못했습니다.');
+  }
+  return identity;
+}
+
+/** 공용 세션 확보 → 부트스트랩 + 내 메일 주소 파악까지 한 번에 수립 */
+async function establish(force: boolean): Promise<MailSession> {
+  const gw = await getGroupwareSession(force);
+  const identity = await bootstrapMail(gw.header);
   // establishedAt 은 공용 세션의 신원 — 이 값이 바뀌면 부트스트랩을 다시 해야 한다
-  return { cookie, email, id, domain, establishedAt: gw.establishedAt };
+  return { cookie: gw.header, ...identity, establishedAt: gw.establishedAt };
 }
 
 /**

@@ -10,6 +10,7 @@ import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
+import { AltAccountsCard } from '../../mail';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
 import {
   SCHEDULE_START_CONFIG_DEFAULT,
@@ -222,6 +223,9 @@ export function SettingsSection() {
           (평문 저장 아님)
         </p>
       </Collapsible>
+
+      {/* 추가 계정(팀 공용 등) — 카드 자체는 mail 기능이 공개 API 로 제공한다 */}
+      <AltAccountsCard />
 
       <Collapsible
         title="알림"

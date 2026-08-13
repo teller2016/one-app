@@ -29,6 +29,9 @@ export const AUTOMATION_PARTITION = {
   weekly: 'gw-weekly',
   // 결재 완료 후 여는 전자결재 문서함 — 작성 창(approval)과 동시에 살아 있으므로 분리해야 한다
   eaBox: 'gw-ea-box',
+  // 내 계정이 아닌 팀 공용 계정 로그인(메일 인증코드) — login 과 같은 파티션을 쓰면
+  // 공용 세션 쿠키가 지워져 메일 위젯·근태가 통째로 재로그인한다
+  altLogin: 'gw-alt-login',
 } as const;
 
 const DEFAULT_PARTITION = AUTOMATION_PARTITION.approval;
