@@ -34,13 +34,14 @@ paths:
 - `action`(버튼 라벨) 지정 시 그 버튼이 기본 버튼이 되고 **클릭 여부를 반환**해 호출부가 후속 동작을 처리한다
 - macOS 미서명/개발 모드에서 Electron `Notification` 이 표시되지 않아(UNErrorDomain 1) OS 알림 권한과 무관한 알럿 방식을 사용한다
 - 창이 닫혀 있으면(맥) 알럿만 독립적으로 뜬다. 창 참조는 `main.ts` 에서 `setNotifyWindow()` 로 등록
-- 사용처: 출퇴근 리마인더처럼 **당장 주의가 필요한 알림**(포커스를 뺏는다)
+- 사용처: **배포 완료/실패**(`settings.notifyDeploy` on/off) · 출퇴근 리마인더 · 환경설정의 테스트 알림(`notify:test` — 배포 알림 미리보기라 실제와 같은 알럿이어야 한다) — 즉 **놓치면 안 되는 알림**은 포커스를 뺏어 확실히 보여준다
+- ⚠️ **배포 알림을 토스트로 바꾸지 말 것** — 2026-08-14 에 `notifyToast` 로 바꿨다가 "잘 안 보인다"는 사용자 지적으로 되돌렸다. 배포는 결과를 놓치면 안 되는 알림이고, 터미널 입력대기는 반대로 흐름을 끊지 않아야 해서 토스트다(둘의 성격이 다르다)
 
 **비침투 알림은 `notifyToast({title, message, variant, sticky, duration, section, actionLabel})`** (2026-08-14) — 창이 화면에 있고 포커스면 `app:toast` IPC 로 **우측 아래 토스트**(App.tsx `AppToastBridge` → 공용 `useToast`)로 표시하고, 백그라운드·최소화·창 없음이면 위 알럿으로 폴백해 놓치지 않는다. 페이로드는 `shared/types.ts` 의 `AppToastPayload`.
 
 - `section` 지정 시 토스트에 [이동](또는 `actionLabel`) 버튼이 붙는다(sectionNav 경유 — App 이 SECTIONS 검증). `terminalSession {sessionId, cwd}` 지정 시 [이동]이 **그 터미널 세션까지 포커스**(`openTerminalSession`), `dedupeKey` 는 같은 키 토스트를 교체(sticky 중복 방지)
 - 백그라운드 폴백이 필요 없으면 **`sendToast`** — 창이 있으면 **백그라운드여도 발신**해 sticky 토스트가 렌더러에 쌓이고 복귀 시 그대로 보인다(2026-08-14 사용자 요청). 창이 파괴됐을 때만 false. 뱃지 등 다른 신호가 이미 있는 저강도 알림용
-- 사용처: ①배포 완료/실패(`settings.notifyDeploy` on/off — 성공·실패 모두 `sticky`, 직접 닫는다. 2026-08-14 사용자 결정) ②터미널 입력대기(`features/terminal` 규칙 — badge/sound 는 `sendToast`, alert 만 `notifyToast`) ③환경설정 테스트 알림 버튼(`notify:test` — 같은 경로라 토스트 미리보기가 된다)
+- 사용처: **터미널 입력대기**뿐이다(`features/terminal` 규칙 — badge/sound 는 `sendToast`, alert 만 `notifyToast`). 배포·근태처럼 놓치면 안 되는 알림은 위 `notify`(알럿)를 쓴다
 
 **새 알림이 필요하면 이 모듈을 재사용한다** — 작업 흐름을 끊으면 안 되는 완료 알림은 `notifyToast`, 당장 응답이 필요한 것만 `notify`.
 

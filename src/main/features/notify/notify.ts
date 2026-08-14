@@ -102,12 +102,11 @@ export function getNotifyWindow(): BrowserWindow | null {
 /** 알림 관련 IPC 등록 — 현재는 미리보기용 테스트 알림 */
 export function registerNotifyIpc() {
   ipcMain.handle('notify:test', () => {
-    // 실제 알림과 같은 경로로 미리보기 — 창이 포커스면 토스트, 아니면 알럿
-    void notifyToast({
-      title: '알림 테스트',
-      message: 'One App 알림이 이렇게 표시됩니다.',
-      variant: 'info',
-      duration: 6000,
+    // 이 버튼은 환경설정 '알림' 그룹의 배포 알림 미리보기다 — 배포가 알럿이므로
+    // 여기도 알럿이어야 실제와 어긋나지 않는다(2026-08-14)
+    void notify({
+      title: '🔔 알림 테스트',
+      body: 'One App 알림이 이렇게 표시됩니다.',
       section: 'settings',
     });
     return { ok: true };

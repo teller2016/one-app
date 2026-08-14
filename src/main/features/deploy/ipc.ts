@@ -12,7 +12,7 @@ import {
   fetchCompareCommits,
   compareWebUrl,
 } from './gitea';
-import { notifyToast } from '../notify/notify';
+import { notify } from '../notify/notify';
 import { isDeployNotifyEnabled, getGiteaConfig } from '../settings/store';
 import {
   triggerBuild,
@@ -367,30 +367,26 @@ export function registerDeployIpc() {
           isDeployNotifyEnabled()
         ) {
           notified = true;
-          // 창이 포커스면 우측 아래 토스트(작업 흐름 안 끊음), 백그라운드면 알럿 폴백.
-          // 배포 알림은 성공·실패 모두 직접 닫을 때까지 남는다 — 놓치면 안 되는 결과다.
+          // ⚠️ 배포는 **알럿(notify)** 으로 알린다 — 토스트로 바꿔 봤더니 눈에 안 띄어
+          // 되돌렸다(2026-08-14 사용자 요청). 배포 결과는 놓치면 안 되는 알림이라
+          // 앱을 앞으로 가져와 확실히 보여주는 쪽이 맞다. 터미널 입력대기는 반대로
+          // 흐름을 끊지 않아야 해서 토스트를 쓴다(features/terminal 규칙).
           if (status.state === 'success') {
-            void notifyToast({
-              title: '배포 성공',
-              message: `${label} 배포가 완료됐습니다.`,
-              variant: 'ok',
-              sticky: true,
+            void notify({
+              title: '✅ 배포 성공',
+              body: `${label} 배포가 완료됐습니다.`,
               section: 'deploy',
             });
           } else if (status.state === 'failure') {
-            void notifyToast({
-              title: '배포 실패',
-              message: `${label} — ${status.result ?? '실패'}`,
-              variant: 'fail',
-              sticky: true,
+            void notify({
+              title: '❌ 배포 실패',
+              body: `${label} — ${status.result ?? '실패'}`,
               section: 'deploy',
             });
           } else {
-            void notifyToast({
-              title: '배포 오류',
-              message: `${label} — ${status.error ?? '상태 추적 오류'}`,
-              variant: 'fail',
-              sticky: true,
+            void notify({
+              title: '⚠️ 배포 오류',
+              body: `${label} — ${status.error ?? '상태 추적 오류'}`,
               section: 'deploy',
             });
           }
