@@ -97,6 +97,8 @@ type Session = {
   bytesSinceInput: number; // 입력 이후 누적 출력 — "실제 턴 산출물" 판정
   bellAt: number; // 마지막 bare BEL 수신 시각 (0 = 없음)
   notifiedSinceInput: boolean; // 이번 입력(턴)에 대한 waiting 알림 기회를 이미 소진했는지
+  lastInputSubmit: boolean; // 마지막 입력에 제출(\r)이 있었는지 — 게이트 유예 재판정 대상 여부
+  notifyRecheck: NodeJS.Timeout | null; // 입력 직후 전이의 재판정 타이머 (게이트 해제 시점)
   suppressNotifyUntil: number; // 이 시각 전의 waiting 전이는 알림 없이 상태만
   // ── 휠 스크롤(tmux copy-mode) 추적값 ──
   paneId?: string; // tmux pane id 캐시 — pane 타깃 명령은 '=세션명' 을 못 받는다
@@ -166,15 +168,44 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   // 알림 기회는 입력(턴)당 1회: attach/resize 의 SIGWINCH redraw 가 busy→waiting 을
   // 다시 만들어도(입력 없이) 소리가 중복되지 않는다.
   const now = Date.now();
-  const eligible =
-    !s.notifiedSinceInput &&
-    now >= s.suppressNotifyUntil &&
-    now - s.lastInputAt >= NOTIFY_INPUT_GAP_MS;
-  s.notifiedSinceInput = true; // 게이트에 걸려 조용히 지나가도 기회는 소진 (뒤늦은 재알림 방지)
-  if (eligible) {
-    const info = toInfo(s);
-    waitingListeners.forEach((cb) => cb(info));
+  if (s.notifiedSinceInput) return;
+  if (now < s.suppressNotifyUntil) {
+    s.notifiedSinceInput = true; // 생성 grace — 초기 프롬프트는 조용히 기회 소진
+    return;
   }
+  const gap = now - s.lastInputAt;
+  if (gap >= NOTIFY_INPUT_GAP_MS) {
+    fireWaitingNotify(s);
+    return;
+  }
+  // 입력 직후(5초 내) 전이 — 예전엔 여기서도 기회를 소진해 **5초 안에 끝나는 짧은 턴이
+  // 영영 무음**이 됐다(2026-08-14 사용자 신고 "대기인데 소리 안 남"). 제출(Enter)로 시작한
+  // 턴이면 소진하지 않고 게이트가 풀리는 시점에 재판정한다 — 그때도 waiting 이면 알림.
+  // 제출 없이 타이핑만 멈춘 경우는 기존대로 소진(프롬프트 앞의 사용자에게 소음 방지).
+  if (!s.lastInputSubmit) {
+    s.notifiedSinceInput = true;
+    return;
+  }
+  clearNotifyRecheck(s);
+  s.notifyRecheck = setTimeout(() => {
+    s.notifyRecheck = null;
+    if (sessions.get(s.id) !== s) return; // 그 사이 종료·교체됨
+    if (s.status !== 'waiting' || s.notifiedSinceInput) return; // 다시 busy 거나 이미 처리됨
+    fireWaitingNotify(s);
+  }, NOTIFY_INPUT_GAP_MS - gap + 100);
+}
+
+/** waiting 알림 발화 + 이번 턴의 기회 소진 */
+function fireWaitingNotify(s: Session) {
+  s.notifiedSinceInput = true;
+  const info = toInfo(s);
+  waitingListeners.forEach((cb) => cb(info));
+}
+
+function clearNotifyRecheck(s: Session) {
+  if (!s.notifyRecheck) return;
+  clearTimeout(s.notifyRecheck);
+  s.notifyRecheck = null;
 }
 
 // OSC 시퀀스(ESC ] … BEL/ST) 를 제거한 뒤 남는 BEL 만 "주의 요청"으로 신뢰 —
@@ -198,14 +229,29 @@ function noteOutput(s: Session, chunk: string, bytes: number) {
 }
 
 /** writeSession 훅 — 사용자 입력은 "보고 있음" 신호: waiting 해제 + 턴 적산 리셋 */
-function noteInput(s: Session) {
+function noteInput(s: Session, data: string) {
   s.lastInputAt = Date.now();
   s.bytesSinceInput = 0;
   s.bellAt = 0;
   s.notifiedSinceInput = false; // 새 턴 — 알림 기회 리셋
+  // 제출(Enter) 여부 — 게이트 유예 재판정 대상 판정. Shift+Enter(ESC \r = TUI 줄바꿈)는
+  // 제출이 아니므로 제외한다(멀티라인 작성 중 멈춤에 알림이 울리면 안 된다).
+  // eslint-disable-next-line no-control-regex -- 터미널 제어 문자 매칭이 목적
+  s.lastInputSubmit = /(?<!\x1b)[\r\n]/.test(data);
+  clearNotifyRecheck(s); // 새 입력이 오면 이전 턴의 재판정은 무효
   // busy 는 유지 — 작업 중 휠(마우스 트래킹 시퀀스)이 상태를 깜빡이게 하지 않는다
   if (s.status === 'waiting') setStatus(s, 'idle', 'input');
 }
+
+// xterm 이 **자동 생성**하는 터미널 질의 응답 — 사람 입력이 아니므로 noteInput(알림 기회
+// 재장전)을 타면 안 된다. 이게 입력으로 집계되면 끝난 세션이 한참 뒤 스스로 그린 출력
+// (상태줄·토큰 카운터 등)에 waiting 알림이 울린다(2026-08-14 사용자 신고 "끝난 세션에서 소리").
+// 포커스 이벤트 ESC[I/O (claude 가 켜는 모드 1004 — pane 클릭/이탈마다 발생),
+// 커서 위치 보고 ESC[{r};{c}R, DSR 상태 ESC[{n}n, DA 응답 ESC[?/>…c (렌더러도 거르지만
+// 이중 방어 — MO 경로 포함), OSC 10~19 색 질의 응답. PTY 전달은 그대로 한다.
+const AUTO_REPLY_RE =
+  // eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
+  /^(?:\x1b\[(?:I|O|\d+;\d+R|\d*n|[?>][0-9;]*c)|\x1b\]1\d;[^\x07\x1b]*(?:\x07|\x1b\\))+$/;
 
 /** 전역 침묵 판정 틱 — busy 세션이 조용해지면 waiting(에이전트) 또는 idle 로 내린다 */
 function statusTick() {
@@ -319,6 +365,8 @@ function makeSession(init: {
     bytesSinceInput: 0,
     bellAt: 0,
     notifiedSinceInput: false,
+    lastInputSubmit: false,
+    notifyRecheck: null,
     suppressNotifyUntil: init.suppressNotifyUntil,
     copyMode: false,
     pendingInput: '',
@@ -387,6 +435,7 @@ function finalizeExit(s: Session, exitCode: number) {
     clearTimeout(s.flushTimer);
     s.flushTimer = null;
   }
+  clearNotifyRecheck(s); // 죽은 세션의 유예 재판정이 발화하지 않게
   reattachState.delete(s.id);
   sessions.delete(s.id);
   if (s.tmuxName) removePersisted(s.id); // tmux 세션이 실제로 죽었을 때만 온다
@@ -688,7 +737,12 @@ export function renameSession(id: string, title: string): void {
 export function writeSession(id: string, data: string): void {
   const s = sessions.get(id);
   if (!s) return;
-  noteInput(s);
+  // 자동 응답(포커스 이벤트·CPR 등)은 사람 입력이 아니다 — 전달만 하고 턴 리셋은 생략
+  if (AUTO_REPLY_RE.test(data)) {
+    if (STATUS_DEBUG) console.log('[term:auto]', s.id, JSON.stringify(data));
+  } else {
+    noteInput(s, data);
+  }
   // 휠로 tmux copy-mode(스크롤 위)에 올라가 있으면 키 입력이 셸이 아니라 copy-mode 명령으로
   // 먹힌다 — 먼저 빠져나온다. 해제는 tmux CLI 호출(비동기)이라 그동안의 입력은 순서대로
   // 모아 뒀다가 한 번에 흘려보낸다(첫 글자를 잃지 않는다).

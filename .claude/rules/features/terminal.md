@@ -125,6 +125,9 @@ paths:
 - 알림 = 입력대기 뱃지 상시 + **토스트 기본 표시**(2026-08-14 — 우측 아래 sticky, **백그라운드여도 발신돼 복귀 시 떠 있다**(`sendToast`), 세션당 `dedupeKey` 1장, [이동]=`openTerminalSession` 으로 그 세션 포커스) + 강도 `terminal.json` `notifyLevel`(badge/sound/alert — 환경설정 → 터미널 Segment): sound 는 +알림음, alert 는 +백그라운드일 때 알럿 폴백(`notifyToast`). 생성 20초·직전 입력 5초 내 전이는 알림 생략.
 - 토스트 제목에 **위치 라벨**(`입력 대기 — 작업영역명 · 워크트리폴더명`) — `sessionLocationLabel`(ipc.ts) 이 워크스페이스별 `worktreePaths`(경량 `git worktree list`)로 cwd 를 대조, **cwd 별 영구 캐시**(세션 수명 동안 불변). 중첩 매치는 더 깊은 경로 우선, 워크스페이스 밖(홈 등)이면 라벨 생략. ⚠️ `listWorktrees` 를 쓰지 말 것 — 워크트리마다 `git status`+`diff` 가 돌아 알림용으론 무겁다.
 - **보고 있는 세션은 토스트 생략** — TerminalSection 이 `sectionNav.setSessionVisibilityCheck` 로 "화면 세션(활성 섹션 + activeGroupIds/activeId)" 판정을 등록하고, App 의 `AppToastBridge` 가 발신 전에 확인한다.
+- 알림 기회는 **턴(입력)당 1회**. 입력 후 5초(입력 게이트) 안의 waiting 전이는 ①**제출(Enter — `\x1b\r` Shift+Enter 제외)로 시작한 턴이면 소진하지 않고 게이트 해제 시점에 재판정**해 그때도 waiting 이면 알림(짧은 턴 미탐 방지 — 2026-08-14, `notifyRecheck` 타이머·finalizeExit 에서 정리) ②제출 없는 입력(타이핑 멈춤)이면 기존대로 조용히 소진.
+- ⚠️ **xterm 자동 응답은 입력으로 치지 않는다**(`AUTO_REPLY_RE` — 포커스 이벤트 ESC[I/O·CPR·DSR·DA·OSC 색 응답, PTY 전달은 그대로) — 이걸 입력으로 집계하면 알림 기회가 재장전돼 **끝난 세션이 한참 뒤 스스로 그린 출력(상태줄 갱신 등)에 소리가 울린다**(2026-08-14 사용자 신고로 수정). 렌더러 `DA_REPLY_RE` 는 DA 만 거른다 — 새 자동 응답 유형이 생기면 main 쪽 목록에 더할 것.
+  - **실측 근거**(2026-08-14, 실제 claude 세션): ①claude 는 기동 시 `ESC[?1004h`(포커스 리포팅)를 켠다 — probe 캡처에서 `?1000h ?1002h ?1003h ?1004h ?1006h ?2004h ?2026h ?2031h` 확인 ②앱 tmux conf 가 `focus-events on` 이라 그 모드가 클라이언트 터미널(xterm)까지 전달된다(실제 `terminal:data` 스트림에서 `?1004h` 관측) ③xterm 소스의 `_handleTextAreaFocus` → `sendFocus` 면 `ESC[I`/`ESC[O` 전송 ④`ONEAPP_TERM_DEBUG=1` 의 **`[term:auto]` 로그로 `ESC[O` 와 OSC 10/11 색 응답이 실제로 `writeSession` 에 도달함을 확인**. 재현·회귀 확인은 이 로그를 볼 것.
 
 ## 리사이즈
 - PTY resize IPC 는 **120ms 디바운스**(마지막 값만 — last-claim-wins 유지), fit 은 rAF 코얼레스 — SIGWINCH 폭주가 claude 전체 리렌더를 부른다.
