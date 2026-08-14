@@ -36,7 +36,8 @@ paths:
    - ⚠️ `knownHash` 는 폰에도 열린 채널의 입력이라 **40자 hex 형식을 검증**한다(비교에만 쓰이지만 규칙은 규칙).
    - MO 터미널 페이지(`src/mobile`)는 `knownHash` 를 보내지 않으므로 항상 전체를 받는다(하위 호환 — 거긴 폴링도 안 한다).
 4. **커밋 목록**: `log --pretty=%h\t%ct\t%s`(커밋 0개면 log 자체가 실패 → 빈 목록), 미푸시 집합은 `@{u}..HEAD`(upstream 없으면 전부 미푸시)
-5. **커밋**: `add -A` 후 `commit -m`(통째 한 번 — 여러 -m 은 문단 분리) / **푸시**: upstream 없으면 `-u origin HEAD`
+5. **커밋**: `add -A` 후 `commit -m`(통째 한 번 — 여러 -m 은 문단 분리) / **푸시**: upstream 이 없거나 **현재 브랜치와 다른 이름을 가리키면** `-u origin HEAD` 로 추적을 바로잡으며 푸시
+   - ⚠️ 워크트리 `-b` 를 원격 베이스(origin/main)로 만들면 git 이 **origin/main 을 추적으로 잡는다** — 사용자 `push.default=current` 라 푸시는 제 이름 브랜치로 잘 가지만 `@{u}..HEAD` 가 안 비어 '푸시할 커밋'이 영영 남았다(2026-08-14 실측). 그래서 워크트리 생성은 `--no-track`(workspaces/git.ts), 푸시는 위 이름 불일치 교정. 확인 다이얼로그 문구도 같은 판정(`lib/push.ts` `pushConfirmMessage`)으로 실제 목적지를 보여준다.
 
 전 명령 `core.quotepath=false`(한글 경로 보존) + `GIT_TERMINAL_PROMPT=0` + 타임아웃(headless 인증 프롬프트 hang 차단).
 

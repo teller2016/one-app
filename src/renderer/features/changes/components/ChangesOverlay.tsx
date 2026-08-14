@@ -15,6 +15,7 @@ import { Textarea } from '../../../components/Textarea';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { relTime } from '../lib/diff';
+import { pushConfirmMessage } from '../lib/push';
 import { useChanges } from '../lib/useChanges';
 import { KIND_CHAR } from './ChangesView';
 import { FileTree } from './FileTree';
@@ -137,9 +138,7 @@ export function ChangesOverlay({
     if (!s) return;
     const ok = await confirm({
       title: '원격으로 푸시',
-      message: s.upstream
-        ? `${s.branch} → ${s.upstream} 로 커밋 ${s.unpushed?.length ?? 0}개를 푸시합니다.`
-        : `'${s.branch}' 는 원격에 없는 새 브랜치입니다 — origin 에 브랜치를 만들며 푸시합니다.`,
+      message: pushConfirmMessage(s),
       confirmLabel: '푸시',
     });
     if (!ok) return;

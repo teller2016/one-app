@@ -19,6 +19,7 @@ import { Textarea } from '../../../components/Textarea';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { relTime } from '../lib/diff';
+import { pushConfirmMessage } from '../lib/push';
 import { useChanges } from '../lib/useChanges';
 
 export const KIND_CHAR: Record<ChangedFileKind, string> = {
@@ -150,12 +151,9 @@ export function ChangesView({
 
   const doPush = async () => {
     if (!status) return;
-    const count = status.unpushed?.length ?? 0;
     const ok = await confirm({
       title: '원격으로 푸시',
-      message: status.upstream
-        ? `${status.branch} → ${status.upstream} 로 커밋 ${count}개를 푸시합니다.`
-        : `'${status.branch}' 는 원격에 없는 새 브랜치입니다 — origin 에 브랜치를 만들며 푸시합니다.`,
+      message: pushConfirmMessage(status),
       confirmLabel: '푸시',
     });
     if (!ok) return;

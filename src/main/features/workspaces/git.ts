@@ -108,8 +108,11 @@ export async function addWorktree(
     return { ok: false, error: `이미 존재하는 폴더입니다: ${target}` };
   }
 
+  // --no-track: 베이스가 원격(origin/main 등)이면 git 이 그걸 추적 브랜치로 잡는다 —
+  // 그러면 자기 이름의 원격 브랜치로 푸시해도 @{u}(origin/main) 대비 커밋이 남아
+  // '푸시할 커밋'이 영영 사라지지 않는다 (추적은 첫 푸시의 -u origin HEAD 가 잡는다)
   const args = opts.createBranch
-    ? ['worktree', 'add', target, '-b', branch, ...(opts.baseRef ? [opts.baseRef] : [])]
+    ? ['worktree', 'add', '--no-track', target, '-b', branch, ...(opts.baseRef ? [opts.baseRef] : [])]
     : ['worktree', 'add', target, branch];
   const r = await run(args, repoPath, ADD_TIMEOUT_MS);
   if (r.code !== 0) {

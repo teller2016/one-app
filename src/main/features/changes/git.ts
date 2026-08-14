@@ -429,14 +429,23 @@ export async function commitChanges(
   return { ok: true, hash: hash.code === 0 ? hash.stdout.trim() : undefined };
 }
 
-/** git push — upstream 없으면 -u origin HEAD 로 원격 브랜치를 만들며 푸시 */
+/** git push — upstream 이 없거나 다른 이름의 브랜치를 추적하면 -u origin HEAD 로 바로잡으며 푸시 */
 export async function pushChanges(repoPath: string): Promise<ChangesPushResult> {
-  const up = await run(
-    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
-    repoPath,
-    STATUS_TIMEOUT_MS
-  );
-  const args = up.code === 0 ? ['push'] : ['push', '-u', 'origin', 'HEAD'];
+  const [head, up] = await Promise.all([
+    run(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath, STATUS_TIMEOUT_MS),
+    run(
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+      repoPath,
+      STATUS_TIMEOUT_MS
+    ),
+  ]);
+  const branch = head.code === 0 ? head.stdout.trim() : '';
+  const upstream = up.code === 0 ? up.stdout.trim() : '';
+  // upstream 이 다른 이름을 가리키면(--no-track 이전에 만든 워크트리 브랜치가 origin/main 을
+  // 추적) 그냥 push 는 @{u}..HEAD 가 안 비어 '푸시할 커밋'이 영영 남는다 — -u 로 바로잡는다
+  const tracksSameName =
+    !!upstream && !!branch && upstream.split('/').slice(1).join('/') === branch;
+  const args = tracksSameName ? ['push'] : ['push', '-u', 'origin', 'HEAD'];
   const r = await run(args, repoPath, PUSH_TIMEOUT_MS);
   // git push 는 성공해도 진행 로그를 stderr 로 쓴다 — 성공·실패 공통으로 합쳐 담는다
   const output = [r.stdout.trim(), r.stderr].filter(Boolean).join('\n');
