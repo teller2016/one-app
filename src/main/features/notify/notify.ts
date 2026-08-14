@@ -1,7 +1,9 @@
 // 알림 (공통 인프라) — 앱 창을 앞으로 가져와 알럿(dialog)으로 표시한다.
 // macOS 미서명/개발 모드에서는 Electron Notification 이 표시되지 않는 경우가 많아
 // OS 알림 권한과 무관하게 항상 뜨는 dialog.showMessageBox 를 사용한다.
+// 비침투 알림(작업 흐름을 끊으면 안 되는 완료 알림)은 notifyToast 를 쓴다.
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import type { AppToastPayload } from '../../../shared/types';
 
 // main.ts 에서 창 생성 후 등록한다 (알럿 부착·섹션 이동에 사용)
 let mainWindow: BrowserWindow | null = null;
@@ -60,6 +62,24 @@ export async function notify({
   return primaryClicked;
 }
 
+/**
+ * 비침투 알림 — 창이 화면에 있고 포커스면 우측 아래 토스트로 표시한다.
+ * 백그라운드(다른 앱 뒤·최소화·창 없음)면 토스트가 안 보이므로 알럿(notify)으로 폴백해
+ * 놓치지 않게 한다. 포커스를 뺏지 않아 작업 흐름을 끊지 않는 완료 알림용.
+ */
+export async function notifyToast(payload: AppToastPayload): Promise<void> {
+  const win = getNotifyWindow();
+  if (win && win.isVisible() && !win.isMinimized() && win.isFocused()) {
+    win.webContents.send('app:toast', payload);
+    return;
+  }
+  await notify({
+    title: payload.title ?? payload.message,
+    body: payload.title ? payload.message : '',
+    section: payload.section,
+  });
+}
+
 /** 등록된 메인 창 반환 (파괴됐으면 null) — 메인 프로세스에서 렌더러로 이벤트를 보낼 때 사용 */
 export function getNotifyWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
@@ -68,9 +88,12 @@ export function getNotifyWindow(): BrowserWindow | null {
 /** 알림 관련 IPC 등록 — 현재는 미리보기용 테스트 알림 */
 export function registerNotifyIpc() {
   ipcMain.handle('notify:test', () => {
-    void notify({
-      title: '🔔 알림 테스트',
-      body: 'One App 알림이 이렇게 표시됩니다.',
+    // 실제 알림과 같은 경로로 미리보기 — 창이 포커스면 토스트, 아니면 알럿
+    void notifyToast({
+      title: '알림 테스트',
+      message: 'One App 알림이 이렇게 표시됩니다.',
+      variant: 'info',
+      duration: 6000,
       section: 'settings',
     });
     return { ok: true };

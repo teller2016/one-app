@@ -12,7 +12,7 @@ import {
   fetchCompareCommits,
   compareWebUrl,
 } from './gitea';
-import { notify } from '../notify/notify';
+import { notifyToast } from '../notify/notify';
 import { isDeployNotifyEnabled, getGiteaConfig } from '../settings/store';
 import {
   triggerBuild,
@@ -367,22 +367,30 @@ export function registerDeployIpc() {
           isDeployNotifyEnabled()
         ) {
           notified = true;
+          // 창이 포커스면 우측 아래 토스트(작업 흐름 안 끊음), 백그라운드면 알럿 폴백.
+          // 배포 알림은 성공·실패 모두 직접 닫을 때까지 남는다 — 놓치면 안 되는 결과다.
           if (status.state === 'success') {
-            void notify({
-              title: '✅ 배포 성공',
-              body: `${label} 배포가 완료됐습니다.`,
+            void notifyToast({
+              title: '배포 성공',
+              message: `${label} 배포가 완료됐습니다.`,
+              variant: 'ok',
+              sticky: true,
               section: 'deploy',
             });
           } else if (status.state === 'failure') {
-            void notify({
-              title: '❌ 배포 실패',
-              body: `${label} — ${status.result ?? '실패'}`,
+            void notifyToast({
+              title: '배포 실패',
+              message: `${label} — ${status.result ?? '실패'}`,
+              variant: 'fail',
+              sticky: true,
               section: 'deploy',
             });
           } else {
-            void notify({
-              title: '⚠️ 배포 오류',
-              body: `${label} — ${status.error ?? '상태 추적 오류'}`,
+            void notifyToast({
+              title: '배포 오류',
+              message: `${label} — ${status.error ?? '상태 추적 오류'}`,
+              variant: 'fail',
+              sticky: true,
               section: 'deploy',
             });
           }

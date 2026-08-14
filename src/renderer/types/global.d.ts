@@ -1,5 +1,6 @@
 // preload 에서 contextBridge 로 노출한 window.oneApp 타입 선언
 import type {
+  AppToastPayload,
   ScheduleRunPayload,
   ScheduleRunResult,
   ScheduleOutputChunk,
@@ -416,6 +417,7 @@ declare global {
       // 드롭된 File 의 실제 경로 (preload 의 webUtils.getPathForFile 경유).
       // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
       getPathForFile?: (file: File) => string;
+      onToast: (cb: (payload: AppToastPayload) => void) => () => void;
       onNavigate: (cb: (section: string) => void) => () => void;
       onHistoryNav: (cb: (dir: 'back' | 'forward') => void) => () => void;
     };

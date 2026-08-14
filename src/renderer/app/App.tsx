@@ -2,7 +2,7 @@ import { ConfirmProvider } from "../components/ConfirmDialog";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
-import { ToastProvider } from "../components/Toast";
+import { ToastProvider, useToast } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { ApprovalSection } from "../features/approval";
 import { AttendanceWidget } from "../features/attendance";
@@ -102,6 +102,28 @@ const SECTIONS: AppSection[] = [
     render: () => <SettingsSection />,
   },
 ];
+
+// main 발신 토스트(app:toast — notify.notifyToast) 를 전역 토스트로 표시하는 브리지.
+// useToast 가 ToastContext 를 읽어야 해서 App 본문이 아니라 Provider 안쪽 자식으로 둔다.
+function AppToastBridge(): null {
+  const toast = useToast();
+  useEffect(() => {
+    if (!window.oneApp?.onToast) return;
+    return window.oneApp.onToast((p) =>
+      toast(p.message, {
+        variant: p.variant ?? "info",
+        title: p.title,
+        sticky: p.sticky,
+        duration: p.duration,
+        // 섹션 이동은 sectionNav 경유 — App 이 등록한 navigator 가 SECTIONS 검증을 한다
+        action: p.section
+          ? { label: p.actionLabel ?? "이동", section: p.section }
+          : undefined,
+      })
+    );
+  }, [toast]);
+  return null;
+}
 
 // Jira 탭에서 이미 확인한 티켓 키 — 새로 들어온 티켓(미확인)을 강조하기 위한 기준
 const JIRA_SEEN_KEY = "jira:seenKeys";
@@ -263,6 +285,7 @@ export function App() {
 
   return (
     <ToastProvider>
+      <AppToastBridge />
       <ConfirmProvider>
         <div className="app">
           <Sidebar

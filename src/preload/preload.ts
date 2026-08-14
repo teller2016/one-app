@@ -1,6 +1,7 @@
 // preload: 렌더러에 안전하게 노출할 API를 contextBridge 로 등록한다.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
+  AppToastPayload,
   ScheduleNotionRecordPayload,
   ScheduleRunPayload,
   ScheduleStartConfig,
@@ -551,6 +552,12 @@ contextBridge.exposeInMainWorld("oneApp", {
   // (Electron 32 에서 제거) webUtils 는 preload 에서만 접근 가능하다.
   // File 을 contextBridge 함수 인자로 넘기는 것이 공식 문서의 패턴이다.
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  // 우측 아래 토스트 알림 구독 (main 의 notifyToast — 창이 포커스일 때 알럿 대신)
+  onToast: (cb: (payload: AppToastPayload) => void) => {
+    const listener = (_e: unknown, payload: AppToastPayload) => cb(payload);
+    ipcRenderer.on("app:toast", listener);
+    return () => ipcRenderer.removeListener("app:toast", listener);
+  },
   // 알림 클릭 등으로 특정 섹션으로 이동하라는 신호 구독. 해제 함수를 반환한다.
   onNavigate: (cb: (section: string) => void) => {
     const listener = (_e: unknown, section: string) => cb(section);

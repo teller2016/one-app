@@ -296,6 +296,19 @@ export type JiraWorkPrepareResult = {
   error?: string;
 };
 
+// ── 알림 토스트 (공통 인프라 — main → 렌더러 app:toast) ──
+
+/** 우측 아래 토스트 알림 — 창이 포커스일 때 알럿 대신 표시 (notify.notifyToast) */
+export type AppToastPayload = {
+  title?: string; // 굵은 제목 줄 (없으면 message 한 줄짜리)
+  message: string;
+  variant?: 'ok' | 'fail' | 'info';
+  sticky?: boolean; // true 면 자동으로 사라지지 않고 ✕ 로 직접 닫는다
+  duration?: number; // 자동 소멸까지 ms (sticky 면 무시)
+  section?: string; // 지정 시 [이동] 액션 버튼 — 클릭하면 해당 섹션으로 전환
+  actionLabel?: string; // 액션 버튼 라벨 (기본 '이동')
+};
+
 // ── 배포 (젠킨스) ──
 
 /** 프로젝트 안의 배포 대상 하나 (예: 스토어, 어드민) */

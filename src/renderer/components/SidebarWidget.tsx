@@ -7,7 +7,7 @@ import { useSidebarCollapsed } from './Sidebar';
  * `body` 로 portal 되므로 좌표상 '팝오버 밖'이다. 그 클릭까지 외부 클릭으로 보면
  * 야근 결재 모달을 여는 순간 배경 팝오버가 닫히고, 확인창의 [확인] 클릭도 함께 닫는다.
  */
-const OUTER_LAYERS = '.modal-overlay, .picker__pop, .toast';
+const OUTER_LAYERS = '.modal-overlay, .picker__pop, .toasts';
 
 /**
  * 사이드바 위젯 셸 — 축소 모드에서 위젯을 쓸 수 있게 만드는 래퍼.

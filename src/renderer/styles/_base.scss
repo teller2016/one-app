@@ -1278,17 +1278,24 @@ input.input--sm {
   }
 }
 
-// ===== 토스트 (전역 — ToastProvider가 렌더) =====
-.toast {
+// ===== 토스트 (전역 — ToastProvider가 렌더, 우측 아래 스택) =====
+.toasts {
   position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 20px;
+  bottom: 20px;
   z-index: 100;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
-  padding: 10px 16px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 380px;
+  padding: 10px 14px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -1296,14 +1303,79 @@ input.input--sm {
   @include type-body;
   animation: toast-in var(--dur-2) var(--ease);
 
+  // 퇴장 — Toast.tsx 의 LEAVE_MS 와 길이 동기화 (--dur-2)
+  &--leaving {
+    animation: toast-out var(--dur-2) var(--ease) forwards;
+  }
+
   &__icon {
     display: inline-flex;
+    margin-top: 2px; // 첫 줄 텍스트와 광학 정렬 (본문이 2줄일 수 있다)
     color: var(--ok);
   }
 
-  // 실패 토스트 — 아이콘 색만 위험색으로
+  // 아이콘 색만 variant 를 따라간다
   &--fail &__icon {
     color: var(--danger);
+  }
+  &--info &__icon {
+    color: var(--accent);
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  &__title {
+    font-weight: 600;
+  }
+
+  // 제목이 있는 알림형에서만 본문을 보조색으로 (한 줄짜리는 본문색 유지)
+  &__title + &__msg {
+    color: var(--text-2);
+  }
+
+  &__action {
+    flex-shrink: 0;
+    align-self: center;
+    margin-left: 4px;
+    padding: 3px 8px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--accent-soft);
+    }
+  }
+
+  &__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    align-self: center;
+    width: 22px;
+    height: 22px;
+    margin-right: -6px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text);
+      background: var(--accent-soft);
+    }
   }
 }
 
@@ -1439,11 +1511,18 @@ input.input--sm {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 8px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 

@@ -126,6 +126,12 @@ html.mo {
     height: 36px;
   }
 
+  // 토스트(우측 아래 스택)가 하단 탭바를 덮지 않게 탭바 위로 올린다
+  .toasts {
+    right: 12px;
+    bottom: calc(var(--mo-tabbar) + env(safe-area-inset-bottom) + 12px);
+  }
+
   // 섹션 헤더 버튼("프로젝트 추가" 등)이 좁은 폭에서 두 줄로 쪼개진다
   .section-head .btn {
     white-space: nowrap;
