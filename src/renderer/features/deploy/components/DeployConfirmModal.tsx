@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import type {
-  DeployProjectView,
-  DeployTarget,
-  DeployPreviewResult,
+import {
+  isMergeCommit,
+  type DeployCommit,
+  type DeployProjectView,
+  type DeployTarget,
+  type DeployPreviewResult,
 } from '../../../../shared/types';
 import { formatTime, extractIssueKeys, jiraIssueUrl } from '../lib/format';
 import { Modal } from '../../../components/Modal';
@@ -17,12 +19,11 @@ import { useCopy } from '../../../lib/useCopy';
  * 커밋 제목 + 티켓 번호를 줄줄이 — 배포 전 공유 메시지용.
  * (머지 커밋은 작업 내용이 아니라 제외)
  */
-function buildShareText(commits: { message: string }[]): string {
+function buildShareText(commits: Pick<DeployCommit, 'message' | 'isMerge'>[]): string {
   return commits
     .map((c) => {
       const title = c.message.split('\n')[0].trim();
-      if (!title || /^Merge (branch|pull request|remote)/i.test(title))
-        return '';
+      if (!title || isMergeCommit(c)) return '';
       // 제목에 이미 키가 있으면 뒤에 또 붙이지 않는다
       const keys = extractIssueKeys(c.message).filter((k) => !title.includes(k));
       return keys.length ? `${title} (${keys.join(', ')})` : title;
@@ -159,7 +160,10 @@ export function DeployConfirmModal({
                   const title = c.message.split('\n')[0];
                   const keys = extractIssueKeys(c.message);
                   return (
-                    <li key={c.id || i}>
+                    <li
+                      key={c.id || i}
+                      className={isMergeCommit(c) ? 'deploy__preview-item--merge' : undefined}
+                    >
                       <span className="deploy__preview-row">
                         <span className="deploy__preview-msg">{title}</span>
                         {keys.map((k) => (

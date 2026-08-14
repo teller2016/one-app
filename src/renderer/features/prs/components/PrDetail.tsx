@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import type {
-  DeployCommit,
-  PrChangedFile,
-  PrItem,
-  PrMergeInfoResult,
-  PrMergeMethod,
+import {
+  isMergeCommit,
+  type DeployCommit,
+  type PrChangedFile,
+  type PrItem,
+  type PrMergeInfoResult,
+  type PrMergeMethod,
 } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
@@ -195,7 +196,9 @@ export function PrDetail({
           <div className="prs__detail-panel">
             <ul className="prs__detail-commits">
               {commits.map((c) => (
-                <li key={c.id}>{c.message.split('\n')[0]}</li>
+                <li key={c.id} className={isMergeCommit(c) ? 'prs__commit--merge' : undefined}>
+                  {c.message.split('\n')[0]}
+                </li>
               ))}
             </ul>
             {files.length > 0 && (

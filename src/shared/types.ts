@@ -389,11 +389,24 @@ export type DeployCommit = {
   author: string;
   timestamp?: number; // epoch ms
   /**
-   * 머지 커밋(부모 2개 이상)인지 — PR 제목·본문 자동 생성에서 제외하는 데 쓴다.
+   * 머지 커밋(부모 2개 이상)인지 — PR 초안 제외·목록 흐림 표시에 쓴다.
    * 젠킨스 경로는 부모 정보가 없어 채우지 않는다(undefined = 알 수 없음).
    */
   isMerge?: boolean;
 };
+
+/**
+ * 머지 커밋 판별 (main·렌더러 공용) — `parents` 로 채워 준 `isMerge` 가 정본이고,
+ * 값이 없는 경로(젠킨스 changeSet 등)에서만 메시지 패턴으로 보조 판정한다.
+ */
+export function isMergeCommit(c: Pick<DeployCommit, "message" | "isMerge">): boolean {
+  return (
+    c.isMerge ??
+    /^Merge (branch|pull request|remote-tracking|commit)\b/i.test(
+      c.message.split("\n")[0]?.trim() ?? "",
+    )
+  );
+}
 
 /** 빌드 상세 — 커밋 내역 표시용 */
 export type DeployBuildDetail = {
@@ -1298,6 +1311,7 @@ export type ChangesLogEntry = {
   subject: string;
   date: number; // author date epoch 초 — 상대 시간 표시용
   unpushed: boolean; // upstream 에 아직 없는 커밋 (upstream 없으면 전부 true)
+  isMerge: boolean; // 머지 커밋(부모 2개 이상) — 목록에서 흐리게 표시
 };
 
 export type ChangesLogResult = {

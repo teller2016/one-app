@@ -228,6 +228,11 @@
       @include type-caption;
       color: var(--text-3);
     }
+
+    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (:disabled 와 같은 수준)
+    &--merge {
+      opacity: 0.45;
+    }
   }
 }
 
@@ -409,6 +414,11 @@
       + li {
         border-top: 1px solid var(--border);
       }
+    }
+
+    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (:disabled 와 같은 수준)
+    li.deploy__preview-item--merge {
+      opacity: 0.45;
     }
   }
 

@@ -167,6 +167,11 @@
       color: var(--text-3);
       flex-shrink: 0;
     }
+
+    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (:disabled 와 같은 수준)
+    &--merge {
+      opacity: 0.45;
+    }
   }
 
   &__log-dot {

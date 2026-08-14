@@ -318,8 +318,9 @@ export async function getChangesDiff(
 
 /** 최근 커밋 목록 — 미푸시 여부 포함 (커밋 섹션용) */
 export async function getCommitLog(repoPath: string): Promise<ChangesLogResult> {
+  // %p = 축약 부모 해시들(공백 구분) — 2개 이상이면 머지 커밋
   const r = await run(
-    ['log', '--no-color', '--pretty=format:%h\t%ct\t%s', '-n', String(LOG_MAX)],
+    ['log', '--no-color', '--pretty=format:%h\t%ct\t%p\t%s', '-n', String(LOG_MAX)],
     repoPath,
     STATUS_TIMEOUT_MS
   );
@@ -339,13 +340,14 @@ export async function getCommitLog(repoPath: string): Promise<ChangesLogResult> 
     .split('\n')
     .filter(Boolean)
     .map((line): ChangesLogEntry | null => {
-      const [hash, ct, ...rest] = line.split('\t');
+      const [hash, ct, parents, ...rest] = line.split('\t');
       if (!hash || !ct) return null;
       return {
         hash,
         subject: rest.join('\t'),
         date: Number(ct),
         unpushed: noUpstream || unpushed.has(hash),
+        isMerge: (parents ?? '').trim().split(' ').filter(Boolean).length > 1,
       };
     })
     .filter((c): c is ChangesLogEntry => !!c);

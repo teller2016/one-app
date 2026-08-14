@@ -1,4 +1,4 @@
-import type { DeployCommit } from '../../../../shared/types';
+import { isMergeCommit, type DeployCommit } from '../../../../shared/types';
 
 /**
  * PR 제목·본문 초안 생성 — 커밋 목록에서 **머지 커밋을 걸러낸 뒤** 대표 커밋을 고른다.
@@ -33,13 +33,6 @@ const rankOf = (subject: string) => {
   const type = typeOf(subject);
   return type != null ? TYPE_RANK[type] ?? RANK_OTHER : RANK_OTHER;
 };
-
-/**
- * 머지 커밋 판별 — main 이 `parents` 로 채워 준 `isMerge` 가 정본이고,
- * 값이 없는 경로(구버전 응답 등)에서만 메시지 패턴으로 보조 판정한다.
- */
-const isMergeCommit = (c: DeployCommit) =>
-  c.isMerge ?? /^Merge (branch|pull request|remote-tracking|commit)\b/i.test(subjectOf(c.message));
 
 /**
  * 제목·본문 초안. `commits` 는 **오래된 순**(main 의 `fetchBranchCommits` 반환 순서).

@@ -1,7 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import type {
-  DeployBuildDetail,
-  DeployBuildSummary,
+import {
+  isMergeCommit,
+  type DeployBuildDetail,
+  type DeployBuildSummary,
 } from '../../../../shared/types';
 import {
   formatTime,
@@ -182,7 +183,10 @@ export function BuildDetailPanel({
               const [title, ...rest] = c.message.split('\n');
               const body = rest.join('\n').trim();
               return (
-                <div className="deploy__commit" key={c.id || i}>
+                <div
+                  className={`deploy__commit${isMergeCommit(c) ? ' deploy__commit--merge' : ''}`}
+                  key={c.id || i}
+                >
                   <div className="deploy__commit-title">
                     <JiraText text={title} jiraUrl={links?.jiraUrl} />
                   </div>

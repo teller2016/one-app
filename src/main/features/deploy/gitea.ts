@@ -34,6 +34,7 @@ type GiteaCompareResponse = {
       message?: string;
       author?: { name?: string; date?: string };
     };
+    parents?: { sha?: string }[];
   }[];
 };
 
@@ -78,6 +79,7 @@ export async function fetchCompareCommits(
       timestamp: c.commit?.author?.date
         ? Date.parse(c.commit.author.date)
         : undefined,
+      isMerge: (c.parents?.length ?? 0) > 1,
     }))
     .reverse(); // 최신 커밋이 먼저
   return { totalCommits: data.total_commits ?? commits.length, commits };

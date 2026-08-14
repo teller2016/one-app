@@ -340,7 +340,7 @@ export function ChangesView({
                 type="button"
                 className={`changes__log-row${
                   ch.commitSel?.hash === c.hash ? ' changes__log-row--active' : ''
-                }`}
+                }${c.isMerge ? ' changes__log-row--merge' : ''}`}
                 title={c.subject}
                 onClick={() => ch.selectCommit(ch.commitSel?.hash === c.hash ? null : c)}
               >
