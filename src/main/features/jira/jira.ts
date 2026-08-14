@@ -517,7 +517,7 @@ export async function getTransitions(key: string): Promise<JiraTransitionsResult
 }
 
 /**
- * 이슈를 '해결됨' 계열 상태로 전환 — 가능한 전환 중 해결/완료 이름을 자동 선택.
+ * 이슈를 '해결됨' 계열 상태로 전환 — 가능한 전환 중 해결(resolve) 이름만 자동 선택.
  * (PR 머지 직후 원클릭 해결 처리용 — 워크플로우별 상태 차이는 이름 휴리스틱으로 흡수)
  */
 export async function resolveIssue(key: string): Promise<JiraActionResult> {
@@ -525,9 +525,9 @@ export async function resolveIssue(key: string): Promise<JiraActionResult> {
   if (!list.ok || !list.transitions) {
     return { ok: false, error: list.error ?? '전환 목록을 불러오지 못했습니다.' };
   }
-  const target = list.transitions.find((t) =>
-    /해결|완료|resolve|done/i.test(t.name),
-  );
+  // 자동 전환은 해결 계열만 — '완료'를 후보에 넣으면 '운영배포완료' 같은 배포 상태를
+  // 오인해 집는다(2026-08-14 실측 오전환). 완료류로 자동 전환할 일은 없다(사용자 확정).
+  const target = list.transitions.find((t) => /해결|resolve/i.test(t.name));
   if (!target) {
     const names = list.transitions.map((t) => t.name).join(', ');
     return {
@@ -535,7 +535,9 @@ export async function resolveIssue(key: string): Promise<JiraActionResult> {
       error: `해결 전환을 찾을 수 없습니다 (가능: ${names || '없음'})`,
     };
   }
-  return transitionIssue(key, target.id);
+  const res = await transitionIssue(key, target.id);
+  // 어느 상태로 갔는지 호출부(토스트)가 보여줄 수 있게 이름을 실어 준다
+  return res.ok ? { ...res, status: target.name } : res;
 }
 
 /** 상태 전환 실행 */

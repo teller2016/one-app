@@ -127,7 +127,12 @@ export type JiraListResult = {
   addedError?: string;
 };
 
-export type JiraActionResult = { ok: boolean; error?: string };
+export type JiraActionResult = {
+  ok: boolean;
+  error?: string;
+  /** 전환 성공 시 실제로 이동한 상태 이름 (resolveIssue 의 자동 선택 결과 표시용) */
+  status?: string;
+};
 
 /**
  * 해결 상태 판별 (main·렌더러 공용 — 렌더러 쪽 진입점은 `features/jira` 의 `isDone`).

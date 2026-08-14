@@ -69,7 +69,7 @@ export function PrSection() {
     });
     if (!ok) return;
     const res = await window.oneApp.jira.resolve(key);
-    if (res.ok) toast(`${key} → 해결됨`);
+    if (res.ok) toast(`${key} → ${res.status ?? '해결됨'}`);
     else toast(res.error ?? '전환에 실패했습니다', 'fail');
   };
 
