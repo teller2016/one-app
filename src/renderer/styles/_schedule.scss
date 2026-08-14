@@ -22,8 +22,10 @@
   }
 
   // 타임라인 카드 — 하루 작업 기록이 주인공
+  // ⚠️ 폭은 .section(--w-content)에 맡긴다 — 카드에만 max-width 를 걸면 형제인
+  //    버튼 행·안내문·로그는 섹션 폭까지 뻗어 카드 오른쪽 밖으로 삐져나온다
+  //    (2026-08-14 사용자 지적). 다른 섹션의 카드도 전부 섹션 폭을 그대로 쓴다.
   &__card {
-    max-width: 640px;
     border: 1px solid var(--border);
     border-radius: var(--r-lg);
     background: var(--surface-1);
