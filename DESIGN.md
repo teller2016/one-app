@@ -74,10 +74,14 @@ shadow:
   "1": "0 1px 2.5px rgba(0,0,0,0.12)"    # 컨트롤 전용(세그 선택 칩) — 카드 금지
   "2": "0 5px 30px rgba(0,0,0,0.22)"     # 모달·토스트·팝오버 (애플의 단일 그림자 이식)
 motion:
-  dur-1: .12s          # 색·배경
-  dur-2: .18s          # transform·펼침
+  dur-1: .12s          # 색·배경 전환
+  dur-2: .18s          # transform·진입 (페이드·팝오버·섹션 전환)
+  dur-3: .28s          # 레이아웃 — 높이·폭이 실제로 변하는 펼침 (Collapsible·사이드바 접기)
   dur-pulse: 1.2s      # 상태 점 펄스
-  ease: "cubic-bezier(.25,.6,.3,1)"
+  ease: "cubic-bezier(.25,.6,.3,1)"      # 상태 전환(양방향)
+  ease-out: "cubic-bezier(.2,.8,.3,1)"   # 진입 감속 (퇴장에는 쓰지 않는다)
+  lift: 6px            # 진입 이동거리 — 아래에서 제자리로
+  keyframes: [rise-in, fade-in, pop-in]  # 공용 진입 (동명 믹스인). 목록 항목엔 걸지 않는다
 focus: "outline 2px solid accent, offset 2px (box-shadow 링 금지 · 입력은 offset 0 + border accent 병행 · 다크 패널 안은 accent-on-dark)"
 icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, stroke: 2 }
 ---
@@ -217,7 +221,14 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 - **컨트롤 높이 (한 줄 폼 컨트롤 통일)**: input·세그 트랙·DatePicker/TimePicker·FileTrigger 는 `--control-h: 36px`, 소형(`input--sm` 계열)은 `--control-h-sm: 30px`. 세로 패딩 대신 고정 높이를 쓰고, **기능 SCSS 에서 컨트롤 높이 오버라이드 금지** — 같은 행의 컨트롤은 자동으로 줄이 맞아야 정상.
 - **라운드 (애플 문법 — 섞지 말 것)**: `--r-sm: 8px`(칩·아이콘 버튼·세그 칩) · `--r-md: 11px`(입력·중첩 패널) · `--r-lg: 18px`(카드·모달) · `--r-full: 999px`(**버튼 필**·뱃지·바). **필 = 액션 신호.** 중첩 표면은 부모보다 한 단계 작게.
 - **그림자 (애플 무그림자 크롬)**: 카드·버튼·텍스트에 그림자 **금지** — `card-surface` 는 헤어라인만. `--shadow-1`(0 1px 2.5px rgba(0,0,0,.12))은 **세그 선택 칩 등 컨트롤 전용**, `--shadow-2`(0 5px 30px rgba(0,0,0,.22) — 애플의 단일 제품 그림자 이식)는 **떠 있는 레이어**(모달·토스트·팝오버) 전용.
-- **모션**: `--dur-1: .12s`(색·배경) · `--dur-2: .18s`(transform·펼침) · `--dur-pulse: 1.2s`(상태 점 펄스) · 스피너 .9s · `--ease: cubic-bezier(.25,.6,.3,1)`. `prefers-reduced-motion` 시 transition·pulse 제거.
+- **모션 (애플식 절제 — 존재는 느껴지되 기다림은 없다)**
+  - **지속시간**: `--dur-1: .12s`(색·배경 전환) · `--dur-2: .18s`(transform·진입) · `--dur-3: .28s`(**레이아웃** — 높이·폭이 실제로 변하는 펼침) · `--dur-pulse: 1.2s`(상태 점 펄스) · 스피너 .9s.
+  - **이징**: 상태 전환처럼 **양방향**인 것은 `--ease: cubic-bezier(.25,.6,.3,1)`, 나타나기만 하는 **진입**은 감속 곡선 `--ease-out: cubic-bezier(.2,.8,.3,1)`. 퇴장에 `--ease-out` 을 쓰지 않는다(끝이 늘어져 굼떠 보인다).
+  - **진입 이동거리는 `--lift: 6px`** — 그 이상은 이 무드에서 과하다. 진입은 **`opacity`·`transform` 만** 쓴다(합성 단계에서 끝나 리페인트가 없다 — 터미널 xterm 이 같은 창에 상주한다).
+  - **공용 진입 믹스인** (`_base.scss`): `rise-in`(아래→제자리 — 섹션 전환·모달·토스트·배너) · `fade-in`(넓은 면·오버레이) · `pop-in`(팝오버·툴팁·메뉴 — 트리거에서 자라나듯). fill-mode 는 항상 `both`(없으면 첫 프레임이 번쩍인다).
+  - ⚠️ **목록 항목(카드·행)에는 진입 모션을 걸지 않는다** — 데이터가 뜨는 건 사용자가 기다린 결과라 즉시 보여야 한다. 계단(stagger)을 앞 N개에만 주면 "N개까지만 애니메이션되는" 것으로 읽힌다(2026-08-14 실사용 지적으로 전면 제거). 목록의 모션은 **컨테이너인 섹션 하나**가 대표한다.
+  - **펼침 높이**: `:root { interpolate-size: allow-keywords }` 로 `height: auto` 를 전환 대상으로 만들고, `<details>` 는 `::details-content` 로 연다(Chromium 129+ / 이 앱은 150). 콘텐츠 높이를 JS 로 재지 않는다.
+  - **`prefers-reduced-motion`**: transition 제거 + 모든 애니메이션을 `animation-duration: .01ms` 로 **즉시 종료**시킨다(스피너만 예외로 회전 유지). ⚠️ `animation: none` 은 금지 — 진입 모션이 `fill-mode: both` 라 시작 상태(`opacity: 0`)에 갇혀 **요소가 아예 안 보인다**.
 - **포커스** (`@mixin focus-ring`): `outline: 2px solid var(--accent); outline-offset: 2px;`
   - box-shadow 링 **금지**. Chromium은 outline이 radius를 따라 라운드로 그려짐(필 버튼에서도 캡슐형 링).
   - 입력은 offset 0 + `border-color: var(--accent)` 병행.
@@ -340,6 +351,8 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 - **아이콘은 공용 `Icon`(Lucide)만** — 크기는 12·14·16·18·20 5단계 안에서.
 - **다크 패널 내부 텍스트는 평소 토큰 그대로** — panel-dark 스코프가 on-dark 로 자동 치환(on-dark 직접 참조 금지).
 - **공용 컴포넌트 + variant/size prop 사용**(§4 레지스트리). 숫자 정렬은 `tabular-nums`.
+- **떠오르는 레이어·화면 전환에는 진입 모션** — `rise-in`/`fade-in`/`pop-in` 믹스인(§3). 이동은 `--lift`(6px)까지, `opacity`·`transform` 만.
+- **폭·높이를 드래그로 바꾸는 곳은 드래그 중 transition 을 끈다** — 손끝을 뒤따라오면 조작감이 무너진다(`--dragging` 클래스).
 
 ### ⛔ Don't
 - ❌ **hex·px 매직넘버**, `.btn`/`.input` 등 루트 클래스 직접 사용, 기능 SCSS 에서 공용 클래스 크기 오버라이드.
@@ -353,6 +366,9 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 - ❌ **카드 hover 에 `translateY`** — hover 는 `surface-2 + border-strong` 만. **selected 에 이중 링** 금지.
 - ❌ **hover 에 brightness(1.n) 밝히기 필터** — 라이트 테마에선 씻겨 보임. hover 는 어둡게.
 - ❌ **색 단독으로 정보 전달**(차트 범례·툴팁은 텍스트 병기) · **라운드 임의값** · **아이콘 임의 크기**.
+- ❌ **reduced-motion 에서 `animation: none`** — 진입 모션은 `fill-mode: both` 라 시작 상태(`opacity: 0`)에 갇혀 요소가 사라진다. `animation-duration: .01ms` 로 즉시 끝낼 것(§3).
+- ❌ **진입 모션에 `--ease-out` 아닌 곡선**, **퇴장에 `--ease-out`** · **`width`/`height`/`top` 애니메이션**(레이아웃 속성 — 펼침·패널 폭처럼 불가피한 곳만).
+- ❌ **목록 항목(카드·행)에 진입 모션·계단(stagger)** — 조회 결과는 즉시 보여야 한다(§3).
 
 ## 7. 마이그레이션 절차 (순서 준수 — 2026-07 애플 전환에 적용)
 

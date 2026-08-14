@@ -783,6 +783,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const sideWidthRef = useRef(sideWidth);
   const sideCollapsedRef = useRef(sideCollapsed);
   const sideApplied = sideCollapsed ? SIDE_COLLAPSED_W : sideWidth;
+  // 폭 전환 애니메이션은 접기/펴기에만 — 드래그 중에는 손끝을 그대로 따라와야 한다
+  // (앱 Sidebar.tsx 와 같은 규칙). 두 그립이 동시에 잡히는 일은 없어 상태 하나로 충분하다.
+  const [panelDragging, setPanelDragging] = useState(false);
 
   const onSideGripDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -792,6 +795,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     // 그대로 두면 넓혀 뒀던 사람이 한 번 접었다 펴는 순간 최소폭을 얻는다 →
     // 접힌 채로 끝나면 '펼쳤을 때 폭'은 드래그 시작 시점 값으로 되돌린다.
     const keepW = sideWidthRef.current;
+    setPanelDragging(true);
     beginPointerDrag(e, {
       cursor: 'col-resize',
       onMove: (ev) => {
@@ -808,6 +812,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         setSideWidth(w);
       },
       onEnd: () => {
+        setPanelDragging(false);
         if (sideCollapsedRef.current) {
           sideWidthRef.current = keepW;
           setSideWidth(keepW);
@@ -833,6 +838,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     e.preventDefault();
     const startX = e.clientX;
     const startW = changesWidthRef.current;
+    setPanelDragging(true);
     beginPointerDrag(e, {
       cursor: 'col-resize',
       onMove: (ev) => {
@@ -843,6 +849,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         setChangesWidth(w);
       },
       onEnd: () => {
+        setPanelDragging(false);
         localStorage.setItem('terminal:changesWidth', String(changesWidthRef.current));
       },
     });
@@ -988,7 +995,11 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     // 접었는데도 왼쪽이 비어 보였다(2026-08-06 사용자 지적)
     <div
       ref={rootRef}
-      className={'terminal' + (sideCollapsed ? ' terminal--side-collapsed' : '')}
+      className={
+        'terminal' +
+        (sideCollapsed ? ' terminal--side-collapsed' : '') +
+        (panelDragging ? ' terminal--dragging' : '')
+      }
       // 섹션 안 버튼을 눌러 xterm 이 포커스를 잃으면 되돌린다 — 위 '포커스 안전망' 절
       onClick={reclaimFocus}
     >

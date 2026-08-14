@@ -65,6 +65,8 @@ export function usePopover(
         position: 'fixed',
         top: clampY(r.top + r.height / 2 - h / 2),
         left: fitsRight ? r.right + GAP : clampX(r.left - GAP - width),
+        // 진입 모션(pop-in)이 트리거 쪽에서 자라나게 — flip 되면 반대편이 기준
+        transformOrigin: fitsRight ? 'left center' : 'right center',
         ...(matchWidth ? { width: r.width } : null),
       });
       return;
@@ -81,6 +83,8 @@ export function usePopover(
         ? Math.max(MARGIN, r.top - GAP - Math.min(h, room))
         : r.bottom + GAP,
       left: clampX(r.left),
+      // 위로 flip 되면 아래쪽 모서리를 기준으로 자라나야 트리거에서 나온 것처럼 보인다
+      transformOrigin: flip ? 'bottom center' : 'top center',
       ...(matchWidth ? { width: r.width } : null),
       ...(maxHeight ? { maxHeight } : null),
     });

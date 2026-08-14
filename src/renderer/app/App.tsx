@@ -370,8 +370,14 @@ export function App() {
                   <Icon name="chevron-right" size={16} />
                 </button>
               </span>
-              <span className="topbar__icon">{active.icon}</span>
-              <span className="topbar__title">{active.label}</span>
+              {/* key 로 섹션마다 재마운트 — 제목·아이콘이 툭 바뀌지 않고 페이드된다
+                  (모션은 _layout.scss 의 .topbar__icon·__title) */}
+              <span className="topbar__icon" key={`icon-${active.id}`}>
+                {active.icon}
+              </span>
+              <span className="topbar__title" key={`title-${active.id}`}>
+                {active.label}
+              </span>
             </header>
 
             {/* 메인 영역 — 섹션마다 별도 경계(key)라 다른 섹션으로 옮기면 오류 상태도 초기화된다 */}

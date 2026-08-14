@@ -23,6 +23,10 @@
     width: 240px;
     flex-shrink: 0;
     min-height: 0;
+    // 접기/펴기 폭 전환 — 앱 Sidebar.tsx 와 같은 규칙(드래그 중엔 아래에서 끈다).
+    // 전환 동안 xterm 이 함께 리사이즈되지만 fit 은 rAF 코얼레스·PTY resize 는
+    // 120ms 디바운스라 그립을 끌 때와 같은 부하다.
+    transition: width var(--dur-3) var(--ease);
     // xterm 이 gap 없이 붙어 있으므로 경계는 선이 맡는다 (grip hover 선이 이 위를 덮는다)
     border-right: 1px solid var(--border);
     // 섹션 패딩이 없어(풀블리드) 패널이 자기 여백을 갖는다 — 우측 6 은
@@ -47,6 +51,11 @@
       flex-direction: column;
       gap: 2px;
     }
+  }
+
+  // ⚠️ 그립을 끄는 동안에는 폭 전환을 끈다 — 걸려 있으면 패널이 손끝을 뒤따라온다
+  &--dragging &__side {
+    transition: none;
   }
 
   // 패널 손잡이 — 끌어서 폭 조절, 더블클릭·Enter 로 접기/펴기.
@@ -1224,6 +1233,9 @@
     // 헤더(브랜치·푸시)가 창 상단·우측 모서리에 딱 붙어 답답했다(2026-08-07 사용자 지적).
     // 좌측은 grip 자리라 두고 위/오른쪽만 숨통을 튼다.
     padding: 8px 8px 0 0;
+    // 조건부 렌더라 여는 순간에만 모션이 걸린다(닫기는 즉시 — 퇴장 애니메이션 자리가 없다).
+    // 넓은 패널이라 이동 없이 페이드만 — 옆에서 밀려오면 xterm 폭 변화와 겹쳐 어지럽다.
+    @include fade-in;
   }
 
   // 리사이즈 grip — .terminal__changes 의 margin(8px) 위에 걸치는 히트 영역, 호버 시 세로선 표시

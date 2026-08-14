@@ -40,6 +40,9 @@
 
 :root {
   color-scheme: light; // 네이티브 컨트롤(체크박스·피커·스크롤바)도 라이트로
+  // height: auto 를 transition 대상으로 만든다 — Collapsible 펼침이 콘텐츠 높이를
+  // 하드코딩하지 않고 부드럽게 열린다. (Chromium 129+, 이 앱은 150)
+  interpolate-size: allow-keywords;
 
   // ===== 배경 레이어 (애플 — 파치먼트 그라운드 + 흰 카드) =====
   --bg: #f5f5f7; // 앱 전체 그라운드(파치먼트) — main.ts BrowserWindow backgroundColor와 동기화
@@ -134,9 +137,13 @@
   --shadow-1: 0 1px 2.5px rgba(0, 0, 0, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
   --shadow-2: 0 5px 30px rgba(0, 0, 0, 0.22); // 모달·토스트·팝오버 (애플의 단일 그림자 이식)
   --dur-1: 0.12s; // 색·배경 전환
-  --dur-2: 0.18s; // transform·펼침
+  --dur-2: 0.18s; // transform·진입(페이드·팝오버·섹션 전환)
+  --dur-3: 0.28s; // 레이아웃 — 높이·폭이 실제로 변하는 펼침(Collapsible·사이드바 접기)
   --dur-pulse: 1.2s; // 상태 점 펄스
-  --ease: cubic-bezier(0.25, 0.6, 0.3, 1);
+  --ease: cubic-bezier(0.25, 0.6, 0.3, 1); // 상태 전환(양방향) 공용
+  // 진입 감속 — 빠르게 나타나 부드럽게 안착. 사라질 때는 --ease 를 쓴다(대칭 금지)
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --lift: 6px; // 진입 모션 이동거리 — 아래에서 제자리로. 절제된 애플 무드의 상한선
 
   // ===== 타이포 (크기만 — 스타일 묶음은 아래 type-* 믹스인이 정본) =====
   --fs-caption: 11px;
@@ -343,6 +350,54 @@
   }
 }
 
+// ===== 모션 (공용 진입 애니메이션 — DESIGN.md §3) =====
+// 진입은 opacity·transform 만 쓴다 — 합성 단계에서 끝나 레이아웃·리페인트가 없다.
+// (터미널 xterm 이 같은 창에 상주하므로 그 외 속성의 애니메이션은 피한다)
+// 끄기는 파일 하단 prefers-reduced-motion 블록이 일괄 담당한다.
+
+// 아래에서 제자리로 — 섹션·목록·카드의 기본 진입
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--lift));
+  }
+}
+
+// 페이드만 — 이동이 과해 보이는 넓은 면(오버레이·전체 폭 패널)
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+// 떠 있는 레이어 — 트리거에서 자라나듯 (팝오버·툴팁·메뉴)
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--lift) * -0.5)) scale(0.97);
+  }
+}
+
+// ⚠️ fill-mode 는 반드시 both — 없으면 애니메이션 시작 직전 한 프레임이
+//    최종 상태로 그려져 "번쩍"인다.
+@mixin rise-in($dur: var(--dur-2), $delay: 0s) {
+  animation: rise-in $dur var(--ease-out) $delay both;
+}
+
+@mixin fade-in($dur: var(--dur-2), $delay: 0s) {
+  animation: fade-in $dur var(--ease-out) $delay both;
+}
+
+@mixin pop-in($dur: var(--dur-2)) {
+  animation: pop-in $dur var(--ease-out) both;
+  transform-origin: top center;
+}
+
+// ⚠️ 목록 항목(카드·행)에는 진입 모션을 걸지 않는다 — 데이터가 뜨는 건
+//    사용자가 기다린 결과라 즉시 보여야 하고, 계단(stagger)을 앞 N개에만 주면
+//    "N개까지만 애니메이션되는" 것처럼 보인다(2026-08-14 사용자 지적으로 제거).
+//    목록의 모션은 컨테이너인 섹션 하나가 대표한다(.main 의 섹션 전환).
+
 * {
   box-sizing: border-box;
 }
@@ -372,16 +427,31 @@ body {
   *::before,
   *::after {
     transition: none !important;
+    // ⚠️ animation: none 이 아니라 '즉시 끝내기'다 — 진입 모션은 fill-mode: both 라
+    //    none 으로 지우면 시작 상태(opacity 0)가 남아 요소가 아예 안 보인다.
+    //    지속시간만 0 으로 만들면 최종 상태로 곧장 안착한다.
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
   }
 
-  .status-dot--busy,
-  .toast {
-    animation: none !important;
+  // 진행 표시만 예외 — 멈춘 스피너는 "멈춘 앱"으로 읽힌다
+  // (버튼 loading·새로고침 회전도 같은 역할이다)
+  .spinner,
+  .btn__spin,
+  .icon-btn__spin {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
   }
 
   // 버튼 수축 마이크로 인터랙션도 제거
   .btn:active:not(:disabled) {
     transform: none;
+  }
+
+  // 펼침(높이·폭) 보간도 끈다 — Collapsible·사이드바가 즉시 최종 크기로 간다
+  :root {
+    interpolate-size: numeric-only;
   }
 }
 
@@ -790,8 +860,11 @@ input.input--sm {
   font-size: var(--fs-body); // 같은 행의 input·피커(13px)와 글자 크기 통일 — small 이면 혼자 작아 보인다
   font-weight: 400; // 애플 래더 — 500 금지
   cursor: pointer;
+  // 선택 시 배경·보더·그림자가 함께 바뀐다 — 셋을 같이 전환해야 칩이 떠오르듯 보인다
   transition:
     background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease);
   @include focus-ring(0px);
 
@@ -824,6 +897,10 @@ input.input--sm {
   font-weight: 400; // 애플 래더 — 500 금지
   max-width: 100%;
   min-width: 0;
+  // 상태가 바뀌면(대기→진행→완료) 색이 튀지 않고 넘어간다
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
 
   // 긴 문구(배포 오류 메시지 등)는 말줄임 — 전체 내용은 title 툴팁으로
   &__label {
@@ -1182,7 +1259,7 @@ input.input--sm {
       border: 1px solid var(--border);
       border-radius: var(--r-md);
       box-shadow: var(--shadow-2);
-      animation: modal-pop var(--dur-2) var(--ease);
+      @include pop-in; // origin 은 usePopover(side: 'right')가 인라인으로 준다
       -webkit-app-region: no-drag; // 사이드바가 drag 라 명시하지 않으면 클릭을 창 드래그가 먹는다
     }
   }
@@ -1192,6 +1269,23 @@ input.input--sm {
 .collapsible {
   @include card-surface;
   margin-bottom: 12px;
+
+  // 펼침 애니메이션 — summary 를 뺀 내용 전체가 ::details-content 다.
+  // `interpolate-size: allow-keywords`(:root) 덕에 auto 높이가 보간되므로
+  // 콘텐츠 높이를 JS 로 재거나 max-height 로 어림잡지 않아도 된다.
+  // ⚠️ content-visibility 는 이산(discrete) 속성이라 allow-discrete 없이는
+  //    닫는 순간 내용이 사라져 애니메이션이 한 프레임도 안 보인다.
+  &::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition:
+      block-size var(--dur-3) var(--ease),
+      content-visibility var(--dur-3) var(--ease) allow-discrete;
+  }
+
+  &[open]::details-content {
+    block-size: auto;
+  }
 
   &__head {
     display: flex;
@@ -1204,7 +1298,10 @@ input.input--sm {
     user-select: none;
     list-style: none; // 기본 ▶ 마커 제거
     border-radius: var(--r-lg);
-    transition: background var(--dur-1) var(--ease);
+    // 아래 모서리는 열리면서 각져야 내용이 같은 카드에 담긴 것으로 읽힌다
+    transition:
+      background var(--dur-1) var(--ease),
+      border-radius var(--dur-2) var(--ease);
     @include focus-ring(-2px);
 
     &::-webkit-details-marker {
@@ -1252,6 +1349,8 @@ input.input--sm {
   border-radius: var(--r-md);
   border: 1px solid;
   @include type-body;
+  // 경고·오류는 대개 조작 결과로 뒤늦게 나타난다 — 튀어나오지 않게 띄워 준다
+  @include rise-in;
 
   &__icon {
     display: inline-flex;
@@ -1301,9 +1400,10 @@ input.input--sm {
   border-radius: var(--r-md);
   box-shadow: var(--shadow-2);
   @include type-body;
-  animation: toast-in var(--dur-2) var(--ease);
+  @include rise-in; // 아래에서 올라온다 — 공용 진입과 같은 곡선·거리
 
-  // 퇴장 — Toast.tsx 의 LEAVE_MS 와 길이 동기화 (--dur-2)
+  // 퇴장 — Toast.tsx 의 LEAVE_MS 와 길이 동기화 (--dur-2).
+  // ⚠️ 퇴장에는 --ease-out 을 쓰지 않는다(끝이 늘어져 안 사라진 것처럼 보인다)
   &--leaving {
     animation: toast-out var(--dur-2) var(--ease) forwards;
   }
@@ -1405,6 +1505,8 @@ input.input--sm {
   text-align: center;
   color: var(--text-3);
   @include type-body;
+  // 로딩이 끝나고 "비었음"이 확정되는 순간 — 툭 나타나면 오류처럼 읽힌다
+  @include fade-in;
 
   // 브라우저 기본 <p> 마진(13px 상하)이 남으면 박스가 26px 부풀고
   // 아이콘·힌트와의 간격도 흔들린다 — 여백은 여기서만 통제
@@ -1481,6 +1583,11 @@ input.input--sm {
     display: block;
     height: 100%;
     border-radius: var(--r-full);
+    // 폭은 인라인 %로 들어온다(폴링으로 갱신) — 전환이 없으면 막대가 계단처럼 뛴다.
+    // 바 하나뿐이라 레이아웃 속성이어도 비용이 없다
+    transition:
+      width var(--dur-3) var(--ease),
+      background var(--dur-1) var(--ease);
   }
 }
 
@@ -1508,17 +1615,7 @@ input.input--sm {
   }
 }
 
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+// 진입은 공용 rise-in 을 쓴다 — 여기엔 퇴장만 남는다(공용에 대응 짝이 없다)
 @keyframes toast-out {
   to {
     opacity: 0;
@@ -1539,7 +1636,7 @@ input.input--sm {
   // 밑에 깔린 사이드바·탑바의 창 드래그 영역(app-region: drag)이 dim 클릭을
   // 흡수하지 않게 걷어낸다 — 드래그 영역은 z-order 무관, 문서 순서로 계산됨
   -webkit-app-region: no-drag;
-  animation: modal-fade var(--dur-1) var(--ease);
+  @include fade-in(var(--dur-1)); // 스크림은 이동 없이 어두워지기만
 }
 
 .modal {
@@ -1552,7 +1649,7 @@ input.input--sm {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
-  animation: modal-pop var(--dur-2) var(--ease);
+  @include rise-in;
 
   // 넓은 콘텐츠(로그·표)용
   &--wide {
@@ -1601,7 +1698,7 @@ input.input--sm {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
   padding: 20px;
-  animation: modal-pop var(--dur-2) var(--ease);
+  @include rise-in;
 
   &__title {
     margin: 0 0 6px;
@@ -1637,12 +1734,16 @@ input.input--sm {
   border-radius: var(--r-md);
   box-shadow: var(--shadow-2);
   -webkit-app-region: no-drag;
+  @include pop-in;
+  // 우클릭 지점이 좌상단이므로 거기서 펼쳐지듯 — usePopover 를 쓰지 않아 직접 지정한다
+  transform-origin: top left;
 
   &__item {
     display: flex;
     align-items: center;
     gap: 9px;
     padding: 7px 10px;
+    transition: background var(--dur-1) var(--ease);
     border: 0;
     border-radius: var(--r-sm);
     background: none;
@@ -1761,7 +1862,8 @@ input.input--sm {
     border: 1px solid var(--border);
     border-radius: var(--r-md);
     box-shadow: var(--shadow-2);
-    animation: modal-pop var(--dur-2) var(--ease);
+    // 트리거에서 자라나듯 — origin 은 usePopover 가 인라인으로 준다(flip 시 반대편)
+    @include pop-in;
   }
 
   // 시간 입력 (타이핑 허용)
@@ -2005,26 +2107,6 @@ input.input--sm {
   }
 }
 
-@keyframes modal-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modal-pop {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 // ── 툴팁 (components/Tooltip.tsx) ──
 // 아이콘만 있는 버튼이 무슨 기능인지 알려준다. 팝오버는 body 로 portal 되므로
 // 최상위 규칙으로 둔다(부모의 overflow:hidden 에 잘리지 않는다).
@@ -2047,4 +2129,6 @@ input.input--sm {
   color: var(--text-2);
   white-space: nowrap;
   @include type-small;
+  // 이미 250ms 기다린 뒤 뜨므로 진입은 더 짧게 — 여기서 또 끌면 굼떠 보인다
+  @include pop-in(var(--dur-1));
 }

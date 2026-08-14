@@ -124,6 +124,12 @@
       cursor: pointer;
       @include type-caption;
       font-family: var(--font-mono);
+      // 새 빌드가 끝나면 이력 칩이 하나 더 붙는다 — 색·선택 상태 변화까지 함께
+      transition:
+        background var(--dur-1) var(--ease),
+        border-color var(--dur-1) var(--ease),
+        color var(--dur-1) var(--ease),
+        filter var(--dur-1) var(--ease);
 
       &--ok {
         background: var(--ok-soft);

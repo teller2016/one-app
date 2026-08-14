@@ -38,6 +38,17 @@
   // 전체폭 타이틀바(.topbar) 아래에서 시작 — 신호등이 사이드바 항목과 겹치지 않는다
   padding-top: var(--titlebar-h);
   -webkit-app-region: drag;
+  // 접기/펴기 폭 전환 — 폭은 Sidebar.tsx 가 인라인으로 준다.
+  // 터미널이 함께 리사이즈되지만 fit 은 rAF 코얼레스·PTY resize 는 120ms 디바운스라
+  // 드래그로 폭을 바꿀 때와 같은 부하다(features/terminal.md '리사이즈').
+  transition:
+    width var(--dur-3) var(--ease),
+    min-width var(--dur-3) var(--ease);
+
+  // ⚠️ 드래그 중에는 폭이 손끝을 그대로 따라와야 한다 — 전환이 걸리면 끌려온다
+  &--dragging {
+    transition: none;
+  }
 
   &__brand {
     display: flex;
@@ -174,6 +185,12 @@
       font-weight: 600;
       color: var(--text-3);
       font-variant-numeric: tabular-nums;
+      // 새 티켓·입력대기가 생겨 뱃지가 붙는 순간 — 툭 나타나면 시야 밖에서 놓친다
+      @include pop-in;
+      // 회색 숫자 ↔ 액센트 필 전환도 이어서 (강조 해제는 탭을 열면 일어난다)
+      transition:
+        background var(--dur-1) var(--ease),
+        color var(--dur-1) var(--ease);
 
       // 확인 안 한 새 티켓 강조 — 액센트 필 (탭을 열어 확인하면 회색 숫자로 복귀)
       &--accent {
@@ -311,14 +328,17 @@
     -webkit-app-region: no-drag;
   }
 
+  // 섹션이 바뀌면 App.tsx 의 key 로 재마운트되어 새 제목·아이콘이 페이드로 들어온다
   &__icon {
     display: inline-flex;
     color: var(--accent);
+    @include fade-in;
   }
 
   &__title {
     font-size: var(--fs-body);
     font-weight: 600;
+    @include fade-in;
   }
 }
 
@@ -329,6 +349,13 @@
   overflow: auto;
   min-height: 0;
 
+  // 섹션 전환 크로스페이드 — App.tsx 가 섹션마다 `key={active.id}` 로 경계를 새로
+  // 만들므로(재마운트) 직접 자식의 진입 모션이 곧 섹션 전환 애니메이션이 된다.
+  // ⚠️ 터미널 래퍼는 상주(keep-alive)라 재마운트되지 않는다 — 아래 opacity 전환이 맡는다.
+  > :not(.main__keep) {
+    @include rise-in;
+  }
+
   // 터미널 keep-alive 래퍼 — 섹션을 떠나도 언마운트하지 않고 숨긴다(App.tsx).
   // 숨김은 visibility — display:none 은 크기가 0 이 되어 복귀 때 xterm 이 80x24 를
   // 거치며 TUI 가 두 번 리플로우한다(숨은 pane 과 같은 규칙, features/terminal.md).
@@ -337,8 +364,12 @@
   &__keep {
     height: 100%;
     min-height: 0;
+    // 숨김이 visibility 라 opacity 만 얹으면 복귀가 페이드인이 된다.
+    // 퇴장은 새 섹션의 진입에 가려 보이지 않으므로 굳이 늦추지 않는다.
+    transition: opacity var(--dur-2) var(--ease-out);
 
     &--hidden {
+      opacity: 0;
       visibility: hidden;
       position: absolute;
       inset: var(--titlebar-h) 0 0 0;

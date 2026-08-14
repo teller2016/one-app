@@ -59,6 +59,9 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('sidebar:collapsed') === '1',
   );
+  // 폭 전환 애니메이션은 접기/펴기에만 준다 — 드래그 중에는 폭이 손끝을 그대로
+  // 따라와야 하므로 CSS 에서 transition 을 끈다(끌림이 생기면 조작감이 무너진다)
+  const [dragging, setDragging] = useState(false);
   // 드래그 중에는 상태만 갱신하고 저장은 놓는 순간 1회 (터미널 드로어 grip 과 같은 규칙)
   const widthRef = useRef(width);
   const collapsedRef = useRef(collapsed);
@@ -79,6 +82,7 @@ export function Sidebar({
     // 그대로 두면 320px 로 넓혀 뒀던 사람이 한 번 접었다 펴는 순간 180px 을 얻는다 →
     // 접힌 채로 끝나면 '펼쳤을 때 폭'은 드래그 시작 시점 값으로 되돌린다.
     const keepW = widthRef.current;
+    setDragging(true);
     beginPointerDrag(e, {
       cursor: 'col-resize',
       onMove: (ev) => {
@@ -95,6 +99,7 @@ export function Sidebar({
         setWidth(w);
       },
       onEnd: () => {
+        setDragging(false);
         if (collapsedRef.current) {
           widthRef.current = keepW;
           setWidth(keepW);
@@ -141,7 +146,11 @@ export function Sidebar({
   return (
     <CollapsedContext.Provider value={collapsed}>
       <aside
-        className={'sidebar' + (collapsed ? ' sidebar--collapsed' : '')}
+        className={
+          'sidebar' +
+          (collapsed ? ' sidebar--collapsed' : '') +
+          (dragging ? ' sidebar--dragging' : '')
+        }
         style={{ width: applied, minWidth: applied }}
       >
         <div className="sidebar__brand">
