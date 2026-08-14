@@ -20,7 +20,10 @@ import { Icon } from '../../../components/Icon';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import type { TerminalFocusRequest } from '../../../lib/sectionNav';
-import { useTerminalFocusRequest } from '../../../lib/sectionNav';
+import {
+  setSessionVisibilityCheck,
+  useTerminalFocusRequest,
+} from '../../../lib/sectionNav';
 import { beginPointerDrag } from '../../../lib/pointerDrag';
 import { useSplitGroups } from '../lib/useSplitGroups';
 import { useWorkspaceActions } from '../lib/useWorkspaceActions';
@@ -692,6 +695,23 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         : next;
     });
   }, [activeId, activeGroupIds]);
+
+  // 입력대기 토스트 억제 — "그 세션을 지금 보고 있는가"를 App 의 토스트 브리지에 제공.
+  // 최신값은 activeIdRef 와 같은 render 시점 대입 패턴 (콜백 identity 는 고정).
+  const onScreenRef = useRef<{ active: boolean; ids: string[] }>({
+    active: false,
+    ids: [],
+  });
+  onScreenRef.current = {
+    active,
+    ids: activeGroupIds ?? (activeId ? [activeId] : []),
+  };
+  useEffect(() => {
+    setSessionVisibilityCheck(
+      (id) => onScreenRef.current.active && onScreenRef.current.ids.includes(id)
+    );
+    return () => setSessionVisibilityCheck(null);
+  }, []);
 
   /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
   const createShell = useCallback(async () => {

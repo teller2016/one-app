@@ -122,7 +122,9 @@ paths:
 - `pty.ts`: `busy`(출력 있음) / `waiting`(에이전트 세션 **완전 침묵 2.5초** + 입력 후 출력 ≥50B) / `idle`(**셸 세션은 waiting 없음**). bare BEL 은 조기 판정(0.3초)+바이트 면제. 상수는 파일 상단.
 - ⚠️ 바이트 문턱을 크게 잡지 말 것 — 600 이면 claude 의 145B 계정 선택 프롬프트를 놓친다.
 - ⚠️ attach/resize 의 SIGWINCH redraw 를 grace 로 거르면 **영영 idle 에 갇힌다** — busy 로 흘려보내고, 알림 중복은 `notifiedSinceInput`(턴당 1회)이 막는다.
-- 알림 = 입력대기 뱃지 상시 + 강도 `terminal.json` `notifyLevel`(badge/sound/alert — 환경설정 → 터미널 Segment). 생성 20초·직전 입력 5초 내 전이는 소리 생략.
+- 알림 = 입력대기 뱃지 상시 + **토스트 기본 표시**(2026-08-14 — 우측 아래 sticky, **백그라운드여도 발신돼 복귀 시 떠 있다**(`sendToast`), 세션당 `dedupeKey` 1장, [이동]=`openTerminalSession` 으로 그 세션 포커스) + 강도 `terminal.json` `notifyLevel`(badge/sound/alert — 환경설정 → 터미널 Segment): sound 는 +알림음, alert 는 +백그라운드일 때 알럿 폴백(`notifyToast`). 생성 20초·직전 입력 5초 내 전이는 알림 생략.
+- 토스트 제목에 **위치 라벨**(`입력 대기 — 작업영역명 · 워크트리폴더명`) — `sessionLocationLabel`(ipc.ts) 이 워크스페이스별 `worktreePaths`(경량 `git worktree list`)로 cwd 를 대조, **cwd 별 영구 캐시**(세션 수명 동안 불변). 중첩 매치는 더 깊은 경로 우선, 워크스페이스 밖(홈 등)이면 라벨 생략. ⚠️ `listWorktrees` 를 쓰지 말 것 — 워크트리마다 `git status`+`diff` 가 돌아 알림용으론 무겁다.
+- **보고 있는 세션은 토스트 생략** — TerminalSection 이 `sectionNav.setSessionVisibilityCheck` 로 "화면 세션(활성 섹션 + activeGroupIds/activeId)" 판정을 등록하고, App 의 `AppToastBridge` 가 발신 전에 확인한다.
 
 ## 리사이즈
 - PTY resize IPC 는 **120ms 디바운스**(마지막 값만 — last-claim-wins 유지), fit 은 rAF 코얼레스 — SIGWINCH 폭주가 claude 전체 리렌더를 부른다.

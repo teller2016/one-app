@@ -38,8 +38,9 @@ paths:
 
 **비침투 알림은 `notifyToast({title, message, variant, sticky, duration, section, actionLabel})`** (2026-08-14) — 창이 화면에 있고 포커스면 `app:toast` IPC 로 **우측 아래 토스트**(App.tsx `AppToastBridge` → 공용 `useToast`)로 표시하고, 백그라운드·최소화·창 없음이면 위 알럿으로 폴백해 놓치지 않는다. 페이로드는 `shared/types.ts` 의 `AppToastPayload`.
 
-- `section` 지정 시 토스트에 [이동](또는 `actionLabel`) 버튼이 붙는다(sectionNav 경유 — App 이 SECTIONS 검증)
-- 사용처: ①배포 완료/실패(`settings.notifyDeploy` on/off — 성공·실패 모두 `sticky`, 직접 닫는다. 2026-08-14 사용자 결정) ②환경설정 테스트 알림 버튼(`notify:test` — 같은 경로라 토스트 미리보기가 된다)
+- `section` 지정 시 토스트에 [이동](또는 `actionLabel`) 버튼이 붙는다(sectionNav 경유 — App 이 SECTIONS 검증). `terminalSession {sessionId, cwd}` 지정 시 [이동]이 **그 터미널 세션까지 포커스**(`openTerminalSession`), `dedupeKey` 는 같은 키 토스트를 교체(sticky 중복 방지)
+- 백그라운드 폴백이 필요 없으면 **`sendToast`** — 창이 있으면 **백그라운드여도 발신**해 sticky 토스트가 렌더러에 쌓이고 복귀 시 그대로 보인다(2026-08-14 사용자 요청). 창이 파괴됐을 때만 false. 뱃지 등 다른 신호가 이미 있는 저강도 알림용
+- 사용처: ①배포 완료/실패(`settings.notifyDeploy` on/off — 성공·실패 모두 `sticky`, 직접 닫는다. 2026-08-14 사용자 결정) ②터미널 입력대기(`features/terminal` 규칙 — badge/sound 는 `sendToast`, alert 만 `notifyToast`) ③환경설정 테스트 알림 버튼(`notify:test` — 같은 경로라 토스트 미리보기가 된다)
 
 **새 알림이 필요하면 이 모듈을 재사용한다** — 작업 흐름을 끊으면 안 되는 완료 알림은 `notifyToast`, 당장 응답이 필요한 것만 `notify`.
 

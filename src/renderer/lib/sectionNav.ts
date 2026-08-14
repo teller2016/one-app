@@ -32,6 +32,23 @@ export function openTerminalSession(req: TerminalFocusRequest): void {
   for (const l of focusListeners) l(req);
 }
 
+// ── 화면 표시 중인 세션 판정 — 입력대기 토스트 억제용 ──
+// TerminalSection 이 등록하고, App 의 토스트 브리지가 "이미 그 세션을 보고 있으면
+// 이동 토스트를 생략"하는 데 쓴다. 미등록(터미널 미방문)이면 항상 false.
+let visibleCheck: ((sessionId: string) => boolean) | null = null;
+
+/** TerminalSection 이 마운트되며 등록한다 (언마운트 시 null) */
+export function setSessionVisibilityCheck(
+  fn: ((sessionId: string) => boolean) | null,
+): void {
+  visibleCheck = fn;
+}
+
+/** 그 세션이 지금 화면(활성 터미널 섹션의 보이는 pane)에 있는가 */
+export function isSessionOnScreen(sessionId: string): boolean {
+  return visibleCheck?.(sessionId) ?? false;
+}
+
 /**
  * 터미널 섹션이 포커스 요청을 받는다.
  * ⚠️ `handler` 는 `useCallback` 으로 안정화해서 넘길 것 — 렌더마다 새 함수를 주면

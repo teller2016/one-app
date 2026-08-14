@@ -29,6 +29,8 @@ export type ToastOptions = {
   sticky?: boolean;
   /** 우측 액션 버튼 (예: 배포 완료 → [이동]) */
   action?: ToastAction;
+  /** 같은 키의 기존 토스트를 교체한다 — sticky 여도 쌓이지 않는다 (예: 세션당 입력대기 1장) */
+  dedupeKey?: string;
 };
 
 type ToastItem = ToastOptions & {
@@ -151,14 +153,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const o: ToastOptions =
       typeof opts === 'string' ? { variant: opts } : (opts ?? {});
     setItems((cur) => {
-      // 같은 확인성 토스트 연타(복사 등)는 쌓지 않고 교체 — 타이머·애니메이션이 새로 돈다
-      const next = cur.filter(
-        (t) =>
-          t.sticky ||
-          t.action ||
-          t.leaving ||
-          t.message !== message ||
-          t.title !== o.title,
+      // 같은 확인성 토스트 연타(복사 등)는 쌓지 않고 교체 — 타이머·애니메이션이 새로 돈다.
+      // dedupeKey 가 있으면 sticky·액션 여부와 무관하게 같은 키를 교체한다.
+      const next = cur.filter((t) =>
+        o.dedupeKey
+          ? t.dedupeKey !== o.dedupeKey
+          : t.sticky ||
+            t.action ||
+            t.leaving ||
+            t.message !== message ||
+            t.title !== o.title,
       );
       next.push({
         ...o,

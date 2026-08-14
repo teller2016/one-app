@@ -307,6 +307,10 @@ export type AppToastPayload = {
   duration?: number; // 자동 소멸까지 ms (sticky 면 무시)
   section?: string; // 지정 시 [이동] 액션 버튼 — 클릭하면 해당 섹션으로 전환
   actionLabel?: string; // 액션 버튼 라벨 (기본 '이동')
+  /** 지정 시 [이동]이 섹션 전환을 넘어 그 터미널 세션까지 포커스한다 (section 보다 우선) */
+  terminalSession?: { sessionId: string; cwd: string };
+  /** 같은 키의 기존 토스트를 교체한다 — 세션당 입력대기 토스트 1장 유지용 */
+  dedupeKey?: string;
 };
 
 // ── 배포 (젠킨스) ──

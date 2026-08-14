@@ -19,7 +19,11 @@ import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { WeeklySection } from "../features/weekly";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setSectionNavigator } from "../lib/sectionNav";
+import {
+  isSessionOnScreen,
+  openTerminalSession,
+  setSectionNavigator,
+} from "../lib/sectionNav";
 import { runSectionBack, useHasSectionBack } from "../lib/sectionBack";
 import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
@@ -109,18 +113,33 @@ function AppToastBridge(): null {
   const toast = useToast();
   useEffect(() => {
     if (!window.oneApp?.onToast) return;
-    return window.oneApp.onToast((p) =>
+    return window.oneApp.onToast((p) => {
+      // 터미널 세션 대상(입력대기)인데 이미 그 세션을 보고 있으면 생략 — 같은 화면에
+      // "이동" 토스트는 소음이다 (판정은 TerminalSection 이 sectionNav 에 등록)
+      const term = p.terminalSession;
+      if (term && isSessionOnScreen(term.sessionId)) return;
       toast(p.message, {
         variant: p.variant ?? "info",
         title: p.title,
         sticky: p.sticky,
         duration: p.duration,
-        // 섹션 이동은 sectionNav 경유 — App 이 등록한 navigator 가 SECTIONS 검증을 한다
-        action: p.section
-          ? { label: p.actionLabel ?? "이동", section: p.section }
-          : undefined,
-      })
-    );
+        dedupeKey: p.dedupeKey,
+        // 세션 대상이면 그 세션까지 포커스, 아니면 섹션 전환만 — 둘 다 sectionNav
+        // 경유라 App 이 등록한 navigator 가 SECTIONS 검증을 한다
+        action: term
+          ? {
+              label: p.actionLabel ?? "이동",
+              onClick: () =>
+                openTerminalSession({
+                  sessionId: term.sessionId,
+                  cwd: term.cwd,
+                }),
+            }
+          : p.section
+            ? { label: p.actionLabel ?? "이동", section: p.section }
+            : undefined,
+      });
+    });
   }, [toast]);
   return null;
 }

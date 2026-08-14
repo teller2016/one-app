@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import path from 'node:path';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -8,7 +9,9 @@ import type {
 import { TERMINAL_AGENT_NAMES } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
-import { notify } from '../notify/notify';
+import { notifyToast, sendToast } from '../notify/notify';
+import { worktreePaths } from '../workspaces/git';
+import { listWorkspaces } from '../workspaces/store';
 import { listAgents } from './agents';
 import {
   attachSession,
@@ -46,6 +49,35 @@ import {
 // 실제 setBadge 는 lib/dockBadge.ts 가 전담한다(개발 인스턴스의 'DEV' 표식과 한 자리를 나눠 쓴다)
 function updateDockBadge(sessions: TerminalSessionInfo[]) {
   setWaitingBadge(sessions.filter((s) => s.status === 'waiting').length);
+}
+
+// 세션 위치 라벨 캐시 — cwd 는 세션 수명 동안 불변이라 waiting 마다 git 을 돌리지 않는다
+const locationLabels = new Map<string, string | null>();
+
+/**
+ * 세션 cwd 가 속한 "작업 영역 · 워크트리" 라벨 (입력대기 알림용).
+ * 워크스페이스별 `git worktree list`(경량 — 상태 조회 없음)로 경로를 대조하고,
+ * 등록된 워크스페이스 밖(홈 등)이면 null — 호출부가 라벨 없이 표시한다.
+ */
+async function sessionLocationLabel(cwd: string): Promise<string | null> {
+  const cached = locationLabels.get(cwd);
+  if (cached !== undefined) return cached;
+  let best: { ws: string; wtPath: string } | null = null;
+  for (const ws of listWorkspaces()) {
+    try {
+      const paths = await worktreePaths(ws.repoPath);
+      for (const p of paths) {
+        if (cwd !== p && !cwd.startsWith(p + '/')) continue;
+        // 중첩 매치(주 워크트리 폴더 안의 워크트리)는 더 깊은 경로가 정답
+        if (!best || p.length > best.wtPath.length) best = { ws: ws.name, wtPath: p };
+      }
+    } catch {
+      // git 실패(저장소 삭제 등)는 라벨 생략 사유일 뿐 — 알림은 그대로 나간다
+    }
+  }
+  const label = best ? `${best.ws} · ${path.basename(best.wtPath)}` : null;
+  locationLabels.set(cwd, label);
+  return label;
 }
 
 /** 터미널 관련 IPC 핸들러 등록 */
@@ -157,15 +189,26 @@ export function registerTerminalIpc() {
     // 시스템 경고음(shell.beep) 대신 전용 알림음 — 다른 앱 경고음과 구분된다
     if (level === 'sound')
       execFile('afplay', ['/System/Library/Sounds/Blow.aiff'], () => {
-        // 재생 실패는 무시 — 소리가 안 나도 뱃지·알럿은 그대로 동작한다
+        // 재생 실패는 무시 — 소리가 안 나도 뱃지·토스트는 그대로 동작한다
       });
-    if (level === 'alert') {
-      void notify({
-        title: '⏳ 입력 대기',
-        body: `'${info.title}' 세션의 ${TERMINAL_AGENT_NAMES[info.agentId]} 가 입력을 기다립니다.`,
+    // 토스트는 강도와 무관한 기본 표시 — [이동]이 그 세션까지 포커스한다.
+    // sticky 지만 dedupeKey 로 세션당 1장만 유지되고, 이미 보고 있는 세션이면
+    // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.
+    void (async () => {
+      const location = await sessionLocationLabel(info.cwd);
+      const payload = {
+        // 어느 작업 영역의 어느 워크트리인지를 제목에 싣는다 (2026-08-14 사용자 요청)
+        title: location ? `입력 대기 — ${location}` : '입력 대기',
+        message: `'${info.title}' 세션의 ${TERMINAL_AGENT_NAMES[info.agentId]} 가 입력을 기다립니다.`,
+        variant: 'info' as const,
+        sticky: true,
         section: 'terminal',
-      });
-    }
+        terminalSession: { sessionId: info.id, cwd: info.cwd },
+        dedupeKey: `term-wait:${info.id}`,
+      };
+      if (level === 'alert') void notifyToast(payload);
+      else sendToast(payload);
+    })();
   });
 
   // 켜두고 종료했으면 자동 시작 — 자리 비움 시나리오상 재시작 후에도 MO 접속이 살아야 한다

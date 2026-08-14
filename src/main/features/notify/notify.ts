@@ -62,17 +62,31 @@ export async function notify({
   return primaryClicked;
 }
 
+/** 창이 화면에 있고 포커스인가 — 토스트가 지금 바로 보이는 상태인지의 판정 */
+function isWindowFocused(): boolean {
+  const win = getNotifyWindow();
+  return !!win && win.isVisible() && !win.isMinimized() && win.isFocused();
+}
+
+/**
+ * 토스트 발신 — 창이 있으면 백그라운드여도 보낸다(sticky 토스트가 렌더러에 쌓여
+ * **복귀했을 때 그대로 떠 있다**). 창이 파괴됐으면 false — 뱃지 등 다른 신호가
+ * 이미 있는 저강도 알림용이라 별도 폴백은 하지 않는다.
+ */
+export function sendToast(payload: AppToastPayload): boolean {
+  const win = getNotifyWindow();
+  if (!win) return false;
+  win.webContents.send('app:toast', payload);
+  return true;
+}
+
 /**
  * 비침투 알림 — 창이 화면에 있고 포커스면 우측 아래 토스트로 표시한다.
  * 백그라운드(다른 앱 뒤·최소화·창 없음)면 토스트가 안 보이므로 알럿(notify)으로 폴백해
  * 놓치지 않게 한다. 포커스를 뺏지 않아 작업 흐름을 끊지 않는 완료 알림용.
  */
 export async function notifyToast(payload: AppToastPayload): Promise<void> {
-  const win = getNotifyWindow();
-  if (win && win.isVisible() && !win.isMinimized() && win.isFocused()) {
-    win.webContents.send('app:toast', payload);
-    return;
-  }
+  if (isWindowFocused() && sendToast(payload)) return;
   await notify({
     title: payload.title ?? payload.message,
     body: payload.title ? payload.message : '',
