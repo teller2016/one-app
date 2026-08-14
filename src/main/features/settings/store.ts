@@ -20,6 +20,8 @@ interface StoredSettings {
   jiraTokenEnc?: string; // safeStorage 로 암호화된 Jira API 토큰
   giteaUrl?: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기)
   giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
+  notionRootUrl?: string; // 노션 투입시간 루트 페이지 URL (일정 노션 기록)
+  notionTokenEnc?: string; // safeStorage 로 암호화된 노션 개인 액세스 토큰
   theme?: ThemePref; // 테마 (기본 system) — 창 배경색 결정에 main 도 읽음
 }
 
@@ -40,6 +42,8 @@ export function getSettingsForRenderer(): AppSettingsView {
     hasJiraToken: !!s.jiraTokenEnc,
     giteaUrl: s.giteaUrl ?? '',
     hasGiteaToken: !!s.giteaTokenEnc,
+    notionRootUrl: s.notionRootUrl ?? '',
+    hasNotionToken: !!s.notionTokenEnc,
     theme: s.theme ?? 'system',
   };
 }
@@ -86,6 +90,13 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   if (input.giteaToken && input.giteaToken.length > 0) {
     next.giteaTokenEnc = encryptSecret(input.giteaToken);
   }
+  if (typeof input.notionRootUrl === 'string') {
+    next.notionRootUrl = input.notionRootUrl.trim();
+  }
+  // 노션 토큰은 입력이 있을 때만 갱신 (빈 값이면 기존 유지)
+  if (input.notionToken && input.notionToken.length > 0) {
+    next.notionTokenEnc = encryptSecret(input.notionToken);
+  }
   writeStored(next);
   return getSettingsForRenderer();
 }
@@ -114,6 +125,15 @@ export function getJiraApiConfig(): {
 /** 배포 완료 알림이 켜져 있는지 (기본 on) */
 export function isDeployNotifyEnabled(): boolean {
   return readStored().notifyDeploy !== false;
+}
+
+/** 노션 연동 설정 — 토큰·루트 페이지 URL 이 모두 있어야 사용 가능 (아니면 null) */
+export function getNotionConfig(): { token: string; rootUrl: string } | null {
+  const s = readStored();
+  if (!s.notionRootUrl || !s.notionTokenEnc) return null;
+  const token = decryptSecret(s.notionTokenEnc);
+  if (token == null) return null;
+  return { token, rootUrl: s.notionRootUrl };
 }
 
 /** 매크로 실행용 자격증명 복호화. 없으면 null */

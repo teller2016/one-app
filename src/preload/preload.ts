@@ -1,6 +1,7 @@
 // preload: 렌더러에 안전하게 노출할 API를 contextBridge 로 등록한다.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
+  ScheduleNotionRecordPayload,
   ScheduleRunPayload,
   ScheduleStartConfig,
   ScheduleWorklog,
@@ -70,6 +71,9 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("schedule:run", payload),
     // 실행 중지 (자동화 브라우저 닫기)
     cancel: () => ipcRenderer.invoke("schedule:cancel"),
+    // 노션 기록 — [노션용 복사] 텍스트를 노션 날짜 페이지에 직접 쓴다
+    notionRecord: (payload: ScheduleNotionRecordPayload) =>
+      ipcRenderer.invoke("schedule:notion:record", payload),
     // 작업 기록·시작 시각 조회/저장 (userData/worklog.json — 강제 종료에도 유지)
     getWorklog: () => ipcRenderer.invoke("schedule:worklog:get"),
     setWorklog: (worklog: ScheduleWorklog) =>

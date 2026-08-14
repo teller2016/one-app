@@ -2,12 +2,14 @@ import { ipcMain } from 'electron';
 import { closePage, type Page } from '../../lib/browser';
 import { runMacro } from './runMacro';
 import { resolveBaseDate } from './scheduleUtils';
+import { recordScheduleToNotion } from './notion';
 import { SCHEDULE_CONFIG } from './config';
 import { getCredentials } from '../settings/store';
 import { readUserJson, writeUserJson } from '../../lib/store';
 import {
   SCHEDULE_DEFAULT_START_TIME,
   SCHEDULE_START_CONFIG_DEFAULT,
+  type ScheduleNotionRecordPayload,
   type ScheduleRunPayload,
   type ScheduleStartConfig,
   type ScheduleWorkItem,
@@ -184,6 +186,13 @@ export function registerScheduleIpc() {
       writeUserJson(START_CONFIG_FILE, normalized);
       return normalized;
     },
+  );
+
+  // 노션 기록 — 외부 쓰기 채널이라 MO(폰)에 열지 않는다 (ipcMain.handle 유지)
+  ipcMain.handle(
+    'schedule:notion:record',
+    (_event, payload: ScheduleNotionRecordPayload) =>
+      recordScheduleToNotion(payload),
   );
 
   ipcMain.handle('schedule:cancel', () => {

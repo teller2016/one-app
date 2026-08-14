@@ -8,6 +8,7 @@ import { Input } from '../../../components/Input';
 import { DatePicker } from '../../../components/DatePicker';
 import { TimePicker } from '../../../components/TimePicker';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
 import {
   SCHEDULE_DEFAULT_START_TIME,
@@ -82,10 +83,13 @@ export function ScheduleSection() {
   const [done, setDone] = useState(false);
   const [log, setLog] = useState('');
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
+  const [notionReady, setNotionReady] = useState(false);
+  const [notionSaving, setNotionSaving] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
   const worklogRef = useRef<ScheduleWorklog>({ items, startTime });
   const worklogDirtyRef = useRef(false);
   const confirm = useConfirm();
+  const toast = useToast();
   const copy = useCopy();
 
   // 매크로 출력/종료 이벤트 구독
@@ -109,11 +113,12 @@ export function ScheduleSection() {
     };
   }, []);
 
-  // 계정 정보 설정 여부 확인
+  // 계정 정보·노션 연동 설정 여부 확인
   useEffect(() => {
-    window.oneApp?.settings
-      .get()
-      .then((s) => setCredsReady(!!s.bizboxId && s.hasPassword));
+    window.oneApp?.settings.get().then((s) => {
+      setCredsReady(!!s.bizboxId && s.hasPassword);
+      setNotionReady(!!s.notionRootUrl && s.hasNotionToken);
+    });
   }, []);
 
   // 작업 기록·시작 시각 복원 — userData/worklog.json
@@ -231,6 +236,52 @@ export function ScheduleSection() {
 
   const copyNotion = () =>
     copy(buildNotionText(items), { success: '노션용 텍스트를 복사했습니다' });
+
+  // 노션 직접 기록 — 대상 날짜는 등록과 동일한 날짜 옵션을 쓴다.
+  // 날짜 페이지에 이미 내용이 있으면 main 이 has_content 로 알려오고, 확인 후 이어붙인다.
+  const recordNotion = async () => {
+    const scheduleText = buildNotionText(items);
+    if (!scheduleText) return;
+    if (!notionReady) {
+      toast('환경설정 → 연동에서 노션 토큰·페이지를 먼저 저장하세요', 'fail');
+      return;
+    }
+    if (dateType === 'date' && !customDate) {
+      toast('날짜를 먼저 선택하세요', 'fail');
+      return;
+    }
+    const dateOption =
+      dateType === 'date'
+        ? ({ type: 'date', date: customDate } as const)
+        : ({ type: dateType } as const);
+    setNotionSaving(true);
+    try {
+      let res = await window.oneApp.schedule.notionRecord({
+        scheduleText,
+        dateOption,
+      });
+      if (!res.ok && res.error === 'has_content') {
+        const go = await confirm({
+          title: '노션에 기록',
+          message:
+            '그 날짜 페이지에 이미 내용이 있습니다. 아래에 이어서 추가할까요?',
+          confirmLabel: '이어서 추가',
+        });
+        if (!go) return;
+        res = await window.oneApp.schedule.notionRecord({
+          scheduleText,
+          dateOption,
+          force: true,
+        });
+      }
+      if (res.ok) toast('노션에 기록했습니다');
+      else if (res.error === 'no_config')
+        toast('환경설정 → 연동에서 노션 토큰·페이지를 먼저 저장하세요', 'fail');
+      else toast(res.error ?? '노션 기록에 실패했습니다', 'fail');
+    } finally {
+      setNotionSaving(false);
+    }
+  };
 
   // 등록 대상 날짜 — main 의 resolveBaseDate 와 같은 규칙 (오늘/어제/직접 입력)
   const resolveTargetDate = (): Date | null => {
@@ -450,6 +501,14 @@ export function ScheduleSection() {
           </Button>
         )}
         <span className="sched__actions-gap" />
+        <Button
+          onClick={recordNotion}
+          loading={notionSaving}
+          disabled={running || !hasItems}
+        >
+          <Icon name="pencil" size={14} />
+          노션에 기록
+        </Button>
         <Button onClick={copyNotion} disabled={running || !hasItems}>
           <Icon name="copy" size={14} />
           노션용 복사
@@ -460,7 +519,8 @@ export function ScheduleSection() {
       </div>
       {done && (
         <p className="note">
-          ✅ 등록 완료 — [노션용 복사]를 눌러 그대로 노션에 붙여넣을 수 있습니다.
+          ✅ 등록 완료 — [노션에 기록]으로 바로 남기거나, [노션용 복사]로
+          붙여넣을 수 있습니다.
         </p>
       )}
       <p className="note">

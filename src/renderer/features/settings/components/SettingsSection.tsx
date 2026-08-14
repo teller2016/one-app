@@ -52,6 +52,9 @@ export function SettingsSection() {
   const [giteaUrl, setGiteaUrl] = useState('');
   const [giteaToken, setGiteaToken] = useState('');
   const [hasGiteaToken, setHasGiteaToken] = useState(false);
+  const [notionRootUrl, setNotionRootUrl] = useState('');
+  const [notionToken, setNotionToken] = useState('');
+  const [hasNotionToken, setHasNotionToken] = useState(false);
   const [reminders, setReminders] = useState<DayReminderConfig[]>(defaultDays);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatMinutes, setRepeatMinutes] = useState('10');
@@ -73,6 +76,8 @@ export function SettingsSection() {
       setHasJiraToken(s.hasJiraToken);
       setGiteaUrl(s.giteaUrl);
       setHasGiteaToken(s.hasGiteaToken);
+      setNotionRootUrl(s.notionRootUrl);
+      setHasNotionToken(s.hasNotionToken);
       // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
       setTheme(s.theme);
       applyThemePref(s.theme);
@@ -141,6 +146,8 @@ export function SettingsSection() {
         jiraToken,
         giteaUrl,
         giteaToken,
+        notionRootUrl,
+        notionToken,
       });
       const savedReminders: ReminderConfig =
         await window.oneApp.attendance.setReminders({
@@ -164,6 +171,9 @@ export function SettingsSection() {
       setGiteaUrl(res.giteaUrl);
       setHasGiteaToken(res.hasGiteaToken);
       setGiteaToken('');
+      setNotionRootUrl(res.notionRootUrl);
+      setHasNotionToken(res.hasNotionToken);
+      setNotionToken('');
       if (savedReminders.days?.length) setReminders(savedReminders.days);
       if (savedReminders.repeat) {
         setRepeatEnabled(savedReminders.repeat.enabled);
@@ -299,7 +309,7 @@ export function SettingsSection() {
       </Collapsible>
 
       <Collapsible
-        title="연동 (Jira · Gitea)"
+        title="연동 (Jira · Gitea · 노션)"
         icon={<Icon name="building" size={14} />}
         storageKey="settings:group:integrations"
       >
@@ -373,9 +383,50 @@ export function SettingsSection() {
             disabled={loading}
           />
         </FormRow>
+        <p className="hint settings__group-desc">
+          Gitea 토큰은 익명 조회가 되는 서버라면 비워둬도 됩니다.
+        </p>
+        <FormRow label="노션 페이지">
+          <Input
+            type="text"
+            value={notionRootUrl}
+            onChange={(e) => setNotionRootUrl(e.target.value)}
+            placeholder="투입시간 루트 페이지 URL (일정 노션 기록용)"
+            disabled={loading}
+          />
+        </FormRow>
+        <FormRow label="노션 토큰">
+          <Input
+            type="password"
+            value={notionToken}
+            onChange={(e) => setNotionToken(e.target.value)}
+            placeholder={
+              hasNotionToken
+                ? '●●●●●●  (저장됨 — 바꿀 때만 입력)'
+                : '개인 액세스 토큰 (ntn_…)'
+            }
+            disabled={loading}
+          />
+        </FormRow>
+        <p className="hint settings__group-desc">
+          [일정 등록]의 [노션에 기록]이 사용합니다. 토큰은{' '}
+          <TextLink
+            small
+            external
+            onClick={() =>
+              void window.oneApp.openExternal(
+                'https://www.notion.so/my-integrations',
+              )
+            }
+          >
+            노션 개인 액세스 토큰
+          </TextLink>
+          에서 발급하고, 노션의 <b>루트 페이지 → ⋯ → 연결</b>에 그 토큰을
+          추가해야 하위 페이지까지 접근됩니다.
+        </p>
         <p className="note">
-          토큰은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
-          익명 조회가 되는 서버라면 비워둬도 됩니다.
+          모든 토큰은 macOS 키체인으로 <b>암호화</b>되어 이 기기에만
+          저장됩니다.
         </p>
       </Collapsible>
 

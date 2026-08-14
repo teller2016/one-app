@@ -55,6 +55,20 @@ export const SCHEDULE_START_CONFIG_DEFAULT: ScheduleStartConfig = {
   officeStart: SCHEDULE_DEFAULT_START_TIME,
 };
 
+/** 노션 기록 요청 — scheduleText 는 [노션용 복사]와 같은 "종료시간 일정명" 줄 텍스트 */
+export type ScheduleNotionRecordPayload = {
+  scheduleText: string;
+  dateOption: ScheduleDateOption;
+  force?: boolean; // 날짜 페이지에 이미 내용이 있어도 이어붙임 (렌더러 확인 후 재시도용)
+};
+
+export type ScheduleNotionRecordResult = {
+  ok: boolean;
+  /** no_config(연동 미설정) · has_content(이미 내용 있음 — force 재시도) · 그 외 사용자 표시용 메시지 */
+  error?: string;
+  url?: string; // 기록한 날짜 페이지 (notion.so 링크)
+};
+
 // ── 환경설정 ──
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
 export type ThemePref = "system" | "light" | "dark";
@@ -68,6 +82,8 @@ export type AppSettingsView = {
   hasJiraToken: boolean; // Jira API 토큰 저장 여부 (내 이슈 조회용)
   giteaUrl: string; // Gitea 베이스 URL (커밋 링크·배포 미리보기용, 빈 값이면 비활성)
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
+  notionRootUrl: string; // 노션 투입시간 루트 페이지 URL (일정 노션 기록용, 빈 값이면 비활성)
+  hasNotionToken: boolean; // 노션 개인 액세스 토큰 저장 여부
   theme: ThemePref; // 테마 (기본 system)
 };
 
@@ -80,6 +96,8 @@ export type SaveSettingsInput = {
   jiraToken?: string; // 빈 값이면 기존 유지
   giteaUrl?: string; // 미지정이면 기존 유지
   giteaToken?: string; // 빈 값이면 기존 유지
+  notionRootUrl?: string; // 미지정이면 기존 유지
+  notionToken?: string; // 빈 값이면 기존 유지
 };
 
 // ── Jira (내 이슈) ──

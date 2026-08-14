@@ -4,6 +4,8 @@ import type {
   ScheduleRunResult,
   ScheduleOutputChunk,
   ScheduleDoneInfo,
+  ScheduleNotionRecordPayload,
+  ScheduleNotionRecordResult,
   ScheduleStartConfig,
   ScheduleWorklog,
   AppSettingsView,
@@ -115,6 +117,9 @@ declare global {
       schedule: {
         run: (payload: ScheduleRunPayload) => Promise<ScheduleRunResult>;
         cancel: () => Promise<{ ok: boolean }>;
+        notionRecord: (
+          payload: ScheduleNotionRecordPayload,
+        ) => Promise<ScheduleNotionRecordResult>;
         getWorklog: () => Promise<ScheduleWorklog>;
         setWorklog: (worklog: ScheduleWorklog) => Promise<{ ok: boolean }>;
         getStartConfig: () => Promise<ScheduleStartConfig>;
