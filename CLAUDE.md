@@ -73,6 +73,10 @@ src/
 ## 상세 규칙은 `.claude/rules/` 에 있다
 작업 대상 파일을 열면 아래 규칙이 **자동으로 로드**된다. 기능 상세·함정·실측 기록은 CLAUDE.md 가 아니라 여기에 쓴다.
 
+⚠️ **규칙 파일은 기능 하나당 하나로 잘게 유지한다** — 파일 하나를 스치기만 해도 그 규칙 전문이
+컨텍스트에 들어오므로, 여러 기능을 한 파일에 묶으면 무관한 함정 문서까지 매번 딸려온다
+(2026-08-17 하네스 감사: `devops.md` 하나가 배포 한 줄 고칠 때 8.5K 토큰을 끌고 왔다 → 기능별 5개로 분할).
+
 | 파일 | 적용 경로 | 내용 |
 |------|-----------|------|
 | `main-process.md` | `src/main/**` · `src/preload/**` · `src/shared/**` | 공통 유틸·IPC 등록·`handleShared`(MO 화이트리스트) |
@@ -83,8 +87,15 @@ src/
 | `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
 | `features/mo-app.md` | `src/mobile-app/**` · moIpc · rpc | RPC shim·broadcast fan-out·폰 셸 |
 | `features/approval.md` | approval | 결재 3종(야근·휴가·지출결의서)·BrowserWindow 자동화 함정 |
-| `features/groupware-apps.md` | schedule · attendance · weekly · mail | 네 기능의 동작·실측 함정 |
-| `features/devops.md` | projects · deploy · prs · jira · nightwatch | 프로젝트 레지스트리·젠킨스·Gitea·Jira·분석 미션 |
+| `features/schedule.md` | schedule | 하루 일정 등록·노션 기록 |
+| `features/attendance.md` | attendance | 출퇴근 위젯·리마인더(+야근 결재 진입점) |
+| `features/weekly.md` | weekly | FE챕터 주간 수집·T/OT·MM |
+| `features/mail.md` | mail | 비즈박스 메일·피그마 인증코드 |
+| `features/projects.md` | projects | 프로젝트 중앙 레지스트리 — 경로·저장소 정보의 출처 |
+| `features/deploy.md` | deploy | 젠킨스 트리거·커밋 미리보기·PROD 확인 |
+| `features/prs.md` | prs | Gitea PR 목록·생성·머지, 브랜치 API 실측 |
+| `features/jira.md` | jira | 내 이슈·주간 활동·[작업] femc 연동 |
+| `features/nightwatch.md` | nightwatch | 티켓 무인 분석 미션·읽기전용 계약 |
 | `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 

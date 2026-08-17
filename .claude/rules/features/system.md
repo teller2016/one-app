@@ -21,7 +21,7 @@ paths:
 ## 환경설정
 `renderer/features/settings` + `main/features/settings`
 
-비즈박스 ID/비밀번호 관리 + **추가 비즈박스 계정**(팀 공용 계정 등록 — 메일 리더의 [인증코드] 탭이 쓴다. 카드는 mail 기능이 `AltAccountsCard` 로 공개하며 상세는 `features/groupware-apps` 규칙) + **터미널 입력대기 알림 강도**(터미널 그룹 — `terminal:notify-level` IPC, 즉시 저장) + **테마(시스템/라이트/다크)** — 테마는 [저장] 없이 세그먼트 변경 즉시 적용·저장(`settings:theme:set`). 적용은 `renderer/lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지), 다크 토큰은 `_base.scss` 의 `:root[data-theme='dark']` 블록, main 은 창 생성 시 `theme`+`nativeTheme` 으로 backgroundColor 선택.
+비즈박스 ID/비밀번호 관리 + **추가 비즈박스 계정**(팀 공용 계정 등록 — 메일 리더의 [인증코드] 탭이 쓴다. 카드는 mail 기능이 `AltAccountsCard` 로 공개하며 상세는 `features/mail` 규칙) + **터미널 입력대기 알림 강도**(터미널 그룹 — `terminal:notify-level` IPC, 즉시 저장) + **테마(시스템/라이트/다크)** — 테마는 [저장] 없이 세그먼트 변경 즉시 적용·저장(`settings:theme:set`). 적용은 `renderer/lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지), 다크 토큰은 `_base.scss` 의 `:root[data-theme='dark']` 블록, main 은 창 생성 시 `theme`+`nativeTheme` 으로 backgroundColor 선택.
 
 연동 설정(Jira 주소·이메일·API 토큰, Gitea 주소·토큰)과 알림 설정(`settings.notifyDeploy`), 로그인 시 자동 시작 토글도 여기에 있다.
 
