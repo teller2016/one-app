@@ -12,6 +12,7 @@ import type {
   JiraEngagement,
 } from '../../../shared/types';
 import { isDoneStatus } from '../../../shared/types';
+import { todayKey } from '../../../shared/date';
 import { fetchWithTimeout as fetch } from '../../lib/http';
 import {
   jiraAuth,
@@ -354,12 +355,7 @@ export async function fetchMyActivity(
   return run;
 }
 
-/** 오늘 날짜 키 (로컬) — 진행 중인 주인지 판정해 TTL 을 고른다 */
-function todayKey(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
+// 오늘 날짜 키(로컬)는 shared/date 의 todayKey — 진행 중인 주인지 판정해 TTL 을 고른다
 
 /** 실제 조회 — 3갈래 병렬 → 병합 → 이력 보강 → 관여도 판정 */
 async function collect(

@@ -1,25 +1,35 @@
-// 결재 폼의 표시용 계산 — main 쪽 규칙(approval/expend.ts·overtime.ts)과 같은 식을 유지한다.
+// 결재 폼의 표시용 계산.
+// 표기 규칙(제목·시간합계·일수 환산)은 main 자동화와 **같은 문자열**이어야 하므로
+// `shared/approval-format.ts` 가 정본이고 여기서는 재수출만 한다.
+import {
+  fromMinutes,
+  monthEndDayKey,
+  parseDayKey,
+  shiftMonthKey,
+  thisMonthKey,
+  todayKey,
+} from '../../../../shared/date';
+import {
+  KIND_DAY_FACTOR,
+  formatHoursTotal,
+} from '../../../../shared/approval-format';
+
+export {
+  APPLICANT_PLACEHOLDER,
+  isSubstituteKind,
+  isTimedKind,
+  titleTag,
+  vacationTitle,
+} from '../../../../shared/approval-format';
 
 /** 오늘 "YYYY-MM-DD" (로컬 기준) */
-export const today = () => {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-};
+export const today = todayKey;
 
 /** 오늘 기준 "YYYY-MM" */
-export const thisMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
+export const thisMonth = thisMonthKey;
 
 /** 월 이동 — "YYYY-MM" ± n개월 */
-export const shiftMonth = (month: string, delta: number) => {
-  const m = month.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return month;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
+export const shiftMonth = shiftMonthKey;
 
 /** 금액 표시 — 12500 → 12,500 */
 export const formatWon = (n: number) => n.toLocaleString('ko-KR');
@@ -35,22 +45,11 @@ export const defaultEndTime = () => {
   let mins = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30;
   mins = Math.max(mins, 18 * 60 + 30);
   mins = Math.min(mins, 23 * 60 + 30);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(Math.floor(mins / 60))}:${p(mins % 60)}`;
+  return fromMinutes(mins);
 };
 
-/** 시간합계 표시 — 자정을 넘겨도 계산 (main 의 formatHoursTotal 과 동일 규칙) */
-export const hoursTotal = (start: string, end: string): string => {
-  const toMin = (t: string) => {
-    const m = t.match(/^(\d{1,2}):(\d{2})$/);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
-  };
-  const s = toMin(start);
-  const e = toMin(end);
-  if (Number.isNaN(s) || Number.isNaN(e) || s === e) return '';
-  const diff = (e - s + 24 * 60) % (24 * 60);
-  return `${parseFloat((diff / 60).toFixed(1))}시간`;
-};
+/** 시간합계 표시 — 자정을 넘겨도 계산 */
+export const hoursTotal = formatHoursTotal;
 
 // ── 지출결의서 ──
 
@@ -59,13 +58,7 @@ export const parkingAmount = (manCount: number, halfCount: number) =>
   Math.floor((manCount * 10000 + halfCount * 5000) / 2);
 
 /** "YYYY-MM" → 그 달 말일 "YYYY-MM-DD" */
-export const monthEndDate = (month: string) => {
-  const m = month.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return '';
-  const last = new Date(Number(m[1]), Number(m[2]), 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`;
-};
+export const monthEndDate = monthEndDayKey;
 
 /** 주차 적요 — 예: 26년 7월 주차 요금 */
 export const parkingNote = (month: string) => {
@@ -92,31 +85,6 @@ export const ATT_DIV_NAMES = [
   '대체휴가',
 ];
 
-/** "YYYY-MM-DD" → "7월 24일" */
-const dayText = (d: string) => {
-  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${Number(m[2])}월 ${Number(m[3])}일` : d;
-};
-
-/** "YYYY-MM-DD" → "07/24" — 대체휴가 제목의 휴일근무일 표기 */
-const shortDayText = (d: string) => {
-  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[2]}/${m[3]}` : d;
-};
-
-/** 신청자 정보를 아직 모를 때 제목 미리보기에 넣는 자리표시 */
-export const APPLICANT_PLACEHOLDER = '성명';
-
-/** 제목 앞 태그 — 표기 표준: 시차_1시간·시차_2시간 → 시차, 오전·오후반차 → 반차 */
-export const titleTag = (attDivName: string) =>
-  /시차/.test(attDivName) ? '시차' : /반차/.test(attDivName) ? '반차' : attDivName;
-
-/** 시차·반차 — 제목에 사용 시간대 (00:00~00:00) 를 명시해야 하는 종류 */
-export const isTimedKind = (attDivName: string) => /반차|시차/.test(attDivName);
-
-/** 대체휴가 — 제목에 휴일근무일을 명시해야 하는 종류 */
-export const isSubstituteKind = (attDivName: string) => attDivName === '대체휴가';
-
 /** 근태구분별 사용 시간대 기본값 [시작, 종료] — 시차는 출근(09:00) 기준, 반차는 점심 포함 */
 export const defaultTimeRange = (attDivName: string): [string, string] => {
   if (attDivName === '오전반차') return ['09:00', '14:00'];
@@ -125,54 +93,9 @@ export const defaultTimeRange = (attDivName: string): [string, string] => {
   return ['09:00', '10:00']; // 시차_1시간
 };
 
-/**
- * 휴가신청서 제목 기본값 — main 의 formatVacationTitle 과 같은 형식.
- * 휴가 신청서 작성 표기 표준: 제목에 성명·사용 날짜를 적고, 시차·반차는 정확한
- * 시간대를, 대체휴가는 휴일근무일을 함께 명시한다.
- *   [연차] 정수범_8월 12일 · [반차] 정수범_8월 12일 (09:00~14:00)
- *   [대체휴가] 정수범_8월 12일 (휴일근무일: 08/09)
- * 신청자 이름은 그룹웨어 화면에서만 알 수 있다. 모를 때는 자리표시를 넣어
- * 형태를 보여주고, 실제 제목은 main 이 채운다(사용자가 고치지 않은 경우).
- */
-export const vacationTitle = (opts: {
-  attDivName: string;
-  fromDate: string;
-  toDate: string;
-  name?: string;
-  useStartTime?: string;
-  useEndTime?: string;
-  holidayWorkDate?: string;
-}) => {
-  const period =
-    opts.fromDate === opts.toDate
-      ? dayText(opts.fromDate)
-      : `${dayText(opts.fromDate)}~${dayText(opts.toDate)}`;
-  const extra =
-    isTimedKind(opts.attDivName) && opts.useStartTime && opts.useEndTime
-      ? ` (${opts.useStartTime}~${opts.useEndTime})`
-      : isSubstituteKind(opts.attDivName) && opts.holidayWorkDate
-        ? ` (휴일근무일: ${shortDayText(opts.holidayWorkDate)})`
-        : '';
-  return `[${titleTag(opts.attDivName)}] ${opts.name || APPLICANT_PLACEHOLDER}_${period}${extra}`;
-};
-
 /** 반차·시차는 하루짜리라 종료일자를 시작일자에 고정한다 */
 export const isSingleDayKind = (attDivName: string) =>
   /반차|시차/.test(attDivName);
-
-/** "YYYY-MM-DD" → 로컬 Date (형식이 어긋나면 null) */
-const parseDay = (d: string): Date | null => {
-  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
-};
-
-/** 근태구분별 하루 환산 계수 — 반차 0.5일, 시차는 8시간 근무 기준 0.125·0.25일 */
-const KIND_DAY_FACTOR: Record<string, number> = {
-  오전반차: 0.5,
-  오후반차: 0.5,
-  시차_1시간: 0.125,
-  시차_2시간: 0.25,
-};
 
 /**
  * 예상 신청일수 — 기간을 입력하는 즉시 연차 1일·반차 0.5일·시차 0.125일 식으로 보여준다.
@@ -186,8 +109,8 @@ export const expectedDayCount = (
 ): number | null => {
   const factor = KIND_DAY_FACTOR[attDivName];
   if (factor !== undefined) return factor; // 반차·시차는 하루짜리 고정
-  const from = parseDay(fromDate);
-  const to = parseDay(toDate);
+  const from = parseDayKey(fromDate);
+  const to = parseDayKey(toDate);
   if (!from || !to || from.getTime() > to.getTime()) return null;
   let days = 0;
   for (const d = new Date(from); d.getTime() <= to.getTime(); d.setDate(d.getDate() + 1)) {

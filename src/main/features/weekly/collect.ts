@@ -9,6 +9,7 @@
 import { WEEKLY_CONFIG } from './config';
 import type { WeeklyPeriod, WeeklyRawRow } from '../../../shared/types';
 import { sleep } from '../../lib/util';
+import { pad2 } from '../../../shared/date';
 import { GROUPWARE_CONFIG } from '../groupware/config';
 import { gotoWithSessionInWindow } from '../groupware/session';
 import {
@@ -73,12 +74,9 @@ function weekAnchor(weekOffset: number, monday: boolean): Date {
   return d;
 }
 
-const toYmd = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${dd}`;
-};
+// 그룹웨어 페이지 전역이 쓰는 형식 — 구분자 없는 "YYYYMMDD"
+const toYmd = (d: Date): string =>
+  `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
 
 const addDays = (d: Date, n: number): Date => {
   const r = new Date(d);
@@ -93,9 +91,7 @@ const mmddSet = (from: Date, days: number): Set<string> => {
   const s = new Set<string>();
   for (let i = 0; i < days; i++) {
     const d = addDays(from, i);
-    s.add(
-      `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`,
-    );
+    s.add(`${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`);
   }
   return s;
 };

@@ -1,7 +1,13 @@
 // 주간 활동 탭의 기간 계산 — 월요일 시작 주(월~일)
 //
 // ⚠️ 날짜 문자열을 `new Date('2026-08-10')` 로 파싱하지 말 것 — 그 형식은 UTC 로 해석돼
-// 한국 시간대에서 하루 앞으로 밀린다. 항상 연·월·일을 쪼개 로컬 Date 를 만든다.
+// 한국 시간대에서 하루 앞으로 밀린다. shared/date 의 parseDayKey 를 쓴다.
+import {
+  WEEKDAY_KO as WEEKDAY,
+  dayKey,
+  pad2 as pad,
+  parseDayKey,
+} from '../../../../shared/date';
 
 /** 조회 기간 — main 의 `jira:activity` 인자와 같은 형식(YYYY-MM-DD) */
 export type WeekRange = {
@@ -13,18 +19,8 @@ export type WeekRange = {
 /** 과거로 이동할 수 있는 한계 — 1년이면 회고 용도로 충분하다 */
 export const MAX_WEEKS_BACK = 52;
 
-const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
-const pad = (n: number) => String(n).padStart(2, '0');
-
-/** 로컬 기준 YYYY-MM-DD */
-const dayKey = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-/** YYYY-MM-DD → 로컬 Date (자정) */
-const parseKey = (key: string): Date => {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
+/** YYYY-MM-DD → 로컬 Date (자정). weekRange 가 만든 값만 들어오므로 형식은 항상 맞다 */
+const parseKey = (key: string): Date => parseDayKey(key) ?? new Date(NaN);
 
 /** offset 주만큼 이동한 월~일 주 (0 = 이번 주) */
 export function weekRange(offset: number): WeekRange {

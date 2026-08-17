@@ -20,6 +20,12 @@ import { VACATION_CONFIG, WORKER_DEPT } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
 import { sleep } from '../../lib/util';
+// 표기 규칙은 렌더러 폼과 공유한다 (문자열이 어긋나면 미리보기와 실제 제목이 달라진다)
+import {
+  KIND_DAY_FACTOR,
+  vacationTitle,
+} from '../../../shared/approval-format';
+import { todayKey } from '../../../shared/date';
 import type {
   VacationInput,
   VacationResult,
@@ -41,47 +47,10 @@ export function parseApplicant(text: string): { name: string; chapter: string } 
 }
 
 /**
- * 제목 문구 — 휴가 신청서 작성 표기 표준(렌더러 calc.ts 의 vacationTitle 과 같은 형식).
- * 제목에 성명·사용 날짜를 적고, 시차·반차는 정확한 시간대를, 대체휴가는 휴일근무일을 명시한다.
- *   [연차] 정수범_8월 12일 · [반차] 정수범_8월 12일 (09:00~14:00)
- *   [대체휴가] 정수범_8월 12일 (휴일근무일: 08/09)
- * 기간이 여러 날이면 끝 날짜를 함께 적는다 — 8월 12일~8월 13일
+ * 제목 문구 — 휴가 신청서 작성 표기 표준. 형식 정본은 `shared/approval-format.ts` 이고
+ * 렌더러 폼 미리보기가 같은 함수를 쓴다(예전엔 양쪽에 복사돼 있었다).
  */
-export function formatVacationTitle(opts: {
-  attDivName: string;
-  name: string;
-  fromDate: string;
-  toDate: string;
-  useStartTime?: string;
-  useEndTime?: string;
-  holidayWorkDate?: string;
-}): string {
-  const dayText = (d: string) => {
-    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return m ? `${Number(m[2])}월 ${Number(m[3])}일` : d;
-  };
-  // "YYYY-MM-DD" → "08/09" (휴일근무일 표기)
-  const shortDayText = (d: string) => {
-    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return m ? `${m[2]}/${m[3]}` : d;
-  };
-  const tag = /시차/.test(opts.attDivName)
-    ? '시차'
-    : /반차/.test(opts.attDivName)
-      ? '반차'
-      : opts.attDivName;
-  const period =
-    opts.fromDate === opts.toDate
-      ? dayText(opts.fromDate)
-      : `${dayText(opts.fromDate)}~${dayText(opts.toDate)}`;
-  const extra =
-    /반차|시차/.test(opts.attDivName) && opts.useStartTime && opts.useEndTime
-      ? ` (${opts.useStartTime}~${opts.useEndTime})`
-      : opts.attDivName === '대체휴가' && opts.holidayWorkDate
-        ? ` (휴일근무일: ${shortDayText(opts.holidayWorkDate)})`
-        : '';
-  return `[${tag}] ${opts.name}_${period}${extra}`;
-}
+export const formatVacationTitle = vacationTitle;
 
 /** 양식 로드 대기 — 신청자·제목·콤보 위젯이 모두 준비될 때까지 */
 async function waitFormReady(page: Page) {
@@ -329,20 +298,8 @@ function docDateText(date: string): string {
 
 /** 오늘 날짜의 본문 표기 (작성 년월일) */
 function todayDocText(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return docDateText(
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-  );
+  return docDateText(todayKey());
 }
-
-/** 근태구분별 하루 환산 — 렌더러 calc.ts 의 KIND_DAY_FACTOR 와 같은 값을 유지할 것 */
-const KIND_DAY_FACTOR: Record<string, number> = {
-  오전반차: 0.5,
-  오후반차: 0.5,
-  시차_1시간: 0.125,
-  시차_2시간: 0.25,
-};
 
 /** 폼 입력 + 그룹웨어가 계산한 신청일수 → 본문에 넣을 문구들 */
 export function buildDocBody(input: VacationInput, dayCount: string): DocBody {

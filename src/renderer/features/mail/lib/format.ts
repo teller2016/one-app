@@ -1,4 +1,5 @@
 // 메일 표시용 포맷 헬퍼
+import { hhmm } from '../../../../shared/date';
 
 /** "이성○ <lee@x.com>" / "\"이성○\" <lee@x>" → 표시 이름. 이름이 없으면 주소 */
 export function senderName(raw: string): string {
@@ -36,9 +37,7 @@ export function mailTime(ms: number): string {
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
-  if (sameDay) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
+  if (sameDay) return hhmm(d);
   if (d.getFullYear() === now.getFullYear()) {
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }

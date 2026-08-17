@@ -23,6 +23,7 @@ import { EXPEND_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
 import { sleep } from '../../lib/util';
+import { monthEndDayKey } from '../../../shared/date';
 import type { ExpendInput, ExpendResult } from '../../../shared/types';
 
 /** 동시 실행 방지 */
@@ -42,13 +43,7 @@ export function parkingAmount(manCount: number, halfCount: number): number {
 }
 
 /** "YYYY-MM" → 그 달 말일 "YYYY-MM-DD" */
-export function monthEndDate(month: string): string {
-  const m = month.match(/^(\d{4})-(\d{2})$/);
-  if (!m) return '';
-  const last = new Date(Number(m[1]), Number(m[2]), 0); // 다음 달 0일 = 이번 달 말일
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`;
-}
+export const monthEndDate = monthEndDayKey;
 
 /** 주차 적요 — 예: 26년 7월 주차 요금 */
 export function parkingNote(month: string): string {

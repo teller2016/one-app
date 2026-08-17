@@ -10,6 +10,7 @@ import { TimePicker } from '../../../components/TimePicker';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
+import { pad2, toMinutes } from '../../../../shared/date';
 import {
   SCHEDULE_DEFAULT_START_TIME,
   type ScheduleWorkItem,
@@ -33,17 +34,17 @@ const LUNCH_START_MIN = 12 * 60 + 30;
 const LUNCH_END_MIN = 13 * 60 + 30;
 const WORKDAY_MIN = 8 * 60; // 하루 기준 근무시간 — 초과분은 OT 로 표시
 
-const pad = (n: number) => String(n).padStart(2, '0');
-
 // "HH:MM" → 분 (형식이 어긋나면 -1 — 정렬 시 맨 앞)
 const timeToMinutes = (t: string): number => {
-  const m = t.match(/^(\d{1,2}):(\d{2})$/);
-  return m ? +m[1] * 60 + +m[2] : -1;
+  const min = toMinutes(t);
+  return Number.isNaN(min) ? -1 : min;
 };
 
 // 분 → "HH:MM"
+// ⚠️ shared 의 fromMinutes 를 쓰지 않는다 — 그쪽은 24시간을 wrap 해서 1440 이 "00:00" 이 되는데,
+// 여기서는 자정 종료를 "24:00" 으로 그대로 보여야 한다.
 const minutesToTime = (m: number): string =>
-  `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 
 // "HH:MM" → 노션·매크로용 십진 시간 문자열 (10:30 → "10.5", 11:00 → "11")
 const timeToDecimal = (t: string): string =>

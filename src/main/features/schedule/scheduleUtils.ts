@@ -1,4 +1,5 @@
 // 일정 파싱 / 시간·날짜 변환 (Day_Schedule_Macro/src/schedule.js 이식)
+import { dayKey, pad2, parseDayKey } from '../../../shared/date';
 import type { ScheduleDateOption } from '../../../shared/types';
 
 export interface ScheduleItem {
@@ -8,31 +9,18 @@ export interface ScheduleItem {
 }
 
 // Date → 'YYYY-MM-DD'
-export const formatDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+export const formatDate = dayKey;
 
 // 'YYYY-MM-DD' 문자열 → Date (형식 및 존재 여부 검증)
 export const parseDateString = (value: string): Date => {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
+  const date = parseDayKey(value);
+  if (!date) {
     throw new Error(`잘못된 날짜 형식입니다: "${value}" (예: 2026-06-15)`);
   }
-
-  const [, year, month, day] = match.map(Number);
-  const date = new Date(year, month - 1, day);
-  // 존재하지 않는 날짜(예: 2026-02-31)가 다른 날로 넘어가는 것을 방지
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  // 존재하지 않는 날짜(예: 2026-02-31)는 Date 가 다음 달로 넘겨 버린다 — 되돌려 비교해 걸러낸다
+  if (dayKey(date) !== value) {
     throw new Error(`존재하지 않는 날짜입니다: "${value}"`);
   }
-
   return date;
 };
 
@@ -54,7 +42,7 @@ export const formatTime = (time: number): string => {
   const numberTime = Number(time);
   const hour = Math.floor(numberTime);
   const minute = Math.round((numberTime - hour) * 60);
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  return `${pad2(hour)}:${pad2(minute)}`;
 };
 
 // 소수 시간 + 기준 날짜 → 'YYYY-MM-DDTHH:mm:ss'

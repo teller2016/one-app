@@ -2,15 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { usePopover } from '../lib/usePopover';
-
-const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-const pad = (n: number) => String(n).padStart(2, '0');
-const toKey = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const parseKey = (v: string): Date | null => {
-  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
-};
+import {
+  WEEKDAY_KO as DOW,
+  dayKey as toKey,
+  parseDayKey as parseKey,
+} from '../../shared/date';
 
 /**
  * 날짜 선택 — 트리거 버튼 + 미니 캘린더 팝오버 (네이티브 input[type=date] 대체).

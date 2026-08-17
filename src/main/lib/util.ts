@@ -2,7 +2,14 @@
 export const sleep = (ms: number) =>
   new Promise<void>((r) => setTimeout(r, ms));
 
-/** 로컬 기준 날짜 키 (예: "2026-7-23") — 하루 단위 상태 초기화 판정용 */
+/**
+ * 로컬 기준 날짜 키 (예: "2026-7-23") — 근태 리마인더의 하루 단위 상태 초기화 판정용.
+ *
+ * ⚠️ **0패딩이 없는 레거시 형식이다. 새 코드에서 쓰지 말고 `shared/date` 의 `dayKey`·`todayKey`
+ * ("2026-07-23")를 쓸 것.** 여기만 형식이 다른 이유는 `userData/reminder-state.json` 에 이미
+ * 이 형식으로 저장돼 있어서다 — 형식을 바꾸면 저장된 "오늘 처리함" 기억이 무효가 돼
+ * 그날 리마인더가 한 번 더 뜬다.
+ */
 export const localDateKey = (d: Date) =>
   `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 

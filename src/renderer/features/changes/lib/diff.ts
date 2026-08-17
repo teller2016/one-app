@@ -1,5 +1,6 @@
 // unified diff → 사이드-바이-사이드 행 변환 + 커밋 시각 표시 헬퍼.
 // 라이브러리 없이 줄 prefix 파싱 — 드로어의 unified 렌더와 같은 원칙.
+import { dayKey } from '../../../../shared/date';
 
 export type SplitSide = { no: number; text: string };
 
@@ -105,6 +106,5 @@ export function relTime(epochSec: number): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
-  const d = new Date(epochSec * 1000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return dayKey(new Date(epochSec * 1000));
 }

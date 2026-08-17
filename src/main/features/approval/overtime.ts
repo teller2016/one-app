@@ -11,36 +11,24 @@ import {
 import { OVERTIME_CONFIG, WORKER_DEPT } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+// 시간합계 문구는 렌더러 폼과 공유한다 (미리보기와 실제 입력이 같아야 한다)
+import { formatHoursTotal } from '../../../shared/approval-format';
+import { pad2 } from '../../../shared/date';
 import type { OvertimeSubmitInput } from '../../../shared/types';
+
+export { formatHoursTotal };
 
 /** 동시 실행 방지 (자동화 창 중복 기동 막기) */
 let running = false;
 
-/** "HH:MM" → 분. 잘못된 형식이면 NaN */
-const toMinutes = (t: string) => {
-  const m = t.match(/^(\d{1,2}):(\d{2})$/);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
-};
-
-/** 근무시간 합계 문구 — 자정을 넘겨도 계산되도록 wrap-around. 예: 2시간 · 2.5시간 */
-export function formatHoursTotal(startTime: string, endTime: string): string {
-  const start = toMinutes(startTime);
-  const end = toMinutes(endTime);
-  if (Number.isNaN(start) || Number.isNaN(end)) return '';
-  const diff = (end - start + 24 * 60) % (24 * 60);
-  const hours = diff / 60;
-  return `${parseFloat(hours.toFixed(1))}시간`;
-}
-
 /** 제목 문구 — 그룹웨어 양식 기본 제목 패턴 + 0패딩 (예: 07월 01일 09시 00분) */
 export function formatTitle(name: string, input: OvertimeSubmitInput): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
   const [, month, day] = input.date.split('-').map(Number);
   const part = (t: string) => {
     const [h, m] = t.split(':').map(Number);
-    return `${pad(h)}시 ${pad(m)}분`;
+    return `${pad2(h)}시 ${pad2(m)}분`;
   };
-  return `[연장근무내역] ${name}_${pad(month)}월 ${pad(day)}일 ${part(input.startTime)}~${part(input.endTime)}`;
+  return `[연장근무내역] ${name}_${pad2(month)}월 ${pad2(day)}일 ${part(input.startTime)}~${part(input.endTime)}`;
 }
 
 /**

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePopover } from '../lib/usePopover';
-
-const pad = (n: number) => String(n).padStart(2, '0');
+import { fromMinutes, pad2 as pad } from '../../shared/date';
 
 /** 자유 입력을 "HH:MM" 으로 정규화 — 19 · 19:5 · 1930 · 19:30 허용, 실패 시 null */
 const normalizeTime = (raw: string): string | null => {
@@ -49,10 +48,9 @@ export function TimePicker({
   // step 분 간격 옵션 (00:00 ~ 자정 직전)
   const options = useMemo(() => {
     const interval = Math.max(1, Math.min(60, Math.trunc(step)));
-    return Array.from({ length: Math.ceil((24 * 60) / interval) }, (_, i) => {
-      const mins = i * interval;
-      return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
-    });
+    return Array.from({ length: Math.ceil((24 * 60) / interval) }, (_, i) =>
+      fromMinutes(i * interval),
+    );
   }, [step]);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(value);
