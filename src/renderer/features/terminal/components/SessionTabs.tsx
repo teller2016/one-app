@@ -15,6 +15,7 @@ import { Input } from '../../../components/Input';
 import { StatusDot } from '../../../components/StatusDot';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
+import { errMsg } from '../../../lib/errMsg';
 
 // waiting 은 "준비됨"(초록) — busy 의 경고색 펄스와 대비시켜 훑어보기 쉽게
 const STATUS_DOT: Record<TerminalSessionStatus, 'busy' | 'ok' | 'idle'> = {
@@ -222,7 +223,7 @@ export const SessionTabs = memo(function SessionTabs({
     try {
       await window.oneApp.terminal.rename(id, next);
     } catch (err) {
-      toast(`이름 변경 실패: ${(err as Error).message}`, 'fail');
+      toast(`이름 변경 실패: ${errMsg(err)}`, 'fail');
     }
   };
 

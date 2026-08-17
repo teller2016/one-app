@@ -24,6 +24,7 @@ import {
   toForm,
 } from './ProjectForm';
 import type { DetailState } from './BuildDetailPanel';
+import { errMsg } from '../../../lib/errMsg';
 
 /** 배포 섹션 — 프로젝트별 젠킨스 잡을 버튼 한 번으로 배포한다. */
 export function DeploySection() {
@@ -80,7 +81,7 @@ export function DeploySection() {
     } catch (err) {
       if (activityForRef.current !== projectId) return;
       setActivity(null);
-      setActivityError((err as Error).message);
+      setActivityError(errMsg(err));
     } finally {
       if (activityForRef.current === projectId) setActivityLoading(false);
     }

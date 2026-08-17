@@ -21,6 +21,7 @@ import { usePolling, useTick } from '../../../lib/usePolling';
 import { CreatePrModal, CreatedPr } from './CreatePrModal';
 import { PrList } from './PrList';
 import { PrDetail } from './PrDetail';
+import { errMsg } from '../../../lib/errMsg';
 
 const orgOf = (pr: PrItem) => pr.repo.split('/')[0];
 const keyOf = (pr: PrItem) => `${pr.repo}#${pr.number}`;
@@ -81,7 +82,7 @@ export function PrSection() {
       setResult({
         ok: false,
         configured: true,
-        error: (err as Error).message ?? '조회 실패',
+        error: errMsg(err) ?? '조회 실패',
       });
     } finally {
       setLoading(false);

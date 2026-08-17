@@ -9,6 +9,7 @@ import { Modal } from '../../../components/Modal';
 import { Segment } from '../../../components/Segment';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 
 type BranchMode = 'new' | 'existing';
 
@@ -90,7 +91,7 @@ export function NewWorktreeModal({
         toast(`워크트리 생성 실패: ${r.error ?? '알 수 없는 오류'}`, 'fail');
       }
     } catch (err) {
-      toast(`워크트리 생성 실패: ${(err as Error).message}`, 'fail');
+      toast(`워크트리 생성 실패: ${errMsg(err)}`, 'fail');
     } finally {
       setCreating(false);
     }

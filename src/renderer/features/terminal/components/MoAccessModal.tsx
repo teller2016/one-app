@@ -11,6 +11,7 @@ import { Tooltip } from '../../../components/Tooltip';
 import { useCopy } from '../../../lib/useCopy';
 import { useEffect, useState } from 'react';
 import type { TerminalServerStatus } from '../../../../shared/types';
+import { errMsg } from '../../../lib/errMsg';
 
 export function MoAccessModal({ onClose }: { onClose: () => void }) {
   const confirm = useConfirm();
@@ -44,7 +45,7 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
     try {
       setStatus(await window.oneApp.terminal.server.setEnabled(!status.running));
     } catch (err) {
-      toast(`서버 ${status.running ? '끄기' : '켜기'} 실패: ${(err as Error).message}`, 'fail');
+      toast(`서버 ${status.running ? '끄기' : '켜기'} 실패: ${errMsg(err)}`, 'fail');
     } finally {
       setBusy(false);
     }
@@ -61,7 +62,7 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
     try {
       setStatus(await window.oneApp.terminal.server.regenToken());
     } catch (err) {
-      toast(`토큰 재발급 실패: ${(err as Error).message}`, 'fail');
+      toast(`토큰 재발급 실패: ${errMsg(err)}`, 'fail');
     }
   };
 

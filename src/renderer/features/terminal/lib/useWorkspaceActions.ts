@@ -16,6 +16,7 @@ import type {
   WorktreeInfo,
 } from '../../../../shared/types';
 import { worktreeName } from './workspace';
+import { errMsg } from '../../../lib/errMsg';
 
 export type WorkspaceActions = {
   /** 워크트리 폴더 제거 (확인 후 git worktree remove) */
@@ -72,7 +73,7 @@ export function useWorkspaceActions({
           toast(`워크트리 제거 실패: ${r.error ?? '알 수 없는 오류'}`, 'fail');
         }
       } catch (err) {
-        toast(`워크트리 제거 실패: ${(err as Error).message}`, 'fail');
+        toast(`워크트리 제거 실패: ${errMsg(err)}`, 'fail');
       }
     },
     [sessions, confirm, toast, refreshWorktrees]
@@ -90,7 +91,7 @@ export function useWorkspaceActions({
       try {
         await window.oneApp.workspaces.delete(ws.id); // 목록 갱신은 onChanged 브로드캐스트
       } catch (err) {
-        toast(`워크스페이스 제거 실패: ${(err as Error).message}`, 'fail');
+        toast(`워크스페이스 제거 실패: ${errMsg(err)}`, 'fail');
       }
     },
     [confirm, toast]
@@ -102,7 +103,7 @@ export function useWorkspaceActions({
       try {
         await window.oneApp.workspaces.save(input);
       } catch (err) {
-        toast(`워크스페이스 저장 실패: ${(err as Error).message}`, 'fail');
+        toast(`워크스페이스 저장 실패: ${errMsg(err)}`, 'fail');
       }
     },
     [toast]

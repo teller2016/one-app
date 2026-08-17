@@ -11,6 +11,7 @@ import { Modal } from '../../../components/Modal';
 import { MultiSelect } from '../../../components/MultiSelect';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
+import { errMsg } from '../../../lib/errMsg';
 
 export function PresetsModal({
   workspaces,
@@ -44,7 +45,7 @@ export function PresetsModal({
       toast('프리셋을 저장했습니다');
       onClose();
     } catch (err) {
-      toast(`프리셋 저장 실패: ${(err as Error).message}`, 'fail');
+      toast(`프리셋 저장 실패: ${errMsg(err)}`, 'fail');
     } finally {
       setSaving(false);
     }

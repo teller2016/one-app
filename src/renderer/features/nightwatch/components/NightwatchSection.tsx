@@ -23,6 +23,8 @@ import { Textarea } from "../../../components/Textarea";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/EmptyState";
 import { usePolling } from "../../../lib/usePolling";
+import { useAsync } from "../../../lib/useAsync";
+import { errMsg, resultError } from "../../../lib/errMsg";
 import { useCopy } from "../../../lib/useCopy";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -55,12 +57,6 @@ export function NightwatchSection() {
   const [status, setStatus] = useState<NightwatchStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [candidates, setCandidates] = useState<NightwatchCandidate[] | null>(
-    null
-  );
-  const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const [candidatesError, setCandidatesError] = useState("");
-  const [hiddenCount, setHiddenCount] = useState(0);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [missionLog, setMissionLog] = useState("");
   const [log, setLog] = useState("");
@@ -101,24 +97,27 @@ export function NightwatchSection() {
       setLog(lg.ok && lg.content ? lg.content : "");
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const loadCandidates = useCallback(async () => {
-    setCandidatesLoading(true);
+  // 후보 목록은 조회 한 건이라 loading·error 를 useAsync 에 맡긴다
+  // (실패는 throw 로 올려야 훅이 error 로 잡는다 — IPC 는 { ok, error } 로 준다)
+  const fetchCandidates = useCallback(async () => {
     const res = await window.oneApp.nightwatch.listCandidates();
-    if (res.ok) {
-      setCandidates(res.candidates ?? []);
-      setHiddenCount(res.hiddenCount ?? 0);
-      setCandidatesError("");
-    } else {
-      setCandidatesError(res.error ?? "후보 조회에 실패했습니다");
-    }
-    setCandidatesLoading(false);
+    if (!res.ok) throw new Error(resultError(res, "후보 조회에 실패했습니다"));
+    return { list: res.candidates ?? [], hidden: res.hiddenCount ?? 0 };
   }, []);
+  const {
+    data: candidateData,
+    loading: candidatesLoading,
+    error: candidatesError,
+    reload: loadCandidates,
+  } = useAsync(fetchCandidates, { immediate: false });
+  const candidates = candidateData?.list ?? null;
+  const hiddenCount = candidateData?.hidden ?? 0;
 
   // 최초 로드 + 1분 자동 새로고침 (로컬 파일 읽기라 저렴)
   usePolling(load, 60_000);

@@ -14,6 +14,7 @@ import type {
   ChangesTarget,
 } from '../../../../shared/types';
 import { usePolling } from '../../../lib/usePolling';
+import { errMsg } from '../../../lib/errMsg';
 
 const POLL_MS = 5000; // 로컬 git status 는 수십 ms — 보이는 동안만 도는 폴링이라 부담 없음
 
@@ -92,7 +93,7 @@ export function useChanges(
         );
       } catch (err) {
         // 세션 종료 등으로 대상이 사라진 레이스 — 에러 상태로 담는다
-        r = { ok: false, error: (err as Error).message };
+        r = { ok: false, error: errMsg(err) };
       }
       // 그 사이 다른 파일을 선택했으면 버린다 (뒤늦은 응답 무시)
       if (selectedRef.current?.path !== file.path) return;
@@ -144,7 +145,7 @@ export function useChanges(
         lg = lr.ok ? (lr.commits ?? []) : [];
       } catch (err) {
         // 폴링 도중 세션이 죽으면 대상 해석이 실패한다 — 조용히 에러 화면으로
-        applyStatus({ ok: false, repo: true, error: (err as Error).message });
+        applyStatus({ ok: false, repo: true, error: errMsg(err) });
         return;
       }
       applyStatus(s);
@@ -244,7 +245,7 @@ export function useChanges(
         if (r.ok) void refresh();
         return r;
       } catch (err) {
-        return { ok: false, error: (err as Error).message };
+        return { ok: false, error: errMsg(err) };
       } finally {
         setCommitting(false);
       }
@@ -260,7 +261,7 @@ export function useChanges(
       if (r.ok) void refresh();
       return r;
     } catch (err) {
-      return { ok: false, error: (err as Error).message };
+      return { ok: false, error: errMsg(err) };
     } finally {
       setPushing(false);
     }

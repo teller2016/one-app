@@ -8,6 +8,7 @@ import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
 import { terminalBackend } from '../lib/backend';
+import { errMsg } from '../../../lib/errMsg';
 
 export function NewSessionModal({
   cwd,
@@ -44,7 +45,7 @@ export function NewSessionModal({
       onCreated(info.id);
       onClose();
     } catch (err) {
-      toast(`세션 생성 실패: ${(err as Error).message}`, 'fail');
+      toast(`세션 생성 실패: ${errMsg(err)}`, 'fail');
     } finally {
       setCreating(false);
     }

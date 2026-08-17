@@ -25,6 +25,7 @@ import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
 import { openTerminalSession } from '../../../lib/sectionNav';
 import { worktreeName } from '../../terminal';
+import { errMsg } from '../../../lib/errMsg';
 
 const SKILL_KEY = 'jira:workSkill'; // 마지막으로 고른 시작 스킬 (localStorage)
 const ACCOUNT_KEY = 'jira:workAccount'; // 마지막으로 고른 Claude 계정
@@ -195,7 +196,7 @@ export function StartWorkModal({
       }
       onClose();
     } catch (err) {
-      toast(`작업을 시작하지 못했습니다 — ${(err as Error).message}`, 'fail');
+      toast(`작업을 시작하지 못했습니다 — ${errMsg(err)}`, 'fail');
     } finally {
       setBusy(false);
     }

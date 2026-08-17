@@ -55,6 +55,7 @@ import {
 } from './TerminalView';
 import type { TerminalPaneHandle } from './TerminalView';
 import { WorkspaceNav } from './WorkspaceNav';
+import { errMsg } from '../../../lib/errMsg';
 
 // 터미널 IPC 노출 여부 — 개발 중 main/preload 변경은 HMR 이 안 되므로(렌더러만 갱신)
 // 앱을 재시작하기 전까지 이 API 가 없다. 없으면 버튼이 조용히 죽는 대신 안내를 띄운다.
@@ -614,7 +615,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       );
       if (!res.ok) toast(res.error || '열지 못했습니다.', 'fail');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '열지 못했습니다.', 'fail');
+      toast(errMsg(err, '열지 못했습니다.'), 'fail');
     }
   }, [selection, toast]);
 
@@ -720,7 +721,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       const info = await terminalApi()?.create({ cwd: selection.path });
       if (info) activateSession(info.id);
     } catch (err) {
-      toast(`세션 생성 실패: ${(err as Error).message}`, 'fail');
+      toast(`세션 생성 실패: ${errMsg(err)}`, 'fail');
     }
   }, [selection, activateSession, toast]);
 
@@ -741,7 +742,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         });
         if (info) activateSession(info.id);
       } catch (err) {
-        toast(`프리셋 실행 실패: ${(err as Error).message}`, 'fail');
+        toast(`프리셋 실행 실패: ${errMsg(err)}`, 'fail');
       }
     },
     [activateSession, toast]
@@ -887,7 +888,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       try {
         await terminalApi()?.kill(s.id);
       } catch (err) {
-        toast(`세션 종료 실패: ${(err as Error).message}`, 'fail');
+        toast(`세션 종료 실패: ${errMsg(err)}`, 'fail');
       }
     },
     [toast]

@@ -7,6 +7,7 @@ import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
 import { Modal } from '../../../components/Modal';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 
 export function NewWorkspaceModal({
   onCreated,
@@ -38,7 +39,7 @@ export function NewWorkspaceModal({
       if (ws) onCreated(ws);
       onClose();
     } catch (err) {
-      toast(`워크스페이스 추가 실패: ${(err as Error).message}`, 'fail');
+      toast(`워크스페이스 추가 실패: ${errMsg(err)}`, 'fail');
     } finally {
       setSaving(false);
     }
