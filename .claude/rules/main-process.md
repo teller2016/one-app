@@ -9,6 +9,19 @@ paths:
 
 ## 공통 유틸 재사용 (중복 정의 금지)
 - REST 호출은 `main/lib/http.ts` 의 `fetchWithTimeout` — **전역 fetch 직접 사용 금지**(타임아웃이 없어 소켓 hang 시 IPC 가 영영 안 풀린다). `import { fetchWithTimeout as fetch }` 패턴을 쓴다.
+- **Gitea REST 는 `main/lib/gitea.ts`**(`giteaFetch`·`giteaJson`·`giteaAuthHeaders`) — 인증 헤더와
+  실패 문구(연결 실패·인증 실패·404·기타)가 여기 한 곳에 있다. deploy·prs 두 기능이 공유한다.
+  상태코드별 문구는 `errors: { auth, notFound, byStatus }`, 실패를 조용히 넘길 조회는 `raw: true`.
+- **Jira 인증 헤더는 `features/jira/jira.ts` 의 `jiraAuth()`** — Basic 헤더를 직접 조립하지 말 것
+  (jira·work·nightwatch 세 곳이 각자 만들던 것을 단일화했다).
+- **날짜·시간 문자열은 `shared/date.ts`**(`pad2`·`dayKey`·`todayKey`·`monthKey`·`parseDayKey`·
+  `toMinutes`·`fromMinutes`·`WEEKDAY_KO`) — main·preload·렌더러 공용. `String(n).padStart(2,'0')` 을
+  새로 쓰지 말 것. ⚠️ 예외 하나: `lib/util.ts` 의 `localDateKey` 는 0패딩 없는 레거시 형식이고
+  저장본(`reminder-state.json`) 호환 때문에 남아 있다 — 새 코드에서 쓰지 않는다.
+- **결재 표기 규칙은 `shared/approval-format.ts`**(`vacationTitle`·`formatHoursTotal`·
+  `KIND_DAY_FACTOR`) — 렌더러 폼 미리보기와 main 자동화가 **같은 문자열**을 만들어야 한다.
+- 원격 주소의 owner/repo 파싱은 `shared/types.ts` 의 `ownerRepoFromUrl`(문자열)·
+  `ownerRepoPartsFromUrl`(조각). ⚠️ `new URL()` 로 파싱하지 말 것 — ssh 주소에서 던진다.
 - userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(`readUserJson`·`writeUserJson`·`encryptSecret`·`decryptSecret`).
 - 전 창 이벤트는 `main/lib/broadcast.ts`.
 - `sleep`·`localDateKey`·`withTimeout` 은 `main/lib/util.ts`.

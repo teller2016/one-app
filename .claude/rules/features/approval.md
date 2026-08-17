@@ -157,7 +157,7 @@ window.open('', '_blank')            ← 빈 창을 먼저 연다 (URL 로 판�
 - ⚠️ **그룹웨어 신청일수(`#dayCnt`)는 반차·시차도 달력 기준 1일로 센다**(2026-08-13 실측 —
   시차_1시간이 "( 1 일간)" 으로 들어갔다). 기간의 `( N 일간)` 과 완료 카드의 신청일수는
   환산 계수(`KIND_DAY_FACTOR`: 반차 0.5 · 시차 0.125/0.25)가 있는 종류면 그 값으로 바꿔
-  적는다. 계수는 렌더러 `calc.ts` 와 main `vacation.ts` **두 곳에 중복** — 함께 고칠 것.
+  적는다. 계수 정본은 **`shared/approval-format.ts`** — 렌더러·main 이 같은 값을 import 한다.
 - 작성 년월일은 `"2026 년 월 일"` 만 있는 문단을 찾아 채운다(안내 문장은 건드리지 않는다).
 - 채우지 못한 항목은 `missed[]` 로 돌려주고 UI 가 "창에서 직접 채우세요" 로 안내한다.
 
@@ -193,8 +193,9 @@ ComboBox 는 `value()/text()/trigger('change')`, DatePicker 는 `value(Date)/tri
 시간대·휴일근무일은 폼에서 입력받아 `VacationInput`(`useStartTime`·`useEndTime`·
 `holidayWorkDate`)으로 넘긴다. 시간대 기본값은 `calc.ts` 의 `defaultTimeRange`
 (오전반차 09:00~14:00 · 오후반차 14:00~18:00 · 시차는 09:00 출근 기준).
-형식 정본은 렌더러 `calc.ts` 의 `vacationTitle` 과 main `vacation.ts` 의
-`formatVacationTitle` **두 곳에 중복**이므로 고칠 때 함께 고친다.
+형식 정본은 **`shared/approval-format.ts` 의 `vacationTitle`** 하나다 — 렌더러 폼 미리보기와
+main 의 `formatVacationTitle`(그 함수의 별칭)이 같은 구현을 쓰므로 한 곳만 고치면 된다.
+같은 파일에 `formatHoursTotal`(야근 시간합계)·`KIND_DAY_FACTOR` 도 있다.
 이름은 `#names`("[(주)포비즈코리아/FE] 정수범")에서 파싱한다(챕터·부문은 표준에서 빠졌다).
 폼은 이름을 모르는 동안 `성명` 자리표시를 보여주고, **자리표시가 남아 있으면 사용자가
 고친 것으로 치지 않고** main 이 다시 만든다(그대로 상신되면 곤란하다).
