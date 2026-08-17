@@ -8,7 +8,9 @@
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "noImplicitAny": true,
+    // strict 계열 전부 — 특히 strictNullChecks 가 없으면 `T | null` 방어 코드가
+    // 타입 검사에서 아무것도 검증하지 않는다(널 가드가 있어도 컴파일러가 안 본다).
+    "strict": true,
     "sourceMap": true,
     "baseUrl": ".",
     "outDir": "dist",

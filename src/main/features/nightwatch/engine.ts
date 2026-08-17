@@ -13,7 +13,9 @@ import type {
   NightwatchTicket,
   Project,
 } from "../../../shared/types";
-import { fetchMyIssues } from "../jira/jira";
+import { fetchMyIssues, jiraAuth } from "../jira/jira";
+// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
+import { fetchWithTimeout as fetch } from "../../lib/http";
 import { getProject } from "../projects/store";
 import { getJiraApiConfig } from "../settings/store";
 import {
@@ -39,6 +41,8 @@ import path from "node:path";
 
 const GIT = "/usr/bin/git";
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+// 첨부는 최대 20MB 라 기본 15초로는 사내망에서도 모자랄 수 있다
+const ATTACHMENT_TIMEOUT_MS = 60_000;
 
 /** 분석 대상 — 프로젝트 레지스트리의 Project 를 엔진 내부 형태로 축약 (path = localPath) */
 type AnalysisRepo = { id: string; name: string; path: string };
@@ -98,30 +102,38 @@ const git = (cwd: string, args: string[], timeoutMs?: number) =>
   run(GIT, ["-C", cwd, ...args], { timeoutMs });
 
 // ── Jira REST ───────────────────────────────────────────────────────────
-async function jiraFetch(apiPath: string): Promise<Record<string, unknown>> {
-  const cfg = getJiraApiConfig();
-  if (!cfg)
+// 인증 헤더는 조립하지 않고 jira/jira.ts 의 jiraAuth() 를 공유한다.
+// ⚠️ 호출은 전역 fetch 가 아니라 fetchWithTimeout — 소켓 hang 시 IPC 가 영영 안 풀린다.
+const requireJiraAuth = () => {
+  const auth = jiraAuth();
+  if (!auth)
     throw new Error("Jira 연동이 설정되지 않았습니다 (환경설정 → 연동)");
-  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64");
-  const response = await fetch(`${cfg.url}${apiPath}`, {
-    headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
-  });
+  return auth;
+};
+
+async function jiraFetch(apiPath: string): Promise<Record<string, unknown>> {
+  const { url, headers } = requireJiraAuth();
+  const response = await fetch(`${url}${apiPath}`, { headers });
   if (!response.ok)
     throw new Error(`Jira ${apiPath} -> HTTP ${response.status}`);
   return (await response.json()) as Record<string, unknown>;
 }
 
 async function jiraDownload(url: string, dest: string): Promise<void> {
-  const cfg = getJiraApiConfig();
-  if (!cfg) throw new Error("Jira 연동이 설정되지 않았습니다");
-  const auth = Buffer.from(`${cfg.email}:${cfg.token}`).toString("base64");
-  const response = await fetch(url, {
-    headers: { Authorization: `Basic ${auth}` },
-  });
+  const { authorization } = requireJiraAuth();
+  // 첨부는 이미지·문서라 본문 조회보다 오래 걸릴 수 있어 타임아웃을 넉넉히 준다
+  const response = await fetch(
+    url,
+    { headers: { Authorization: authorization } },
+    ATTACHMENT_TIMEOUT_MS,
+  );
   if (!response.ok)
     throw new Error(`첨부 다운로드 실패 -> HTTP ${response.status}`);
   fs.writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
 }
+
+/** 미션이 남기는 result.json — 요약만 읽는다 */
+type MissionResultFile = { summary?: string };
 
 // Jira description/comment 는 ADF(JSON) 라 재귀 평탄화로 텍스트만 추출한다
 type AdfNode =
@@ -553,11 +565,12 @@ async function processTicket(
     runningTicket = null;
 
     const violation = await detectRepoTampering(key, repo.path, before);
-    let result: { summary?: string } | null = null;
+    // ⚠️ `as typeof result` 로 쓰지 말 것 — 좁혀진 타입(null)이 잡혀 result 가 never 가 된다
+    let result: MissionResultFile | null = null;
     try {
       result = JSON.parse(
         fs.readFileSync(path.join(ticketDir, "result.json"), "utf8")
-      ) as typeof result;
+      ) as MissionResultFile;
     } catch {
       result = null;
     }

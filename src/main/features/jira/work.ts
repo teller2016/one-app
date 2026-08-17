@@ -23,7 +23,7 @@ import type {
 } from '../../../shared/types';
 import { fetchWithTimeout as fetch } from '../../lib/http';
 import { shQuote } from '../../lib/util';
-import { getJiraApiConfig } from '../settings/store';
+import { jiraAuth } from './jira';
 import { listSessions } from '../terminal/pty';
 
 /** 티켓 맥락 폴더 보관 개수 — 넘치면 오래된 것부터 지운다(세션이 살아있는 티켓은 제외) */
@@ -338,20 +338,21 @@ export async function prepareJiraWork(
   const key = safeKey(input.key ?? '');
   if (!key) return { ok: false, error: '이슈 키가 올바르지 않습니다.' };
 
-  const cfg = getJiraApiConfig();
-  if (!cfg) {
+  // 인증 헤더는 조립하지 않고 jira.ts 의 jiraAuth() 를 공유한다 (헤더 조립 중복 금지)
+  const auth = jiraAuth();
+  if (!auth) {
     return {
       ok: false,
       error: '환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하세요.',
     };
   }
-  const authHeader = `Basic ${Buffer.from(`${cfg.email}:${cfg.token}`).toString('base64')}`;
+  const { url: baseUrl, authorization: authHeader, headers } = auth;
 
   let issue: RawWorkIssue;
   try {
     const res = await fetch(
-      `${cfg.url}/rest/api/3/issue/${encodeURIComponent(key)}?fields=${WORK_FIELDS}&expand=renderedFields`,
-      { headers: { Authorization: authHeader, Accept: 'application/json' } },
+      `${baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}?fields=${WORK_FIELDS}&expand=renderedFields`,
+      { headers },
       ISSUE_TIMEOUT_MS,
     );
     if (res.status === 401 || res.status === 403) {
@@ -407,7 +408,7 @@ export async function prepareJiraWork(
   });
 
   const summary = issue.fields.summary ?? '(제목 없음)';
-  const url = `${cfg.url}/browse/${key}`;
+  const url = `${baseUrl}/browse/${key}`;
   const markdown = buildTicketMarkdown({
     key,
     url,
