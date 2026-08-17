@@ -10,8 +10,8 @@ import type {
   PrMergeMethod,
 } from '../../../shared/types';
 import { mainBranchRank } from '../../../shared/types';
-// 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch } from '../../lib/http';
+// 인증 헤더·연결 실패·인증 실패 문구는 공용 클라이언트가 담당한다 (deploy 기능과 공유)
+import { giteaFetch, giteaJson } from '../../lib/gitea';
 
 type GiteaIssue = {
   number?: number;
@@ -29,28 +29,15 @@ type GiteaReview = {
   submitted_at?: string;
 };
 
-const authHeaders = (token: string | null): Record<string, string> =>
-  token ? { Authorization: `token ${token}` } : {};
-
 /** 열린 PR 목록 (최신순, 최대 50개) */
 export async function fetchOpenPrs(
   giteaUrl: string,
   token: string | null,
 ): Promise<PrItem[]> {
-  let res: Response;
-  try {
-    res = await fetch(
-      `${giteaUrl}/api/v1/repos/issues/search?type=pulls&state=open&limit=50`,
-      { headers: authHeaders(token) },
-    );
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.');
-  }
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.');
-  if (!res.ok) throw new Error(`Gitea 응답 오류 (HTTP ${res.status})`);
-
-  const data = (await res.json()) as GiteaIssue[];
+  const data = await giteaJson<GiteaIssue[]>(
+    `${giteaUrl}/api/v1/repos/issues/search?type=pulls&state=open&limit=50`,
+    token,
+  );
   return (Array.isArray(data) ? data : []).flatMap((it) => {
     const repo = it.repository?.full_name;
     if (!repo || it.number == null) return [];
@@ -87,9 +74,10 @@ export async function enrichBranches(
   await Promise.all(
     repos.map(async (repo) => {
       try {
-        const res = await fetch(
+        const res = await giteaFetch(
           `${giteaUrl}/api/v1/repos/${repo}/pulls?state=open&limit=${BRANCH_PAGE_SIZE}`,
-          { headers: authHeaders(token) },
+          token,
+          { raw: true },
         );
         if (!res.ok) return;
         const data = (await res.json()) as {
@@ -128,9 +116,10 @@ export async function enrichApprovals(
   return Promise.all(
     prs.map(async (pr) => {
       try {
-        const res = await fetch(
+        const res = await giteaFetch(
           `${giteaUrl}/api/v1/repos/${pr.repo}/pulls/${pr.number}/reviews`,
-          { headers: authHeaders(token) },
+          token,
+          { raw: true },
         );
         if (!res.ok) return pr;
         const reviews = (await res.json()) as GiteaReview[];
@@ -204,21 +193,11 @@ async function fetchBranchPage(
   repo: string,
   page = 1,
 ): Promise<GiteaBranch[]> {
-  let res: Response;
-  try {
-    res = await fetch(
-      `${giteaUrl}/api/v1/repos/${repo}/branches?limit=${BRANCH_PAGE_SIZE}&page=${page}`,
-      { headers: authHeaders(token) },
-    );
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.');
-  }
-  if (res.status === 404) throw new Error(`저장소를 찾을 수 없습니다: ${repo}`);
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.');
-  if (!res.ok) throw new Error(`Gitea 응답 오류 (HTTP ${res.status})`);
-
-  const data = (await res.json()) as GiteaBranch[];
+  const data = await giteaJson<GiteaBranch[]>(
+    `${giteaUrl}/api/v1/repos/${repo}/branches?limit=${BRANCH_PAGE_SIZE}&page=${page}`,
+    token,
+    { errors: { notFound: `저장소를 찾을 수 없습니다: ${repo}` } },
+  );
   return Array.isArray(data) ? data : [];
 }
 
@@ -231,8 +210,8 @@ async function fetchDefaultBranch(
   const hit = defaultBranchCache.get(repo);
   if (hit && Date.now() - hit.at < DEFAULT_BRANCH_TTL) return hit.value;
   try {
-    const res = await fetch(`${giteaUrl}/api/v1/repos/${repo}`, {
-      headers: authHeaders(token),
+    const res = await giteaFetch(`${giteaUrl}/api/v1/repos/${repo}`, token, {
+      raw: true,
     });
     if (!res.ok) return undefined;
     const data = (await res.json()) as { default_branch?: string };
@@ -252,9 +231,10 @@ async function fetchBranch(
   name: string,
 ): Promise<GiteaBranch | null> {
   try {
-    const res = await fetch(
+    const res = await giteaFetch(
       `${giteaUrl}/api/v1/repos/${repo}/branches/${encodeURIComponent(name)}`,
-      { headers: authHeaders(token) },
+      token,
+      { raw: true },
     );
     if (!res.ok) return null;
     return (await res.json()) as GiteaBranch;
@@ -349,20 +329,14 @@ export async function fetchAllBranchNames(
   const hit = allBranchCache.get(repo);
   if (hit && Date.now() - hit.at < BASE_CANDIDATE_TTL) return hit.value;
 
-  let res: Response;
-  try {
-    res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/git/refs/heads`, {
-      headers: authHeaders(token),
-    });
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.');
-  }
-  if (res.status === 404) throw new Error(`저장소를 찾을 수 없습니다: ${repo}`);
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.');
-  if (!res.ok) throw new Error(`브랜치 목록 조회 실패 (HTTP ${res.status})`);
-
-  const data = (await res.json()) as { ref?: string }[];
+  const data = await giteaJson<{ ref?: string }[]>(
+    `${giteaUrl}/api/v1/repos/${repo}/git/refs/heads`,
+    token,
+    {
+      label: '브랜치 목록 조회',
+      errors: { notFound: `저장소를 찾을 수 없습니다: ${repo}` },
+    },
+  );
   const names = (Array.isArray(data) ? data : []).flatMap((r) =>
     r.ref?.startsWith('refs/heads/') ? [r.ref.slice('refs/heads/'.length)] : [],
   );
@@ -392,17 +366,7 @@ export async function fetchBranchCommits(
   files: PrChangedFile[];
   stats: { additions: number; deletions: number };
 }> {
-  let res: Response;
-  try {
-    res = await fetch(
-      `${giteaUrl}/api/v1/repos/${repo}/compare/${encodeURIComponent(`${base}...${head}`)}`,
-      { headers: authHeaders(token) },
-    );
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다.');
-  }
-  if (!res.ok) throw new Error(`브랜치 비교 실패 (HTTP ${res.status})`);
-  const data = (await res.json()) as {
+  const data = await giteaJson<{
     commits?: {
       sha?: string;
       commit?: { message?: string; author?: { name?: string; date?: string } };
@@ -410,7 +374,11 @@ export async function fetchBranchCommits(
       files?: { filename?: string; status?: string }[];
       stats?: { additions?: number; deletions?: number };
     }[];
-  };
+  }>(
+    `${giteaUrl}/api/v1/repos/${repo}/compare/${encodeURIComponent(`${base}...${head}`)}`,
+    token,
+    { label: '브랜치 비교' },
+  );
   const raw = data.commits ?? [];
 
   const commits = raw
@@ -446,30 +414,30 @@ export async function createPr(
   token: string,
   input: PrCreateInput,
 ): Promise<{ number: number; url: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`${giteaUrl}/api/v1/repos/${input.repo}/pulls`, {
-      method: 'POST',
-      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        head: input.head,
-        base: input.base,
-        title: input.title,
-        body: input.body ?? '',
-      }),
-    });
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다.');
-  }
-  if (res.status === 409)
-    throw new Error('이미 같은 브랜치의 열린 PR 이 있거나, 커밋 차이가 없습니다.');
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Gitea 인증 실패 — 토큰 권한을 확인하세요.');
-  if (res.status === 404)
-    throw new Error('저장소 또는 브랜치를 찾을 수 없습니다.');
-  if (!res.ok) throw new Error(`PR 생성 실패 (HTTP ${res.status})`);
-
-  const data = (await res.json()) as { number?: number; html_url?: string };
+  const data = await giteaJson<{ number?: number; html_url?: string }>(
+    `${giteaUrl}/api/v1/repos/${input.repo}/pulls`,
+    token,
+    {
+      init: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          head: input.head,
+          base: input.base,
+          title: input.title,
+          body: input.body ?? '',
+        }),
+      },
+      label: 'PR 생성',
+      errors: {
+        auth: 'Gitea 인증 실패 — 토큰 권한을 확인하세요.',
+        notFound: '저장소 또는 브랜치를 찾을 수 없습니다.',
+        byStatus: {
+          409: '이미 같은 브랜치의 열린 PR 이 있거나, 커밋 차이가 없습니다.',
+        },
+      },
+    },
+  );
   return {
     number: data.number ?? 0,
     url: data.html_url ?? `${giteaUrl}/${input.repo}/pulls/${data.number}`,
@@ -483,22 +451,15 @@ export async function fetchMergeInfo(
   repo: string,
   number: number,
 ): Promise<{ mergeable: boolean; title: string; head?: string; base?: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}`, {
-      headers: authHeaders(token),
-    });
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다.');
-  }
-  if (res.status === 404) throw new Error('PR 을 찾을 수 없습니다.');
-  if (!res.ok) throw new Error(`PR 조회 실패 (HTTP ${res.status})`);
-  const data = (await res.json()) as {
+  const data = await giteaJson<{
     mergeable?: boolean;
     title?: string;
     head?: { ref?: string };
     base?: { ref?: string };
-  };
+  }>(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}`, token, {
+    label: 'PR 조회',
+    errors: { notFound: 'PR 을 찾을 수 없습니다.' },
+  });
   return {
     mergeable: !!data.mergeable,
     title: data.title ?? '',
@@ -515,21 +476,20 @@ export async function mergePr(
   number: number,
   method: PrMergeMethod,
 ): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}/merge`, {
+  // 오류면 giteaFetch 가 던진다 — 여기까지 오면 머지 완료(200)
+  await giteaFetch(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}/merge`, token, {
+    init: {
       method: 'POST',
-      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Do: method }),
-    });
-  } catch {
-    throw new Error('Gitea 에 연결할 수 없습니다.');
-  }
-  if (res.ok) return; // 200 = 머지 완료
-  if (res.status === 405)
-    throw new Error('머지할 수 없는 상태입니다 — 컨플릭트 또는 보호 규칙을 확인하세요.');
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Gitea 인증 실패 — 토큰에 쓰기 권한이 있는지 확인하세요.');
-  if (res.status === 404) throw new Error('PR 을 찾을 수 없습니다.');
-  throw new Error(`머지 실패 (HTTP ${res.status})`);
+    },
+    label: '머지',
+    errors: {
+      auth: 'Gitea 인증 실패 — 토큰에 쓰기 권한이 있는지 확인하세요.',
+      notFound: 'PR 을 찾을 수 없습니다.',
+      byStatus: {
+        405: '머지할 수 없는 상태입니다 — 컨플릭트 또는 보호 규칙을 확인하세요.',
+      },
+    },
+  });
 }

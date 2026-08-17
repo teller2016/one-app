@@ -6,12 +6,8 @@ import {
   deleteProject,
   getProjectCredentials,
 } from './store';
-import {
-  parseOwnerRepo,
-  normalizeBranch,
-  fetchCompareCommits,
-  compareWebUrl,
-} from './gitea';
+import { normalizeBranch, fetchCompareCommits, compareWebUrl } from './gitea';
+import { ownerRepoPartsFromUrl } from '../../../shared/types';
 import { notify } from '../notify/notify';
 import { isDeployNotifyEnabled, getGiteaConfig } from '../settings/store';
 import {
@@ -262,7 +258,7 @@ export function registerDeployIpc() {
               '젠킨스 잡이 Git plugin(checkout scm)으로 소스를 받는지 확인하세요.',
           };
         }
-        const parsed = parseOwnerRepo(last.repoUrl);
+        const parsed = ownerRepoPartsFromUrl(last.repoUrl);
         if (!parsed) {
           return {
             ok: false,

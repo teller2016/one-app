@@ -1,5 +1,6 @@
 // deploy 기능 공용 헬퍼 — 상태 키·진행 판별·시간 포맷
 import type { DeployStatus } from '../../../../shared/types';
+import { ownerRepoPartsFromUrl } from '../../../../shared/types';
 
 /** 상태/패널 맵의 키 (projectId:targetId) */
 export const statusKey = (projectId: string, targetId: string) =>
@@ -42,30 +43,13 @@ export const formatRelative = (ts: number) => {
   return new Date(ts).toLocaleDateString('ko-KR');
 };
 
-/** 저장소 URL 에서 owner/repo 추출 (젠킨스가 기록한 내부망 주소도 경로만 사용) */
-export const parseOwnerRepo = (
-  repoUrl: string,
-): { owner: string; repo: string } | null => {
-  try {
-    const u = new URL(repoUrl);
-    const parts = u.pathname.split('/').filter(Boolean);
-    if (parts.length < 2) return null;
-    return {
-      owner: parts[parts.length - 2],
-      repo: parts[parts.length - 1].replace(/\.git$/, ''),
-    };
-  } catch {
-    return null;
-  }
-};
-
 /** Gitea 커밋 페이지 URL 베이스 — giteaUrl 미설정이거나 저장소 해석 실패면 null */
 export const giteaCommitBase = (
   giteaUrl: string,
   repoUrl?: string,
 ): string | null => {
   if (!giteaUrl || !repoUrl) return null;
-  const parsed = parseOwnerRepo(repoUrl);
+  const parsed = ownerRepoPartsFromUrl(repoUrl);
   if (!parsed) return null;
   return `${giteaUrl.replace(/\/+$/, '')}/${parsed.owner}/${parsed.repo}/commit/`;
 };

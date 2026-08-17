@@ -625,13 +625,30 @@ export const PROJECT_REMOTE_KINDS: ProjectRemoteKind[] = [
   "other",
 ];
 
-/** 원격 주소에서 "owner/repo" 추출 (https·ssh 모두, .git 제거) — 실패 시 null */
-export function ownerRepoFromUrl(url: string): string | null {
-  const cleaned = url.trim().replace(/\.git$/, "");
+/**
+ * 원격 주소에서 owner·repo 조각 추출 (https·ssh 모두, .git·쿼리·끝 슬래시 제거) — 실패 시 null.
+ *
+ * ⚠️ `new URL()` 로 파싱하지 말 것 — `git@host:owner/repo` 형태에서 던진다.
+ * main·렌더러의 owner/repo 파싱 정본이다(예전엔 세 곳에 제각각 있었다).
+ */
+export function ownerRepoPartsFromUrl(
+  url: string,
+): { owner: string; repo: string } | null {
+  const cleaned = url
+    .trim()
+    .split(/[?#]/)[0]
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "");
   if (!cleaned) return null;
   // git@host:owner/repo 또는 http(s)://host/owner/repo — 마지막 두 세그먼트
   const m = cleaned.match(/[:/]([^:/]+)\/([^:/]+)$/);
-  return m ? `${m[1]}/${m[2]}` : null;
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
+/** 원격 주소에서 "owner/repo" 추출 — 실패 시 null */
+export function ownerRepoFromUrl(url: string): string | null {
+  const parts = ownerRepoPartsFromUrl(url);
+  return parts ? `${parts.owner}/${parts.repo}` : null;
 }
 
 /** 등록된 프로젝트 하나 — 비밀 없음(토큰은 환경설정 담당), 평문 JSON 저장 */
