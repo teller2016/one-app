@@ -195,7 +195,13 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   }
   if (now < s.suppressNotifyUntil) {
     s.notifiedSinceInput = true; // 생성 grace — 초기 프롬프트는 조용히 기회 소진
-    termLog('skip', { id: s.id, why: 'create-grace' });
+    // 남은 grace 를 함께 남긴다 — 생성 시각만으론 "생성 57초 뒤인데 왜 grace 인가"를
+    // 읽을 수 없다(복원 시 grace 가 새로 걸린다). 발화/미발화가 갈린 지점 판독용.
+    termLog('skip', {
+      id: s.id,
+      why: 'create-grace',
+      graceLeft: `${((s.suppressNotifyUntil - now) / 1000).toFixed(1)}s`,
+    });
     return;
   }
   const gap = now - s.lastInputAt;
@@ -305,6 +311,14 @@ function noteInput(s: Session, data: string) {
   // 제출이 아니므로 제외한다(멀티라인 작성 중 멈춤에 알림이 울리면 안 된다).
   // eslint-disable-next-line no-control-regex -- 터미널 제어 문자 매칭이 목적
   s.lastInputSubmit = /(?<!\x1b)[\r\n]/.test(data);
+  // ⚠️ 제출이 오면 **생성 grace 를 즉시 푼다** — 사용자가 뭔가 시킨 세션은 더 이상 '방금
+  // 만든/복원한' 세션이 아니다. grace 는 초기 프롬프트·복원 redraw 의 소음을 막자는 것이지
+  // 사용자가 시킨 작업의 완료를 삼키라는 뜻이 아닌데, `create-grace` 분기가 알림 기회까지
+  // 소진(`notifiedSinceInput = true`)하므로 안 풀면 **그 턴은 영영 무음**이 된다
+  // (2026-08-19 신고 "특정 작업영역만 완료 토스트가 안 뜬다" — 앱 재시작 복원 grace 가
+  //  끝나기 0.5초 전에 waiting 이 와서 삼켜졌고, 1.5초 뒤 전이한 옆 세션은 정상 발화했다.
+  //  작업영역과 무관한 타이밍 문제였다). 입력 게이트(5초)는 그대로라 짧은 턴도 안전하다.
+  if (s.lastInputSubmit) s.suppressNotifyUntil = 0;
   clearNotifyRecheck(s); // 새 입력이 오면 이전 턴의 재판정은 무효
   // busy 는 유지 — 작업 중 휠(마우스 트래킹 시퀀스)이 상태를 깜빡이게 하지 않는다.
   // ⚠️ waiting(초록)은 **제출(Enter)** 로만 내린다 — 타이핑 도중에 내리면, 답을 쓰다가
