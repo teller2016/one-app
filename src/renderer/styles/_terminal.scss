@@ -2,6 +2,16 @@
 
 // 터미널 — 좌측 LNB(워크스페이스 → 워크트리 트리) + 상단 세션 탭 + xterm 다크 패널
 // + 우측 변경사항 드로어 (Superset 스타일)
+// 축소 LNB 타일 둘레를 도는 작업중 아크 — 한 주기에 둘레만큼 흐른다.
+// ⚠️ 이동량은 컴포넌트가 **음수로 계산해** --arc-shift 로 준다. `calc(-1 * …)` 를 쓰면
+//    Chromium 이 이 keyframe 을 보간하지 않고 순간이동시킨다(2026-08-19 실측 —
+//    dashoffset 이 0px 과 calc(0% - Npx) 사이를 튀어 아크가 안 도는 것처럼 보였다).
+@keyframes sq-arc-dash {
+  to {
+    stroke-dashoffset: var(--arc-shift);
+  }
+}
+
 .terminal {
   display: flex;
   // grip 이 flex 아이템이라 gap 이 [패널|grip|터미널] 사이에 두 번 붙는다 — 12 는 손잡이
@@ -334,6 +344,12 @@
     flex-shrink: 0;
   }
 
+  // 작업중(에이전트 세션) 스피너 — 펼침 모드 행의 우측 상태 영역.
+  // 이름 span 안이 아니라 형제로 둔다 — 이름은 ellipsis 라 안에 넣으면 함께 잘린다.
+  &__lnb-spin {
+    flex-shrink: 0;
+  }
+
   // 워크트리 행 — [아이콘][이름/브랜치][±변경량][제거]. 활성 행은 우측 터미널 패널과
   // 이어진 것처럼 같은 니어블랙 타일로 채운다 (panel-dark 가 텍스트 토큰을 재매핑)
   &__wt-row {
@@ -617,7 +633,33 @@
     }
   }
 
-  // (입력대기 점은 세션 수 뱃지의 --waiting 색으로 대체 — 아래 wt-sq-count 참고)
+  // (입력대기 점은 세션 수 뱃지의 --waiting 색으로 대체 — 위 wt-sq-count 참고)
+
+  // 작업중(에이전트 실행) — 타일 둘레를 accent 아크가 한 바퀴 돈다.
+  // ⚠️ 축소 모드에 스피너를 '놓을 자리'는 없다 — 타일이 30~34px 이고 우상단은 이미 세션
+  //    수 뱃지가 점유한다. 둘레 링은 레이아웃 폭을 1px도 먹지 않아 이니셜·숫자·입력대기
+  //    초록을 그대로 남기면서 펼침 모드 스피너와 같은 '돌고 있다' 언어를 쓴다.
+  // 구현은 **타일과 같은 라운드 사각을 stroke-dash 로 달리는 SVG 아크**다.
+  // ⚠️ 2026-08-19 스크린샷 왕복으로 걸러낸 오답 두 개 — 되돌리지 말 것:
+  //    ①conic-gradient 링 + `transform: rotate` → 사각 요소가 돌아 코너가 타일 밖으로 튄다
+  //    ②원형 border 아크(.spinner 기법) → 24px 사각 타일과 기하가 안 맞아 아크가 타일을
+  //      관통하고 우상단 세션 수 숫자와 겹친다(원의 외접/내접 어느 쪽으로도 안 맞는다)
+  // 아크 길이·이동량은 둘레(타일 크기마다 다르다)에 의존하므로 컴포넌트가 dasharray 와
+  // --arc-shift 를 인라인으로 준다 — 여기서는 색·두께·박자만 정한다.
+  &__sq-arc {
+    position: absolute;
+    // 히트 영역(34px) 둘레가 아니라 **안쪽 내용물**(이니셜 타일·아이콘)에 밀착시킨다 —
+    // 34px 둘레에 두면 타일에서 떨어져 떠 보이고 우상단 세션 수 숫자를 가로지른다.
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    animation: sq-arc-dash 0.9s linear infinite;
+    pointer-events: none;
+  }
 
   // ── 우측 터미널 영역 ──
   // ⚠️ min-width·min-height 0 은 필수 — flex 아이템의 기본 min-*:auto 는 콘텐츠 기반이라

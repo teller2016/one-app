@@ -62,6 +62,16 @@ const MIN_TURN_BYTES = 50;
 // 최근 입력 직후의 waiting 전이는 상태(뱃지)만 바꾸고 소리·알럿은 생략 —
 // 타이핑을 잠깐 멈춘 사용자는 이미 프롬프트 앞에 있다(불러올 필요가 없다)
 const NOTIFY_INPUT_GAP_MS = 5000;
+// busy 안에서 '실작업'(working)을 가리는 문턱 — 이만큼 출력이 **이어져야** 작업중으로 본다.
+// ⚠️ busy 자체는 출력 한 프레임에도 켜진다: claude 는 마우스 트래킹을 켜므로 휠·클릭이,
+//    프롬프트 타이핑이 그때마다 화면을 다시 그린다(리렌더는 0.3초 이내로 끝난다).
+//    그 출렁임을 LNB 로딩 표시로 그대로 보여주면 "완료된 세션을 스크롤만 해도 작업중"이 된다
+//    (2026-08-19 사용자 신고). claude 스피너는 1Hz 로 계속 그리므로 1.2초면 안전하게 갈린다.
+const WORKING_MIN_MS = 1200;
+// 출력 간격이 이보다 벌어지면 '연속 출력'이 끊긴 것으로 본다. claude 스피너는 ~1Hz 라
+// 1.5초면 스피너는 이어짐으로 잡고, 대기 화면의 분 단위 갱신(실측: 60초마다 4.5KB)과
+// 스크롤 한 번의 단발 리렌더는 끊긴 것으로 갈린다.
+const OUTPUT_RUN_GAP_MS = 1500;
 const CREATE_NOTIFY_GRACE_MS = 20_000; // 생성 직후 첫 waiting 알림 억제 (방금 만든 사용자에게 소음)
 const STATUS_TICK_MS = 1000; // 침묵 판정 틱 (세션별 타이머 대신 전역 1개)
 const AGENT_LAUNCH_QUIET_MS = 350; // 출력이 이만큼 잠잠해지면 프롬프트가 완성됐다고 본다
@@ -96,6 +106,9 @@ type Session = {
   lastInputAt: number; // 마지막 사용자 입력(writeSession) 시각 — 자동 실행 write 는 제외
   bytesSinceInput: number; // 입력 이후 누적 출력 — "실제 턴 산출물" 판정
   bellAt: number; // 마지막 bare BEL 수신 시각 (0 = 없음)
+  outputRunSince: number; // 지금 이어지는 출력 구간의 시작 시각 — '실작업' 판정 기준
+  lastMouseAt: number; // 마지막 마우스 리포트(휠·클릭) 시각 — "보고 있음" 신호
+  working: boolean; // 출력이 이어지는 것이 확인된 busy — LNB 로딩 표시용
   notifiedSinceInput: boolean; // 이번 입력(턴)에 대한 waiting 알림 기회를 이미 소진했는지
   lastInputSubmit: boolean; // 마지막 입력에 제출(\r)이 있었는지 — 게이트 유예 재판정 대상 여부
   lastInputKind: string; // 진단용 — 마지막 입력의 '종류' 요약 (debug.ts, 로그 꺼져 있으면 빈 값)
@@ -149,6 +162,7 @@ const toInfo = (s: Session): TerminalSessionInfo => ({
   projectId: s.projectId,
   projectName: s.projectName,
   status: s.status,
+  working: s.working,
   createdAt: s.createdAt,
 });
 
@@ -168,6 +182,7 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
     });
   }
   s.status = status;
+  if (status !== 'busy') s.working = false; // busy 를 벗어나면 작업중 표시를 내린다
   emitChanged();
   if (status !== 'waiting') return;
   // 소리·알럿 게이트 — 상태(뱃지)는 위 emitChanged 로 이미 반영됐다.
@@ -246,10 +261,34 @@ const hasBareBel = (chunk: string) =>
  * 즉시 attach 되어 첫 렌더(계정 선택 등)가 통째로 grace 에 먹히고 영영 idle 에 갇힌다(2026-08 실측). */
 function noteOutput(s: Session, chunk: string, bytes: number) {
   const now = Date.now();
+  // 출력이 오래 끊겼다면 여기서부터 새 구간 — '이어지는 출력'의 길이를 이 시각으로 잰다
+  if (now - s.lastOutputAt > OUTPUT_RUN_GAP_MS) s.outputRunSince = now;
   s.lastOutputAt = now;
   s.bytesSinceInput += bytes;
   if (s.agentId !== 'shell' && hasBareBel(chunk)) s.bellAt = now;
-  if (s.status !== 'busy') setStatus(s, 'busy', 'output');
+
+  // '실작업' = 출력이 문턱만큼 **이어졌고**, 그동안 사용자가 화면을 만지지 않았다.
+  // 후자를 함께 보는 이유: 타이핑·스크롤은 claude 의 리렌더를 부르는데, 그 리렌더를
+  // 작업으로 세면 완료된 세션을 확인하는 것만으로 작업중이 된다(2026-08-19 신고).
+  const sustained =
+    now - s.outputRunSince >= WORKING_MIN_MS &&
+    now - s.lastInputAt >= WORKING_MIN_MS &&
+    now - s.lastMouseAt >= WORKING_MIN_MS;
+
+  if (s.status !== 'busy') {
+    // ⚠️ waiting 은 '아직 해소되지 않은 완료' 표시다 — 단발 리렌더나 대기 화면의 분 단위
+    //    갱신에 내리지 않는다(그러면 훑어볼 초록이 수시로 사라진다). 실작업이 확인될 때만
+    //    내린다. idle→busy 는 그대로 즉시다 — 여기를 늦추면 세션 생성 직후 첫 렌더가
+    //    통째로 먹혀 영영 idle 에 갇힌다(2026-08 실측, 아래 grace 주석과 같은 함정).
+    if (s.status === 'waiting' && !sustained) return;
+    setStatus(s, 'busy', 'output');
+  }
+  // ⚠️ 한 번 켜지면 busy 인 동안 유지한다 — 작업 중에 스크롤한다고 표시가 꺼지면 안 된다.
+  if (!s.working && sustained) {
+    s.working = true;
+    termLog('status', { id: s.id, from: 'busy', to: 'busy+working', why: 'sustained-output' });
+    emitChanged();
+  }
 }
 
 /** writeSession 훅 — 사용자 입력은 "보고 있음" 신호: waiting 해제 + 턴 적산 리셋 */
@@ -267,8 +306,10 @@ function noteInput(s: Session, data: string) {
   // eslint-disable-next-line no-control-regex -- 터미널 제어 문자 매칭이 목적
   s.lastInputSubmit = /(?<!\x1b)[\r\n]/.test(data);
   clearNotifyRecheck(s); // 새 입력이 오면 이전 턴의 재판정은 무효
-  // busy 는 유지 — 작업 중 휠(마우스 트래킹 시퀀스)이 상태를 깜빡이게 하지 않는다
-  if (s.status === 'waiting') setStatus(s, 'idle', 'input');
+  // busy 는 유지 — 작업 중 휠(마우스 트래킹 시퀀스)이 상태를 깜빡이게 하지 않는다.
+  // ⚠️ waiting(초록)은 **제출(Enter)** 로만 내린다 — 타이핑 도중에 내리면, 답을 쓰다가
+  //    다른 세션을 보러 간 사용자가 '아직 답 안 보낸 세션'을 목록에서 잃는다(2026-08-19 신고).
+  if (s.status === 'waiting' && s.lastInputSubmit) setStatus(s, 'idle', 'input');
 }
 
 // xterm 이 **자동 생성**하는 시퀀스 — 사람 입력이 아니므로 noteInput(알림 기회 재장전)을
@@ -287,6 +328,12 @@ function noteInput(s: Session, data: string) {
 // MO 경로 포함) · DECRPM 모드 리포트 ESC[?{n};{m}$y · 마우스 리포트 3종(SGR ESC[<b;x;yM/m,
 // urxvt ESC[b;x;yM, X10 ESC[M + 3바이트) · OSC 질의 응답(색·팔레트) · DCS 응답(XTVERSION 등).
 // 어느 것도 키보드로는 만들 수 없어 사람 입력을 잘못 삼킬 위험이 없다. PTY 전달은 그대로 한다.
+/** 마우스 리포트만 골라내는 패턴 — SGR(ESC[<b;x;yM/m) · urxvt(ESC[b;x;yM) · X10(ESC[M+3B).
+ *  AUTO_REPLY_RE 의 부분집합이다(그쪽 목록을 고치면 여기도 볼 것). */
+const MOUSE_REPORT_RE =
+  // eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
+  /\x1b\[(?:<\d+;\d+;\d+[Mm]|\d+;\d+;\d+M|M[\s\S]{3})/;
+
 const AUTO_REPLY_RE =
   // eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
   /^(?:\x1b\[(?:[IO]|\d+;\d+R|\d*n|[?>][0-9;]*c|\?[0-9;]+\$y|<\d+;\d+;\d+[Mm]|\d+;\d+;\d+M|M[\s\S]{3})|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[^\x1b]*\x1b\\)+$/;
@@ -406,6 +453,9 @@ function makeSession(init: {
     lastInputAt: 0,
     bytesSinceInput: 0,
     bellAt: 0,
+    outputRunSince: 0,
+    lastMouseAt: 0,
+    working: false,
     notifiedSinceInput: false,
     lastInputKind: '',
     lastInputSubmit: false,
@@ -783,6 +833,10 @@ export function writeSession(id: string, data: string): void {
   // 자동 응답(포커스 이벤트·CPR 등)은 사람 입력이 아니다 — 전달만 하고 턴 리셋은 생략
   if (AUTO_REPLY_RE.test(data)) {
     if (termDebugOn()) termLog('auto', { id: s.id, kind: describeInput(data) });
+    // 마우스 리포트만은 시각을 남긴다 — 턴 시작은 아니지만 "사용자가 이 화면을 만지고
+    // 있다"는 신호다. claude 가 그 조작에 리렌더로 답하는 출력이 working 으로 승격되면
+    // 완료된 세션을 스크롤하는 것만으로 로딩이 뜬다(noteOutput 참고).
+    if (MOUSE_REPORT_RE.test(data)) s.lastMouseAt = Date.now();
   } else {
     noteInput(s, data);
   }

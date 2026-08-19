@@ -3,7 +3,11 @@
 // 행 드래그로 순서 변경, 우클릭 컨텍스트 메뉴로 이름·색·Finder·제거.
 // 축소 모드에선 워크스페이스 타일 + (펼친 워크스페이스의) 워크트리 아이콘 타일이 남는다.
 import { memo, useMemo, useState } from 'react';
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type {
+  CSSProperties,
+  DragEvent as ReactDragEvent,
+  MouseEvent as ReactMouseEvent,
+} from 'react';
 import type {
   TerminalSessionInfo,
   TerminalWorkspace,
@@ -25,6 +29,62 @@ import {
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
 
+/**
+ * 행에 '작업중' 을 켤 세션인가 — **에이전트 세션(claude 등)의 실작업만** 센다.
+ * ⚠️ `status === 'busy'` 를 그대로 쓰지 말 것 — busy 는 출력 한 프레임에도 켜지므로
+ *    완료된 세션을 스크롤·클릭하거나 프롬프트에 타이핑하는 것만으로 2.5초 동안 로딩이
+ *    떴다(2026-08-19 사용자 신고). main 이 '출력이 이어지는지' 를 보고 `working` 을 준다.
+ * ⚠️ 일반 셸을 빼는 것도 같은 이유 — `ls` 한 번에도 busy 가 잠깐 켜진다.
+ */
+const isAgentBusy = (s: TerminalSessionInfo) =>
+  s.working && !!s.agentId && s.agentId !== 'shell';
+
+/** 축소 타일의 라운드 사각 반지름 — SCSS 토큰 `--r-sm`(8px) 과 맞춘 값.
+ *  SVG 기하는 CSS 변수로 못 쓰므로 여기서만 숫자로 둔다(토큰이 바뀌면 같이 고칠 것). */
+const SQ_RADIUS = 8;
+/** 아크가 둘레에서 차지하는 비율 — 0.22 면 네 변 중 한 변 남짓 */
+const ARC_RATIO = 0.22;
+
+/**
+ * 축소 LNB 타일의 '작업중' 아크 — 타일과 같은 라운드 사각 둘레를 dash 가 달린다.
+ * ⚠️ 원형 링(border 트릭)이나 회전하는 conic-gradient 로 바꾸지 말 것 — 사각 타일과
+ *    기하가 안 맞아 아크가 타일을 관통하거나 코너가 밖으로 튄다(styles/_terminal.scss 참고).
+ */
+function BusyArc({ size }: { size: number }) {
+  // size = 감쌀 내용물보다 조금 큰 지름 (이니셜 타일 24px → 26, 아이콘만 있는 타일 → 24)
+  const inset = 1; // stroke 절반이 잘리지 않게 안쪽으로
+  const side = size - inset * 2;
+  // 라운드 사각 둘레 = 직선 네 변 + 코너 원 하나
+  const len = 4 * (side - 2 * SQ_RADIUS) + 2 * Math.PI * SQ_RADIUS;
+  return (
+    <svg
+      className="terminal__sq-arc"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={
+        {
+          // 한 주기의 이동량 — 음수까지 여기서 계산한다(키프레임의 calc 은 보간되지 않는다)
+          '--arc-shift': -len,
+          // ⚠️ dash + gap 이 정확히 둘레여야 한다 — 합이 둘레보다 크면 한 주기에
+          //    아크가 경로 밖으로 빠져 **깜빡 사라지는 구간**이 생긴다(2026-08-19 실측).
+          strokeDasharray: `${len * ARC_RATIO} ${len * (1 - ARC_RATIO)}`,
+        } as CSSProperties
+      }
+      aria-hidden="true"
+    >
+      <rect
+        x={inset}
+        y={inset}
+        width={side}
+        height={side}
+        rx={SQ_RADIUS}
+        ry={SQ_RADIUS}
+      />
+    </svg>
+  );
+}
+
 // memo — 패널 폭 드래그는 프레임마다 상위 상태를 바꾸는데, 트리는 그동안 달라질 것이 없다.
 // 상위가 콜백을 전부 useCallback 으로 안정화해 두어야 실제로 효과가 난다.
 export const WorkspaceNav = memo(function WorkspaceNav({
@@ -35,6 +95,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   collapsed,
   expanded,
   otherCount,
+  otherBusy,
   onToggleExpand,
   onSelect,
   onNewWorktree,
@@ -53,6 +114,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   expanded: string[];
   /** 어느 워크트리에도 안 속한 세션 수 — 0 이면 '기타 세션' 행을 감춘다 */
   otherCount: number;
+  /** 기타 세션에 작업중(에이전트) 세션이 있는가 — 행의 작업중 스피너 */
+  otherBusy: boolean;
   onToggleExpand: (wsId: string) => void;
   onSelect: (sel: WorkspaceSelection) => void;
   onNewWorktree: (ws: TerminalWorkspace) => void;
@@ -141,30 +204,34 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   // 워크트리 행마다 sessions 를 통째로 훑어 (워크트리 수 × 세션 수) 만큼 돌았다.
   // 세션 상태 브로드캐스트마다 트리가 다시 그려지는 자리라 훑는 횟수가 그대로 비용이다.
   const byCwd = useMemo(() => {
-    const map = new Map<string, { count: number; waiting: boolean }>();
+    const map = new Map<string, { count: number; waiting: boolean; busy: boolean }>();
     for (const s of sessions) {
+      const busy = isAgentBusy(s);
       const cur = map.get(s.cwd);
       if (cur) {
         cur.count += 1;
         cur.waiting ||= s.status === 'waiting';
+        cur.busy ||= busy;
       } else {
-        map.set(s.cwd, { count: 1, waiting: s.status === 'waiting' });
+        map.set(s.cwd, { count: 1, waiting: s.status === 'waiting', busy });
       }
     }
     return map;
   }, [sessions]);
 
-  /** 워크스페이스 아래 전 워크트리의 세션 합계 (부모 행의 개수 뱃지·대기 색) */
+  /** 워크스페이스 아래 전 워크트리의 세션 합계 (부모 행의 개수 뱃지·대기 색·작업중) */
   const wsAgg = (ws: TerminalWorkspace) => {
     let count = 0;
     let waiting = false;
+    let busy = false;
     for (const wt of worktrees[ws.id] ?? []) {
       const a = byCwd.get(wt.path);
       if (!a) continue;
       count += a.count;
       waiting ||= a.waiting;
+      busy ||= a.busy;
     }
-    return { count, waiting };
+    return { count, waiting, busy };
   };
 
   const contextMenu = menu && (
@@ -230,7 +297,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     return (
       <div className="terminal__list" role="list">
         {workspaces.map((ws) => {
-          const { count: wsCount, waiting } = wsAgg(ws);
+          const { count: wsCount, waiting, busy } = wsAgg(ws);
           const isOpen = expanded.includes(ws.id);
           const wsActive =
             selection?.kind === 'worktree' && selection.wsId === ws.id;
@@ -243,7 +310,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
               {...dropTarget(ws)}
             >
               <Tooltip
-                label={`${ws.name} — 세션 ${wsCount}개${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
+                label={`${ws.name} — 세션 ${wsCount}개${busy ? ' · 작업 중' : ''}${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
               >
                 {/* 펼침 모드의 행 클릭과 같은 동작 — 워크트리 타일 목록을 접고 편다
                     (예전엔 첫 워크트리를 선택했는데 두 모드의 클릭 의미가 달라 혼란 — 2026-08-06) */}
@@ -267,6 +334,9 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                   >
                     {initials(ws.name)}
                   </span>
+                  {/* 자식 워크트리에서 에이전트가 돌고 있으면 타일 둘레를 아크가 돈다 —
+                      숫자 뱃지·이니셜을 가리지 않고 폭도 먹지 않는다 (펼침 모드는 스피너) */}
+                  {busy && <BusyArc size={26} />}
                   {/* 자식 워크트리에 켜진 세션 합계 — 부모만 보여도 사용 중임을 알 수 있게 */}
                   {wsCount > 0 && (
                     <span
@@ -299,12 +369,13 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     const agg = byCwd.get(wt.path);
                     const count = agg?.count ?? 0;
                     const wtWaiting = agg?.waiting ?? false;
+                    const wtBusy = agg?.busy ?? false;
                     return (
                       <Tooltip
                         key={wt.path}
                         label={`${worktreeName(wt)} · ${wt.branch ?? wt.head ?? ''}${
                           count > 0 ? ` · 세션 ${count}개` : ''
-                        }${wtWaiting ? ' · 입력 대기' : ''}`}
+                        }${wtBusy ? ' · 작업 중' : ''}${wtWaiting ? ' · 입력 대기' : ''}`}
                       >
                         <button
                           type="button"
@@ -315,13 +386,14 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                           aria-current={active ? 'true' : undefined}
                           aria-label={`${ws.name} — ${worktreeName(wt)} 워크트리${
                             count > 0 ? ` (세션 ${count}개)` : ''
-                          }`}
+                          }${wtBusy ? ' · 작업 중' : ''}`}
                           disabled={wt.missing}
                           onClick={() =>
                             onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
                           }
                         >
                           <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={15} />
+                          {wtBusy && <BusyArc size={24} />}
                           {count > 0 && (
                             <span
                               className={
@@ -344,7 +416,9 @@ export const WorkspaceNav = memo(function WorkspaceNav({
         })}
         {otherCount > 0 && (
           <div className="terminal__sq-group">
-            <Tooltip label={`기타 세션 ${otherCount}개 — 워크스페이스 밖에서 시작된 세션`}>
+            <Tooltip
+              label={`기타 세션 ${otherCount}개${otherBusy ? ' · 작업 중' : ''} — 워크스페이스 밖에서 시작된 세션`}
+            >
               <button
                 type="button"
                 className={
@@ -356,6 +430,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                 onClick={() => onSelect({ kind: 'other' })}
               >
                 <Icon name="terminal" size={16} />
+                {otherBusy && <BusyArc size={26} />}
               </button>
             </Tooltip>
           </div>
@@ -369,7 +444,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     <div className="terminal__list">
       {workspaces.map((ws) => {
         const isOpen = expanded.includes(ws.id);
-        const { count: wsCount, waiting: wsWaiting } = wsAgg(ws);
+        const { count: wsCount, waiting: wsWaiting, busy: wsBusy } = wsAgg(ws);
         const list = worktrees[ws.id];
         return (
           <div
@@ -425,6 +500,14 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                       {initials(ws.name)}
                     </span>
                     <span className="terminal__ws-name">{ws.name}</span>
+                    {/* 자식 워크트리에서 에이전트가 돌고 있으면 스피너 (축소 모드는 타일 둘레 아크) */}
+                    {wsBusy && (
+                      <span
+                        className="spinner spinner--xs terminal__lnb-spin"
+                        role="img"
+                        aria-label="작업 중"
+                      />
+                    )}
                     {/* 자식 워크트리에 켜진 세션 합계 — 입력 대기가 있으면 초록 */}
                     {wsCount > 0 && (
                       <span
@@ -487,6 +570,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                   const agg = byCwd.get(wt.path);
                   const count = agg?.count ?? 0;
                   const waiting = agg?.waiting ?? false;
+                  const busy = agg?.busy ?? false;
                   return (
                     <div
                       key={wt.path}
@@ -521,6 +605,13 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             {wt.branch ?? (wt.head ? `detached @ ${wt.head}` : '')}
                           </span>
                         </span>
+                        {busy && (
+                          <span
+                            className="spinner spinner--xs terminal__lnb-spin"
+                            role="img"
+                            aria-label="작업 중"
+                          />
+                        )}
                         {(wt.additions > 0 || wt.deletions > 0) && (
                           <span className="terminal__wt-diff" aria-label="미커밋 변경량">
                             <span className="terminal__wt-add">+{wt.additions}</span>
@@ -571,6 +662,13 @@ export const WorkspaceNav = memo(function WorkspaceNav({
               <span className="terminal__wt-body">
                 <span className="terminal__wt-name">기타 세션 ({otherCount})</span>
               </span>
+              {otherBusy && (
+                <span
+                  className="spinner spinner--xs terminal__lnb-spin"
+                  role="img"
+                  aria-label="작업 중"
+                />
+              )}
             </button>
           </div>
         </div>

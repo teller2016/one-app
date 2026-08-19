@@ -444,7 +444,9 @@ body {
   // (버튼 loading·새로고침 회전도 같은 역할이다)
   .spinner,
   .btn__spin,
-  .icon-btn__spin {
+  .icon-btn__spin,
+  // 축소 LNB 의 작업중 아크도 같은 역할 — 멈추면 '멈춘 에이전트'로 읽힌다
+  .terminal__sq-arc {
     animation-duration: 0.9s !important;
     animation-iteration-count: infinite !important;
   }
@@ -1575,6 +1577,13 @@ input.input--sm {
     width: 32px;
     height: 32px;
     border-width: 3px;
+  }
+
+  // 목록 행 안에 끼우는 크기 — 텍스트 줄 높이를 늘리지 않는다 (터미널 LNB 작업중 표시)
+  &--xs {
+    width: 11px;
+    height: 11px;
+    border-width: 1.5px;
   }
 }
 

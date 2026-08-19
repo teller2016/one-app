@@ -1070,6 +1070,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           collapsed={sideCollapsed}
           expanded={expanded}
           otherCount={otherSessions.length}
+          otherBusy={otherSessions.some(
+            (s) => s.working && !!s.agentId && s.agentId !== 'shell',
+          )}
           onToggleExpand={toggleExpand}
           onSelect={selectWorkspaceTab}
           onNewWorktree={setWorktreeFor}

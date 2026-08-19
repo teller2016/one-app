@@ -1143,6 +1143,10 @@ export type TerminalSessionInfo = {
   projectId?: string; // 프로젝트 레지스트리 id (홈이면 없음)
   projectName?: string; // 표시용 — MO 가 재조회 없이 쓴다
   status: TerminalSessionStatus;
+  /** busy 중에서도 **출력이 이어지는 것이 확인된** 상태 — 로딩 표시(LNB)의 조건.
+   *  busy 는 리렌더 한 프레임에도 켜지므로(스크롤·타이핑) 그대로 쓰면 오탐이 된다.
+   *  판정 규칙은 main 의 `pty.ts` 의 `WORKING_MIN_MS` 주석 참고. */
+  working: boolean;
   createdAt: number;
 };
 
