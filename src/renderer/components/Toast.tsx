@@ -45,6 +45,9 @@ type ToastFn = (message: string, opts?: ToastVariant | ToastOptions) => void;
 
 // Provider 밖에서 호출되면 조용히 무시 (no-op)
 const ToastContext = createContext<ToastFn>(() => undefined);
+const ToastDismissContext = createContext<(dedupeKey: string) => void>(
+  () => undefined,
+);
 
 /**
  * 토스트 표시 함수를 반환 — `toast('저장되었습니다')` / 실패는 `toast('저장 실패', 'fail')`
@@ -52,6 +55,15 @@ const ToastContext = createContext<ToastFn>(() => undefined);
  */
 export function useToast() {
   return useContext(ToastContext);
+}
+
+/**
+ * `dedupeKey` 로 떠 있는 토스트를 닫는 함수를 반환 — 알림의 용건이 끝났을 때 쓴다
+ * (예: 입력대기 토스트가 가리키던 세션을 사용자가 화면에 띄웠다).
+ * 그 키의 토스트가 없으면 아무 일도 하지 않는다.
+ */
+export function useToastDismiss() {
+  return useContext(ToastDismissContext);
 }
 
 const LEAVE_MS = 180; // 퇴장 애니메이션 길이 — _base.scss 의 toast-out(--dur-2) 과 동기화
@@ -149,6 +161,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  /**
+   * 같은 dedupeKey 의 토스트를 모두 닫는다 (없으면 no-op).
+   * 닫을 것이 없을 때 **상태를 바꾸지 않는 것**이 중요하다 — 세션을 전환할 때마다
+   * 불리므로 매번 새 배열을 반환하면 그때마다 앱 전체가 리렌더된다.
+   */
+  const dismissByKey = useCallback((dedupeKey: string) => {
+    setItems((cur) =>
+      cur.some((t) => t.dedupeKey === dedupeKey && !t.leaving)
+        ? cur.map((t) =>
+            t.dedupeKey === dedupeKey ? { ...t, leaving: true } : t,
+          )
+        : cur,
+    );
+    // 퇴장 애니메이션 후 제거 — 그 사이 같은 키로 새 토스트가 오면(leaving=false) 살아남는다
+    setTimeout(() => {
+      setItems((cur) => {
+        const next = cur.filter((t) => t.dedupeKey !== dedupeKey || !t.leaving);
+        return next.length === cur.length ? cur : next;
+      });
+    }, LEAVE_MS);
+  }, []);
+
   const show = useCallback<ToastFn>((message, opts) => {
     const o: ToastOptions =
       typeof opts === 'string' ? { variant: opts } : (opts ?? {});
@@ -177,14 +211,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider value={show}>
-      {children}
-      {items.length > 0 && (
-        <div className="toasts">
-          {items.map((t) => (
-            <ToastCard key={t.id} item={t} onDismiss={dismiss} />
-          ))}
-        </div>
-      )}
+      <ToastDismissContext.Provider value={dismissByKey}>
+        {children}
+        {items.length > 0 && (
+          <div className="toasts">
+            {items.map((t) => (
+              <ToastCard key={t.id} item={t} onDismiss={dismiss} />
+            ))}
+          </div>
+        )}
+      </ToastDismissContext.Provider>
     </ToastContext.Provider>
   );
 }

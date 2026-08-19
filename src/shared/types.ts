@@ -313,6 +313,14 @@ export type AppToastPayload = {
   dedupeKey?: string;
 };
 
+/**
+ * 터미널 입력대기 토스트의 dedupeKey.
+ * main(발신)과 렌더러(그 세션을 보면 닫기)가 **같은 키**를 써야 짝이 맞아서 여기 둔다 —
+ * 양쪽에 문자열을 각각 적어 두면 한쪽만 바뀌었을 때 조용히 안 닫힌다.
+ */
+export const termWaitToastKey = (sessionId: string): string =>
+  `term-wait:${sessionId}`;
+
 // ── 배포 (젠킨스) ──
 
 /** 프로젝트 안의 배포 대상 하나 (예: 스토어, 어드민) */

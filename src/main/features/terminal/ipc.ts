@@ -6,7 +6,7 @@ import type {
   TerminalNotifyLevel,
   TerminalSessionInfo,
 } from '../../../shared/types';
-import { TERMINAL_AGENT_NAMES } from '../../../shared/types';
+import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
 import { notifyToast, sendToast } from '../notify/notify';
@@ -204,7 +204,7 @@ export function registerTerminalIpc() {
         sticky: true,
         section: 'terminal',
         terminalSession: { sessionId: info.id, cwd: info.cwd },
-        dedupeKey: `term-wait:${info.id}`,
+        dedupeKey: termWaitToastKey(info.id),
       };
       if (level === 'alert') void notifyToast(payload);
       else sendToast(payload);

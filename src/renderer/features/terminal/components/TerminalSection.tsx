@@ -13,11 +13,12 @@ import type {
   TerminalWorkspace,
   WorktreeInfo,
 } from '../../../../shared/types';
+import { termWaitToastKey } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
-import { useToast } from '../../../components/Toast';
+import { useToast, useToastDismiss } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import type { TerminalFocusRequest } from '../../../lib/sectionNav';
 import {
@@ -164,6 +165,7 @@ function savedSelection(): WorkspaceSelection | null {
  *  pane 숨김(크기 주장 중지)·폴링 중지·전역 단축키 해제·포털 모달 닫기가 걸린다 */
 export function TerminalSection({ active = true }: { active?: boolean }) {
   const toast = useToast();
+  const dismissToast = useToastDismiss();
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -747,6 +749,16 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     );
     return () => setSessionVisibilityCheck(null);
   }, []);
+
+  // 이미 떠 있던 입력대기 토스트는 그 세션이 화면에 올라오면 거둔다 — 눈으로 확인한
+  // 알림이 남아 있을 이유가 없다(sticky 라 스스로 사라지지 않는다). 발신 '전' 억제는
+  // 위의 visibility check 가, '이미 뜬 것' 정리는 여기가 맡아 짝을 이룬다.
+  // 보고 있는 세션만 닫는다 — 아직 확인하지 않은 다른 세션의 알림까지 지우면 놓친다.
+  useEffect(() => {
+    if (!active) return;
+    const shown = activeGroupIds ?? (activeId ? [activeId] : []);
+    for (const id of shown) dismissToast(termWaitToastKey(id));
+  }, [active, activeId, activeGroupIds, dismissToast]);
 
   /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
   const createShell = useCallback(async () => {
