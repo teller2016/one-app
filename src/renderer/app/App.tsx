@@ -24,7 +24,12 @@ import {
   openTerminalSession,
   setSectionNavigator,
 } from "../lib/sectionNav";
-import { runSectionBack, useHasSectionBack } from "../lib/sectionBack";
+import {
+  runSectionBack,
+  runSectionForward,
+  useHasSectionBack,
+  useHasSectionForward,
+} from "../lib/sectionBack";
 import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
@@ -189,6 +194,8 @@ export function App() {
   }, []);
 
   const goForward = useCallback(() => {
+    // 뒤로가기와 대칭 — 섹션 안에서 되돌릴 것이 있으면(터미널 세션 히스토리) 그쪽 먼저
+    if (runSectionForward()) return;
     setActiveId((cur) => {
       const next = fwdStack.current.pop();
       if (!next) return cur;
@@ -285,6 +292,7 @@ export function App() {
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
   // 섹션 내부에 돌아갈 하위 화면이 있으면 히스토리가 비어 있어도 뒤로 버튼을 살린다
   const hasSectionBack = useHasSectionBack();
+  const hasSectionForward = useHasSectionForward();
 
   // 데스크톱 알림 클릭 등으로 특정 섹션 이동 요청 시 해당 탭으로 전환
   useEffect(() => {
@@ -364,7 +372,7 @@ export function App() {
                   type="button"
                   className="icon-btn"
                   onClick={goForward}
-                  disabled={fwdStack.current.length === 0}
+                  disabled={fwdStack.current.length === 0 && !hasSectionForward}
                   title="앞으로 (⌘])"
                 >
                   <Icon name="chevron-right" size={16} />

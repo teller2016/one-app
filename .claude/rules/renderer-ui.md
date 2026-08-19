@@ -62,6 +62,13 @@ paths:
 - 날짜·시간 문자열은 **`shared/date.ts`**(`pad2`·`dayKey`·`todayKey`·`parseDayKey`·`toMinutes`·
   `fromMinutes`·`WEEKDAY_KO`) — main 과 공용이다. 로컬에 `pad` 를 다시 정의하지 말 것.
 - 드롭다운·팝오버 배치는 `lib/usePopover.ts`
+- **섹션 안에서 뒤로/앞으로를 먼저 소비**하려면 `lib/sectionBack.ts` — 앱 히스토리(⌘[ ⌘]·마우스
+  뒤로/앞으로·스와이프·탑바)는 원래 섹션 사이를 오가는데, 여기에 핸들러를 걸면 **섹션 이동 전에**
+  그 섹션의 자체 이동을 처리한다(핸들러가 `true` 를 반환 = 섹션 이동하지 말 것). 결재(목록↔폼) ·
+  터미널(세션·워크트리 히스토리)이 쓴다. **뒤로만 등록하고 앞으로를 빼면 되돌릴 방법이 없어지므로**
+  `setSectionForward` 도 짝으로 등록한다. ⚠️ 해제는 `clearSectionBack/Forward(fn)` — 등록소가
+  전역 슬롯 하나라, keep-alive 로 숨는 섹션(터미널)이 `setSectionBack(null)` 로 정리하면 그새
+  등록한 **다른 섹션의 핸들러를 지운다**. identity 가 맞을 때만 지우는 clear 를 쓸 것.
 - 테마 전환은 `lib/theme.ts`(`<html data-theme>` + localStorage 미러 — 부팅 플래시 방지, `useThemeMode` 훅)
 
 ## 기능 간 참조

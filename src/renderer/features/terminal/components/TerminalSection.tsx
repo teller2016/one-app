@@ -25,6 +25,7 @@ import {
   useTerminalFocusRequest,
 } from '../../../lib/sectionNav';
 import { beginPointerDrag } from '../../../lib/pointerDrag';
+import { useSessionHistory } from '../lib/useSessionHistory';
 import { useSplitGroups } from '../lib/useSplitGroups';
 import { useWorkspaceActions } from '../lib/useWorkspaceActions';
 import { usePolling } from '../../../lib/usePolling';
@@ -35,6 +36,8 @@ import { groupOf, sessionIdsOf } from '../lib/layout';
 import {
   agentIdFromCommand,
   presetsForWorkspace,
+  sameSelection,
+  selectionKey,
   worktreeName,
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
@@ -340,12 +343,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [sessions, allPaths]
   );
 
-  // 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션이 전부 이 키로 갈린다
-  const selKey = !selection
-    ? ''
-    : selection.kind === 'other'
-      ? 'other'
-      : `${selection.wsId}:${selection.path}`;
+  // 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션·방문 히스토리가 전부 이 키로 갈린다
+  const selKey = selectionKey(selection);
 
   // 탭 목록 — 이 화면의 세션들을 **사용자가 정한 순서**로. 순서에 없는 세션(새로 만든 것)은
   // 뒤에 원래 순서(생성 순)대로 남는다.
@@ -434,6 +433,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   activeIdRef.current = activeId;
   const selKeyRef = useRef(selKey);
   selKeyRef.current = selKey;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   // ── 분할 그룹 — 상태기계 전체가 훅 안에 있다 (lib/useSplitGroups.ts) ──
   // 트리 보관·영속화·죽은 세션 정리·드래그 앤 드롭·경계 그립까지.
@@ -465,14 +466,46 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     rememberActive,
   });
 
-  const selectTab = useCallback(
+  /** 화면 전환만 — 히스토리에 남기지 않는다(새 세션 자동 활성화 등 자동 경로용).
+   *  탭 클릭 = 화면 전환뿐이다 — 그룹 소속이면 그 그룹이, 아니면 단일 전체 화면이
+   *  따라온다(뷰 = activeId 의 함수). 그룹을 건드리지 않는다. */
+  const applyTab = useCallback(
     (id: string) => {
-      // 탭 클릭 = 화면 전환뿐이다 — 그룹 소속이면 그 그룹이, 아니면 단일 전체 화면이
-      // 따라온다(뷰 = activeId 의 함수). 그룹을 건드리지 않는다.
-      rememberActive(selKey, id);
+      rememberActive(selKeyRef.current, id);
       setActiveId(id);
     },
-    [rememberActive, selKey]
+    [rememberActive]
+  );
+
+  // ── 섹션 안 뒤로/앞으로 — 세션·워크트리 전환을 히스토리에 쌓는다 (lib/useSessionHistory.ts) ──
+  const { recordVisit } = useSessionHistory({
+    active,
+    selection,
+    activeId,
+    sessions,
+    selectWorkspace: selectAndSave,
+    setActiveId,
+    rememberActive,
+  });
+
+  /** 탭 클릭·⌘1~9·⌃Tab — 사용자가 고른 전환이라 히스토리에 남긴다 */
+  const selectTab = useCallback(
+    (id: string) => {
+      if (activeIdRef.current !== id) recordVisit();
+      applyTab(id);
+    },
+    [applyTab, recordVisit]
+  );
+
+  /** LNB 워크트리·기타 선택 — 사용자 조작이라 히스토리에 남긴다
+   *  (워크스페이스·워크트리를 갓 만든 뒤의 자동 이동은 selectAndSave 를 그대로 쓴다) */
+  const selectWorkspaceTab = useCallback(
+    (sel: WorkspaceSelection | null) => {
+      if (sameSelection(sel, selectionRef.current)) return;
+      recordVisit();
+      selectAndSave(sel);
+    },
+    [recordVisit, selectAndSave]
   );
 
   /** 탭 드래그로 정한 새 순서 — 이 화면(selKey)만 기억한다(다른 워크트리는 그대로).
@@ -621,16 +654,17 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
 
   // 방금 만든 세션 — 목록 브로드캐스트가 아직 안 왔으면 보정 효과가 첫 탭으로 되돌리므로,
   // 목록에 나타날 때까지 기다렸다가 활성화한다 (생성 응답과 브로드캐스트의 순서 무관).
-  // selectTab 경유 — 분할 중이면 새 세션이 포커스된 슬롯을 이어받는다(탭 클릭과 동일 의미론)
+  // applyTab 경유 — 분할 중이면 새 세션이 포커스된 슬롯을 이어받는다(탭 클릭과 동일 의미론).
+  // 히스토리에는 남기지 않는다 — 사용자가 '이동'한 게 아니라 만든 세션이 따라온 것이다
   const pendingRef = useRef<string | null>(null);
 
   useEffect(() => {
     const pending = pendingRef.current;
     if (pending && sessions.some((s) => s.id === pending)) {
       pendingRef.current = null;
-      selectTab(pending);
+      applyTab(pending);
     }
-  }, [sessions, selKey, selectTab]);
+  }, [sessions, selKey, applyTab]);
 
   useEffect(() => {
     if (pendingRef.current) return;
@@ -1037,7 +1071,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           expanded={expanded}
           otherCount={otherSessions.length}
           onToggleExpand={toggleExpand}
-          onSelect={selectAndSave}
+          onSelect={selectWorkspaceTab}
           onNewWorktree={setWorktreeFor}
           {...wsActions}
         />

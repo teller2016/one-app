@@ -12,6 +12,15 @@ export type WorkspaceSelection =
   | { kind: 'worktree'; wsId: string; path: string }
   | { kind: 'other' };
 
+/**
+ * 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션·방문 히스토리가 전부 이 키로 갈린다.
+ * 선택이 없으면 빈 문자열(아직 아무 워크트리도 안 골랐다).
+ */
+export function selectionKey(sel: WorkspaceSelection | null): string {
+  if (!sel) return '';
+  return sel.kind === 'other' ? 'other' : `${sel.wsId}:${sel.path}`;
+}
+
 /** 두 선택이 같은가 — 탭 목록·활성 표시 비교용 */
 export function sameSelection(
   a: WorkspaceSelection | null,

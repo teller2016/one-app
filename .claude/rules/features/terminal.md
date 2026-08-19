@@ -49,6 +49,18 @@ paths:
 - ⚠️ `main__keep--hidden` 의 `height: auto` 를 지우지 말 것 — 기반 `height:100%` 가 남으면 over-constrained 로 **숨은 크기 ≠ 활성 크기**가 되어 섹션 전환마다 PTY 리사이즈가 두 번 돈다.
 - 터미널 ErrorBoundary 는 key 없는 상주 경계 — 섹션 이동으로 초기화되지 않고 폴백 [다시 시도]가 복구를 맡는다.
 
+## 섹션 안 뒤로/앞으로 (2026-08-19)
+- 세션·워크트리 전환은 `lib/useSessionHistory.ts` 가 방문 스택에 쌓고, `lib/sectionBack` 에 걸어
+  **섹션 이동보다 먼저** 소비한다 — 터미널에서 ⌘[ 는 다른 메뉴가 아니라 직전에 보던 세션으로 간다.
+- 항목은 `{selection, sessionId}` 쌍이다 — 세션 id 만으론 다른 워크트리 세션을 복원할 때 탭 목록에
+  없어서 화면에 안 나온다. 복원은 `rememberActive` 를 **먼저** 심고 `setActiveId` — 안 그러면
+  '활성 세션 보정' effect 가 그 화면의 마지막 탭으로 곧바로 덮어쓴다.
+- ⚠️ **섹션을 떠나면(`active=false`) 스택을 비운다.** 안 비우면 오간 세션 수만큼 눌러야 터미널
+  밖으로 나간다. 스택이 빈 방향은 **등록하지 않아야** App 의 섹션 이동으로 넘어간다.
+- ⚠️ 기록은 **사용자가 고른 전환만** — 탭 클릭·⌘1~9·⌃Tab(`selectTab`) · LNB 선택(`selectWorkspaceTab`).
+  자동 경로는 기록 없는 `applyTab`/`selectAndSave` 를 쓴다(새 세션 자동 활성화·죽은 세션 보정·
+  Jira [작업] 진입·분할 pane 포커스 이동 — 노이즈가 되거나 화면이 안 바뀐다).
+
 ## 분할(스플릿) 그룹
 - `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + ratio)가 그룹 상태. **pane 들은 `__panes` 의 플랫 형제 유지** — React 재부모화 = xterm 언마운트라 트리 모양대로 중첩 금지. 렌더는 `computeLayout` 의 %rect 인라인.
 - **화면은 activeId 의 함수** — 포커스 세션이 속한 그룹 전체가 보이고, 아니면 단독 전체 화면. 탭 클릭·⌘1..9·⌃Tab·새 세션은 **화면 전환만**, 그룹 생성·변경은 **드롭만** 한다. ⚠️ '탭 클릭 = 포커스 슬롯 교체'(VS Code 식)는 분할을 덮어써 폐기 — 되돌리지 말 것.
