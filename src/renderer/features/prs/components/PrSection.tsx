@@ -18,6 +18,7 @@ import { useToast } from '../../../components/Toast';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
+import { RECHECK_MS, RECHECK_POLL_MS } from '../lib/conflictRecheck';
 import { CreatePrModal, CreatedPr } from './CreatePrModal';
 import { PrList } from './PrList';
 import { PrDetail } from './PrDetail';
@@ -55,6 +56,10 @@ export function PrSection() {
   // 방금 만든 PR — 목록 재조회가 끝나기 전에도 상세를 띄우기 위한 낙관적 항목
   const [justCreated, setJustCreated] = useState<PrItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // 머지 직후 충돌 재검사 창 (`lib/conflictRecheck.ts` 주석 참고)
+  const [recheck, setRecheck] = useState<{ repo: string; until: number } | null>(
+    null,
+  );
   const toast = useToast();
   const confirmDialog = useConfirm();
 
@@ -101,6 +106,47 @@ export function PrSection() {
   }, []);
   usePolling(load, 120_000); // 조회 + 2분 주기 자동 새로고침
   useTick(60_000); // "n분 전" 갱신용 1분 틱
+
+  // 재검사 창 동안 짧은 주기로 그 저장소의 충돌 여부만 다시 확인한다(1요청 — 목록 전체
+  // 조회는 리뷰 N+1 이 붙어 반복에 맞지 않는다). false 가 남지 않으면 Gitea 의 재계산이
+  // 끝난 것이라 창을 조기 종료한다.
+  const recheckTick = useCallback(async () => {
+    const repo = recheck?.repo;
+    if (!repo) return;
+    const res = await window.oneApp.prs.getMergeables(repo);
+    if (!res.ok || !res.mergeable) return; // 실패는 다음 틱에 다시 시도
+    const map: Record<number, boolean | undefined> = res.mergeable;
+    setResult((prev) =>
+      prev?.ok && prev.prs
+        ? {
+            ...prev,
+            prs: prev.prs.map((pr) => {
+              const next = map[pr.number];
+              return pr.repo === repo && next !== undefined
+                ? { ...pr, mergeable: next }
+                : pr;
+            }),
+          }
+        : prev,
+    );
+    if (!Object.values(map).some((m) => m === false)) setRecheck(null);
+  }, [recheck?.repo]);
+  usePolling(recheckTick, RECHECK_POLL_MS, {
+    enabled: !!recheck,
+    immediate: false, // 머지 직후의 load() 가 이미 1회분이다
+  });
+
+  // 창 만료 — 그때까지 false 로 남은 PR 은 실제 충돌로 확정한다
+  useEffect(() => {
+    if (!recheck) return;
+    const left = recheck.until - Date.now();
+    if (left <= 0) {
+      setRecheck(null);
+      return;
+    }
+    const timer = setTimeout(() => setRecheck(null), left);
+    return () => clearTimeout(timer);
+  }, [recheck]);
 
   const saveConfig = (next: PrsConfig) => {
     setConfig(next);
@@ -162,6 +208,9 @@ export function PrSection() {
   // 현재 탭이 레지스트리 저장소일 때만 새 PR 가능 (기본 브랜치·표시명이 있어야 한다)
   const currentRegistry = createRepos.find((r) => r.repo === effectiveTab);
 
+  // 재검사 창 안이면 이 저장소의 mergeable=false 는 '충돌'인지 아직 알 수 없다
+  const conflictPending = !!recheck && recheck.repo === effectiveTab;
+
   const q = query.trim().toLowerCase();
   const visible = orgFiltered
     .filter((pr) => pr.repo === effectiveTab)
@@ -172,6 +221,12 @@ export function PrSection() {
           .join(' ')
           .toLowerCase()
           .includes(q),
+    )
+    // false 를 모름으로 낮춘다 — 목록의 충돌 칩이 잘못 뜨지 않게 (확정은 재조회가 한다)
+    .map((pr) =>
+      conflictPending && pr.mergeable === false
+        ? { ...pr, mergeable: undefined }
+        : pr,
     )
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 
@@ -207,6 +262,8 @@ export function PrSection() {
     toast(`#${pr.number} 머지 완료`);
     setSelectedKey(null);
     setJustCreated(null);
+    // 머지가 base 를 밀었으니 같은 저장소의 다른 PR 은 잠시 재검사 상태다
+    setRecheck({ repo: pr.repo, until: Date.now() + RECHECK_MS });
     void load();
     void offerJiraResolve(pr.title);
   };
@@ -363,6 +420,7 @@ export function PrSection() {
                   pr={selected}
                   defaultBranch={defaultBranchOf(selected.repo)}
                   hasToken={hasToken}
+                  conflictPending={conflictPending}
                   onMerged={onMerged}
                 />
               ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   isMergeCommit,
   type DeployCommit,
@@ -14,6 +14,8 @@ import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { usePolling } from '../../../lib/usePolling';
+import { RECHECK_POLL_MS } from '../lib/conflictRecheck';
 import { rel } from '../lib/relTime';
 
 const METHOD_OPTIONS: { value: PrMergeMethod; label: string }[] = [
@@ -34,12 +36,15 @@ export function PrDetail({
   pr,
   defaultBranch,
   hasToken,
+  conflictPending,
   onMerged,
 }: {
   pr: PrItem;
   /** 프로젝트 레지스트리의 기본 브랜치 — 그 외 브랜치로 가는 PR 경고용 */
   defaultBranch?: string;
   hasToken: boolean;
+  /** 머지 직후 Gitea 재검사 창 — 이때의 mergeable=false 는 충돌로 단정하지 않는다 */
+  conflictPending?: boolean;
   /** 머지 성공 — 부모가 토스트·목록 갱신·Jira 해결 제안을 이어간다 */
   onMerged: (pr: PrItem) => void;
 }) {
@@ -56,17 +61,25 @@ export function PrDetail({
   // 목록이 이미 아는 값을 우선 쓰고, merge-info 응답이 오면 그것이 정본
   const head = pr.head ?? (info?.ok ? info.head : undefined);
   const base = pr.base ?? (info?.ok ? info.base : undefined);
-  const mergeable = info?.ok ? info.mergeable : pr.mergeable;
+  const rawMergeable = info?.ok ? info.mergeable : pr.mergeable;
+  // 재검사 창 동안의 false 는 '재계산 중'일 수 있어 모름으로 낮춘다 — 뱃지는 '확인 중'이
+  // 되고 충돌 배너는 뜨지 않는다 (머지 버튼은 그대로 비활성)
+  const mergeable =
+    conflictPending && rawMergeable === false ? undefined : rawMergeable;
 
-  useEffect(() => {
-    let alive = true;
-    void window.oneApp.prs.getMergeInfo(pr.repo, pr.number).then((res) => {
-      if (alive) setInfo(res);
-    });
-    return () => {
-      alive = false;
-    };
+  // PR 마다 key 로 재마운트되므로(부모) 이 인스턴스의 repo·number 는 바뀌지 않는다
+  const loadInfo = useCallback(() => {
+    void window.oneApp.prs.getMergeInfo(pr.repo, pr.number).then(setInfo);
   }, [pr.repo, pr.number]);
+
+  // 진입 시 1회 정본 확인 + 재검사 창 동안만 짧은 주기로 재확인 (확정되면 바로 반영)
+  useEffect(() => {
+    loadInfo();
+  }, [loadInfo]);
+  usePolling(loadInfo, RECHECK_POLL_MS, {
+    enabled: !!conflictPending,
+    immediate: false,
+  });
 
   // base 대비 head 커밋·변경 파일 — 생성 미리보기와 같은 채널을 재사용한다
   useEffect(() => {

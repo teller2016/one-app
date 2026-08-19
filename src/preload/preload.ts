@@ -350,6 +350,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 머지 전 상태 확인 (컨플릭트 여부)
     getMergeInfo: (repo: string, number: number) =>
       ipcRenderer.invoke("prs:merge-info", repo, number),
+    // 저장소 열린 PR 의 충돌 여부만 (1요청) — 머지 직후 재검사 창에서 짧게 폴링
+    getMergeables: (repo: string) =>
+      ipcRenderer.invoke("prs:mergeables", repo),
     // PR 머지 (Gitea 토큰 필요)
     merge: (repo: string, number: number, method: PrMergeMethod) =>
       ipcRenderer.invoke("prs:merge", repo, number, method),

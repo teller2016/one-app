@@ -597,6 +597,16 @@ export type PrMergeInfoResult = {
   error?: string;
 };
 
+/**
+ * 저장소 열린 PR 의 충돌 여부만 (PR 번호 → mergeable) — 머지 직후 재검사 창에서
+ * 목록 전체 조회 대신 1요청으로 확인한다.
+ */
+export type PrMergeablesResult = {
+  ok: boolean;
+  mergeable?: Record<number, boolean>;
+  error?: string;
+};
+
 export type PrMergeMethod = "merge" | "squash" | "rebase";
 
 export type PrMergeResult = { ok: boolean; error?: string };

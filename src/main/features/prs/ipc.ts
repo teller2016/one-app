@@ -9,6 +9,7 @@ import {
   fetchBranchCommits,
   createPr,
   fetchMergeInfo,
+  fetchRepoMergeables,
   mergePr,
 } from './gitea';
 import { getPrsConfig, savePrsConfig } from './store';
@@ -23,6 +24,7 @@ import type {
   PrCreateInput,
   PrCreateResult,
   PrMergeInfoResult,
+  PrMergeablesResult,
   PrMergeMethod,
   PrMergeResult,
 } from '../../../shared/types';
@@ -170,6 +172,23 @@ export function registerPrsIpc() {
       try {
         const info = await fetchMergeInfo(gitea.url, gitea.token, repo, number);
         return { ok: true, ...info };
+      } catch (err) {
+        return { ok: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // 저장소 열린 PR 의 충돌 여부만 재확인 (1요청) — 머지 직후 재검사 창에서 짧게 폴링한다.
+  // 목록 전체 조회(prs:fetch)는 리뷰 N+1 이 붙어 반복 호출에 맞지 않는다.
+  handleShared(
+    'prs:mergeables',
+    async (repo: string): Promise<PrMergeablesResult> => {
+      const gitea = getGiteaConfig();
+      if (!gitea) return { ok: false, error: NO_GITEA };
+      if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
+      try {
+        const mergeable = await fetchRepoMergeables(gitea.url, gitea.token, repo);
+        return { ok: true, mergeable };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
       }

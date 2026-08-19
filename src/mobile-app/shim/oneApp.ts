@@ -32,6 +32,7 @@ const SPEC: Spec = {
     getBranchCommits: { ch: 'prs:branch-commits' },
     create: { ch: 'prs:create' },
     getMergeInfo: { ch: 'prs:merge-info' },
+    getMergeables: { ch: 'prs:mergeables' },
     merge: { ch: 'prs:merge' },
   },
   deploy: {

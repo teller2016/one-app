@@ -37,4 +37,9 @@ push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **마스터-
 
 생성·머지는 **Gitea 토큰 필수**(없으면 배너 안내·버튼 숨김). 목록은 **전역 이슈 검색 API**(`/repos/issues/search?type=pulls&state=open`)로 접근 가능한 전체 저장소의 열린 PR + 리뷰 승인 수 뱃지 + **머지 방향(`head → base`)·충돌 여부**, 2분 자동 새로고침.
 
+⚠️ **머지 직후 다른 PR 이 전부 '충돌'로 뜨던 함정**(2026-08-19 실측·수정): Gitea 는 base 브랜치가 갱신되면(= 그 브랜치로 PR 이 머지되면) 그 base 를 향한 **열린 PR 전부**를 다시 충돌 검사하고, 그동안 `mergeable` 을 false 로 준다. PR 응답에는 상태 구분 필드가 없어(**1.25.4** swagger 확인 — `mergeable` 불리언 하나뿐) **재검사 중과 실제 충돌을 API 로 구분할 수 없다.** 그래서 머지 성공 후 `RECHECK_MS`(30초) 동안 그 저장소의 false 를 **모름(undefined)으로 낮춰** 목록 충돌 칩·상세 충돌 배너를 억제하고(머지 버튼은 그대로 비활성 — 서버도 거부한다), `RECHECK_POLL_MS`(3초)마다 재확인해 확정한다. false 가 사라지면 창을 **조기 종료**, 창이 만료되도록 남은 false 는 **실제 충돌로 확정**. 상세 패널도 같은 창 동안 `prs:merge-info` 를 3초마다 다시 본다. 상수·배경은 `renderer/features/prs/lib/conflictRecheck.ts` 한 곳.
+
+- 재확인 채널은 **`prs:mergeables`(저장소당 1요청** — 열린 PR 의 `번호 → mergeable` 맵). ⚠️ **재검사 폴링에 `prs:fetch` 를 쓰지 말 것** — 승인 수 보강이 PR 마다 요청(N+1)이라 3초 폴링에서 요청이 폭발한다.
+- 저장소별 `/pulls?state=open` 1요청 로직은 `fetchRepoPrStates()` 하나로 모았다(`enrichBranches` 와 `fetchRepoMergeables` 가 공용).
+
 ⚠️ **전역 이슈 검색 API 는 브랜치를 주지 않는다**(`base`·`head` 는 `null`, `ref` 는 빈 문자열 — 2026-08-06 실측). 그래서 `enrichBranches` 가 **저장소별 `/pulls?state=open` 1요청**으로 한꺼번에 채운다(PR 마다 `/pulls/{n}` 을 부르면 PR 수만큼 요청 — 저장소 수 ≪ PR 수). **같은 응답의 `mergeable` 도 함께 실어** 목록의 충돌 뱃지가 추가 요청 없이 나온다. 승인 수 보강과는 서로 독립이라 `Promise.all` 로 함께 돌린다. 상세 패널의 방향·충돌 정본은 `prs:merge-info`(`/pulls/{n}`).

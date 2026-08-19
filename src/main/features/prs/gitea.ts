@@ -59,6 +59,59 @@ export async function fetchOpenPrs(
 type PrDirection = { head?: string; base?: string; mergeable?: boolean };
 
 /**
+ * 저장소의 열린 PR 상태를 **1요청**으로 — 머지 방향(head/base)과 mergeable.
+ * 실패·형식 이상은 빈 맵으로 조용히 넘긴다(표시용 부가 정보라 목록 자체를 막지 않는다).
+ */
+async function fetchRepoPrStates(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<Map<number, PrDirection>> {
+  const map = new Map<number, PrDirection>();
+  try {
+    const res = await giteaFetch(
+      `${giteaUrl}/api/v1/repos/${repo}/pulls?state=open&limit=${BRANCH_PAGE_SIZE}`,
+      token,
+      { raw: true },
+    );
+    if (!res.ok) return map;
+    const data = (await res.json()) as {
+      number?: number;
+      head?: { ref?: string };
+      base?: { ref?: string };
+      mergeable?: boolean;
+    }[];
+    for (const p of Array.isArray(data) ? data : []) {
+      if (p.number != null)
+        map.set(p.number, {
+          head: p.head?.ref,
+          base: p.base?.ref,
+          mergeable: typeof p.mergeable === 'boolean' ? p.mergeable : undefined,
+        });
+    }
+  } catch {
+    // 무시 — 브랜치·충돌 표시만 빠진다
+  }
+  return map;
+}
+
+/**
+ * 저장소 열린 PR 의 충돌 여부만 (PR 번호 → mergeable) — **1요청**.
+ * 머지 직후 Gitea 가 관련 PR 을 다시 충돌 검사하는 동안 `mergeable` 이 false 로 오는데,
+ * 목록 전체 조회(리뷰 N+1)를 반복하지 않고 이 채널로 짧게 재확인한다.
+ */
+export async function fetchRepoMergeables(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+): Promise<Record<number, boolean>> {
+  const out: Record<number, boolean> = {};
+  for (const [number, d] of await fetchRepoPrStates(giteaUrl, token, repo))
+    if (typeof d.mergeable === 'boolean') out[number] = d.mergeable;
+  return out;
+}
+
+/**
  * PR 별 머지 방향(head → base)·머지 가능 여부 보강 — 전역 이슈 검색 API 는 브랜치를
  * 주지 않는다(`ref` 는 빈 값). PR 마다 `/pulls/{n}` 을 부르는 대신 **저장소별 PR 목록
  * 1요청**으로 한꺼번에 채운다(저장소 수 ≪ PR 수). 같은 응답에 `mergeable` 이 있어
@@ -73,32 +126,8 @@ export async function enrichBranches(
   const byRepo = new Map<string, Map<number, PrDirection>>();
   await Promise.all(
     repos.map(async (repo) => {
-      try {
-        const res = await giteaFetch(
-          `${giteaUrl}/api/v1/repos/${repo}/pulls?state=open&limit=${BRANCH_PAGE_SIZE}`,
-          token,
-          { raw: true },
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          number?: number;
-          head?: { ref?: string };
-          base?: { ref?: string };
-          mergeable?: boolean;
-        }[];
-        const map = new Map<number, PrDirection>();
-        for (const p of Array.isArray(data) ? data : []) {
-          if (p.number != null)
-            map.set(p.number, {
-              head: p.head?.ref,
-              base: p.base?.ref,
-              mergeable: typeof p.mergeable === 'boolean' ? p.mergeable : undefined,
-            });
-        }
-        byRepo.set(repo, map);
-      } catch {
-        // 무시 — 브랜치·충돌 표시만 빠진다
-      }
+      const map = await fetchRepoPrStates(giteaUrl, token, repo);
+      if (map.size) byRepo.set(repo, map);
     }),
   );
   return prs.map((pr) => {

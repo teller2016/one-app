@@ -48,6 +48,7 @@ import type {
   PrCreateInput,
   PrCreateResult,
   PrMergeInfoResult,
+  PrMergeablesResult,
   PrMergeMethod,
   PrMergeResult,
   ApplinkInput,
@@ -285,6 +286,7 @@ declare global {
         ) => Promise<PrCommitsResult>;
         create: (input: PrCreateInput) => Promise<PrCreateResult>;
         getMergeInfo: (repo: string, number: number) => Promise<PrMergeInfoResult>;
+        getMergeables: (repo: string) => Promise<PrMergeablesResult>;
         merge: (
           repo: string,
           number: number,
