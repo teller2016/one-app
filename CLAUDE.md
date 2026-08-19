@@ -13,7 +13,8 @@
 |------|------|
 | `npm start` | 개발 모드 실행 (핫리로드) |
 | `npx tsc --noEmit` | 타입 검사 (커밋 전 권장) |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint (훅 규칙 포함 — `exhaustive-deps` 경고 0 을 유지한다) |
+| `npm test` | 순수 로직 단위 테스트 (vitest) |
 | `npm run make` | `.app` + 배포용 `.zip` (macOS 는 ZIP maker 만 있다 — DMG 아님) |
 | `npm run icon:dev` | 개발용 DEV 아이콘 생성 (원본 아이콘을 바꿨을 때만) |
 
@@ -35,6 +36,9 @@ src/
 ├── mobile/                   # 📱 MO 터미널 페이지 (Vite 엔트리 mobile_window, plain TS)
 ├── mobile-app/               # 📱 MO 앱 셸 (Vite 엔트리 mobile_app_window, 렌더러 재사용)
 └── shared/                   # 🔗 프로세스 공용 — types.ts · terminal-protocol.ts · mo-protocol.ts
+
+standalone/overtime/          # 📦 동료 배포용 단독 앱 (야근 결재·지출결의서) — 본체 approval 의 복사본.
+                              #    셀렉터·판정 로직을 고치면 이쪽도 함께 봐야 한다 (그 README 참고)
 ```
 
 **기능 목록**

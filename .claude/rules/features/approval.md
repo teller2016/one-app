@@ -66,6 +66,11 @@ paths:
 ## ⚠️ 자동화는 puppeteer 가 아니라 Electron `BrowserWindow` 다 (`browser.ts`)
 `standalone/overtime` 판에서 이식했다. puppeteer 를 쓰지 않는 이유가 두 가지다.
 
+> ⚠️ **셀렉터·URL·판정 로직을 고칠 때는 `standalone/overtime` 도 함께 볼 것.** 동료에게
+> 건네는 단독 배포판이 야근 결재·지출결의서를 **복사본으로** 갖고 있어(마지막 동기화
+> 2026-07-30), 그룹웨어 화면이 바뀌면 양쪽이 같이 깨진다. 무엇이 갈라져 있는지는
+> `standalone/overtime/README.md` 의 "One App 본체와의 관계" 에 정리해 뒀다.
+
 1. **시스템 Chrome 이 필요 없다** — Chromium 이 앱에 들어 있다.
 2. **작성한 창을 사용자에게 그대로 넘길 수 있다** — 지출결의서(첨부·상신)·미리보기가 이 위에 선다.
    `releasePage()` 가 자동화 장치(alert/confirm 가로채기·오프너 교체)를 걷어낸 뒤 넘긴다.

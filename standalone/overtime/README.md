@@ -7,7 +7,7 @@
 | **야근 결재** | 전자결재 연장근무내역서를 작성해 **상신까지** 한다 (결재선이 '본인'이라 미결함에서 스스로 승인) |
 | **지출결의서(개인)** | 주차요금·석식대 항목을 **채워만 두고** 화면을 남긴다 — 첨부·결재상신은 사용자가 직접 |
 
-야근 결재는 One App 본체의 `src/main/features/overtime` + `OvertimeModal` 을 **Windows 동료에게 실행 파일로 건네줄 수 있게** 뽑아낸 것이고, 지출결의서는 이 앱에만 있다.
+야근 결재는 One App 본체의 `src/main/features/approval`(`overtime.ts`) + `OvertimeModal` 을 **Windows 동료에게 실행 파일로 건네줄 수 있게** 뽑아낸 것이고, 지출결의서는 이 앱에만 있다.
 
 - **의존성 없음** — 브라우저 자동화를 puppeteer 대신 Electron 자체 `BrowserWindow` 로 하므로, 받는 사람 PC 에 Chrome 을 따로 깔 필요가 없다.
 - **계정은 각자 PC 에만** — 사번·비밀번호는 Electron `safeStorage`(Windows DPAPI · macOS 키체인)로 암호화해 `userData/settings.json` 에 저장한다.
@@ -109,16 +109,25 @@ src/
 ### One App 본체와의 관계
 
 `config.ts` 의 셀렉터·URL 과 `submit.ts` 의 판정 로직은 본체
-`src/main/features/overtime/` 와 **같은 내용을 복사**해 둔 것이다.
+`src/main/features/approval/` 와 **같은 내용을 복사**해 둔 것이다.
 그룹웨어 화면이 바뀌면 **양쪽을 함께 수정**해야 한다.
 
-자동화 방식만 다르다.
+⚠️ **자동화 방식은 이제 양쪽이 같다.** 본체가 puppeteer 를 쓰던 시절에는 이 앱만
+`BrowserWindow` 를 썼지만, 본체도 같은 방식으로 전환했다(`main/lib/browser.ts`).
+`evalInPage`·`waitInPage`·팝업 처리의 함정은 양쪽에 똑같이 적용된다.
 
 | | One App 본체 | 이 앱 |
 |---|---|---|
-| 브라우저 | puppeteer + 시스템 Chrome | Electron 내장 Chromium |
-| 페이지 실행 | `page.evaluate` | `evalInPage` (함수를 문자열로 주입) |
-| 조건 대기 | `page.waitForFunction` | `waitInPage` (폴링) |
+| 브라우저 자동화 | `main/lib/browser.ts` | 같은 방식, 코드만 별도 복사 (`src/main/browser.ts`) |
+| 로그인 | 공용 세션 `groupware/session.ts` | 자체 `gw.ts` 의 `login()` |
 | 계정 | 본체 환경설정 공용 | 이 앱 설정 화면 (별도 저장) |
+
+**동기화할 때 볼 것** — 본체가 먼저 정리하고 이 앱이 따라가지 못한 것들이다.
+기능 차이는 아니지만(동작은 같다), 같은 버그를 두 번 고치지 않으려면 알고 있어야 한다.
+
+- 날짜·표기 유틸: 본체는 `shared/date.ts`·`shared/approval-format.ts` 로 통합했고,
+  이 앱은 `expend.ts`·`expendCalc.ts` 안에 같은 계산을 그대로 두고 있다
+- 셀렉터·URL: 본체는 `EXPEND_CONFIG` 로 뺐고, 이 앱은 일부가 호출부에 하드코딩돼 있다
+- 본체에만 있는 기능(휴가신청서·결재 홈·상신함 열기)은 이 앱에 없다 — 옮길 대상이 아니다
 
 ⚠️ `evalInPage` 로 넘기는 함수는 문자열로 직렬화되므로 **바깥 스코프 변수를 참조할 수 없다** — 필요한 값은 반드시 인자로 넘긴다.
