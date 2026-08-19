@@ -6,6 +6,7 @@
 // 그대로 터미널에 넘긴다 — ⚠️ command 문자열을 렌더러에서 손대지 말 것(셸 인용 파손).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  JiraIssue,
   JiraWorkAccount,
   JiraWorkAccountInfo,
   JiraWorkSkill,
@@ -15,6 +16,7 @@ import type {
   WorktreeInfo,
 } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
+import { useConfirm } from '../../../components/ConfirmDialog';
 import { Button } from '../../../components/Button';
 import { Checkbox } from '../../../components/Checkbox';
 import { FormRow } from '../../../components/FormRow';
@@ -45,15 +47,19 @@ export function StartWorkModal({
   issueKey,
   summary,
   projectKey,
+  statusCategory,
   onClose,
 }: {
   issueKey: string;
   summary: string;
   /** 이슈의 Jira 프로젝트 키 — 레지스트리와 맞춰 기본 위치를 고른다 */
   projectKey: string;
+  /** 이슈의 현재 상태 계열 — 이미 진행중(indeterminate)이면 전환 제안을 건너뛴다 */
+  statusCategory: JiraIssue['statusCategory'];
   onClose: () => void;
 }) {
   const toast = useToast();
+  const confirmDialog = useConfirm();
   const [workspaces, setWorkspaces] = useState<TerminalWorkspace[]>([]);
   const [worktrees, setWorktrees] = useState<Record<string, WorktreeInfo[]>>({});
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
@@ -163,6 +169,21 @@ export function StartWorkModal({
     localStorage.setItem(SKILL_KEY, v);
   }, []);
 
+  // 시작 직후 — 티켓을 진행중으로 옮길지 제안한다 (PR 머지 → 해결됨 제안과 같은 패턴).
+  // 확인창은 App 루트의 ConfirmProvider 라 모달이 닫히고 터미널로 이동한 뒤에도 뜬다.
+  const offerProgress = async () => {
+    if (statusCategory === 'indeterminate') return; // 이미 진행중 계열
+    const ok = await confirmDialog({
+      title: `${issueKey} 진행중으로 전환할까요?`,
+      message: '작업을 시작했습니다. 티켓 상태를 진행중으로 옮겨 둘 수 있어요.',
+      confirmLabel: '진행중으로',
+    });
+    if (!ok) return;
+    const res = await window.oneApp.jira.startProgress(issueKey);
+    if (res.ok) toast(`${issueKey} → ${res.status ?? '진행중'}`);
+    else toast(res.error ?? '전환에 실패했습니다', 'fail');
+  };
+
   const start = async () => {
     if (!spot) return;
     setBusy(true);
@@ -195,6 +216,7 @@ export function StartWorkModal({
         toast(`${issueKey} 작업을 시작했습니다${att > 0 ? ` (첨부 ${att}개 전달)` : ''}`);
       }
       onClose();
+      void offerProgress();
     } catch (err) {
       toast(`작업을 시작하지 못했습니다 — ${errMsg(err)}`, 'fail');
     } finally {

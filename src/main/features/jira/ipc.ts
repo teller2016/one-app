@@ -10,6 +10,7 @@ import {
   listAdded,
   removeTicketFromList,
   resolveIssue,
+  startProgressIssue,
   transitionIssue,
   validateAddedTicket,
 } from './jira';
@@ -30,6 +31,8 @@ export function registerJiraIpc() {
   );
   // PR 머지 직후 원클릭 해결 처리 — 해결/완료 계열 전환 자동 선택
   handleShared('jira:resolve', (key: string) => resolveIssue(key));
+  // 작업 시작 직후 원클릭 진행 처리 — 진행 계열 전환 자동 선택
+  handleShared('jira:start-progress', (key: string) => startProgressIssue(key));
 
   // 주간 활동 — 기간(YYYY-MM-DD) 안에 내가 작업한 티켓 + 관여도 + 내 변경 이력.
   // ⚠️ 날짜가 JQL 문자열에 들어가므로 형식 검증은 `activity.ts` 진입부에서 한다.

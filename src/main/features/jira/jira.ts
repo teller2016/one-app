@@ -540,6 +540,28 @@ export async function resolveIssue(key: string): Promise<JiraActionResult> {
   return res.ok ? { ...res, status: target.name } : res;
 }
 
+/**
+ * 이슈를 '진행중' 계열 상태로 전환 — 가능한 전환 중 진행(progress) 이름만 자동 선택.
+ * (티켓 작업 시작 직후 원클릭 진행 처리용 — resolveIssue 와 같은 이름 휴리스틱 방식)
+ */
+export async function startProgressIssue(key: string): Promise<JiraActionResult> {
+  const list = await getTransitions(key);
+  if (!list.ok || !list.transitions) {
+    return { ok: false, error: list.error ?? '전환 목록을 불러오지 못했습니다.' };
+  }
+  const target = list.transitions.find((t) => /진행|progress/i.test(t.name));
+  if (!target) {
+    const names = list.transitions.map((t) => t.name).join(', ');
+    return {
+      ok: false,
+      error: `진행 전환을 찾을 수 없습니다 (가능: ${names || '없음'})`,
+    };
+  }
+  const res = await transitionIssue(key, target.id);
+  // 어느 상태로 갔는지 호출부(토스트)가 보여줄 수 있게 이름을 실어 준다
+  return res.ok ? { ...res, status: target.name } : res;
+}
+
 /** 상태 전환 실행 */
 export async function transitionIssue(
   key: string,

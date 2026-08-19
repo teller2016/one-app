@@ -196,6 +196,8 @@ declare global {
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
         resolve: (key: string) => Promise<JiraActionResult>;
+        /** 진행 계열 전환 자동 선택 실행 (작업 시작 직후용) */
+        startProgress: (key: string) => Promise<JiraActionResult>;
         /** 기간(YYYY-MM-DD)에 내가 작업한 티켓 — 관여도·내 변경 이력 포함 */
         activity: (
           start: string,

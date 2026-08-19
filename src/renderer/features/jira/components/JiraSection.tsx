@@ -677,6 +677,7 @@ export function JiraSection() {
           issueKey={workIssue.key}
           summary={workIssue.summary}
           projectKey={workIssue.projectKey}
+          statusCategory={workIssue.statusCategory}
           onClose={() => setWorkIssue(null)}
         />
       )}

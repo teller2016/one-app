@@ -191,6 +191,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("jira:transition", key, id),
     // 해결/완료 계열 전환 자동 선택 실행 (PR 머지 직후용)
     resolve: (key: string) => ipcRenderer.invoke("jira:resolve", key),
+    // 진행 계열 전환 자동 선택 실행 (작업 시작 직후용)
+    startProgress: (key: string) => ipcRenderer.invoke("jira:start-progress", key),
     // 주간 활동 — 기간(YYYY-MM-DD)에 내가 작업한 티켓 + 관여도(해결/진행/연관) + 내 변경 이력
     activity: (start: string, end: string, force?: boolean) =>
       ipcRenderer.invoke("jira:activity", start, end, force),
