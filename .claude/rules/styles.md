@@ -16,8 +16,10 @@ paths:
 공용 믹스인은 `_base.scss` 에 있다: **`rise-in`**(아래→제자리 — 섹션 전환·모달·토스트·배너) · **`fade-in`**(넓은 면·오버레이) · **`pop-in`**(팝오버·툴팁·메뉴). 키프레임을 새로 만들지 말고 이것들을 쓴다.
 
 - ⚠️ **목록 항목(카드·행)에는 걸지 말 것** — 조회 결과는 사용자가 기다린 것이라 즉시 보여야 한다. 계단(stagger)까지 만들어 PR·Jira·메일·프로젝트 등 11곳에 넣었다가 **전면 제거**했다(2026-08-14 사용자 지적: "상단 8개만 애니메이션되는데 목록엔 굳이 필요 없다" — 앞 N개에만 지연을 주면 딱 그렇게 읽힌다). 목록의 모션은 컨테이너인 섹션 하나가 대표한다. `stagger` 믹스인도 함께 지웠으니 되살리지 말 것.
+- ⚠️ **진입 믹스인의 `fill-mode` 는 `backwards` 다 — `both`(=forwards 포함)로 되돌리지 말 것.** forwards 면 모션이 끝난 뒤에도 `transform` 이 애니메이션 제어 속성으로 남아, 그 요소가 **자손 `position: fixed` 의 containing block** 이 된다. `.main > 섹션` 의 `rise-in` 탓에 그 안의 `.jira-view`(고정 상세 패널)가 뷰포트가 아니라 섹션 박스에 갇혀 **세로로 잘렸다**(2026-08-19 사용자 신고 → headless 실측: `both` top=100/h=132, `backwards` top=56/h=832). 키프레임에 `to` 가 없어 forwards 의 시각적 이득은 0이다.
+- **떠 있는 레이어(모달·팝오버·상세 패널)는 `body` portal 로 띄운다** — `Modal`·`Select`·`Tooltip`·`DatePicker`·`TimePicker`·`ContextMenu`·`MultiSelect`·`ChangesOverlay` 가 모두 그렇다. 섹션 안에 `position: fixed` 로 두면 위 함정처럼 조상 transform 에 갇힌다(`.jira-view` 만 아직 예외다).
 - **애니메이션은 요소가 마운트될 때 실행된다** — React 가 `key` 로 재마운트하는 지점이 곧 애니메이션 지점이다. 섹션 전환(`.main > :not(.main__keep)`)과 탑바 제목이 이 방식이고, 그래서 `App.tsx` 의 `topbar__icon`·`__title` 에 **`key={active.id}` 가 붙어 있다**(지우면 제목이 툭 바뀐다).
-- ⚠️ **`prefers-reduced-motion` 에서 `animation: none` 금지** — 믹스인이 `fill-mode: both` 라 시작 상태(`opacity: 0`)에 갇혀 **요소가 아예 안 보인다**. `_base.scss` 하단 블록처럼 `animation-duration: .01ms !important` 로 즉시 끝낼 것. 스피너 계열(`.spinner`·`.btn__spin`·`.icon-btn__spin`)만 회전을 되살린다.
+- ⚠️ **`prefers-reduced-motion` 에서 `animation: none` 금지** — 믹스인이 `fill-mode` 를 쓰므로 상태가 어긋날 수 있다. `_base.scss` 하단 블록처럼 `animation-duration: .01ms !important` 로 즉시 끝낼 것. 스피너 계열(`.spinner`·`.btn__spin`·`.icon-btn__spin`)만 회전을 되살린다.
 - **펼침 높이**는 `:root { interpolate-size: allow-keywords }` + `<details>` 의 `::details-content`(Chromium 129/131+, 이 앱은 150 — 실측 확인). `content-visibility` 전환에 **`allow-discrete` 가 없으면 닫는 순간 내용이 사라져** 애니메이션이 한 프레임도 안 보인다. JS 로 높이를 재지 말 것.
 - **팝오버의 `transform-origin` 은 `usePopover` 가 인라인으로 준다**(flip 되면 반대편) — SCSS 에서 고정하지 말 것. 훅을 안 쓰는 `ContextMenu` 만 직접 `top left` 를 지정한다.
 - ⚠️ **드래그로 폭을 바꾸는 패널은 드래그 중 `transition: none`** — 앱 사이드바(`.sidebar--dragging`)·터미널 세션 패널(`.terminal--dragging`) 둘 다 그렇게 돼 있다. 안 끄면 패널이 손끝을 뒤따라온다. **한쪽을 고치면 다른 쪽도 볼 것.**

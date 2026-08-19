@@ -378,18 +378,23 @@
   }
 }
 
-// ⚠️ fill-mode 는 반드시 both — 없으면 애니메이션 시작 직전 한 프레임이
-//    최종 상태로 그려져 "번쩍"인다.
+// ⚠️ fill-mode 는 **backwards** — 시작 직전 한 프레임이 최종 상태로 그려져 "번쩍"이는 것을
+//    막는 건 backwards 쪽이다. **forwards(both)로 두지 말 것**: 진입 모션이 끝난 뒤에도
+//    `transform` 이 애니메이션 제어 속성으로 남아 그 요소가 **자손 `position:fixed` 의
+//    containing block** 이 된다. 실제로 `.main > 섹션` 에 rise-in 이 걸린 탓에 그 안의
+//    `.jira-view`(고정 레이어)가 뷰포트가 아니라 섹션 박스에 갇혀 세로로 잘렸다
+//    (2026-08-19 사용자 신고). 키프레임에 `to` 가 없어 forwards 의 시각적 이득도 0이다.
+//    떠 있는 레이어를 새로 만들 때는 다른 8개처럼 **body portal** 을 쓰는 편이 더 안전하다.
 @mixin rise-in($dur: var(--dur-2), $delay: 0s) {
-  animation: rise-in $dur var(--ease-out) $delay both;
+  animation: rise-in $dur var(--ease-out) $delay backwards;
 }
 
 @mixin fade-in($dur: var(--dur-2), $delay: 0s) {
-  animation: fade-in $dur var(--ease-out) $delay both;
+  animation: fade-in $dur var(--ease-out) $delay backwards;
 }
 
 @mixin pop-in($dur: var(--dur-2)) {
-  animation: pop-in $dur var(--ease-out) both;
+  animation: pop-in $dur var(--ease-out) backwards;
   transform-origin: top center;
 }
 
@@ -427,9 +432,9 @@ body {
   *::before,
   *::after {
     transition: none !important;
-    // ⚠️ animation: none 이 아니라 '즉시 끝내기'다 — 진입 모션은 fill-mode: both 라
-    //    none 으로 지우면 시작 상태(opacity 0)가 남아 요소가 아예 안 보인다.
-    //    지속시간만 0 으로 만들면 최종 상태로 곧장 안착한다.
+    // ⚠️ animation: none 이 아니라 '즉시 끝내기'다 — 진입 모션은 fill-mode 를 쓰므로
+    //    none 으로 지우면 상태가 어긋날 수 있다. 지속시간만 0 으로 만들면 최종 상태로
+    //    곧장 안착한다(fill-mode 가 무엇이든 안전한 방식이라 그대로 둔다).
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
