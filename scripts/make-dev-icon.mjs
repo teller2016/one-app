@@ -284,7 +284,7 @@ function main() {
   });
 
   fs.writeFileSync(OUT, encodePng({ width, height, px }));
-  // eslint-disable-next-line no-console
+   
   console.log(
     `[icon] ${path.relative(ROOT, OUT)} 생성 — 본체 y=${top}..${bottom}, 밴드 y=${bandTop}..${bandBottom}`
   );

@@ -43,7 +43,7 @@ const config: ForgeConfig = {
         execSync(`codesign --force --deep --sign "${identity}" "${appPath}"`, {
           stdio: 'inherit',
         });
-        // eslint-disable-next-line no-console
+         
         console.log(`[forge] "${identity}" 로 서명 완료: ${appPath}`);
       }
     },

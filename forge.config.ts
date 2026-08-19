@@ -60,7 +60,7 @@ const config: ForgeConfig = {
     // asar 로 묶기 전에, Vite 가 제외한 런타임 모듈(node-pty·ws)을 채워 넣는다
     packageAfterCopy: async (_forgeConfig, buildPath) => {
       const count = copyRuntimeDeps(buildPath);
-      // eslint-disable-next-line no-console
+       
       console.log(`[forge] 런타임 의존성 ${count}개 패키지에 포함`);
     },
     // 자가서명 인증서로 고정 서명 — adhoc 서명은 빌드마다 바뀌어 safeStorage 의
@@ -109,12 +109,12 @@ const config: ForgeConfig = {
             signed = true;
           } catch (err) {
             if (attempt === MAX_SIGN_ATTEMPTS) throw err;
-            // eslint-disable-next-line no-console
+             
             console.warn(`[forge] 서명 실패 — 확장 속성 재정리 후 재시도 (${attempt}/${MAX_SIGN_ATTEMPTS})`);
             await new Promise((resolve) => setTimeout(resolve, attempt * 800));
           }
         }
-        // eslint-disable-next-line no-console
+         
         console.log(`[forge] "${identity}" 로 서명 완료: ${appPath}`);
       }
     },

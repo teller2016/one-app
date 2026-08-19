@@ -25,7 +25,7 @@ import type {
 
 /** 진행 단계를 렌더러와 터미널 로그에 함께 보낸다 (창이 닫혔으면 무시) */
 const progressSender = (sender: Electron.WebContents) => (step: string) => {
-  // eslint-disable-next-line no-console
+   
   console.log(`[draft] ${step}`);
   try {
     const progress: OvertimeProgress = { step };
