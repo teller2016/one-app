@@ -18,6 +18,7 @@ import type {
   TerminalSessionStatus,
 } from '../../../shared/types';
 import { shQuote } from '../../lib/util';
+import { describeInput, termDebugOn, termLog } from './debug';
 import { getProject } from '../projects/store';
 import { agentCommand } from './agents';
 import {
@@ -65,11 +66,10 @@ const CREATE_NOTIFY_GRACE_MS = 20_000; // 생성 직후 첫 waiting 알림 억�
 const STATUS_TICK_MS = 1000; // 침묵 판정 틱 (세션별 타이머 대신 전역 1개)
 const AGENT_LAUNCH_QUIET_MS = 350; // 출력이 이만큼 잠잠해지면 프롬프트가 완성됐다고 본다
 const AGENT_LAUNCH_MAX_WAIT_MS = 3000; // 출력이 계속 이어지는 셸 테마 대비 발사 상한
-const STATUS_DEBUG = process.env.ONEAPP_TERM_DEBUG === '1'; // 상수 보정용 전이 로그
+// 진단 로그(debug.ts) — userData 의 스위치 파일로 켜고 term-debug.log 에 쌓인다.
+// 입력대기 알림 오탐 추적이 주 용도라 입력 종류·상태 전이·알림 발화를 함께 남긴다.
 /** 세션 수명 로그 — 생성·자동 실행·종료. 프리셋 세션이 곧바로 사라질 때 원인을 좁힌다 */
-const life = (...args: unknown[]) => {
-  if (STATUS_DEBUG) console.log('[term:life]', ...args);
-};
+const life = (event: string, fields: Record<string, unknown>) => termLog('life', { event, ...fields });
 const TITLE_MAX_LEN = 60; // 사용자 지정 제목 상한 — 목록은 한 줄 ellipsis 라 그 이상은 무의미
 
 type Session = {
@@ -98,6 +98,7 @@ type Session = {
   bellAt: number; // 마지막 bare BEL 수신 시각 (0 = 없음)
   notifiedSinceInput: boolean; // 이번 입력(턴)에 대한 waiting 알림 기회를 이미 소진했는지
   lastInputSubmit: boolean; // 마지막 입력에 제출(\r)이 있었는지 — 게이트 유예 재판정 대상 여부
+  lastInputKind: string; // 진단용 — 마지막 입력의 '종류' 요약 (debug.ts, 로그 꺼져 있으면 빈 값)
   notifyRecheck: NodeJS.Timeout | null; // 입력 직후 전이의 재판정 타이머 (게이트 해제 시점)
   suppressNotifyUntil: number; // 이 시각 전의 waiting 전이는 알림 없이 상태만
   // ── 휠 스크롤(tmux copy-mode) 추적값 ──
@@ -155,11 +156,16 @@ const toInfo = (s: Session): TerminalSessionInfo => ({
 
 function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   if (s.status === status) return;
-  if (STATUS_DEBUG) {
-    const silence = ((Date.now() - s.lastOutputAt) / 1000).toFixed(1);
-    console.log(
-      `[term-status] ${s.id} ${s.status}→${status} (${why}) bytes=${s.bytesSinceInput} silence=${silence}s`
-    );
+  if (termDebugOn()) {
+    termLog('status', {
+      id: s.id,
+      from: s.status,
+      to: status,
+      why,
+      bytes: s.bytesSinceInput,
+      silence: `${((Date.now() - s.lastOutputAt) / 1000).toFixed(1)}s`,
+      notified: s.notifiedSinceInput,
+    });
   }
   s.status = status;
   emitChanged();
@@ -168,9 +174,13 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   // 알림 기회는 입력(턴)당 1회: attach/resize 의 SIGWINCH redraw 가 busy→waiting 을
   // 다시 만들어도(입력 없이) 소리가 중복되지 않는다.
   const now = Date.now();
-  if (s.notifiedSinceInput) return;
+  if (s.notifiedSinceInput) {
+    termLog('skip', { id: s.id, why: 'already-notified' });
+    return;
+  }
   if (now < s.suppressNotifyUntil) {
     s.notifiedSinceInput = true; // 생성 grace — 초기 프롬프트는 조용히 기회 소진
+    termLog('skip', { id: s.id, why: 'create-grace' });
     return;
   }
   const gap = now - s.lastInputAt;
@@ -184,6 +194,7 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   // 제출 없이 타이핑만 멈춘 경우는 기존대로 소진(프롬프트 앞의 사용자에게 소음 방지).
   if (!s.lastInputSubmit) {
     s.notifiedSinceInput = true;
+    termLog('skip', { id: s.id, why: 'no-submit', lastInput: s.lastInputKind });
     return;
   }
   clearNotifyRecheck(s);
@@ -197,6 +208,19 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
 
 /** waiting 알림 발화 + 이번 턴의 기회 소진 */
 function fireWaitingNotify(s: Session) {
+  // ⚠️ 오탐 추적의 핵심 기록 — 이 줄이 없는데 토스트가 떴다면 원인은 렌더러 쪽이다.
+  // 직전 입력의 '종류'(lastInputKind)가 마우스 리포트 같은 비-사람 입력이면
+  // 알림 기회가 잘못 재장전된 것이다.
+  termLog('notify', {
+    id: s.id,
+    title: s.title,
+    agent: s.agentId,
+    sinceInput: `${((Date.now() - s.lastInputAt) / 1000).toFixed(1)}s`,
+    bytes: s.bytesSinceInput,
+    bell: s.bellAt > s.lastInputAt,
+    lastInput: s.lastInputKind,
+    submit: s.lastInputSubmit,
+  });
   s.notifiedSinceInput = true;
   const info = toInfo(s);
   waitingListeners.forEach((cb) => cb(info));
@@ -230,6 +254,10 @@ function noteOutput(s: Session, chunk: string, bytes: number) {
 
 /** writeSession 훅 — 사용자 입력은 "보고 있음" 신호: waiting 해제 + 턴 적산 리셋 */
 function noteInput(s: Session, data: string) {
+  if (termDebugOn()) {
+    s.lastInputKind = describeInput(data);
+    termLog('input', { id: s.id, kind: s.lastInputKind, status: s.status });
+  }
   s.lastInputAt = Date.now();
   s.bytesSinceInput = 0;
   s.bellAt = 0;
@@ -243,15 +271,25 @@ function noteInput(s: Session, data: string) {
   if (s.status === 'waiting') setStatus(s, 'idle', 'input');
 }
 
-// xterm 이 **자동 생성**하는 터미널 질의 응답 — 사람 입력이 아니므로 noteInput(알림 기회
-// 재장전)을 타면 안 된다. 이게 입력으로 집계되면 끝난 세션이 한참 뒤 스스로 그린 출력
-// (상태줄·토큰 카운터 등)에 waiting 알림이 울린다(2026-08-14 사용자 신고 "끝난 세션에서 소리").
-// 포커스 이벤트 ESC[I/O (claude 가 켜는 모드 1004 — pane 클릭/이탈마다 발생),
-// 커서 위치 보고 ESC[{r};{c}R, DSR 상태 ESC[{n}n, DA 응답 ESC[?/>…c (렌더러도 거르지만
-// 이중 방어 — MO 경로 포함), OSC 10~19 색 질의 응답. PTY 전달은 그대로 한다.
+// xterm 이 **자동 생성**하는 시퀀스 — 사람 입력이 아니므로 noteInput(알림 기회 재장전)을
+// 타면 안 된다. 이게 입력으로 집계되면 끝난 세션이 한참 뒤 스스로 그린 출력(상태줄·토큰
+// 카운터 등)에 waiting 알림이 울린다(2026-08-14 사용자 신고 "끝난 세션에서 소리").
+//
+// ⚠️ **마우스 리포트가 여기 빠져 있어 같은 증상이 재발했다**(2026-08-19 사용자 신고
+// "완료된 터미널에 자꾸 토스트"). claude 는 마우스 트래킹을 켜므로 TerminalView 가 휠·클릭을
+// xterm 에 그대로 위임하고(mouseTrackingMode ≠ 'none' 분기), xterm 이 만든 SGR 리포트가
+// terminal:write 로 올라온다. 즉 **완료된 세션을 눈으로 확인하려고 클릭·스크롤하는 것만으로**
+// 알림 기회가 재장전되고, 이어지는 claude 리렌더 출력 한 번에 토스트가 다시 떴다.
+// 마우스는 "보고 있음"일 뿐 "새 턴 시작"이 아니다 — 턴 리셋 대상에서 뺀다.
+//
+// 목록: 포커스 이벤트 ESC[I/O (모드 1004 — pane 클릭/이탈마다 발생) · 커서 위치 보고
+// ESC[{r};{c}R · DSR 상태 ESC[{n}n · DA 응답 ESC[?/>…c (렌더러도 거르지만 이중 방어 —
+// MO 경로 포함) · DECRPM 모드 리포트 ESC[?{n};{m}$y · 마우스 리포트 3종(SGR ESC[<b;x;yM/m,
+// urxvt ESC[b;x;yM, X10 ESC[M + 3바이트) · OSC 질의 응답(색·팔레트) · DCS 응답(XTVERSION 등).
+// 어느 것도 키보드로는 만들 수 없어 사람 입력을 잘못 삼킬 위험이 없다. PTY 전달은 그대로 한다.
 const AUTO_REPLY_RE =
   // eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
-  /^(?:\x1b\[(?:I|O|\d+;\d+R|\d*n|[?>][0-9;]*c)|\x1b\]1\d;[^\x07\x1b]*(?:\x07|\x1b\\))+$/;
+  /^(?:\x1b\[(?:[IO]|\d+;\d+R|\d*n|[?>][0-9;]*c|\?[0-9;]+\$y|<\d+;\d+;\d+[Mm]|\d+;\d+;\d+M|M[\s\S]{3})|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[^\x1b]*\x1b\\)+$/;
 
 /** 전역 침묵 판정 틱 — busy 세션이 조용해지면 waiting(에이전트) 또는 idle 로 내린다 */
 function statusTick() {
@@ -269,6 +307,10 @@ function statusTick() {
       // 순수 셸(ls 한 번)과 에코 수준 출력은 waiting 자격이 없다 — 뱃지 오탐 차단
       setStatus(s, 'idle', 'silence');
     }
+    // ⚠️ BEL 은 판정에 **한 번 쓰면 소비**한다. 예전엔 다음 입력까지 남아 있어서, 완료 때
+    // 울린 BEL 하나가 이후의 모든 출력에 '300ms 침묵 + 바이트 임계 면제'를 계속 발급했다 —
+    // 끝난 세션이 busy↔waiting 을 쉼 없이 왕복하며 알림 게이트를 반복해서 두드린 원인.
+    s.bellAt = 0;
   }
 }
 
@@ -365,6 +407,7 @@ function makeSession(init: {
     bytesSinceInput: 0,
     bellAt: 0,
     notifiedSinceInput: false,
+    lastInputKind: '',
     lastInputSubmit: false,
     notifyRecheck: null,
     suppressNotifyUntil: init.suppressNotifyUntil,
@@ -739,7 +782,7 @@ export function writeSession(id: string, data: string): void {
   if (!s) return;
   // 자동 응답(포커스 이벤트·CPR 등)은 사람 입력이 아니다 — 전달만 하고 턴 리셋은 생략
   if (AUTO_REPLY_RE.test(data)) {
-    if (STATUS_DEBUG) console.log('[term:auto]', s.id, JSON.stringify(data));
+    if (termDebugOn()) termLog('auto', { id: s.id, kind: describeInput(data) });
   } else {
     noteInput(s, data);
   }
