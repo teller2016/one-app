@@ -110,6 +110,8 @@ export function StartWorkModal({
     return () => {
       alive = false;
     };
+    // 진입 시 1회 로드 — account 는 저장된 초기 선택을 검증하는 용도라 재실행이 불필요하다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 이 티켓과 이어진 저장소 — 레지스트리의 Jira 키가 같은 프로젝트의 로컬 경로로 판정

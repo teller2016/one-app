@@ -156,7 +156,8 @@ export function DeploySection() {
       },
     );
     return () => off?.();
-  }, []);
+    // refreshStatuses 는 useCallback([]) 로 영구 안정 — deps 에 있어도 재구독되지 않는다
+  }, [refreshStatuses]);
 
   // 배포 탭을 보는 동안 1분마다 상태 자동 새로고침 (젠킨스에서 직접 돌린 빌드도 반영).
   // 목록은 ref 로 읽어 폴러가 프로젝트 저장마다 재시작되지 않게 한다.

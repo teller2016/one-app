@@ -77,6 +77,7 @@ export function MultiSelect({
     const first = options.findIndex((o) => selected.includes(o.value));
     setHi(isAll || first < 0 ? 0 : first + (allLabel != null ? 1 : 0));
     // 의존성은 open 만 — 열리는 순간의 선택값 기준 1회면 충분
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // 하이라이트 이동 시 보이게 스크롤

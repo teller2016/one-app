@@ -67,8 +67,13 @@ export function useChanges(
     setStatus(s);
   };
 
-  /** 지금 보고 있는 기준의 diff scope — 커밋 선택 > branch 모드 > 워킹트리 */
-  const scopeNow = (): ChangesDiffScope | undefined => {
+  /**
+   * 지금 보고 있는 기준의 diff scope — 커밋 선택 > branch 모드 > 워킹트리.
+   * ⚠️ mode·commitSel 은 ref 로 읽지만 fullDiff 는 훅 인자라 ref 미러가 없다.
+   * loadDiff 가 이 함수를 클로저로 붙잡으므로 useCallback([fullDiff]) 로 묶어
+   * 값이 바뀌면 loadDiff 도 함께 새로 만들어지게 한다.
+   */
+  const scopeNow = useCallback((): ChangesDiffScope | undefined => {
     const base: ChangesDiffScope = commitSelRef.current
       ? { commit: commitSelRef.current.hash }
       : modeRef.current === 'branch'
@@ -76,7 +81,7 @@ export function useChanges(
         : {};
     if (fullDiff) base.full = true;
     return base.mode || base.commit || base.full ? base : undefined;
-  };
+  }, [fullDiff]);
 
   const loadDiff = useCallback(
     async (file: ChangedFile) => {
@@ -117,7 +122,7 @@ export function useChanges(
           : r
       );
     },
-    [tgt]
+    [tgt, scopeNow]
   );
 
   /**

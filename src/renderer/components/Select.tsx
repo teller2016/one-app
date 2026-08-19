@@ -97,6 +97,7 @@ export function Select({
     const raf = requestAnimationFrame(() => searchRef.current?.focus());
     return () => cancelAnimationFrame(raf);
     // 의존성은 open 만 — 열리는 순간의 선택값 기준 1회면 충분
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // 검색어가 바뀌면 첫 후보로 하이라이트를 옮긴다

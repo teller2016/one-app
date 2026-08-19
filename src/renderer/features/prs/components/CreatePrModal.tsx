@@ -119,6 +119,7 @@ export function CreatePrModal({
       alive = false;
     };
     // deps 는 repo 만 — mruBase·effectiveDefault 는 모달이 열려 있는 동안 불변
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo]);
 
   // base 대비 head 커밋 로드 → 제목/본문 자동 생성 (저장소·브랜치 변경 시 재조회)
