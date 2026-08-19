@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
@@ -6,8 +6,14 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
-import { OvertimeModal } from '../../approval';
 import { publishAttendance } from '../lib/shared';
+
+// ⚠️ lazy — 사이드바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
+// 초기 번들에 그대로 딸려온다(App.tsx 의 ApprovalSection lazy 가 무의미해진다).
+// 모달은 열 때만 필요하니 그때 받는다.
+const OvertimeModal = lazy(() =>
+  import('../../approval').then((m) => ({ default: m.OvertimeModal }))
+);
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
 
@@ -176,9 +182,11 @@ export function AttendanceWidget() {
 
         {error && <p className="sbw__error">{error}</p>}
 
-        {/* 야근 결재 모달 — 연장근무내역서 작성·상신 */}
+        {/* 야근 결재 모달 — 연장근무내역서 작성·상신 (청크는 열 때 받는다) */}
         {overtimeOpen && (
-          <OvertimeModal onClose={() => setOvertimeOpen(false)} />
+          <Suspense fallback={null}>
+            <OvertimeModal onClose={() => setOvertimeOpen(false)} />
+          </Suspense>
         )}
       </div>
     </SidebarWidget>

@@ -4,21 +4,18 @@ import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
 import { ToastProvider, useToast } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
-import { ApprovalSection } from "../features/approval";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
 import { JiraSection, isDone } from "../features/jira";
 import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
-import { NightwatchSection } from "../features/nightwatch";
 import { ProjectsSection } from "../features/projects";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
 import { TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
-import { WeeklySection } from "../features/weekly";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
   isSessionOnScreen,
   openTerminalSession,
@@ -33,6 +30,25 @@ import {
 import { usePolling } from "../lib/usePolling";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
+
+// ⚠️ 첫 화면(터미널)과 무관하면서 무거운 의존성을 끌고 오는 섹션은 **필요할 때 받는다** —
+// 주간보고의 chart.js, Nightwatch 의 react-markdown+remark-gfm, 결재 폼이 초기 파싱에서 빠진다.
+// 대신 첫 페인트 뒤 유휴 시간에 미리 받아 두므로(App 의 prefetch effect) 전환은 기존처럼 즉시다.
+// ⚠️ 결재는 사이드바 출퇴근 위젯의 야근 결재 모달과 같은 청크다 — 그쪽도 lazy 여야
+//    (AttendanceWidget) 이 분리가 실제로 효과를 낸다. 한쪽만 바꾸면 청크가 그대로 딸려온다.
+const loadWeekly = () => import("../features/weekly");
+const loadNightwatch = () => import("../features/nightwatch");
+const loadApproval = () => import("../features/approval");
+
+const WeeklySection = lazy(() =>
+  loadWeekly().then((m) => ({ default: m.WeeklySection }))
+);
+const NightwatchSection = lazy(() =>
+  loadNightwatch().then((m) => ({ default: m.NightwatchSection }))
+);
+const ApprovalSection = lazy(() =>
+  loadApproval().then((m) => ({ default: m.ApprovalSection }))
+);
 
 // 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다.
 // ⚠️ 배열 첫 항목이 앱을 열었을 때의 화면이다(activeId 초기값 = SECTIONS[0].id).
@@ -168,6 +184,22 @@ export function App() {
   useEffect(() => {
     if (activeId === "terminal") setTermVisited(true);
   }, [activeId]);
+
+  // lazy 섹션 청크를 첫 페인트 뒤 유휴 시간에 미리 받아 둔다 — 초기 파싱에서만 빼고
+  // 전환 지연은 만들지 않는다. 로컬 파일이라 받는 비용 자체는 거의 없다.
+  useEffect(() => {
+    const prefetch = () => {
+      void loadWeekly();
+      void loadNightwatch();
+      void loadApproval();
+    };
+    if (typeof requestIdleCallback !== "function") {
+      const t = setTimeout(prefetch, 2_000);
+      return () => clearTimeout(t);
+    }
+    const id = requestIdleCallback(prefetch, { timeout: 5_000 });
+    return () => cancelIdleCallback(id);
+  }, []);
   // 섹션 방문 히스토리 — 뒤로(⌘[ · 스와이프 오른쪽 · 마우스 뒤로)/앞으로(⌘] · 반대 방향)
   const backStack = useRef<string[]>([]);
   const fwdStack = useRef<string[]>([]);
@@ -407,7 +439,9 @@ export function App() {
               )}
               {activeId !== "terminal" && (
                 <ErrorBoundary key={active.id} label={active.label}>
-                  {active.render()}
+                  {/* lazy 섹션의 청크 대기 — 유휴 프리페치로 이미 받아 둔 경우가 대부분이라
+                      대개 한 프레임도 보이지 않는다. 로딩 UI 는 각 섹션이 자체로 갖는다. */}
+                  <Suspense fallback={null}>{active.render()}</Suspense>
                 </ErrorBoundary>
               )}
             </main>

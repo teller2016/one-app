@@ -1,6 +1,5 @@
 // MO(모바일) 접속 모달 — 서버 켜기/끄기 + 접속 URL·QR + 토큰 재발급.
 // 폰은 Tailscale 로 맥에 도달하고, URL 의 토큰이 앱 차원의 인증을 담당한다.
-import QRCode from 'qrcode';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { useConfirm } from '../../../components/ConfirmDialog';
@@ -35,7 +34,10 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
       setQr('');
       return;
     }
-    void QRCode.toDataURL(firstUrl, { margin: 1, width: 240 }).then(setQr);
+    // qrcode 는 이 모달에서만 쓴다 — 정적 import 하면 터미널(첫 화면) 청크에 들어간다
+    void import('qrcode').then((m) =>
+      m.default.toDataURL(firstUrl, { margin: 1, width: 240 }).then(setQr)
+    );
   }, [firstUrl]);
 
   // IPC 실패는 토스트로 알린다 — 삼키면 버튼만 원래대로 돌아와 아무 일도 없어 보인다
