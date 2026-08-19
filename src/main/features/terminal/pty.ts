@@ -45,23 +45,14 @@ import {
   tmuxScrollPane,
   tmuxSessionName,
 } from './tmux';
+import { decideSilence, decideWaitingNotify } from './status';
 
 const RING_MAX_BYTES = 512 * 1024; // attach replay 용 출력 보관 상한 (chunk 단위 링버퍼)
 const BATCH_MS = 16; // 출력 배칭 — 대량 출력 시 IPC/WS 이벤트 폭주 방지
 const REDRAW_TOGGLE_MS = 40; // SIGWINCH 토글 간격 — TUI(claude CLI 등) 강제 리렌더용
 
-// ── 상태 휴리스틱 상수 — "스피너=busy 유지, 완전 침묵=waiting" 방식.
-// claude 스피너는 ~1Hz 로 계속 그리므로 완전 침묵 = 턴 종료로 안전하다.
-// (대기 화면이 주기 출력을 하는 것으로 실측되면 "2초 윈도 출력 < 80B" 판정으로 전환할 것)
-const WAIT_SILENCE_MS = 2500; // busy → waiting/idle 판정 침묵 시간
-const BEL_SILENCE_MS = 300; // bare BEL(에이전트의 주의 요청) 후에는 짧은 침묵으로 조기 판정
-// 입력 후 이 이상 출력해야 "턴 산출물" — 마지막 키 에코 수준(수 바이트)만 거른다.
-// ⚠️ 크게 잡으면(600) claude 래퍼의 계정 선택 프롬프트(145B) 같은 작은 입력 대기를 놓친다(2026-08 실측).
-// 타이핑 멈춤 오탐은 바이트가 아니라 NOTIFY_INPUT_GAP_MS(알림 게이트)가 막는다.
-const MIN_TURN_BYTES = 50;
-// 최근 입력 직후의 waiting 전이는 상태(뱃지)만 바꾸고 소리·알럿은 생략 —
-// 타이핑을 잠깐 멈춘 사용자는 이미 프롬프트 앞에 있다(불러올 필요가 없다)
-const NOTIFY_INPUT_GAP_MS = 5000;
+// ⚠️ 상태 판정 규칙(침묵 판정·알림 게이트)과 그 상수는 ./status.ts 에 있다 —
+// 순수 함수라 테스트로 고정돼 있으니(status.test.ts) 규칙을 바꿀 때는 그쪽을 고칠 것.
 // busy 안에서 '실작업'(working)을 가리는 문턱 — 이만큼 출력이 **이어져야** 작업중으로 본다.
 // ⚠️ busy 자체는 출력 한 프레임에도 켜진다: claude 는 마우스 트래킹을 켜므로 휠·클릭이,
 //    프롬프트 타이핑이 그때마다 화면을 다시 그린다(리렌더는 0.3초 이내로 끝난다).
@@ -188,43 +179,41 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
   // 소리·알럿 게이트 — 상태(뱃지)는 위 emitChanged 로 이미 반영됐다.
   // 알림 기회는 입력(턴)당 1회: attach/resize 의 SIGWINCH redraw 가 busy→waiting 을
   // 다시 만들어도(입력 없이) 소리가 중복되지 않는다.
-  const now = Date.now();
-  if (s.notifiedSinceInput) {
-    termLog('skip', { id: s.id, why: 'already-notified' });
-    return;
-  }
-  if (now < s.suppressNotifyUntil) {
-    s.notifiedSinceInput = true; // 생성 grace — 초기 프롬프트는 조용히 기회 소진
-    // 남은 grace 를 함께 남긴다 — 생성 시각만으론 "생성 57초 뒤인데 왜 grace 인가"를
-    // 읽을 수 없다(복원 시 grace 가 새로 걸린다). 발화/미발화가 갈린 지점 판독용.
-    termLog('skip', {
-      id: s.id,
-      why: 'create-grace',
-      graceLeft: `${((s.suppressNotifyUntil - now) / 1000).toFixed(1)}s`,
-    });
-    return;
-  }
-  const gap = now - s.lastInputAt;
-  if (gap >= NOTIFY_INPUT_GAP_MS) {
+  // 판정은 status.ts 의 순수 함수(decideWaitingNotify)가 한다 — 여기서는 적용만.
+  const gate = decideWaitingNotify(s, Date.now());
+  if (gate.action === 'fire') {
     fireWaitingNotify(s);
     return;
   }
-  // 입력 직후(5초 내) 전이 — 예전엔 여기서도 기회를 소진해 **5초 안에 끝나는 짧은 턴이
-  // 영영 무음**이 됐다(2026-08-14 사용자 신고 "대기인데 소리 안 남"). 제출(Enter)로 시작한
-  // 턴이면 소진하지 않고 게이트가 풀리는 시점에 재판정한다 — 그때도 waiting 이면 알림.
-  // 제출 없이 타이핑만 멈춘 경우는 기존대로 소진(프롬프트 앞의 사용자에게 소음 방지).
-  if (!s.lastInputSubmit) {
-    s.notifiedSinceInput = true;
-    termLog('skip', { id: s.id, why: 'no-submit', lastInput: s.lastInputKind });
+  if (gate.action === 'skip') {
+    termLog('skip', { id: s.id, why: gate.why });
     return;
   }
+  if (gate.action === 'consume') {
+    s.notifiedSinceInput = true; // 알리지 않고 이번 턴의 기회만 소진
+    // create-grace 는 남은 grace 를 함께 남긴다 — 생성 시각만으론 "생성 57초 뒤인데 왜
+    // grace 인가"를 읽을 수 없다(복원 시 grace 가 새로 걸린다). 발화/미발화 판독용.
+    termLog(
+      'skip',
+      gate.why === 'create-grace'
+        ? {
+            id: s.id,
+            why: gate.why,
+            graceLeft: `${(gate.graceLeftMs / 1000).toFixed(1)}s`,
+          }
+        : { id: s.id, why: gate.why, lastInput: s.lastInputKind },
+    );
+    return;
+  }
+  // recheck — 게이트가 풀리는 시점에 재판정한다(기회는 남겨 둔다).
+  // 이게 없으면 5초 안에 끝나는 짧은 턴이 영영 무음이 된다(2026-08-14 신고).
   clearNotifyRecheck(s);
   s.notifyRecheck = setTimeout(() => {
     s.notifyRecheck = null;
     if (sessions.get(s.id) !== s) return; // 그 사이 종료·교체됨
     if (s.status !== 'waiting' || s.notifiedSinceInput) return; // 다시 busy 거나 이미 처리됨
     fireWaitingNotify(s);
-  }, NOTIFY_INPUT_GAP_MS - gap + 100);
+  }, gate.delayMs);
 }
 
 /** waiting 알림 발화 + 이번 턴의 기회 소진 */
@@ -356,18 +345,9 @@ const AUTO_REPLY_RE =
 function statusTick() {
   const now = Date.now();
   for (const s of sessions.values()) {
-    if (s.status !== 'busy') continue;
-    // bare BEL 은 에이전트의 명시적 주의 요청 — 짧은 침묵으로 조기 판정 + 바이트 임계 면제
-    const bell = s.bellAt > s.lastInputAt;
-    const silence = bell ? BEL_SILENCE_MS : WAIT_SILENCE_MS;
-    const lastActivity = Math.max(s.lastOutputAt, s.lastInputAt);
-    if (now - lastActivity < silence) continue;
-    if (s.agentId !== 'shell' && (bell || s.bytesSinceInput >= MIN_TURN_BYTES)) {
-      setStatus(s, 'waiting', bell ? 'bel' : 'silence');
-    } else {
-      // 순수 셸(ls 한 번)과 에코 수준 출력은 waiting 자격이 없다 — 뱃지 오탐 차단
-      setStatus(s, 'idle', 'silence');
-    }
+    const d = decideSilence(s, now);
+    if (!d) continue;
+    setStatus(s, d.next, d.why);
     // ⚠️ BEL 은 판정에 **한 번 쓰면 소비**한다. 예전엔 다음 입력까지 남아 있어서, 완료 때
     // 울린 BEL 하나가 이후의 모든 출력에 '300ms 침묵 + 바이트 임계 면제'를 계속 발급했다 —
     // 끝난 세션이 busy↔waiting 을 쉼 없이 왕복하며 알림 게이트를 반복해서 두드린 원인.

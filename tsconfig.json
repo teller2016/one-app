@@ -16,5 +16,11 @@
     "outDir": "dist",
     "resolveJsonModule": true
   },
-  "include": ["src", "forge.config.ts", "vite.*.config.ts", "forge.env.d.ts"]
+  "include": [
+    "src",
+    "forge.config.ts",
+    "vite.*.config.ts",
+    "vitest.config.ts",
+    "forge.env.d.ts"
+  ]
 }
