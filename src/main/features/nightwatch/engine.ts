@@ -1,5 +1,5 @@
 // Nightwatch 엔진 — Jira 후보 조회 → 티켓 데이터 준비 → 실제 저장소(현재 체크아웃)에서 헤드리스 미션 → 사후 검증 → 원장 기록.
-// 자동 실행 없음: UI 의 [분석] 수동 호출이 유일한 진입점이고, 실행 중 추가된 요청은 대기열로 순차 처리한다.
+// 진입점 둘: UI 의 [분석] 수동 호출과 자동 순회 스케줄러(scheduler.ts). 실행 중 추가된 요청은 대기열로 순차 처리한다.
 // worktree 없이 사용자의 작업 트리를 그대로 읽는다 — 그래서 저장소에 대한 어떤 git 조작(원복 포함)도 하지 않고,
 // 미션이 저장소를 건드린 흔적이 보이면 증거 patch 만 남기고 경고한다.
 import type {
@@ -28,6 +28,7 @@ import {
   appendCycleLog,
   ensureNwDirs,
   getNightwatchConfig,
+  loadAutoState,
   loadNwState,
   nwPaths,
   readCycleLogTail,
@@ -232,6 +233,7 @@ export async function getNightwatchStatus(): Promise<NightwatchStatus> {
     .sort((a, b) =>
       String(b.startedAt ?? "").localeCompare(String(a.startedAt ?? ""))
     );
+  const config = getNightwatchConfig();
   return {
     jiraConfigured: !!getJiraApiConfig(),
     claudeFound: !!(await ensureClaudeBin()),
@@ -240,9 +242,18 @@ export async function getNightwatchStatus(): Promise<NightwatchStatus> {
     queue: queue.map((q) => q.key),
     lastRunAt,
     jiraBaseUrl: getJiraApiConfig()?.url,
-    config: getNightwatchConfig(),
+    config,
+    auto: loadAutoState(),
+    // 타이머 부착 여부는 설정 enabled 와 1:1 이다 (scheduler.refreshNightwatchSchedule).
+    // scheduler 를 import 하지 않는 이유: scheduler → engine 방향 의존만 두고 순환을 만들지 않는다.
+    autoRunning: config.auto.enabled,
     tickets,
   };
+}
+
+/** 지금 분석이 돌고 있거나 대기열이 남았는지 — 자동 순회가 한 건씩만 태우도록 쓰는 게이트 */
+export function isAnalysisActive(): boolean {
+  return missionBusy || queue.length > 0;
 }
 
 // 해결 판별 — renderer jira 의 isDone 과 동일 기준. 이 팀 워크플로우는 '해결됨'이
@@ -258,14 +269,23 @@ const summaryPrefix = (summary: string) =>
 const repoDefaultKey = (ticketKey: string, summary: string) =>
   `${ticketKey.split("-")[0]}:${summaryPrefix(summary)}`;
 
-/** 분석 후보 목록 — Jira 섹션과 같은 '내 미해결 이슈' 전체에서 해결·숨김 티켓만 뺀다 */
+/**
+ * 분석 후보 목록 — '내 미해결 이슈' + Jira 섹션에서 직접 추가한 티켓에서 숨김·기분석만 뺀다.
+ *
+ * ⚠️ **직접 추가한 티켓(pinned)은 해결 상태여도 남긴다** — 내 담당이 아닐 수 있고, 사용자가
+ * "이걸 보겠다"고 명시적으로 넣은 티켓이다. 해결됨으로 목록에서 사라지면 분석할 경로가
+ * 아예 없어진다(Jira 섹션은 '해결됨' 그룹에 접어 두지만 여기엔 그 그룹이 없다).
+ * 대신 `resolved` 를 실어 보내 자동 순회가 이미 끝난 티켓에 비용을 쓰지 않게 한다.
+ */
 export async function listCandidates(): Promise<NightwatchCandidatesResult> {
   const list = await fetchMyIssues();
   if (!list.ok || !list.issues) {
     return { ok: false, error: list.error ?? "이슈 조회에 실패했습니다" };
   }
   const state = loadNwState();
-  const open = list.issues.filter((issue) => !isIssueDone(issue));
+  const open = list.issues.filter(
+    (issue) => issue.pinned || !isIssueDone(issue)
+  );
   // 숨김 목록 위생 — 해결·할당 해제로 내 목록에서 사라진 키는 더 기억할 필요 없다
   const openKeys = new Set(open.map((issue) => issue.key));
   const hidden = state.hiddenTickets.filter((key) => openKeys.has(key));
@@ -286,6 +306,8 @@ export async function listCandidates(): Promise<NightwatchCandidatesResult> {
         issueType: issue.issueType,
         status: issue.status,
         priority: issue.priority,
+        pinned: issue.pinned,
+        resolved: isIssueDone(issue) || undefined,
         // 위 필터로 처리한 티켓은 이미 빠졌으므로 항상 null (필드는 타입 호환 위해 유지)
         processedStatus: state.tickets[issue.key]?.status ?? null,
         suggestedRepoId:

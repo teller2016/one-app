@@ -1,9 +1,12 @@
 // Nightwatch 설정·티켓 원장 저장 — 데이터는 전부 userData/nightwatch/ 아래 (비밀 없음, 평문 JSON)
 // Jira 자격증명은 환경설정 공용(settings/store.ts getJiraApiConfig)이라 여기서 다루지 않는다.
 import type {
+  NightwatchAutoConfig,
+  NightwatchAutoState,
   NightwatchConfig,
   NightwatchTicket,
 } from "../../../shared/types";
+import { todayKey } from "../../../shared/date";
 import { app } from "electron";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,6 +18,7 @@ export const nwPaths = () => {
     base,
     config: path.join(base, "config.json"),
     state: path.join(base, "state.json"),
+    autoState: path.join(base, "auto-state.json"),
     work: path.join(base, "work"),
     reports: path.join(base, "reports"),
     logs: path.join(base, "logs"),
@@ -29,11 +33,44 @@ export function ensureNwDirs() {
   }
 }
 
+// 자동 순회 기본값 — 끄고 시작한다. maxPerDay 0 = 무제한(후보가 소진되면 알아서 멈춘다)
+const DEFAULT_AUTO: NightwatchAutoConfig = {
+  enabled: false,
+  model: "opus",
+  maxPerDay: 0,
+};
+
 // 분석 대상 저장소는 프로젝트 레지스트리(features/projects) 참조 — 여기엔 목록이 없다
 const DEFAULT_CONFIG: NightwatchConfig = {
   claudeConfigDir: path.join(os.homedir(), ".claude"),
   timeoutMinutes: 40,
+  auto: DEFAULT_AUTO,
 };
+
+// claude CLI --model 에 넘길 별칭 형식 (engine 의 sanitizeAnalyzeOpts 와 같은 기준)
+const MODEL_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** 자동 순회 설정 정제 — 형식이 깨진 값은 이전값(없으면 기본값) 유지 */
+function sanitizeAuto(
+  input: Partial<NightwatchAutoConfig> | undefined,
+  prev: NightwatchAutoConfig
+): NightwatchAutoConfig {
+  const model =
+    input?.model === null
+      ? null
+      : typeof input?.model === "string" && MODEL_RE.test(input.model.trim())
+        ? input.model.trim()
+        : input?.model === undefined
+          ? prev.model
+          : // 빈 문자열은 "CLI 기본" 선택 — null 로 정규화한다
+            null;
+  return {
+    enabled:
+      typeof input?.enabled === "boolean" ? input.enabled : prev.enabled,
+    model,
+    maxPerDay: clamp(input?.maxPerDay, 0, 50, prev.maxPerDay),
+  };
+}
 
 function readJson<T>(file: string): T | null {
   try {
@@ -68,6 +105,7 @@ export function getNightwatchConfig(): NightwatchConfig {
         ? saved.claudeConfigDir.trim()
         : DEFAULT_CONFIG.claudeConfigDir,
     timeoutMinutes: clamp(saved.timeoutMinutes, 5, 120, DEFAULT_CONFIG.timeoutMinutes),
+    auto: sanitizeAuto(saved.auto, DEFAULT_AUTO),
   };
 }
 
@@ -82,6 +120,7 @@ export function saveNightwatchConfig(
         ? input.claudeConfigDir.trim()
         : prev.claudeConfigDir,
     timeoutMinutes: clamp(input.timeoutMinutes, 5, 120, prev.timeoutMinutes),
+    auto: sanitizeAuto(input.auto, prev.auto),
   };
   writeJson(nwPaths().config, next);
   return next;
@@ -107,6 +146,36 @@ export function loadNwState(): NwState {
 
 export function saveNwState(state: NwState) {
   writeJson(nwPaths().state, state);
+}
+
+// ── 자동 순회 진행 상태 ──────────────────────────────────────────────────
+// ⚠️ 메모리에만 두면 안 된다 — 앱 재시작이 하루 상한과 '오늘 건너뛴 티켓' 기억을
+// 지워버려, 저장소를 못 정한 티켓에 매 tick 마다 선택 미션을 다시 태운다.
+const EMPTY_AUTO_STATE = (): NightwatchAutoState => ({
+  date: todayKey(),
+  count: 0,
+  skipped: [],
+});
+
+/** 오늘의 자동 순회 상태 — 저장된 날짜가 어제면 빈 상태로 시작한다 */
+export function loadAutoState(): NightwatchAutoState {
+  const raw = readJson<Partial<NightwatchAutoState>>(nwPaths().autoState);
+  const today = todayKey();
+  if (!raw || raw.date !== today) return EMPTY_AUTO_STATE();
+  return {
+    date: today,
+    count: typeof raw.count === "number" && raw.count > 0 ? Math.floor(raw.count) : 0,
+    skipped: Array.isArray(raw.skipped)
+      ? raw.skipped.filter((k): k is string => typeof k === "string")
+      : [],
+    lastCheckAt: typeof raw.lastCheckAt === "string" ? raw.lastCheckAt : undefined,
+    lastPick: typeof raw.lastPick === "string" ? raw.lastPick : null,
+    lastError: typeof raw.lastError === "string" ? raw.lastError : null,
+  };
+}
+
+export function saveAutoState(state: NightwatchAutoState) {
+  writeJson(nwPaths().autoState, state);
 }
 
 // 사이클 로그 상한 — 이 로그는 tail 로만 읽히는데 로테이션이 없어 앱을 쓰는 내내

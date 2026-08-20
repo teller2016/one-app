@@ -1,4 +1,5 @@
 import type {
+  NightwatchAutoConfig,
   NightwatchCandidate,
   NightwatchConfig,
   NightwatchStatus,
@@ -8,6 +9,7 @@ import type {
 import { Badge } from "../../../components/Badge";
 import { Banner } from "../../../components/Banner";
 import { Button } from "../../../components/Button";
+import { Checkbox } from "../../../components/Checkbox";
 import { Collapsible } from "../../../components/Collapsible";
 import { useConfirm } from "../../../components/ConfirmDialog";
 import { FormRow } from "../../../components/FormRow";
@@ -22,6 +24,7 @@ import { Segment } from "../../../components/Segment";
 import { Textarea } from "../../../components/Textarea";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/EmptyState";
+import { hhmm } from "../../../../shared/date";
 import { usePolling } from "../../../lib/usePolling";
 import { useAsync } from "../../../lib/useAsync";
 import { errMsg, resultError } from "../../../lib/errMsg";
@@ -47,11 +50,13 @@ const ticketBadge = (
 };
 
 /**
- * Nightwatch — Jira 버그 티켓 헤드리스 분석 (수동 실행 전용).
+ * Nightwatch — Jira 버그 티켓 헤드리스 분석 (수동 실행 + 자동 순회).
  * Jira 섹션과 같은 '내 미해결 이슈' 중 버그만 후보로 보여주고, [분석]에서
  * 저장소를 골라 시작하면 그 저장소의 현재 체크아웃에서 헤드리스 Claude
  * 미션이 돌아 리포트 + 작업 프롬프트를 만든다. 실행 중 추가한 티켓은
- * 대기열로 순차 실행. Jira 자격증명은 환경설정 → 연동 공용.
+ * 대기열로 순차 실행. 설정의 [자동 분석]을 켜면 스케줄러가 후보를 알아서 한 건씩
+ * 돌린다(저장소는 학습값 → claude 선택 → Jira 키 순으로 정함). Jira 자격증명은
+ * 환경설정 → 연동 공용.
  */
 export function NightwatchSection() {
   const [status, setStatus] = useState<NightwatchStatus | null>(null);
@@ -262,6 +267,29 @@ export function NightwatchSection() {
   const patch = (p: Partial<NightwatchConfig>) =>
     setForm((f) => (f ? { ...f, ...p } : f));
 
+  const patchAuto = (p: Partial<NightwatchAutoConfig>) =>
+    setForm((f) => (f ? { ...f, auto: { ...f.auto, ...p } } : f));
+
+  // 자동 분석 토글은 [저장] 없이 즉시 반영한다 — 스위치를 올렸는데 저장을 또 눌러야
+  // 도는 건 토글의 의미를 잃는다. (메인이 그 자리에서 스케줄러를 붙였다 뗀다)
+  const toggleAuto = async (enabled: boolean) => {
+    if (!form) return;
+    const next = { ...form, auto: { ...form.auto, enabled } };
+    setForm(next);
+    setBusy("auto");
+    try {
+      const st = await window.oneApp.nightwatch.saveConfig(next);
+      setStatus(st);
+      setForm(st.config);
+      toast(enabled ? "자동 분석을 켰습니다" : "자동 분석을 껐습니다");
+    } catch (e) {
+      setForm(form); // 저장 실패 — 스위치를 원래대로 되돌린다
+      toast(errMsg(e), "fail");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const openJira = (key: string) => {
     if (status?.jiraBaseUrl) {
       void window.oneApp.openExternal(`${status.jiraBaseUrl}/browse/${key}`);
@@ -352,6 +380,19 @@ export function NightwatchSection() {
                   숨김 {hiddenCount}건 해제
                 </Button>
               )}
+              {/* 자동 순회 on/off 는 색으로 바로 읽히게 — 켜짐 초록·꺼짐 빨강 */}
+              {!runningKey && (
+                <Badge
+                  variant={status.autoRunning ? "ok" : "fail"}
+                  title={
+                    status.autoRunning
+                      ? "설정 → 자동 분석이 켜져 있습니다 (5분마다 후보 확인)"
+                      : "설정 → 자동 분석이 꺼져 있습니다 (수동 [분석]만 동작)"
+                  }
+                >
+                  자동 분석 {status.autoRunning ? "켜짐" : "꺼짐"}
+                </Badge>
+              )}
               {runningKey && (
                 <>
                   <Badge variant="busy">{runningKey} 분석 중</Badge>
@@ -419,6 +460,16 @@ export function NightwatchSection() {
                         </button>
                         <span className="nightwatch__dim">{c.issueType}</span>
                         <span className="nightwatch__dim">{c.status}</span>
+                        {/* 직접 추가한 티켓은 내 담당이 아닐 수 있어 출처를 표시한다.
+                            (해결 상태여도 후보에 남는 것은 이 티켓들뿐) */}
+                        {c.pinned && (
+                          <span
+                            className="nightwatch__dim"
+                            title="Jira 섹션에서 직접 추가한 티켓 — 해결된 뒤에도 후보에 남습니다(자동 분석 대상은 아님)"
+                          >
+                            <Icon name="pin" size={11} /> 직접 추가
+                          </span>
+                        )}
                         {c.priority && (
                           <span className="nightwatch__dim">{c.priority}</span>
                         )}
@@ -570,6 +621,57 @@ export function NightwatchSection() {
           icon={<Icon name="settings" size={14} />}
           storageKey="nightwatch:settings"
         >
+          <FormRow label="자동 분석" column>
+            <Checkbox
+              label="후보 티켓을 알아서 분석"
+              checked={form.auto.enabled}
+              disabled={busy === "auto"}
+              onChange={(e) => void toggleAuto(e.target.checked)}
+              title="켜면 저장 없이 바로 적용됩니다"
+            />
+            <p className="hint">
+              켜 두면 5분마다 미처리 후보를 확인해 <b>한 건씩</b> 분석합니다.
+              저장소는 지난 선택(학습값) → claude 자동 선택 → Jira 키 일치 순으로
+              정하고, 못 정한 티켓은 그날 하루 건너뜁니다. 분석 이력이 생긴
+              티켓은 후보에서 빠지므로 같은 티켓을 다시 돌리지 않습니다.
+            </p>
+            {status && form.auto.enabled && (
+              <p className="hint">
+                오늘 {status.auto.count}건
+                {form.auto.maxPerDay > 0
+                  ? ` / ${form.auto.maxPerDay}건`
+                  : " (상한 없음)"}
+                {status.auto.lastCheckAt &&
+                  ` · 마지막 확인 ${hhmm(new Date(status.auto.lastCheckAt))}`}
+                {status.auto.lastPick && ` · ${status.auto.lastPick}`}
+                {status.auto.skipped.length > 0 &&
+                  ` · 오늘 건너뜀 ${status.auto.skipped.length}건`}
+                {status.auto.lastError && ` · ⚠️ ${status.auto.lastError}`}
+              </p>
+            )}
+          </FormRow>
+          <FormRow label="자동 분석 모델">
+            <Segment
+              options={[
+                { value: "", label: "기본" },
+                { value: "fable", label: "Fable" },
+                { value: "opus", label: "Opus" },
+                { value: "sonnet", label: "Sonnet" },
+                { value: "haiku", label: "Haiku" },
+              ]}
+              value={form.auto.model ?? ""}
+              onChange={(v) => patchAuto({ model: v || null })}
+            />
+          </FormRow>
+          <FormRow label="하루 최대 건수">
+            <Input
+              small
+              type="number"
+              value={String(form.auto.maxPerDay)}
+              onChange={(e) => patchAuto({ maxPerDay: Number(e.target.value) })}
+              title="0 이면 상한 없이 후보가 소진될 때까지 돌립니다"
+            />
+          </FormRow>
           <FormRow label="분석 대상 프로젝트">
             <p className="hint">
               분석 대상은 <b>프로젝트</b> 탭에서 관리합니다. (로컬 경로가 있는

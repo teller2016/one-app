@@ -958,7 +958,7 @@ export type ReminderConfig = {
   repeat: ReminderRepeat;
 };
 
-// ── Nightwatch (Jira 버그 티켓 헤드리스 분석 — 수동 실행) ──
+// ── Nightwatch (Jira 버그 티켓 헤드리스 분석 — 수동 실행 + 자동 순회) ──
 export type NightwatchTicket = {
   key: string;
   status: string; // in_progress | analyzed | failed | violation_edited …
@@ -981,20 +981,34 @@ export type NightwatchAnalyzeOpts = {
   note?: string | null; // 미션 프롬프트에 첨부할 사용자 부가설명
 };
 
+/**
+ * 자동 순회 설정 — 켜두면 스케줄러가 미처리 후보를 알아서 한 건씩 분석한다.
+ * 시각 스케줄은 없다(토글이 곧 스위치): 켜져 있는 동안 주기적으로 후보를 확인하고,
+ * 분석 이력이 있는 티켓은 후보에서 빠지므로 소진되면 조용히 대기한다.
+ */
+export type NightwatchAutoConfig = {
+  enabled: boolean; // 자동 순회 on/off — 이 값만으로 스케줄러가 붙었다 떨어진다
+  model: string | null; // 자동 분석 모델 (claude CLI --model 별칭, null 이면 CLI 기본)
+  maxPerDay: number; // 하루 최대 자동 분석 건수 — 0 이면 무제한
+};
+
 // 폼 친화적으로 평평하게 유지 — 저장은 userData/nightwatch/config.json
 // (분석 대상 저장소는 프로젝트 레지스트리(Project)를 참조 — 자체 목록 없음)
 export type NightwatchConfig = {
   claudeConfigDir: string; // 분석 세션 Claude 계정 (~/.claude | ~/.claude-team)
   timeoutMinutes: number; // 티켓당 미션 타임아웃
+  auto: NightwatchAutoConfig; // 자동 순회
 };
 
-// 분석 후보 티켓 — Jira 섹션과 같은 '내 미해결 이슈' 전체 (숨김 처리한 티켓 제외)
+// 분석 후보 티켓 — Jira 섹션과 같은 '내 미해결 이슈' + 직접 추가한 티켓 (숨김 처리한 티켓 제외)
 export type NightwatchCandidate = {
   key: string;
   summary: string;
   issueType: string; // 버그 · 작업 · 하위 작업 …
   status: string; // 해야 할 일 · 진행 중 …
   priority: string | null;
+  pinned?: boolean; // Jira 섹션에서 직접 추가한 티켓 (내 담당이 아닐 수 있다)
+  resolved?: boolean; // 해결·완료 상태 — pinned 라서 후보에 남은 경우에만 true 가 된다
   processedStatus: string | null; // 원장에 이미 있으면 그 상태 (재분석 가능)
   suggestedRepoId: string | null; // 같은 프로젝트·말머리로 마지막에 고른 저장소 (학습형 기본값)
 };
@@ -1006,6 +1020,16 @@ export type NightwatchCandidatesResult = {
   error?: string;
 };
 
+/** 자동 순회 진행 현황 — 하루 단위로 리셋된다 (userData/nightwatch/auto-state.json) */
+export type NightwatchAutoState = {
+  date: string; // 로컬 날짜 키 (YYYY-MM-DD) — 바뀌면 count·skipped 리셋
+  count: number; // 오늘 자동으로 시작한 분석 건수
+  skipped: string[]; // 오늘 저장소를 정하지 못해 건너뛴 티켓 키 (하루 1회만 시도)
+  lastCheckAt?: string; // 마지막 후보 확인 시각 (ISO)
+  lastPick?: string | null; // 마지막 자동 선택 결과 요약 (UI 표시용)
+  lastError?: string | null; // 마지막 확인 실패 사유 (Jira 조회 실패 등)
+};
+
 export type NightwatchStatus = {
   jiraConfigured: boolean; // 환경설정 → 연동의 Jira 주소·이메일·토큰 완비 여부
   claudeFound: boolean; // claude 바이너리 탐지 여부
@@ -1015,6 +1039,8 @@ export type NightwatchStatus = {
   lastRunAt?: string; // 마지막 분석 시각 (ISO)
   jiraBaseUrl?: string; // 티켓 키 클릭 시 브라우저 링크용
   config: NightwatchConfig;
+  auto: NightwatchAutoState; // 자동 순회 진행 현황
+  autoRunning: boolean; // 스케줄러 타이머가 붙어 있는지 (설정 enabled 와 동기)
   tickets: NightwatchTicket[];
 };
 
