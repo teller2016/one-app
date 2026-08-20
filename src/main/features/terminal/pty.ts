@@ -842,7 +842,23 @@ export function writeSession(id: string, data: string): void {
     exitCopyMode(s);
     return;
   }
-  s.pty.write(data);
+  ptyWrite(s, data);
+}
+
+/**
+ * PTY 쓰기 — **반드시 이걸 거칠 것**(`s.pty.write` 직접 호출 금지).
+ *
+ * ⚠️ node-pty 의 write 는 동기로 던진다 — 세션이 방금 죽었는데 렌더러·폰이 아직 모르고
+ * 보낸 키, 형이 어긋난 WS 프레임(`{type:'input', data:123}`) 등이 그 경로다. main 에는
+ * uncaughtException 핸들러가 없어 그 예외 하나가 **앱 전체를 내린다** — 세션을 끊는 것보다
+ * 훨씬 나쁘다. 삼킨 결과는 '그 입력만 유실'이고, 죽은 세션이면 어차피 갈 곳이 없다.
+ */
+function ptyWrite(s: Session, data: string): void {
+  try {
+    s.pty.write(data);
+  } catch (err) {
+    life('write:failed', { id: s.id, err: String(err) });
+  }
 }
 
 /** copy-mode 해제 + 밀린 입력 flush — writeSession·scrollSessionToBottom 공용 */
@@ -865,7 +881,7 @@ function exitCopyMode(s: Session): Promise<void> {
 function flushPendingInput(s: Session) {
   const buf = s.pendingInput;
   s.pendingInput = '';
-  if (buf && sessions.has(s.id)) s.pty.write(buf);
+  if (buf && sessions.has(s.id)) ptyWrite(s, buf);
 }
 
 /**

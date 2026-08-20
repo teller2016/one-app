@@ -103,7 +103,9 @@ export function registerWorkspacesIpc() {
       const app = findEditorApp();
       if (!app) return { ok: false, error: `${EDITOR_NAME} 가 설치되어 있지 않습니다.` };
       const w = requireWorkspace(id);
-      const list = await listWorktrees(w.repoPath);
+      // 경로 대조만 하면 되므로 경량 조회 — 상세는 워크트리마다 status·diff 를 돌려
+      // 버튼을 누른 뒤 IDE 가 뜨기까지 그만큼 늦어진다
+      const list = await listWorktreesBrief(w.repoPath);
       if (!list.some((t) => t.path === worktreePath)) {
         throw new Error('이 워크스페이스의 워크트리가 아닙니다.');
       }
@@ -139,7 +141,8 @@ export function registerWorkspacesIpc() {
     'workspaces:worktree-remove',
     async (_e, id: string, worktreePath: string, force?: boolean) => {
       const w = requireWorkspace(id);
-      const list = await listWorktrees(w.repoPath);
+      // 경로·isMain 만 보면 되므로 경량 조회 (dirty 는 호출부가 이미 확인해 force 로 넘긴다)
+      const list = await listWorktreesBrief(w.repoPath);
       const target = list.find((t) => t.path === worktreePath);
       if (!target) throw new Error('이 워크스페이스의 워크트리가 아닙니다.');
       if (target.isMain) throw new Error('원본 저장소(주 워크트리)는 제거할 수 없습니다.');

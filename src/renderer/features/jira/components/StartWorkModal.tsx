@@ -93,8 +93,12 @@ export function StartWorkModal({
         api.terminal.agents(),
         api.jira.workAccounts(),
       ]);
+      // ⚠️ 워크트리는 **경량으로 먼저** 받는다(경로·브랜치만) — 상세는 워크스페이스마다
+      // `git status --untracked-files=all` + `git diff` 를 돌려 전부 모으면 600ms 가까이
+      // 걸린다(워크스페이스 14개 596ms, 2026-08-20 실측). 그동안 모달이 안 뜨면 티켓 하나
+      // 시작하는 데 체감된다. 미커밋 표시(dirty·±N)에 필요한 상세는 아래에서 덧입힌다.
       const trees = await Promise.all(
-        ws.map(async (w) => [w.id, await api.workspaces.worktrees(w.id)] as const)
+        ws.map(async (w) => [w.id, await api.workspaces.worktrees(w.id, false)] as const)
       );
       if (!alive) return;
       setWorkspaces(ws);
@@ -106,6 +110,18 @@ export function StartWorkModal({
       // 저장된 선택이 사라졌으면(프로필 폴더 삭제) 첫 계정으로 되돌린다
       if (accs.length > 0 && !accs.some((a) => a.id === account)) setAccount(accs[0].id);
       setReady(true);
+      // 미커밋 표시는 뒤따라 채운다 — 도착하는 워크스페이스부터 그 항목만 갈아끼우므로
+      // 목록은 이미 떠 있고 '미커밋'·±N 만 곧 나타난다
+      for (const w of ws) {
+        void api.workspaces
+          .worktrees(w.id, true)
+          .then((list) => {
+            if (alive) setWorktrees((cur) => ({ ...cur, [w.id]: list }));
+          })
+          .catch(() => {
+            // 저장소가 사라졌거나 git 실패 — 경량 목록이 그대로 남는다(미커밋 표시만 없다)
+          });
+      }
     })();
     return () => {
       alive = false;

@@ -142,6 +142,21 @@ export const SessionTabs = memo(function SessionTabs({
     }
   }, [draggingId]);
 
+  // ── 활성 탭을 보이는 곳으로 ─────────────────────────────────────────
+  // 탭바는 가로 스크롤(`overflow-x: auto`)이라 탭이 많으면 활성 탭이 화면 밖일 수 있다.
+  // 클릭 전환은 원래 보이던 탭이지만 ⌘1..9·⌃Tab·새 세션·히스토리 복원은 **안 보이는 탭**을
+  // 고를 수 있어서, 안 끌어오면 "전환했는데 어디로 갔는지 모르겠다"가 된다.
+  // ⚠️ deps 는 activeId 뿐 — items 까지 넣으면 세션 상태 브로드캐스트(초 단위)마다 돌아서
+  //    사용자가 손으로 밀어 둔 탭바 스크롤이 계속 되돌아온다.
+  // ⚠️ `block: 'nearest'` — 없으면 섹션 전체가 세로로 함께 스크롤된다.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!activeId) return;
+    listRef.current
+      ?.querySelector(`[data-session="${activeId}"]`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeId]);
+
   // ── 순서 변경 — 탭을 끌어 다른 아이템의 좌우 가장자리에 놓으면 표시 순서가 바뀐다.
   // 이동 단위는 **탭바 아이템**(단일 탭 또는 그룹 통탭 전체)이다 — 그룹 안 멤버 순서는
   // 분할 트리가 소유하므로(pane 드롭이 바꾼다) 여기서는 그룹을 통째로 옮긴다.
@@ -380,7 +395,12 @@ export const SessionTabs = memo(function SessionTabs({
         if (draggingId) onDetachSession(draggingId);
       }}
     >
-      <div className="terminal__tabs-list" role="tablist" aria-label="터미널 세션">
+      <div
+        className="terminal__tabs-list"
+        role="tablist"
+        aria-label="터미널 세션"
+        ref={listRef}
+      >
         {items.map((it, idx) =>
           it.kind === 'single' ? (
             renderTab(it.session, { index: idx })

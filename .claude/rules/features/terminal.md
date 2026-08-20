@@ -34,6 +34,7 @@ paths:
 - ⚠️ **에이전트는 `TMUX` 를 지우고 실행**(위 `env -u`) — 남기면 Claude Code 가 트루컬러를 포기하고 256색 폴백(로고가 분홍빛). 셸 세션은 감싸지 않는다. 색이 이상하면 먼저 출력 바이트의 SGR 유형(`38;2` vs `38;5`)부터 확인.
 - tmux 미설치 폴백 세션만 예전 PTY write 방식 — 첫 출력 후 350ms 잠잠해지면 전송, 상한 3초.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 포함, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
+- ⚠️ **PTY 쓰기는 `pty.ts` 의 `ptyWrite()` 를 거칠 것**(`s.pty.write` 직접 호출 금지) — node-pty 의 write 는 동기로 던지고(죽은 세션에 남은 키·형이 어긋난 WS 프레임), main 에 uncaughtException 핸들러가 없어 그 예외 하나가 **앱 전체를 내린다**.
 - 진단: `ONEAPP_TERM_DEBUG=1` → `[term:life]` 로그. 죽은 pane 재현은 전용 소켓 + `remain-on-exit on` + `capture-pane -p`.
 
 ## 데스크톱 pane 관리
@@ -63,6 +64,7 @@ paths:
   Jira [작업] 진입·분할 pane 포커스 이동 — 노이즈가 되거나 화면이 안 바뀐다).
 
 ## 분할(스플릿) 그룹
+- ⚠️ 아래 규칙(특히 '한 세션 = pane 하나'와 무변화 시 **원본 참조 반환**)은 `lib/layout.test.ts` 가 고정한다 — 트리 함수를 손볼 때는 `npm test` 로 확인할 것(`status.ts` 와 같은 방식).
 - `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + ratio)가 그룹 상태. **pane 들은 `__panes` 의 플랫 형제 유지** — React 재부모화 = xterm 언마운트라 트리 모양대로 중첩 금지. 렌더는 `computeLayout` 의 %rect 인라인.
 - **화면은 activeId 의 함수** — 포커스 세션이 속한 그룹 전체가 보이고, 아니면 단독 전체 화면. 탭 클릭·⌘1..9·⌃Tab·새 세션은 **화면 전환만**, 그룹 생성·변경은 **드롭만** 한다. ⚠️ '탭 클릭 = 포커스 슬롯 교체'(VS Code 식)는 분할을 덮어써 폐기 — 되돌리지 말 것.
 - 드롭 판정 X자(`|nx|>|ny|`), 중앙 데드존 0.3 = 그 pane 세션 교체. 그룹당 `MAX_SPLIT_PANES`(4). 다른 그룹 세션 드롭 시 먼저 `removeFromGroups`. pane 1개 남는 그룹은 해체.
