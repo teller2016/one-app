@@ -42,6 +42,9 @@ const monoFontLoaded = (stack: string, size: number) => {
 
 // PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
 const PTY_RESIZE_DEBOUNCE_MS = 120;
+// 다만 디바운스만 두면 드래그를 붙잡고 있는 동안 아무도 화면을 채우지 않는다 — 상한을 둬서
+// 긴 드래그 중에도 이 주기로 한 번씩은 SIGWINCH 가 나가게 한다 (아래 onResize 주석)
+const PTY_RESIZE_MAX_WAIT_MS = 250;
 
 // 휠 위임 주기 — 한 번의 IPC 가 tmux CLI 를 한 번 돌리므로 프레임마다 보내지 않는다
 const WHEEL_FLUSH_MS = 24;
@@ -458,18 +461,35 @@ export const TerminalView = memo(function TerminalView({
     // PTY 크기 전달은 디바운스 — 창 드래그 중엔 매 프레임 크기가 바뀌고, 그때마다
     // SIGWINCH 를 보내면 claude 같은 TUI 가 전체 리렌더를 반복해 화면이 요동친다.
     // 마지막 값만 보내면 드래그가 끝난 크기로 한 번 맞춰진다(last-claim-wins 유지).
+    //
+    // ⚠️ 다만 **디바운스만 두면 안 된다** — xterm 은 fit 으로 즉시 줄어드는데(rAF) 대체 화면
+    // (claude 등)은 리플로우 대상이 아니라 새 영역이 빈칸으로 남고, SIGWINCH 가 나가기 전엔
+    // 그 빈칸을 채워 줄 출력이 없다. 드래그를 붙잡고 있는 내내 타이머가 리셋되므로
+    // **검은 화면이 드래그 시간만큼 유지됐다**(2026-08-20 사용자 신고). 그래서 상한을 둔다 —
+    // 대기가 MAX_WAIT 를 넘기면 그 자리에서 한 번 보내 화면을 채우고 기준을 다시 잡는다.
+    // (1회 리렌더는 1.5KB/2 chunk 라 이 주기로는 요동치지 않는다 — terminal-notes.md 실측)
     let ptyResizeTimer: number | null = null;
+    let ptyResizePendingSince = 0;
     const resizeSub = term.onResize(({ cols, rows }) => {
       // ⚠️ 숨은 pane 은 PTY 크기를 주장하지 않는다 — 세션마다 xterm 을 살려 두므로
       // 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣고,
       // 폰(MO)이 보고 있는 세션의 크기까지 되돌려 버린다(크기 공유는 마지막 주장 기준).
       // 분할로 보이는 pane 들은 각자 **자기 세션**의 크기를 주장하므로 서로 충돌하지 않는다.
       if (!visibleRef.current) return;
+      const now = Date.now();
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
-      ptyResizeTimer = window.setTimeout(() => {
+      else ptyResizePendingSince = now; // 대기 구간의 시작
+      const send = () => {
         ptyResizeTimer = null;
+        ptyResizePendingSince = 0;
         window.oneApp.terminal.resize(id, cols, rows);
-      }, PTY_RESIZE_DEBOUNCE_MS);
+      };
+      // 상한 초과 — 지금 값이 곧 최신 값이므로 즉시 보낸다(트레일링은 다음 이벤트가 다시 건다)
+      if (now - ptyResizePendingSince >= PTY_RESIZE_MAX_WAIT_MS) {
+        send();
+        return;
+      }
+      ptyResizeTimer = window.setTimeout(send, PTY_RESIZE_DEBOUNCE_MS);
     });
 
     // 백엔드 확인 — tmux 면 스크롤을 위임한다(위 휠 핸들러). 조회 전에 굴린 휠은

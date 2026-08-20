@@ -189,6 +189,8 @@ tmux 클라이언트가 화면 전체를 직접 그리므로 xterm 뷰포트에 
 ## ⚠️ 리사이즈 — SIGWINCH 폭주 주의
 창 리사이즈 중 터미널이 요동치던 원인은 SIGWINCH 폭주였다 — 드래그 중 프레임마다 PTY resize 를 보내면 claude 가 매번 전체 리렌더를 한다(실측: 20회 연속 resize → **28.3KB/38 chunk** vs 마지막 1회만 → **1.5KB/2 chunk**). 그래서 `TerminalView` 는 **PTY resize IPC 를 120ms 디바운스**(마지막 값만 — last-claim-wins 유지)하고 **fit 을 rAF 로 코얼레스**한다.
 
+⚠️ **디바운스만으로는 반대 증상이 생긴다 — 드래그 중 검은 화면**(2026-08-20 사용자 신고: 창을 크게 잡아 끌면 1~2초 검은 화면, 놓으면 복구). xterm 은 rAF fit 으로 **즉시** 새 크기가 되는데 대체 화면(claude)은 xterm 의 리플로우 대상이 아니라 넓어진 영역이 빈칸으로 남고, 그 빈칸을 채우는 것은 SIGWINCH 를 받은 claude 의 리렌더뿐이다. 드래그하는 내내 디바운스 타이머가 리셋되니 SIGWINCH 가 **한 번도** 나가지 않아 검은 화면이 드래그 시간만큼 유지됐다. → 디바운스에 **최대 대기 상한 `PTY_RESIZE_MAX_WAIT_MS`(250ms)** 를 더했다: 대기가 상한을 넘기면 그 자리에서 한 번 보내고 기준 시각을 다시 잡는다(트레일링은 다음 resize 이벤트가 다시 걸어 마지막 값 보장은 그대로). 1회 리렌더가 1.5KB/2 chunk 이므로 긴 드래그도 4회/초 × 1.5KB 수준 — 위의 폭주(28.3KB)와는 자릿수가 다르다.
+
 더불어 세션 패널 도입으로 생긴 래퍼 `.terminal__main` 에는 **`min-width/min-height: 0` + `overflow: hidden` 이 필수** — flex 아이템의 기본 `min-*: auto` 는 콘텐츠 기반이라 xterm 이 커지면 래퍼가 늘고 host(flex:1)도 커져 fit→resize→더 큰 xterm 무한 성장 루프가 된다.
 
 ### ⚠️ 여백은 **`.xterm` 이 갖는다** — 마운트 부모에 padding 을 주면 마지막 행이 잘린다 (2026-08-12 실측)
