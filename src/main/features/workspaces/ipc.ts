@@ -16,6 +16,7 @@ import {
   addWorktree,
   listBranches,
   listWorktrees,
+  listWorktreesBrief,
   removeWorktree,
 } from './git';
 import {
@@ -122,9 +123,12 @@ export function registerWorkspacesIpc() {
     }
   );
 
-  ipcMain.handle('workspaces:worktrees', (_e, id: string) =>
-    listWorktrees(requireWorkspace(id).repoPath)
-  );
+  // detail=false 면 경량 조회(status·diff 생략) — LNB 가 접힌 워크스페이스에 쓴다.
+  // 기본은 상세다: 인자를 안 주는 기존 호출부(MO 트리·워크트리 모달)는 그대로 동작한다.
+  ipcMain.handle('workspaces:worktrees', (_e, id: string, detail?: boolean) => {
+    const { repoPath } = requireWorkspace(id);
+    return detail === false ? listWorktreesBrief(repoPath) : listWorktrees(repoPath);
+  });
 
   ipcMain.handle('workspaces:worktree-add', (_e, input: WorktreeAddInput) =>
     addWorktree(requireWorkspace(input.workspaceId).repoPath, input)

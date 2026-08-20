@@ -45,11 +45,21 @@ export function useWorkspaceActions({
   const removeWorktree = useCallback(
     async (ws: TerminalWorkspace, wt: WorktreeInfo) => {
       const inUse = sessions.filter((s) => s.cwd === wt.path).length;
+      // ⚠️ LNB 목록은 **경량 조회**라 `dirty` 를 모른다(항상 false) — 지우기 직전에
+      // 그 워크스페이스만 상세로 확인한다. 사용자 조작 1회라 비용이 문제되지 않고,
+      // 오히려 폴링 값(최대 10초 묵음)보다 최신이다. 실패하면 넘겨받은 값으로 진행한다.
+      let dirty = wt.dirty;
+      try {
+        const fresh = await window.oneApp.workspaces.worktrees(ws.id, true);
+        dirty = fresh.find((w) => w.path === wt.path)?.dirty ?? wt.dirty;
+      } catch {
+        // 조회 실패 — 확인 문구가 덜 정확할 뿐이고, 아래 force 는 git 이 다시 판정한다
+      }
       const ok = await confirm({
         title: '워크트리 제거',
         message: [
           `'${worktreeName(wt)}'(${wt.branch ?? wt.head ?? '?'}) 워크트리 폴더를 제거합니다.`,
-          wt.dirty ? '커밋하지 않은 변경이 함께 사라집니다.' : '',
+          dirty ? '커밋하지 않은 변경이 함께 사라집니다.' : '',
           inUse > 0 ? `이 위치를 쓰는 세션 ${inUse}개의 작업 폴더가 사라집니다.` : '',
           '브랜치는 삭제되지 않습니다.',
         ]
@@ -64,7 +74,7 @@ export function useWorkspaceActions({
         const r = await window.oneApp.workspaces.removeWorktree(
           ws.id,
           wt.path,
-          wt.dirty || wt.missing
+          dirty || wt.missing
         );
         if (r.ok) {
           toast('워크트리를 제거했습니다');

@@ -2,7 +2,7 @@ import { ConfirmProvider } from "../components/ConfirmDialog";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
-import { ToastProvider, useToast } from "../components/Toast";
+import { ToastProvider, useToast, useToastDismiss } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
 import { DeploySection } from "../features/deploy";
@@ -28,6 +28,7 @@ import {
   useHasSectionForward,
 } from "../lib/sectionBack";
 import { usePolling } from "../lib/usePolling";
+import { termWaitToastKey } from "../../shared/types";
 import type { ReactNode } from "react";
 import type { TerminalSessionInfo } from "../../shared/types";
 
@@ -132,6 +133,15 @@ const SECTIONS: AppSection[] = [
 // useToast 가 ToastContext 를 읽어야 해서 App 본문이 아니라 Provider 안쪽 자식으로 둔다.
 function AppToastBridge(): null {
   const toast = useToast();
+  const dismissToast = useToastDismiss();
+  // 세션이 끝나면 그 세션의 입력대기 토스트를 거둔다 — sticky 라 스스로 사라지지 않는데,
+  // 죽은 세션은 '화면에 올라오면 닫는다'(TerminalSection)는 다른 경로에도 영영 걸리지
+  // 않아 남는다. 남은 [이동]을 누르면 없는 세션을 열려다 아무 일도 일어나지 않는다.
+  useEffect(() => {
+    const api = window.oneApp?.terminal;
+    if (!api?.onExit) return;
+    return api.onExit((ev) => dismissToast(termWaitToastKey(ev.id)));
+  }, [dismissToast]);
   useEffect(() => {
     if (!window.oneApp?.onToast) return;
     return window.oneApp.onToast((p) => {

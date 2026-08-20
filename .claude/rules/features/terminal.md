@@ -41,6 +41,7 @@ paths:
 - **pane 은 활성이 된 세션만 만든다** — `livePanes`(최근 사용 순) 상한 `MAX_LIVE_PANES`(8): WebGL 컨텍스트는 브라우저 전역 개수 제한이 있다. 넘치면 가장 오래 안 본 pane 축출(재선택 시 attach 복원). `livePanes` 는 보는 그룹 전체를 포함하고 LRU 축출은 화면 밖만 자른다.
 - ⚠️ **숨은 pane 은 PTY 크기를 주장하지 않는다**(`activeRef` 로 `onResize`·`reclaimSize` 차단) — 안 막으면 MO 가 보는 세션 크기까지 되돌린다. 보이게 된 순간 `fit`+재주장+포커스.
 - 글자 크기는 `TerminalSection` 이 한 곳에서 소유해 내려준다.
+- ⚠️ **`activateSession` 의 대기 플래그(`pendingRef`)는 반드시 풀린다** — '만든 세션이 목록에 나타나면 활성화' 대기인데, 그동안 **'활성 세션 보정' effect 가 통째로 멈춘다.** 목록에 끝내 안 나타나는 id(종료된 세션의 알림 [이동] 등)를 받으면 영영 남아 탭을 직접 누르기 전까지 화면이 빈 채로 굳었다. 3초 만료 타이머 + 만료 시 안내 토스트로 막는다. ⚠️ ref 만 비우면 렌더가 안 일어나 보정이 재개되지 않는다 — 해제 신호(`pendingCleared` state)를 보정 effect deps 에 함께 둘 것.
 
 ## 섹션 keep-alive (2026-08-13)
 - 터미널 섹션 자체도 `App.tsx` 의 `main__keep` 래퍼로 **상주 마운트**(숨김 = `visibility` + absolute) — 섹션 이동이 재마운트(attach 왕복 + TUI 리드로)를 만들지 않는다. ⚠️ 재마운트발 버그(Shift+Enter alt 게이트 오판·링버퍼 DA 재응답)의 방어 코드는 **앱 재시작·livePanes 축출 경로에 여전히 필요** — 지우지 말 것.
@@ -79,6 +80,7 @@ paths:
 - `TerminalView` 는 세션 객체가 아니라 **`sessionId` 등 원시값**만 받는다 — 객체는 브로드캐스트마다 새 참조라 memo 가 깨진다. (툴바를 공용 바로 올린 뒤 `cwd` 도 안 넘긴다 — 제목·상태·위치는 전부 탭바·공용 바가 표시한다.)
 - 프리셋은 `presetsByCwd` useMemo 맵(키 = cwd 집합 문자열)에서 꺼내고, 없으면 고정 상수 `NO_PRESETS`. 실행 콜백은 `(cwd, preset)` 인자.
 - LNB 집계는 `byCwd` 한 번에(행마다 filter 금지). ⚠️ 워크트리 폴링(10초)은 내용이 같으면 **이전 객체 유지**(JSON.stringify 비교).
+- ⚠️ **워크트리 폴링은 경량 조회**(`workspaces.worktrees(id, false)` → `listWorktreesBrief` = `git worktree list` 1회)를 쓴다 — 상세는 워크트리마다 `git status --untracked-files=all`+`git diff` 를 돌려 **워크스페이스 14개에 596ms**(경량 24ms, 2026-08-20 실측)였고 그게 10초마다 돌았다. LNB 의 ±변경량 표시는 이때 걷어냈다(잘 안 보는 값 — 변경 내역은 '변경사항' 드로어가 맡는다). `dirty` 가 필요한 곳(워크트리 제거 확인)만 **그 순간** 상세로 부른다.
 
 ## 상단 공용 바·탭바 액션
 - 툴바(프리셋·검색·글자크기·맨아래로·Finder)는 pane 이 아니라 **탭바 아래 공용 바 하나**. 프리셋 대상 = 포커스 세션 cwd, 없으면 선택 워크트리.
@@ -146,6 +148,7 @@ paths:
 - 알림 = 입력대기 뱃지 상시 + **토스트 기본 표시**(2026-08-14 — 우측 아래 sticky, **백그라운드여도 발신돼 복귀 시 떠 있다**(`sendToast`), 세션당 `dedupeKey` 1장, [이동]=`openTerminalSession` 으로 그 세션 포커스) + 강도 `terminal.json` `notifyLevel`(badge/sound/alert — 환경설정 → 터미널 Segment): sound 는 +알림음, alert 는 +백그라운드일 때 알럿 폴백(`notifyToast`). 생성 20초·직전 입력 5초 내 전이는 알림 생략.
 - 토스트 제목에 **위치 라벨**(`입력 대기 — 작업영역명 · 워크트리폴더명`) — `sessionLocationLabel`(ipc.ts) 이 워크스페이스별 `worktreePaths`(경량 `git worktree list`)로 cwd 를 대조, **cwd 별 영구 캐시**(세션 수명 동안 불변). 중첩 매치는 더 깊은 경로 우선, 워크스페이스 밖(홈 등)이면 라벨 생략. ⚠️ `listWorktrees` 를 쓰지 말 것 — 워크트리마다 `git status`+`diff` 가 돌아 알림용으론 무겁다.
 - **보고 있는 세션은 토스트 생략** — TerminalSection 이 `sectionNav.setSessionVisibilityCheck` 로 "화면 세션(활성 섹션 + activeGroupIds/activeId)" 판정을 등록하고, App 의 `AppToastBridge` 가 발신 전에 확인한다.
+  - ⚠️ **세션이 죽으면 그 세션의 입력대기 토스트도 거둔다** — `App.tsx` 의 `AppToastBridge` 가 `terminal:exit` 에서 `dismissToast(termWaitToastKey(id))`. 죽은 세션은 '화면에 올라오면 닫는다' 경로에 영영 안 걸려 sticky 토스트가 남았고, 그 [이동]을 누르면 없는 세션을 열려다 **터미널 섹션이 빈 화면으로 고착**됐다(아래 대기 플래그 참고).
   - **이미 떠 있던 토스트는 그 세션이 화면에 올라오면 거둔다**(2026-08-19) — 입력대기 토스트는 sticky 라 스스로 안 사라져서, 알림을 보고 세션에 가도 ✕ 를 눌러야 했다. TerminalSection 의 effect 가 화면 세션마다 `useToastDismiss()(termWaitToastKey(id))`. **보고 있는 세션만** 닫는다 — 터미널 섹션 진입만으로 전부 닫으면 아직 확인 안 한 다른 세션 알림까지 사라진다. dedupeKey 문자열은 `shared/types.ts` 의 `termWaitToastKey()` 한 곳 — main(발신)과 렌더러(닫기)가 갈라지면 조용히 안 닫힌다.
 - ⚠️ **제출(Enter)이 오면 생성 grace 를 즉시 푼다**(`noteInput` 의 `suppressNotifyUntil = 0`) — grace 는 초기 프롬프트·복원 redraw 의 소음을 막자는 것이고, `create-grace` 분기는 알림 기회까지 소진하므로 안 풀면 **grace 창(20초) 안에 끝난 사용자 턴이 통째로 무음**이 된다. 2026-08-19 신고 "FO-JB 작업영역만 완료 토스트가 안 뜬다"의 원인이 이것 — **작업영역과 무관한 타이밍 문제**였다: 앱 재시작 복원 grace 가 끝나기 0.5초 전에 waiting 이 온 세션은 삼켜지고, 1.5초 뒤에 전이한 옆 세션은 정상 발화했다. ⚠️ 복원(`restoreSessions`)도 grace 를 새로 걸므로 **생성 시각만 보고 "grace 는 끝났을 것"이라 추정하지 말 것** — `[skip] why=create-grace` 로그의 `graceLeft` 를 볼 것.
 - 알림 기회는 **턴(입력)당 1회**. 입력 후 5초(입력 게이트) 안의 waiting 전이는 ①**제출(Enter — `\x1b\r` Shift+Enter 제외)로 시작한 턴이면 소진하지 않고 게이트 해제 시점에 재판정**해 그때도 waiting 이면 알림(짧은 턴 미탐 방지 — 2026-08-14, `notifyRecheck` 타이머·finalizeExit 에서 정리) ②제출 없는 입력(타이핑 멈춤)이면 기존대로 조용히 소진.

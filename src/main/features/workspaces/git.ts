@@ -52,6 +52,27 @@ export async function worktreePaths(repoPath: string): Promise<string[]> {
   return (await parseWorktrees(repoPath)).map((w) => w.path);
 }
 
+/**
+ * 경량 목록 — 경로·브랜치·존재 여부만. **워크트리마다 도는 `git status`·`git diff` 를
+ * 건너뛴다**(저장소당 `worktree list` 1회로 끝난다).
+ *
+ * LNB 는 10초마다 전 워크스페이스의 목록을 새로 받는데, ±변경량이 실제로 화면에 있는
+ * 곳은 **펼친 워크스페이스의 워크트리 행뿐**이다. 접힌 워크스페이스는 세션 수 집계에
+ * 경로만 필요하므로(cwd 대조) 이쪽을 쓴다 — 큰 저장소에서 `status --untracked-files=all`
+ * 은 폴링으로 돌리기엔 무겁다.
+ */
+export async function listWorktreesBrief(repoPath: string): Promise<WorktreeInfo[]> {
+  const bare = await parseWorktrees(repoPath);
+  return bare.map((w) => ({
+    ...w,
+    missing: w.missing || !fs.existsSync(w.path),
+    // 조회하지 않은 값 — 이 목록을 쓰는 화면(접힌 워크스페이스)에는 표시가 없다
+    dirty: false,
+    additions: 0,
+    deletions: 0,
+  }));
+}
+
 /** 워크트리 목록 + 워크트리별 미커밋 변경량(LNB 의 +N −M 표시용) */
 export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
   const bare = await parseWorktrees(repoPath);

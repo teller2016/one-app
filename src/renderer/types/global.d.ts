@@ -350,7 +350,8 @@ declare global {
           worktreePath: string,
         ) => Promise<{ ok: boolean; error?: string }>;
         pickDir: (title?: string) => Promise<{ path?: string }>;
-        worktrees: (id: string) => Promise<WorktreeInfo[]>;
+        /** detail=false 면 경량 조회 — 경로·브랜치만(±변경량은 0, dirty 는 false) */
+        worktrees: (id: string, detail?: boolean) => Promise<WorktreeInfo[]>;
         addWorktree: (input: WorktreeAddInput) => Promise<WorktreeActionResult>;
         removeWorktree: (
           id: string,

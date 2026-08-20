@@ -81,6 +81,10 @@ const MAX_LIVE_PANES = 8;
 /** 프리셋이 없는 위치에 넘길 고정 빈 배열 — 매번 [] 를 만들면 pane 의 memo 가 깨진다 */
 const NO_PRESETS: TerminalPreset[] = [];
 
+/** '만든 세션이 목록에 나타나면 활성화' 대기의 상한 — 브로드캐스트는 즉시 오므로
+ *  이만큼 지나도 안 왔으면 그 세션은 오지 않는 것이다(activateSession 참고) */
+const PENDING_ACTIVATE_TTL_MS = 3000;
+
 // 변경사항 드로어 너비 — 좌측 모서리 드래그로 조절, localStorage 기억
 const CHANGES_MIN_W = 240;
 const CHANGES_MAX_W = 640;
@@ -241,10 +245,14 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     const api = window.oneApp?.workspaces;
     if (!api) return;
     const list = workspacesRef.current;
+    // ⚠️ **항상 경량 조회**(detail=false) — LNB 는 경로·브랜치·세션 수만 그린다.
+    // 상세는 워크트리마다 `git status --untracked-files=all` + `git diff` 를 돌리는데,
+    // 그건 이 폴링(10초·워크스페이스 전부)에서 감당할 비용이 아니다. 미커밋 변경량이
+    // 필요한 곳은 자기가 상세로 부른다(워크트리 제거 확인 · Jira 작업 시작 모달).
     const entries = await Promise.all(
       list.map(async (ws) => {
         try {
-          return [ws.id, await api.worktrees(ws.id)] as const;
+          return [ws.id, await api.worktrees(ws.id, false)] as const;
         } catch {
           // 삭제 직후 폴링 레이스 등 — 조용히 빈 목록 (다음 틱에 정리된다)
           return [ws.id, [] as WorktreeInfo[]] as const;
@@ -659,14 +667,38 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   // applyTab 경유 — 분할 중이면 새 세션이 포커스된 슬롯을 이어받는다(탭 클릭과 동일 의미론).
   // 히스토리에는 남기지 않는다 — 사용자가 '이동'한 게 아니라 만든 세션이 따라온 것이다
   const pendingRef = useRef<string | null>(null);
+  const pendingTimerRef = useRef<number | null>(null);
+  // 대기가 풀렸음을 아래 '활성 세션 보정' effect 에 알리는 신호 — ref 변화는 렌더를
+  // 만들지 않으므로, 만료로 비웠을 때 보정을 다시 돌리려면 상태가 하나 필요하다
+  const [pendingCleared, setPendingCleared] = useState(0);
+
+  /** 대기 해제(소비·만료 공용) — 타이머까지 함께 정리한다 */
+  const clearPending = useCallback(() => {
+    if (pendingTimerRef.current !== null) {
+      window.clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+    if (pendingRef.current === null) return;
+    pendingRef.current = null;
+    setPendingCleared((n) => n + 1);
+  }, []);
+  useEffect(() => () => clearPending(), [clearPending]);
+
+  /** 대기 만료 — 그 id 의 세션은 오지 않는다. 사용자가 [이동]으로 부른 경우가 대부분이라
+   *  조용히 넘기면 "눌렀는데 아무 일도 없다"가 되므로 이유를 알린다. */
+  const expirePending = useCallback(() => {
+    const missed = pendingRef.current;
+    clearPending();
+    if (missed) toast('세션을 찾지 못했습니다 — 이미 종료된 세션입니다.', 'fail');
+  }, [clearPending, toast]);
 
   useEffect(() => {
     const pending = pendingRef.current;
     if (pending && sessions.some((s) => s.id === pending)) {
-      pendingRef.current = null;
+      clearPending();
       applyTab(pending);
     }
-  }, [sessions, selKey, applyTab]);
+  }, [sessions, selKey, applyTab, clearPending]);
 
   useEffect(() => {
     if (pendingRef.current) return;
@@ -681,13 +713,24 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         tabView.tabs[0]?.id ??
         null
     );
-  }, [tabSessions, tabView, activeId, selKey]);
+  }, [tabSessions, tabView, activeId, selKey, pendingCleared]);
 
-  /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다 */
-  const activateSession = useCallback((id: string) => {
-    pendingRef.current = id;
-    setActiveId(id);
-  }, []);
+  /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다.
+   *  ⚠️ 목록에 **끝내 나타나지 않는 id**(이미 종료된 세션의 알림 [이동] 등)를 받으면
+   *  위 대기 플래그가 영영 남아 '활성 세션 보정' 이 통째로 멈춘다 — 탭을 직접 누르기
+   *  전까지 화면이 빈 채로 고착됐다. 만료 타이머로 반드시 풀어 준다. */
+  const activateSession = useCallback(
+    (id: string) => {
+      clearPending();
+      pendingRef.current = id;
+      pendingTimerRef.current = window.setTimeout(
+        expirePending,
+        PENDING_ACTIVATE_TTL_MS
+      );
+      setActiveId(id);
+    },
+    [clearPending, expirePending]
+  );
 
   // ── 다른 섹션에서 넘어온 '이 세션을 열어라' 요청 (Jira [작업] → femc 세션) ──
   // ⚠️ 요청이 도착한 시점엔 워크스페이스·워크트리 목록이 아직 없다(섹션에 막 들어왔다).
@@ -698,7 +741,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   useEffect(() => {
     if (!focusReq) return;
     const wtReady = workspaces.every((w) => !!worktrees[w.id]);
-    if (!wsReady || !wtReady) return; // 목록 도착까지 보류
+    // 세션 목록도 기다린다 — 없으면 '이 세션이 살아 있는가' 판정을 할 수 없어
+    // 죽은 세션 요청이 대기 만료(안내 토스트)로 흘러가야 할지 알 수 없다
+    if (!wsReady || !sessionsReady || !wtReady) return; // 목록 도착까지 보류
     const hit = workspaces.find(
       (ws) =>
         (worktrees[ws.id] ?? []).some((w) => w.path === focusReq.cwd) ||
@@ -709,7 +754,15 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     );
     activateSession(focusReq.sessionId);
     setFocusReq(null);
-  }, [focusReq, wsReady, workspaces, worktrees, selectAndSave, activateSession]);
+  }, [
+    focusReq,
+    wsReady,
+    sessionsReady,
+    workspaces,
+    worktrees,
+    selectAndSave,
+    activateSession,
+  ]);
 
   // ── 살아 있는 pane — **실제로 본 적 있는 세션만** xterm 을 만든다 ──
   // 예전엔 sessions 전부를 마운트해서 터미널 섹션에 들어가는 순간 세션 수만큼

@@ -437,8 +437,10 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("workspaces:open-editor", id, worktreePath),
     // 폴더 선택 다이얼로그 — 워크스페이스 등록·워크트리 위치 선택 공용
     pickDir: (title?: string) => ipcRenderer.invoke("workspaces:pick-dir", title),
-    // 워크트리 목록 + 워크트리별 미커밋 변경량 (+N −M)
-    worktrees: (id: string) => ipcRenderer.invoke("workspaces:worktrees", id),
+    // 워크트리 목록 + 워크트리별 미커밋 변경량 (+N −M).
+    // detail=false 면 경량(경로·브랜치만 — 워크트리마다 도는 git status·diff 를 건너뛴다)
+    worktrees: (id: string, detail?: boolean) =>
+      ipcRenderer.invoke("workspaces:worktrees", id, detail),
     // 워크트리 생성 — 부모 폴더·폴더명·브랜치(신규/기존)
     addWorktree: (input: WorktreeAddInput) =>
       ipcRenderer.invoke("workspaces:worktree-add", input),

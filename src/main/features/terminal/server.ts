@@ -16,7 +16,7 @@ import type {
 } from '../../../shared/terminal-protocol';
 import type { TerminalServerStatus } from '../../../shared/types';
 import { listProjects } from '../projects/store';
-import { listWorktrees } from '../workspaces/git';
+import { listWorktreesBrief } from '../workspaces/git';
 import { listPresets, listWorkspaces } from '../workspaces/store';
 import {
   attachSession,
@@ -204,7 +204,9 @@ async function buildWorkspaceTree(): Promise<TermWorkspaceNode[]> {
     listWorkspaces().map(async (ws) => {
       let worktrees: TermWorkspaceNode['worktrees'] = [];
       try {
-        worktrees = (await listWorktrees(ws.repoPath))
+        // 경량 조회 — 이 트리는 경로·이름·브랜치만 쓴다(±변경량 표시 없음).
+        // 상세를 쓰면 시트를 열 때마다 워크트리마다 git status·diff 가 돌아 폰 응답이 느려진다
+        worktrees = (await listWorktreesBrief(ws.repoPath))
           .filter((wt) => !wt.missing)
           .map((wt) => ({
             path: wt.path,

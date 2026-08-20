@@ -612,12 +612,6 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             aria-label="작업 중"
                           />
                         )}
-                        {(wt.additions > 0 || wt.deletions > 0) && (
-                          <span className="terminal__wt-diff" aria-label="미커밋 변경량">
-                            <span className="terminal__wt-add">+{wt.additions}</span>
-                            <span className="terminal__wt-del">−{wt.deletions}</span>
-                          </span>
-                        )}
                       </button>
                       {!wt.isMain && (
                         <Tooltip label="워크트리 제거">

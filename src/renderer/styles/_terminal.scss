@@ -444,23 +444,8 @@
     white-space: nowrap;
   }
 
-  // 미커밋 변경량 (+N −M) — LNB 트리의 워크트리 상태 요약
-  &__wt-diff {
-    display: flex;
-    gap: 5px;
-    flex-shrink: 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-caption);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__wt-add {
-    color: var(--ok);
-  }
-
-  &__wt-del {
-    color: var(--danger);
-  }
+  // (미커밋 변경량 ±N 표시는 걷어냈다 — 잘 보지 않는 값 하나 때문에 10초 폴링이
+  //  워크트리마다 git status·diff 를 돌렸다. 변경 내역은 우측 '변경사항' 드로어가 맡는다)
 
   // 제거 — 히트 영역 22px 하한선 (renderer-ui.md: 16px 는 점처럼 보여 못 찾는다)
   &__wt-remove {

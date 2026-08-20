@@ -7,7 +7,7 @@ import type {
   TerminalSessionInfo,
 } from '../../../shared/types';
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
-import { broadcast } from '../../lib/broadcast';
+import { broadcast, onBroadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
 import { notifyToast, sendToast } from '../notify/notify';
 import { worktreePaths } from '../workspaces/git';
@@ -51,8 +51,14 @@ function updateDockBadge(sessions: TerminalSessionInfo[]) {
   setWaitingBadge(sessions.filter((s) => s.status === 'waiting').length);
 }
 
-// 세션 위치 라벨 캐시 — cwd 는 세션 수명 동안 불변이라 waiting 마다 git 을 돌리지 않는다
+// 세션 위치 라벨 캐시 — cwd 는 세션 수명 동안 불변이라 waiting 마다 git 을 돌리지 않는다.
+// ⚠️ 다만 **워크스페이스 목록이 바뀌면 답도 바뀐다** — 워크스페이스를 나중에 등록하면
+// 그 전에 만든 세션은 `null`(라벨 없음)로 캐시돼 있어 알림 제목에 위치가 영영 안 붙었고,
+// 이름 변경·제거 뒤에는 옛 이름이 계속 나왔다. 목록 변경 브로드캐스트에 맞춰 비운다.
 const locationLabels = new Map<string, string | null>();
+onBroadcast((channel) => {
+  if (channel === 'workspaces:changed') locationLabels.clear();
+});
 
 /**
  * 세션 cwd 가 속한 "작업 영역 · 워크트리" 라벨 (입력대기 알림용).
