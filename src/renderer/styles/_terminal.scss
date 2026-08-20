@@ -377,14 +377,17 @@
       background: var(--overlay-hover);
     }
 
-    // 활성 = 살짝 밝아지는 필(overlay-track — hover 보다 한 단계 진한 오버레이,
-    // 다크 테마에선 흰 12% 라 '밝아지는' 느낌) — Superset 의 선택 타일과 같은 문법.
-    // 니어블랙·글로우·블루 필·진한 테두리를 거쳐 정착(2026-08-06 피드백 왕복).
+    // 활성 = accent-soft 틴트 + accent 아이콘(currentColor) — 지금 어느 워크트리를
+    // 보고 있는지가 트리에서 한눈에 잡힌다. 이름(--text)·브랜치(--text-3)는 자기 색을
+    // 갖고 있어 그대로고, 색이 바뀌는 것은 행 아이콘뿐이다.
+    // 2026-08-06 에는 중성 오버레이(overlay-track)로 정착했으나, 2026-08-20 리디자인
+    // 시안 검토에서 사용자가 accent 안을 채택했다(예전에 반려된 것은 채도 100% '블루 필').
     // :hover 동반 선언은 특정도 — 단독 &--active(0,1,0)는 :hover(0,2,0)에 진다.
     &--active,
     &--active:hover {
-      background: var(--overlay-track);
+      background: var(--accent-soft);
       border-color: transparent;
+      color: var(--accent);
     }
 
     // 폴더가 사라진 워크트리 (git prune 대상) — 선택 불가 표시
@@ -553,30 +556,52 @@
       cursor: default;
     }
 
-    // 활성 = 살짝 밝아지는 필 (행 활성과 동일)
+    // 활성 = accent 틴트 + accent 아이콘 (펼침 모드 __wt-row--active 와 같은 문법)
     &--active,
     &--active:hover {
-      background: var(--overlay-track);
+      background: var(--accent-soft);
       border-color: transparent;
-      color: var(--text-2);
+      color: var(--accent);
     }
   }
 
-  // 세션 수 뱃지 — 타일 우상단에 겹치는 작은 숫자 (0 이면 렌더 안 함).
+  // 세션 수 뱃지 — 타일 우상단에 걸치는 필 (0 이면 렌더 안 함).
   // 워크트리 타일과 부모 워크스페이스 타일이 공용으로 쓴다 (부모 = 자식 합계)
+  // ⚠️ **앱의 '축소된 사이드바 아이콘 우상단 카운트' 문법을 그대로 쓴다** —
+  //    정본은 `.sidebar__item-badge`(_layout.scss)와 `.mail-nav__count`(_mail.scss).
+  //    자리(우상단)·규격(--fs-caption 600 · min-width · r-full)·soft 배경이 그 규칙이고,
+  //    여기만 다르게 만들면 같은 화면 왼쪽의 앱 사이드바 뱃지와 따로 논다.
+  // ⚠️ 진한 색을 꽉 채우지 말 것 — `--text-3` 채움 + 배경색 글자로 만들었더니 DESIGN.md
+  //    의 뱃지 규칙(soft 배경 + 시맨틱 글자)에서 혼자 벗어나 무겁고 이질적이었다.
+  // ⚠️ **테두리·링을 두르지 말 것** — 배경색(--bg) 링으로 타일에서 떼어내 봤더니
+  //    초록 대기 뱃지 둘레에 회색 테두리가 도는 꼴이 됐다(2026-08-20 사용자 지적).
+  //    정본(.sidebar__item-badge)도 링 없이 배경 하나로 아이콘 위에 앉는다.
+  // ⚠️ 배경은 **불투명**이어야 한다 — soft 토큰(반투명)을 그대로 쓰면 뱃지의 절반은
+  //    컬러 이니셜 타일 위, 절반은 패널 위라 한 뱃지 안에서 색이 갈라진다.
+  //    그래서 대기색도 soft 토큰 대신 --surface-2 에 --ok 를 섞어 불투명하게 만든다.
   &__wt-sq-count {
     position: absolute;
     top: -1px;
     right: 1px;
+    min-width: 13px;
+    height: 13px;
+    padding: 0 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-full);
+    background: var(--surface-2);
     font-size: var(--fs-caption);
+    font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--text-2);
 
-    // 입력 대기 세션이 있으면 초록 — 예전의 대기 점을 숫자가 겸한다
+    // 입력 대기 세션이 있으면 초록 — 예전의 대기 점을 숫자가 겸한다.
+    // soft 배경 + 시맨틱 글자 = `.badge--ok` 와 같은 조합 (단 불투명 — 위 주석)
     &--waiting {
+      background: color-mix(in srgb, var(--ok) 16%, var(--surface-2));
       color: var(--ok);
-      font-weight: 600;
     }
   }
 
@@ -628,7 +653,7 @@
   // ⚠️ 2026-08-19 스크린샷 왕복으로 걸러낸 오답 두 개 — 되돌리지 말 것:
   //    ①conic-gradient 링 + `transform: rotate` → 사각 요소가 돌아 코너가 타일 밖으로 튄다
   //    ②원형 border 아크(.spinner 기법) → 24px 사각 타일과 기하가 안 맞아 아크가 타일을
-  //      관통하고 우상단 세션 수 숫자와 겹친다(원의 외접/내접 어느 쪽으로도 안 맞는다)
+  //      관통하고 우상단 세션 수 뱃지와 겹친다(원의 외접/내접 어느 쪽으로도 안 맞는다)
   // 아크 길이·이동량은 둘레(타일 크기마다 다르다)에 의존하므로 컴포넌트가 dasharray 와
   // --arc-shift 를 인라인으로 준다 — 여기서는 색·두께·박자만 정한다.
   &__sq-arc {
@@ -642,7 +667,10 @@
     stroke: var(--accent);
     stroke-width: 1.5;
     stroke-linecap: round;
-    animation: sq-arc-dash 0.9s linear infinite;
+    // 1.6s — 0.9s 는 작은 타일 둘레를 도는 짧은 아크라 '휙휙' 지나가 산만했다.
+    // 느긋하게 한 바퀴 도는 쪽이 '작업 중'을 알리면서도 시선을 덜 빼앗는다
+    // (2026-08-20 리디자인 시안에서 채택한 박자).
+    animation: sq-arc-dash 1.6s linear infinite;
     pointer-events: none;
   }
 
