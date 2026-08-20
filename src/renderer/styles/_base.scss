@@ -423,7 +423,20 @@ body {
   background: transparent;
   color: var(--text);
   overflow: hidden;
+  // Retina(2x) 기준 — 그레이스케일 AA 로 획을 얇게 다듬어 애플 앱과 같은 인상을 낸다.
+  // 1x 모니터에서는 아래 미디어 쿼리가 이 강제를 되돌린다.
   -webkit-font-smoothing: antialiased;
+}
+
+// ⚠️ 1x(비레티나) 외부 모니터 — `antialiased` 강제를 풀어 OS 기본 렌더링에 맡긴다.
+// macOS 는 10.14 부터 서브픽셀 AA 를 없앴으므로 1x 화면의 글자는 원래도 흐린데,
+// 여기에 `antialiased` 가 획까지 얇게 만들어 유독 번져 보인다(2560x1440 27" ≈ 109PPI 실측).
+// `resolution` 미디어 쿼리는 창이 모니터를 넘어가는 순간 Chromium 이 다시 평가하므로
+// 창을 끌어다 놓기만 해도 자동으로 전환된다 — 재시작 불필요.
+@media (max-resolution: 1.5dppx) {
+  body {
+    -webkit-font-smoothing: auto;
+  }
 }
 
 // 모션 최소화 설정 존중 — 전환·펄스·진입 모션만 끈다 (스피너 회전은 진행 표시라 유지)
