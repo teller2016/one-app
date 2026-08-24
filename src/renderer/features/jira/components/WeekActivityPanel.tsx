@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   JiraActivityIssue,
   JiraEngagement,
@@ -13,6 +13,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
 import { Tooltip } from '../../../components/Tooltip';
+import { useAsync } from '../../../lib/useAsync';
 import { useCopy } from '../../../lib/useCopy';
 
 import { statusBadgeVariant } from '../lib/issue';
@@ -187,38 +188,57 @@ export function WeekActivityPanel({
 }) {
   const [offset, setOffset] = useState(0);
   const range = useMemo(() => weekRange(offset), [offset]);
-  const [issues, setIssues] = useState<JiraActivityIssue[]>([]);
-  const [configured, setConfigured] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [warnings, setWarnings] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const copy = useCopy();
 
-  const load = useCallback(
-    async (force = false) => {
-      setLoading(true);
-      const res = await window.oneApp.jira.activity(range.start, range.end, force);
-      setConfigured(res.configured);
-      if (res.ok && res.issues) {
-        setIssues(res.issues);
-        setError('');
-      } else {
-        setIssues([]);
-        setError(res.error ?? '활동 내역을 불러오지 못했습니다.');
-      }
-      setWarnings(res.warnings ?? []);
-      setLoading(false);
-    },
-    [range.start, range.end],
-  );
+  // 새로고침 버튼만 캐시를 건너뛴다(`force`). `reload()` 는 인자를 받지 않으므로
+  // 다음 1회분 의사를 ref 로 넘기고 조회 시점에 비운다.
+  const forceRef = useRef(false);
 
-  // 주를 옮기면 그 주를 다시 조회한다 (main 이 주 단위로 캐시하므로 왕복은 저렴하다)
+  // ⚠️ 주 이동은 **캐시된 주(즉시)와 미캐시 주(약 1초)를 섞어** 부르므로 응답이 역순으로
+  // 도착할 수 있다. `useAsync` 의 세대 카운터가 오래된 응답을 버린다 — 이걸 손으로 하면
+  // 라벨은 이번 주, 목록은 지난 주가 되고 그 상태의 [링크 N] 이 주간보고에 다른 주의
+  // 링크를 넣는다. try/catch 도 훅이 맡아 IPC 예외 때 로딩이 갇히지 않는다.
+  const fetchActivity = useCallback(() => {
+    const force = forceRef.current;
+    forceRef.current = false;
+    return window.oneApp.jira.activity(range.start, range.end, force);
+  }, [range.start, range.end]);
+
+  const {
+    data,
+    loading,
+    error: fetchError,
+    reload,
+  } = useAsync(fetchActivity, {
+    errorFallback: '활동 내역을 불러오지 못했습니다.',
+  });
+
+  const refresh = () => {
+    forceRef.current = true;
+    void reload();
+  };
+
+  // 결과에서 화면 값을 끌어낸다 — 첫 렌더(data=null)는 '설정됨'으로 보아 안내 배너가
+  // 깜빡이지 않게 한다. 실패해도 `configured` 는 응답을 그대로 따른다(미설정 안내용).
+  // ⚠️ `useMemo` 로 참조를 고정한다 — 매 렌더 새 배열이면 아래 counts·projects 메모가
+  // 통째로 다시 돌고 `exhaustive-deps` 경고도 뜬다
+  const issues = useMemo<JiraActivityIssue[]>(
+    () => (data?.ok ? (data.issues ?? []) : []),
+    [data],
+  );
+  const configured = data?.configured ?? true;
+  const warnings = data?.warnings ?? [];
+  // IPC 예외(훅이 잡은 것)와 결과 자체의 실패 문구를 한 자리에서 보여준다
+  const error =
+    fetchError ||
+    (data && !data.ok ? (data.error ?? '활동 내역을 불러오지 못했습니다.') : '');
+
+  // 주가 바뀌면 펼친 행을 접는다 — 다른 주의 티켓이라 펼침 상태를 이어갈 의미가 없다
   useEffect(() => {
     setExpanded(new Set());
-    void load();
-  }, [load]);
+  }, [range.start, range.end]);
 
   const counts = useMemo(() => {
     const map = { resolved: 0, progressed: 0, touched: 0 };
@@ -288,7 +308,7 @@ export function WeekActivityPanel({
         <RefreshButton
           size={14}
           spinning={loading}
-          onClick={() => void load(true)}
+          onClick={refresh}
           title="이 주 활동 새로고침"
         />
       </div>
