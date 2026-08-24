@@ -9,6 +9,7 @@ import type {
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
 import { broadcast, onBroadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
+import { sleep } from '../../lib/util';
 import { notifyToast, sendToast } from '../notify/notify';
 import { worktreePaths } from '../workspaces/git';
 import { listWorkspaces } from '../workspaces/store';
@@ -217,9 +218,19 @@ export function registerTerminalIpc() {
     })();
   });
 
-  // 켜두고 종료했으면 자동 시작 — 자리 비움 시나리오상 재시작 후에도 MO 접속이 살아야 한다
+  // 켜두고 종료했으면 자동 시작 — 자리 비움 시나리오상 재시작 후에도 MO 접속이 살아야 한다.
+  // ⚠️ Tailscale 데몬은 로그인 직후 이 앱보다 늦게 올라올 수 있고, 그 사이에는 평문 노출을
+  // 막기 위해 시작이 거부된다(사유는 `server.ts` 의 바인딩 주석). 한 번만 시도하면 그 경우
+  // 사용자가 접속 모달에서 손으로 켜야 하므로, 올라올 시간을 주며 몇 번 더 시도한다.
   if (getServerEnabled()) {
-    void app.whenReady().then(() => startServer());
+    void app.whenReady().then(async () => {
+      for (const wait of [0, 3_000, 8_000, 20_000]) {
+        if (wait) await sleep(wait);
+        const status = await startServer();
+        // 떴거나, 기다려도 안 풀리는 사유(포트 충돌 등)면 그만둔다
+        if (status.running || !status.needsTailscale) return;
+      }
+    });
   }
 
   // tmux 백엔드면 이전 실행의 영속 세션을 재접속 복원 (미설치면 no-op)

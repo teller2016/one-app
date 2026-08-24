@@ -52,6 +52,9 @@ let pingTimer: NodeJS.Timeout | null = null;
 let certTimer: NodeJS.Timeout | null = null;
 let offPty: Array<() => void> = []; // pty 구독 해제 목록
 let lastError = '';
+// 시작을 거부한 이유가 'Tailscale 미연결' 인가 — 자동 시작이 재시도할지 판단하는 근거
+// (포트 충돌 같은 사유는 기다려도 안 풀리므로 재시도하지 않는다)
+let needsTailscale = false;
 
 // 소켓별 상태 — attach 된 세션에만 출력을 전달한다
 // kind — /term(터미널 페이지)과 /rpc(폰 앱 셸)를 한 맵에서 ping 으로 함께 관리하되,
@@ -297,6 +300,24 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
   }
 }
 
+// ── 바인딩 주소 ──
+
+/** Tailscale 이 노드에 주는 IPv4 인가 (CGNAT 대역 100.64.0.0/10) */
+const isTailscaleIp = (ip: string) =>
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip);
+
+/** 이 기기의 Tailscale IPv4 목록 — 없으면 빈 배열(= Tailscale 이 안 올라와 있다) */
+function tailscaleIps(): string[] {
+  const ips: string[] = [];
+  for (const infos of Object.values(os.networkInterfaces())) {
+    for (const info of infos ?? []) {
+      if (info.family !== 'IPv4' || info.internal) continue;
+      if (isTailscaleIp(info.address)) ips.push(info.address);
+    }
+  }
+  return ips;
+}
+
 // ── 서버 수명 ──
 
 export async function startServer(): Promise<TerminalServerStatus> {
@@ -307,6 +328,24 @@ export async function startServer(): Promise<TerminalServerStatus> {
   // secure context 로 클립보드·wss 가 정상 동작한다. 없으면 기존처럼 HTTP.
   const tls = await ensureTls();
   tlsDomain = tls?.domain ?? null;
+
+  // ⚠️ **평문(HTTP) 폴백은 Tailscale 주소에만 바인딩한다.** `0.0.0.0` 으로 열면 인증 토큰이
+  // 쿼리스트링·쿠키로, 터미널 입출력 전체가 ws 로 **같은 Wi-Fi 의 모든 기기에 평문 노출**된다.
+  // 토큰을 캡처하면 `/term` 으로 셸 세션을 새로 만들거나 기존 세션에 attach 할 수 있어
+  // 사실상 원격 실행이 된다(토큰 자체는 randomBytes(32)+timingSafeEqual 이라 튼튼하지만
+  // 평문 캡처 앞에서는 무의미하다). 이 기능의 설계 전제도 '도달·암호화는 Tailscale' 이다.
+  // TLS 로 떴을 때는 전 인터페이스를 유지한다 — 전송이 암호화돼 캡처로 토큰이 새지 않고,
+  // 인증서 도메인(MagicDNS)이 결국 Tailscale 주소로 풀리므로 실질 도달면도 같다.
+  const host = tls ? '0.0.0.0' : (tailscaleIps()[0] ?? null);
+  if (!host) {
+    lastError =
+      'Tailscale 주소를 찾을 수 없어 시작하지 않았습니다 — 평문(HTTP) 연결을 ' +
+      '같은 Wi-Fi 전체에 열지 않으려면 Tailscale 이 연결돼 있어야 합니다.';
+    needsTailscale = true;
+    emit();
+    return getServerStatus();
+  }
+  needsTailscale = false;
 
   const handler: http.RequestListener = (req, res) => {
     const url = new URL(req.url ?? '/', 'http://local');
@@ -478,7 +517,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       resolve();
     };
     srv.once('error', onListenError);
-    srv.listen(getPort(), '0.0.0.0', () => {
+    srv.listen(getPort(), host, () => {
       // listen 성공 후엔 위 정리 핸들러를 떼어낸다 — 남겨두면 런타임 에러 한 번에
       // server=null 이 되면서 실제 소켓은 계속 listen 하는 유령 상태가 된다
       srv.removeListener('error', onListenError);
@@ -521,7 +560,8 @@ export async function stopServer(): Promise<void> {
  * 접속 URL 후보 — 토큰 포함 (QR·복사용).
  * HTTPS 로 떴으면 **인증서 도메인(MagicDNS 이름) 하나만** 준다 — IP 로 접속하면 인증서
  * 이름이 안 맞아 경고가 뜨고, 그러면 설치형 PWA 조건도 깨진다.
- * HTTP 폴백일 때는 예전처럼 Tailscale IP(100.64.0.0/10) 우선으로 정렬한다.
+ * ⚠️ HTTP 폴백일 때는 **Tailscale IP 만** 준다 — 서버가 그 주소에만 바인딩돼 있어
+ * 다른 LAN IP 를 안내하면 열리지 않는 주소가 된다(startServer 의 바인딩 주석 참고).
  */
 function accessUrls(pagePath = '/'): string[] {
   const token = getOrCreateToken();
@@ -529,16 +569,9 @@ function accessUrls(pagePath = '/'): string[] {
   if (tlsDomain) {
     return [`https://${tlsDomain}:${port}${pagePath}?token=${token}`];
   }
-  const addrs: { ip: string; ts: boolean }[] = [];
-  for (const infos of Object.values(os.networkInterfaces())) {
-    for (const info of infos ?? []) {
-      if (info.family !== 'IPv4' || info.internal) continue;
-      const ts = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(info.address);
-      addrs.push({ ip: info.address, ts });
-    }
-  }
-  addrs.sort((a, b) => Number(b.ts) - Number(a.ts));
-  return addrs.map((a) => `http://${a.ip}:${port}${pagePath}?token=${token}`);
+  return tailscaleIps().map(
+    (ip) => `http://${ip}:${port}${pagePath}?token=${token}`
+  );
 }
 
 export function getServerStatus(): TerminalServerStatus {
@@ -548,6 +581,11 @@ export function getServerStatus(): TerminalServerStatus {
     port: getPort(),
     urls: running ? accessUrls('/') : [], // 폰 앱 셸 (기본 진입점)
     terminalUrls: running ? accessUrls(`${TERMINAL_PREFIX}/`) : [], // 터미널 페이지
+    // TLS 없이(평문 HTTP) 떴는가 — Tailscale 안에서만 열려 있지만 전송은 암호화되지 않아
+    // PWA 설치·클립보드 API 가 막히고, 접속 화면에서 그 사실을 알려야 한다
+    insecure: running && !tlsDomain,
+    // Tailscale 미연결로 시작을 거부한 상태 — 기다리면 풀릴 수 있어 자동 시작이 재시도한다
+    needsTailscale: !running && needsTailscale,
     error: lastError || undefined,
   };
 }

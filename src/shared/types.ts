@@ -1220,9 +1220,15 @@ export type TerminalAttachResult = {
 export type TerminalServerStatus = {
   running: boolean;
   port: number;
-  urls: string[]; // 폰 앱 셸(`/`) 접속 URL 후보 — Tailscale IP 우선, 토큰 포함 (QR/복사용)
+  urls: string[]; // 폰 앱 셸(`/`) 접속 URL 후보 — 토큰 포함 (QR/복사용)
   terminalUrls: string[]; // 터미널 페이지(`/terminal/`) 접속 URL 후보
-  error?: string; // 포트 충돌 등 시작 실패 사유
+  // TLS 없이 평문 HTTP 로 떴는가. 이때 서버는 Tailscale 주소에만 바인딩되지만(같은 Wi-Fi 노출 방지)
+  // 전송이 암호화되지 않아 PWA 설치·클립보드 API 가 막힌다 — 접속 화면에서 안내한다
+  insecure?: boolean;
+  // Tailscale 이 연결되지 않아 시작을 거부했는가 — 기다리면 풀릴 수 있는 사유라
+  // 자동 시작은 이 값을 보고 재시도한다(포트 충돌 등은 재시도하지 않는다)
+  needsTailscale?: boolean;
+  error?: string; // 포트 충돌·Tailscale 미연결 등 시작 실패 사유
 };
 
 // ── 터미널 워크스페이스 (터미널 섹션 전용 저장소 목록 — 프로젝트 레지스트리와 별개) ──

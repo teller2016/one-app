@@ -96,6 +96,16 @@ export function MoAccessModal({ onClose }: { onClose: () => void }) {
 
         {status?.running && (
           <>
+            {/* 평문 폴백 안내 — 서버는 Tailscale 주소에만 바인딩돼 같은 Wi-Fi 의 다른
+                기기에는 안 열리지만, 전송이 암호화되지 않아 PWA 설치가 안 된다 */}
+            {status.insecure && (
+              <Banner variant="warning">
+                Tailscale 인증서가 없어 <strong>평문(HTTP)</strong> 으로 연결됩니다 — 같은
+                Wi-Fi 의 다른 기기에 열리지 않도록 Tailscale 주소에만 바인딩했지만, 주소창
+                없는 <strong>홈 화면 앱 설치와 클립보드 복사가 막힙니다</strong>. Tailscale
+                관리 콘솔에서 HTTPS Certificates 를 켠 뒤 서버를 다시 켜면 해결됩니다.
+              </Banner>
+            )}
             {qr && (
               <div className="terminal-mo__qr">
                 <img src={qr} alt="MO 접속 QR" />
