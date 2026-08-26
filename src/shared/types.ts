@@ -85,6 +85,11 @@ export type AppSettingsView = {
   notionRootUrl: string; // 노션 투입시간 루트 페이지 URL (일정 노션 기록용, 빈 값이면 비활성)
   hasNotionToken: boolean; // 노션 개인 액세스 토큰 저장 여부
   theme: ThemePref; // 테마 (기본 system)
+  /**
+   * 키체인(safeStorage) 암호화가 가능한가 — false 면 위 비밀들이 **평문 base64** 로 저장된다.
+   * 정상 환경에선 항상 true 다. 환경설정 화면이 false 일 때만 경고 배너를 띄운다.
+   */
+  secureStorage: boolean;
 };
 
 export type SaveSettingsInput = {
@@ -1322,6 +1327,19 @@ export function agentIdFromCommand(command: string): TerminalAgentId {
   const name = bin.split('/').pop() ?? '';
   const agents: TerminalAgentId[] = ['claude', 'femc', 'codex', 'gemini'];
   return agents.find((a) => a === name) ?? 'shell';
+}
+
+/**
+ * 경로 마지막 폴더명 → 워크트리 표시명 (주 워크트리는 'local').
+ * ⚠️ 렌더러 터미널 기능 안에 있던 것을 shared 로 옮겼다 — Jira '작업 시작' 모달이
+ *    같은 이름을 보여주려고 `features/terminal` 배럴을 import 하면서 **폰 번들(MO)까지
+ *    xterm 499KB 가 딸려 왔다**(2026-08-26 실측: MO 청크 858KB 중 566KB 가 죽은 무게).
+ *    @xterm 패키지에 `sideEffects` 필드가 없어 rollup 이 버리지 못한다.
+ */
+export function worktreeName(wt: WorktreeInfo): string {
+  if (wt.isMain) return 'local';
+  const segs = wt.path.split('/').filter(Boolean);
+  return segs[segs.length - 1] ?? wt.path;
 }
 
 /** 베이스 브랜치 선택용 목록 — 로컬·원격 구분 (원격은 `origin/…` 그대로) */

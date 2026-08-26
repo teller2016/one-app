@@ -91,11 +91,36 @@ export function writeUserJson(filename: string, value: unknown): void {
   });
 }
 
+/**
+ * 키체인 암호화를 쓸 수 있는가 — 못 쓰면 비밀이 **평문 base64 로** 저장된다.
+ *
+ * 정상 환경(서명된 앱 + 로그인된 키체인)에서는 항상 true 다. false 가 되는 경우는
+ * 서명이 깨졌거나 키체인이 잠긴 상태 — 이때 조용히 폴백하면 사용자는 비밀번호·API 토큰이
+ * userData JSON 에 사실상 평문으로 쌓이는 걸 **모른 채** 계속 쓰게 된다.
+ * 그래서 여기서 경고를 남기고, 환경설정 화면에도 배너로 알린다(`AppSettingsView.secureStorage`).
+ */
+export function isSecureStorageAvailable(): boolean {
+  return safeStorage.isEncryptionAvailable();
+}
+
+// 프로세스당 한 번만 경고한다 (저장할 때마다 찍으면 로그가 의미를 잃는다)
+let warnedInsecure = false;
+function warnInsecureOnce(): void {
+  if (warnedInsecure) return;
+  warnedInsecure = true;
+  console.warn(
+    '[store] ⚠️ safeStorage 를 쓸 수 없어 비밀 값을 평문 base64 로 저장합니다. ' +
+      '앱 서명이 깨졌거나 키체인이 잠겼을 수 있습니다 — 저장된 계정·토큰이 보호되지 않습니다.',
+  );
+}
+
 /** 비밀 값을 safeStorage 로 암호화해 base64 로 (키체인 불가 환경은 평문 base64 폴백) */
 export function encryptSecret(plain: string): string {
-  return safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(plain).toString('base64')
-    : Buffer.from(plain, 'utf8').toString('base64');
+  if (!safeStorage.isEncryptionAvailable()) {
+    warnInsecureOnce();
+    return Buffer.from(plain, 'utf8').toString('base64');
+  }
+  return safeStorage.encryptString(plain).toString('base64');
 }
 
 /** encryptSecret 역방향 — 복호화 실패(키체인 변경 등) 시 null */

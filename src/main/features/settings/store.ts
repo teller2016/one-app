@@ -9,6 +9,7 @@ import {
   writeUserJson,
   encryptSecret,
   decryptSecret,
+  isSecureStorageAvailable,
 } from '../../lib/store';
 
 interface StoredSettings {
@@ -45,6 +46,7 @@ export function getSettingsForRenderer(): AppSettingsView {
     notionRootUrl: s.notionRootUrl ?? '',
     hasNotionToken: !!s.notionTokenEnc,
     theme: s.theme ?? 'system',
+    secureStorage: isSecureStorageAvailable(),
   };
 }
 
