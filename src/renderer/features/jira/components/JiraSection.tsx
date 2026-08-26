@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   JiraIssue,
   JiraTransition,
@@ -280,6 +280,8 @@ export function JiraSection() {
   // 전환 메뉴 상태 — 한 번에 하나만 열림
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [menuState, setMenuState] = useState<MenuState>('loading');
+  // 전환 목록 요청 순번 — 메뉴를 옮기거나 닫으면 올려서 늦게 온 응답을 버린다
+  const menuSeq = useRef(0);
   const [transitioningKey, setTransitioningKey] = useState<string | null>(null);
   // 상세 패널 — 닫을 때 detailKey 를 남겨둬야 슬라이드아웃 중 내용이 사라지지 않는다
   const [detailKey, setDetailKey] = useState<string | null>(null);
@@ -353,12 +355,18 @@ export function JiraSection() {
   // 메뉴 토글 — 열 때마다 그 이슈의 가능한 전환을 새로 조회
   const toggleMenu = async (key: string) => {
     if (menuKey === key) {
+      menuSeq.current += 1; // 진행 중인 조회 결과를 버린다
       setMenuKey(null);
       return;
     }
+    const seq = menuSeq.current + 1;
+    menuSeq.current = seq;
     setMenuKey(key);
     setMenuState('loading');
     const res = await window.oneApp.jira.getTransitions(key);
+    // 다른 이슈 메뉴로 넘어갔거나 메뉴를 닫았으면 이 응답은 버린다
+    // (안 그러면 지금 열린 메뉴에 남의 이슈 전환 목록이 뜬다)
+    if (seq !== menuSeq.current) return;
     if (res.ok && res.transitions) setMenuState(res.transitions);
     else setMenuState({ error: res.error ?? '전환 목록을 불러오지 못했습니다' });
   };
@@ -366,7 +374,10 @@ export function JiraSection() {
   // 메뉴 밖 클릭·Escape 로 닫기
   useEffect(() => {
     if (!menuKey) return;
-    const close = () => setMenuKey(null);
+    const close = () => {
+      menuSeq.current += 1; // 진행 중인 조회 결과를 버린다
+      setMenuKey(null);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
     };

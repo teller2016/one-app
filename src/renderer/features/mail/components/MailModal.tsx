@@ -77,6 +77,8 @@ export function MailModal({
   const listRef = useRef<HTMLUListElement>(null);
   // 요청 순번 — 페이지를 빠르게 넘길 때 뒤늦게 도착한 이전 응답을 버린다
   const reqSeq = useRef(0);
+  // 본문 요청 순번 — 목록에서 메일을 연달아 클릭할 때 이전 본문이 뒤늦게 덮어쓰는 것을 막는다
+  const bodySeq = useRef(0);
 
   const loadList = useCallback(async (f: MailFolder, p: number) => {
     const seq = reqSeq.current + 1;
@@ -138,13 +140,19 @@ export function MailModal({
   };
 
   const openMail = async (item: MailItem) => {
+    const seq = bodySeq.current + 1;
+    bodySeq.current = seq;
     setSelected(item.muid);
     setViewOpen(true);
     setBody({ kind: 'loading', muid: item.muid });
     const wasUnread = !item.seen;
     const res = await window.oneApp.mail.getBody(item.muid, wasUnread);
+    // 늦게 온 응답이 방금 연 다른 메일의 본문을 덮어쓰지 않게 한다.
+    // ⚠️ 읽음 처리는 세대와 무관하게 반영한다 — 서버는 이미 읽음으로 바꿨으므로
+    //    여기서 건너뛰면 목록·뱃지만 안읽음으로 남아 어긋난다.
+    const fresh = seq === bodySeq.current;
     if (res.ok && res.body) {
-      setBody({ kind: 'ok', body: res.body });
+      if (fresh) setBody({ kind: 'ok', body: res.body });
       if (wasUnread) {
         // 로컬 목록·세그먼트 뱃지·사이드바 뱃지를 즉시 읽음으로 반영
         setItems((prev) =>
@@ -156,7 +164,7 @@ export function MailModal({
         }));
         onRead(item.muid);
       }
-    } else {
+    } else if (fresh) {
       setBody({ kind: 'error', message: res.error ?? '본문을 불러오지 못했습니다.' });
     }
   };
