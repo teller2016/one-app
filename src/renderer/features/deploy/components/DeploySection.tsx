@@ -10,6 +10,7 @@ import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { useToast } from '../../../components/Toast';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
@@ -29,6 +30,7 @@ import { errMsg } from '../../../lib/errMsg';
 /** 배포 섹션 — 프로젝트별 젠킨스 잡을 버튼 한 번으로 배포한다. */
 export function DeploySection() {
   const confirmDialog = useConfirm(); // 이름 주의: confirm 은 배포 확인 모달 상태가 사용 중
+  const toast = useToast();
   const [projects, setProjects] = useState<DeployProjectView[]>([]);
   const [statuses, setStatuses] = useState<Record<string, DeployStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -429,11 +431,18 @@ export function DeploySection() {
       production: form.production,
       targets,
     };
-    const list = await window.oneApp.deploy.saveProject(input);
-    setProjects(list);
-    setForm(null);
-    setFormError('');
-    refreshStatuses(list);
+    // ⚠️ 이 채널은 데스크톱 전용이다(젠킨스 인증 시크릿을 담는 쓰기 채널) —
+    // 폰 셸에서 부르면 브리지가 '폰에서 쓸 수 없는 기능입니다' 로 거절한다.
+    // 잡지 않으면 폼이 그대로 열린 채 아무 반응이 없어 보인다.
+    try {
+      const list = await window.oneApp.deploy.saveProject(input);
+      setProjects(list);
+      setForm(null);
+      setFormError('');
+      refreshStatuses(list);
+    } catch (e) {
+      setFormError(errMsg(e, '프로젝트를 저장하지 못했습니다.'));
+    }
   };
 
   const removeProject = async (p: DeployProjectView) => {
@@ -444,7 +453,12 @@ export function DeploySection() {
       danger: true,
     });
     if (!ok) return;
-    setProjects(await window.oneApp.deploy.deleteProject(p.id));
+    // 저장과 같은 이유로 데스크톱 전용 채널이다 (위 saveForm 주석 참고)
+    try {
+      setProjects(await window.oneApp.deploy.deleteProject(p.id));
+    } catch (e) {
+      toast(errMsg(e, '프로젝트를 삭제하지 못했습니다.'), 'fail');
+    }
   };
 
   // ── 프로젝트 추가/편집 폼 ──

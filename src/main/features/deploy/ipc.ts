@@ -1,3 +1,4 @@
+import { ipcMain } from 'electron';
 import { broadcast } from '../../lib/broadcast';
 import { handleShared } from '../../lib/moIpc';
 import {
@@ -68,12 +69,15 @@ const inFlight = new Set<string>();
 export function registerDeployIpc() {
   handleShared('deploy:projects:get', async () => listProjects());
 
-  handleShared(
+  // ⚠️ 프로젝트 등록/삭제는 MO 에 열지 않는다 — 젠킨스 URL·인증 시크릿을 담는 쓰기 채널이라
+  // 폰에서 부를 이유가 없다. 폰의 DeploySection 은 목록·상태·트리거만 쓴다.
+  // (폰에서 호출되면 브리지가 '폰에서 쓸 수 없는 기능입니다' 로 응답한다 — 화면이 오류로 받는다)
+  ipcMain.handle(
     'deploy:projects:save',
-    async (input: SaveDeployProjectInput) => saveProject(input),
+    async (_e, input: SaveDeployProjectInput) => saveProject(input),
   );
 
-  handleShared('deploy:projects:delete', async (id: string) =>
+  ipcMain.handle('deploy:projects:delete', async (_e, id: string) =>
     deleteProject(id),
   );
 

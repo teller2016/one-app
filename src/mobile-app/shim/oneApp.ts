@@ -37,6 +37,9 @@ const SPEC: Spec = {
   },
   deploy: {
     getProjects: { ch: 'deploy:projects:get' },
+    // ⚠️ 아래 둘은 main 이 MO 에 열지 않은 채널이다(`deploy/ipc.ts` — 젠킨스 인증 시크릿을
+    // 담는 쓰기 채널). 선언은 남겨 둔다 — 빼면 `undefined is not a function` 이 나지만,
+    // 남겨 두면 브리지가 '폰에서 쓸 수 없는 기능입니다' 로 거절해 화면이 그 문구를 보여준다.
     saveProject: { ch: 'deploy:projects:save' },
     deleteProject: { ch: 'deploy:projects:delete' },
     fetchStatuses: { ch: 'deploy:status:fetch' },
