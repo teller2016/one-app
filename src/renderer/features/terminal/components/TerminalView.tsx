@@ -407,7 +407,15 @@ export const TerminalView = memo(function TerminalView({
     // setTimeout(0) 으로 조합 결과를 보내는데, 이 리스너는 `term.open()` **이후** 등록이라
     // xterm 자신의 리스너보다 나중에 호출되고 그래서 우리 타이머가 뒤에 실행된다.
     const composeTarget = term.textarea;
+    // compositionend 뒤 xterm 이 조합 결과를 setTimeout(0) 으로 보내기까지의 창 — 이 사이에도
+    // CompositionHelper 는 `_isSendingComposition` 으로 '조합 중'과 같게 keydown 을 다룬다.
+    // 우리 타이머는 xterm 것보다 뒤에 실행되므로(리스너 등록 순서) 그 창을 정확히 덮는다.
+    let compositionSettling = false;
     const onCompositionEnd = () => {
+      compositionSettling = true;
+      window.setTimeout(() => {
+        compositionSettling = false;
+      }, 0);
       if (!pendingCursorSeq) return;
       const seq = pendingCursorSeq;
       pendingCursorSeq = null;
@@ -416,9 +424,19 @@ export const TerminalView = memo(function TerminalView({
       }, 0);
     };
     composeTarget?.addEventListener('compositionend', onCompositionEnd);
+    // ⚠️ 조합 중 **단독 수정키 keydown 은 xterm 에 넘기지 않는다** — `CompositionHelper.keydown`
+    // 의 면제 목록은 CapsLock(20)·229·Shift/Ctrl/Alt(16/17/18) 뿐이라 **Meta(⌘, 91/93) 는
+    // 조합을 즉시 확정하는 키로 취급**된다: 글자를 한 번 보내고, 뒤이은 진짜 compositionend
+    // 가 `substring(start)` 로 같은 글자를 다시 보낸다 → 마지막 글자 중복. Karabiner 가
+    // `⌘J → ←` 처럼 수정키 없는 키로 리맵하면 `⌘ up → ← → ⌘ down` 으로 합성하므로 이동
+    // 직후 **⌘ keydown 이 조합 중에 도착**한다("입력중" → "입력중중", 2026-08-26 신고 —
+    // 물리 화살표엔 ⌘ 재누름이 없어 무사). xterm 은 단독 수정키 keydown 으로 하는 일이 없어
+    // 막아도 잃는 기능이 없다(Shift/Ctrl/Alt 는 xterm 도 면제하지만 통일해서 막는다).
+    const MODIFIER_KEYS = new Set(['Meta', 'Shift', 'Control', 'Alt', 'CapsLock']);
     // ── 숨은 textarea 캐럿 ──────────────────────────────────────────────
-    // ⚠️ 아래 핸들러에서 가로채 `return false` 하는 키는 반드시 `ev.preventDefault()` 도
-    // 함께 한다 — xterm 은 커스텀 핸들러가 false 를 주면 cancel() 없이 바로 빠져나가므로
+    // ⚠️ 아래 핸들러에서 가로채 `return false` 하는 키는 `ev.preventDefault()` 도 함께 한다
+    // (예외: 조합 중 커서 보류 분기 — 그 이유는 해당 분기 주석) — xterm 은 커스텀 핸들러가
+    // false 를 주면 cancel() 없이 바로 빠져나가므로
     // 브라우저의 기본 편집 명령(⌘← = moveToBeginningOfLine, ⌘⌫ = deleteToBeginningOfLine,
     // Enter = 개행 삽입)이 **xterm 의 숨은 textarea** 에 그대로 적용된다. 한글 등 IME 입력은
     // 그 textarea 를 거치는데, `CompositionHelper` 는 조합 위치를 `textarea.value.length`
@@ -437,13 +455,21 @@ export const TerminalView = memo(function TerminalView({
       if (ta.selectionStart !== len || ta.selectionEnd !== len) ta.setSelectionRange(len, len);
     };
     term.attachCustomKeyEventHandler((ev) => {
+      if (
+        ev.type === 'keydown' &&
+        (ev.isComposing || compositionSettling) &&
+        MODIFIER_KEYS.has(ev.key)
+      )
+        return false; // 조합 중 단독 수정키 — 위 설명 참고
       if (ev.type === 'keydown' && !ev.isComposing) rehomeCaret();
       // 한글 조합 중 커서 이동 — 위 설명 참고. keydown 에서만 보류하고 keypress·keyup 까지
       // 막아 xterm 이 손대지 못하게 한다.
+      // ⚠️ 여기서는 preventDefault 를 **하지 않는다** — 브라우저 편집 명령(moveLeft 등)이
+      // textarea 캐럿을 옮기며 IME 조합을 끝내 주는 경로가 곧 보류한 시퀀스를 내보내는
+      // 방아쇠다. 캐럿이 어긋나는 문제는 아래 `rehomeCaret` 이 다음 keydown 에서 되돌린다.
       if (ev.isComposing) {
         const seq = composingCursorSeq(ev);
         if (seq) {
-          ev.preventDefault(); // 편집 명령이 textarea 캐럿을 옮기지 않게 (위 '숨은 textarea 캐럿')
           if (ev.type === 'keydown') pendingCursorSeq = seq;
           return false;
         }
