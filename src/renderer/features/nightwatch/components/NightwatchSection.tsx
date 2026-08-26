@@ -214,14 +214,21 @@ export function NightwatchSection() {
     await loadCandidates();
   };
 
+  // ⚠️ main 의 저장은 실패로 reject 될 수 있다(설정 파일 쓰기 실패 등).
+  // try 가 없으면 busy 가 'save' 로 갇혀 버튼이 영구 로딩 상태가 된다.
   const saveForm = async () => {
     if (!form) return;
     setBusy("save");
-    const st = await window.oneApp.nightwatch.saveConfig(form);
-    setStatus(st);
-    setForm(st.config);
-    toast("설정을 저장했습니다");
-    setBusy(null);
+    try {
+      const st = await window.oneApp.nightwatch.saveConfig(form);
+      setStatus(st);
+      setForm(st.config);
+      toast("설정을 저장했습니다");
+    } catch (e) {
+      toast(errMsg(e), "fail");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const openReport = async (key: string) => {
