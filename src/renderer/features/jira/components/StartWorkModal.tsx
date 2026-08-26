@@ -26,7 +26,7 @@ import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
 import { openTerminalSession } from '../../../lib/sectionNav';
-import { worktreeName } from '../../terminal';
+import { worktreeName } from '../../../../shared/types';
 import { errMsg } from '../../../lib/errMsg';
 
 const SKILL_KEY = 'jira:workSkill'; // 마지막으로 고른 시작 스킬 (localStorage)

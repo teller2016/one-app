@@ -1,3 +1,4 @@
 export { TerminalSection } from './components/TerminalSection';
-// 워크트리 표시명 — Jira 작업 시작 모달이 같은 규칙으로 위치를 보여준다(판정 중복 방지)
-export { worktreeName } from './lib/workspace';
+// ⚠️ 여기서 무언가를 더 내보내기 전에 — 이 배럴은 TerminalSection(→ xterm 5종)을
+// 끌고 온다. 순수 헬퍼를 다른 기능이 쓰려면 배럴에 얹지 말고 `shared/types.ts` 로 옮길 것
+// (worktreeName 이 그렇게 갔다 — MO 폰 번들에 xterm 499KB 가 딸려오던 원인, 2026-08-26).

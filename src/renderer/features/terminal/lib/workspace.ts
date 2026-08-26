@@ -1,7 +1,7 @@
 // 워크스페이스 LNB·프리셋 공용 헬퍼 — 선택 상태 타입·이니셜·색 인덱스·프리셋 스코프.
 // (TerminalSection·WorkspaceNav·SessionTabs·TerminalView 가 함께 쓴다)
 import type { IconName } from '../../../components/Icon';
-import type { TerminalPreset, WorktreeInfo } from '../../../../shared/types';
+import type { TerminalPreset } from '../../../../shared/types';
 import { agentIdFromCommand } from '../../../../shared/types';
 
 /**
@@ -54,16 +54,13 @@ export function tileColor(ws: { name: string; color?: number }): number {
   return ws.color ?? colorIndex(ws.name);
 }
 
-/** 경로 마지막 폴더명 — 워크트리 표시명(주 워크트리는 'local') */
-export function worktreeName(wt: WorktreeInfo): string {
-  if (wt.isMain) return 'local';
-  const segs = wt.path.split('/').filter(Boolean);
-  return segs[segs.length - 1] ?? wt.path;
-}
-
 // 프리셋 스코프·에이전트 태깅 판정은 MO(src/mobile)와 공유해야 해서 shared 로 옮겼다 —
 // 기존 import 경로가 그대로 살아 있도록 여기서 다시 내보낸다.
-export { agentIdFromCommand, presetsForWorkspace } from '../../../../shared/types';
+export {
+  agentIdFromCommand,
+  presetsForWorkspace,
+  worktreeName,
+} from '../../../../shared/types';
 
 /** 프리셋 칩 아이콘 — claude 는 ✳(Superset 무드), 나머지는 터미널 글리프 */
 export function presetIcon(p: TerminalPreset): IconName {
