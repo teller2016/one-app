@@ -113,29 +113,35 @@ export function DeploySection() {
   );
   useTick(5_000, anyBuilding);
 
-  // 프로젝트 목록의 최근 빌드 상태 조회
-  const refreshStatuses = useCallback(async (list: DeployProjectView[]) => {
-    await Promise.all(
-      list
-        .filter((p) => p.hasSecret)
-        .map(async (p) => {
-          const map = await window.oneApp.deploy.fetchStatuses(p.id);
-          setStatuses((prev) => {
-            const next = { ...prev };
-            for (const [targetId, status] of Object.entries(map)) {
-              const key = statusKey(p.id, targetId);
-              // 앱에서 방금 트리거한 대상의 낙관적 '대기중'만 보호
-              // (watchBuild 가 갱신하므로 주기 조회가 직전 빌드 완료로 덮지 않게).
-              // 서버 감지 대기중(다른 빌드에 밀림)은 조회 결과로 계속 갱신해야
-              // 빌드 시작 시 '대기중 → 빌드중'으로 자연스럽게 넘어간다.
-              if (!(optimistic.current.has(key) && next[key]?.state === 'queued'))
-                next[key] = status;
-            }
-            return next;
-          });
-        }),
-    );
-  }, []);
+  // 프로젝트 목록의 최근 빌드 상태 조회.
+  // force 는 주기 조회용 — 진입 시엔 main 의 짧은 캐시를 그대로 써서 화면을 바로 채운다.
+  const refreshStatuses = useCallback(
+    async (list: DeployProjectView[], force = false) => {
+      await Promise.all(
+        list
+          .filter((p) => p.hasSecret)
+          .map(async (p) => {
+            const map = await window.oneApp.deploy.fetchStatuses(p.id, force);
+            setStatuses((prev) => {
+              const next = { ...prev };
+              for (const [targetId, status] of Object.entries(map)) {
+                const key = statusKey(p.id, targetId);
+                // 앱에서 방금 트리거한 대상의 낙관적 '대기중'만 보호
+                // (watchBuild 가 갱신하므로 주기 조회가 직전 빌드 완료로 덮지 않게).
+                // 서버 감지 대기중(다른 빌드에 밀림)은 조회 결과로 계속 갱신해야
+                // 빌드 시작 시 '대기중 → 빌드중'으로 자연스럽게 넘어간다.
+                if (
+                  !(optimistic.current.has(key) && next[key]?.state === 'queued')
+                )
+                  next[key] = status;
+              }
+              return next;
+            });
+          }),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     window.oneApp?.deploy.getProjects().then((list) => {
@@ -166,7 +172,7 @@ export function DeploySection() {
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
   const pollStatuses = useCallback(() => {
-    void refreshStatuses(projectsRef.current);
+    void refreshStatuses(projectsRef.current, true); // 주기 조회는 항상 최신을 본다
   }, [refreshStatuses]);
   usePolling(pollStatuses, 60_000, {
     enabled: projects.length > 0,

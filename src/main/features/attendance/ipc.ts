@@ -1,6 +1,11 @@
 import { ipcMain } from 'electron';
 import { handleShared } from '../../lib/moIpc';
 import { runAttendance } from './attend';
+import {
+  cacheAttendance,
+  getCachedAttendance,
+  invalidateAttendance,
+} from './statusCache';
 import { getCredentials } from '../settings/store';
 import { getReminderConfig, saveReminderConfig } from './reminders';
 import { refreshReminderSchedule } from './scheduler';
@@ -9,21 +14,31 @@ import type {
   ReminderConfig,
 } from '../../../shared/types';
 
+async function runStatus(): Promise<AttendanceResult> {
+  const cred = getCredentials();
+  if (!cred)
+    return {
+      ok: false,
+      error: '비즈박스 계정이 없습니다. [환경설정]에서 저장하세요.',
+    };
+  try {
+    return { ok: true, info: await runAttendance('status') };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 /** 출퇴근(근태) 관련 IPC 핸들러 등록 */
 export function registerAttendanceIpc() {
   // 현재 출퇴근 시각 조회 (MO 공유 — 헤드리스라 폰에서도 안전. 수십 초 걸릴 수 있다)
-  handleShared('attendance:fetch', async (): Promise<AttendanceResult> => {
-    const cred = getCredentials();
-    if (!cred)
-      return {
-        ok: false,
-        error: '비즈박스 계정이 없습니다. [환경설정]에서 저장하세요.',
-      };
-    try {
-      return { ok: true, info: await runAttendance('status') };
-    } catch (err) {
-      return { ok: false, error: (err as Error).message };
+  handleShared('attendance:fetch', (force?: boolean): Promise<AttendanceResult> => {
+    if (force === true) invalidateAttendance();
+    // 진행 중인 조회에도 붙는다 — 데스크톱 위젯과 폰이 동시에 물으면 왕복 하나로 합친다
+    else {
+      const hit = getCachedAttendance();
+      if (hit) return hit;
     }
+    return cacheAttendance(runStatus());
   });
 
   // 출근/퇴근 찍기 (MO 공유 — 폰에서도 확인 다이얼로그를 거친다)
@@ -37,6 +52,7 @@ export function registerAttendanceIpc() {
           error: '비즈박스 계정이 없습니다. [환경설정]에서 저장하세요.',
         };
       try {
+        // 캐시 무효화는 runAttendance 안에서 — 트레이·리마인더로 찍어도 걸리게
         return { ok: true, info: await runAttendance(action) };
       } catch (err) {
         return { ok: false, error: (err as Error).message };

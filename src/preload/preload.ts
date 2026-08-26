@@ -117,8 +117,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     deleteProject: (id: string) =>
       ipcRenderer.invoke("deploy:projects:delete", id),
     // 배포 대상별 최근 빌드 상태 조회 (targetId → status)
-    fetchStatuses: (projectId: string) =>
-      ipcRenderer.invoke("deploy:status:fetch", projectId),
+    // force=true 는 주기 조회 — main 의 짧은 캐시를 우회한다
+    fetchStatuses: (projectId: string, force?: boolean) =>
+      ipcRenderer.invoke("deploy:status:fetch", projectId, force),
     // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) 조회
     fetchActivity: (projectId: string) =>
       ipcRenderer.invoke("deploy:activity:fetch", projectId),
@@ -250,7 +251,8 @@ contextBridge.exposeInMainWorld("oneApp", {
   },
   attendance: {
     // 현재 출퇴근 시각 조회 (headless 브라우저로 그룹웨어 확인 — 수 초 소요)
-    fetch: () => ipcRenderer.invoke("attendance:fetch"),
+    // force=true 는 수동 새로고침 — main 의 조회 캐시를 우회한다
+    fetch: (force?: boolean) => ipcRenderer.invoke("attendance:fetch", force),
     // 출근/퇴근 찍기
     stamp: (action: "come" | "leave") =>
       ipcRenderer.invoke("attendance:stamp", action),
@@ -329,7 +331,8 @@ contextBridge.exposeInMainWorld("oneApp", {
   prs: {
     // 열린 PR 목록 조회 (Gitea — 주소 미설정이면 configured:false)
     // light=true 는 개수만 필요한 홈 카드용 — PR별 리뷰 조회(N+1)를 생략한다
-    fetch: (opts?: { light?: boolean }) => ipcRenderer.invoke("prs:fetch", opts),
+    fetch: (opts?: { light?: boolean; force?: boolean }) =>
+      ipcRenderer.invoke("prs:fetch", opts),
     // 설정(조직 필터 + 빠른 PR 저장소) 조회/저장
     getConfig: () => ipcRenderer.invoke("prs:config:get"),
     setConfig: (config: PrsConfig) =>

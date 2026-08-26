@@ -40,6 +40,14 @@ paths:
    - ⚠️ 워크트리 `-b` 를 원격 베이스(origin/main)로 만들면 git 이 **origin/main 을 추적으로 잡는다** — 사용자 `push.default=current` 라 푸시는 제 이름 브랜치로 잘 가지만 `@{u}..HEAD` 가 안 비어 '푸시할 커밋'이 영영 남았다(2026-08-14 실측). 그래서 워크트리 생성은 `--no-track`(workspaces/git.ts), 푸시는 위 이름 불일치 교정. 확인 다이얼로그 문구도 같은 판정(`lib/push.ts` `pushConfirmMessage`)으로 실제 목적지를 보여준다.
 
 전 명령 `core.quotepath=false`(한글 경로 보존) + `GIT_TERMINAL_PROMPT=0` + 타임아웃(headless 인증 프롬프트 hang 차단).
+**조회 명령은 `runGit(..., { readOnly: true })`** — `GIT_OPTIONAL_LOCKS=0` 이 붙어 5초 폴링이 매 tick `.git/index` 를 다시 쓰고 사용자·에이전트의 git 작업과 index.lock 을 두고 경합하던 것을 막는다. **쓰기(add/commit/push)에는 붙이지 않는다.**
+
+### ⚠️ tick 당 프로세스 수를 늘리지 말 것 (2026-08-26 계측)
+5초 폴링이라 tick 당 git 스폰 수가 그대로 비용이다. **6개 → 4개**로 줄여 둔 상태이고(`main` 브랜치 실측, work 모드 + 커밋 목록), 그 근거는:
+- `rev-parse --is-inside-work-tree` 는 **경로별 5분 캐시** — status 가 실패하면 버린다(워크트리 삭제·이동 대응).
+- 베이스 브랜치는 `for-each-ref refs/heads/main refs/heads/master` **한 번**(옛 `rev-parse --verify` 는 브랜치당 1회라 최대 2스폰) + **60초 캐시**.
+- `@{u}..HEAD` 는 상태 조회와 커밋 목록이 **같은 tick 에 함께 부르므로 2초 창으로 Promise 를 공유**한다(포맷을 `%h\t%s` 로 통일해 한 명령으로 합쳤다). ⚠️ **커밋·푸시 후에는 `invalidateRepo()` 로 버린다** — 안 버리면 직후 재조회가 옛 미푸시 목록을 보여준다.
+- status·베이스·numstat 은 서로 독립이라 `Promise.all`(branch 모드는 분기점을 알아야 하는 numstat 만 뒤로 뺀다).
 
 ## 보안 — 폰에 열리는 채널
 IPC 6채널 전부 `handleShared`(MO 화이트리스트) — ⚠️ **클라이언트가 경로를 직접 못 넘긴다**: `ChangesTarget`(projectId/sessionId)만 받아 main 이 해석하고, diff 파일 경로도 저장소 밖 탈출을 검증한다(폰에 열리는 채널이라 임의 디렉터리 git 실행 차단). ⚠️ **커밋 해시·diff scope 도 화이트리스트 검증**(`HASH_RE` + `sanitizeScope`) — 임의 문자열이 git 인자가 되면 안 된다.

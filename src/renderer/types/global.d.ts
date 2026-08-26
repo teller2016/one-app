@@ -142,8 +142,10 @@ declare global {
           input: SaveDeployProjectInput,
         ) => Promise<DeployProjectView[]>;
         deleteProject: (id: string) => Promise<DeployProjectView[]>;
+        // force=true 는 주기 조회 — main 의 짧은 상태 캐시를 우회한다
         fetchStatuses: (
           projectId: string,
+          force?: boolean,
         ) => Promise<Record<string, DeployStatus>>;
         fetchActivity: (projectId: string) => Promise<DeployActivityResult>;
         trigger: (
@@ -234,7 +236,8 @@ declare global {
         onStatus: (cb: (status: VpnStatus) => void) => () => void;
       };
       attendance: {
-        fetch: () => Promise<AttendanceResult>;
+        // force=true 는 수동 새로고침 — main 의 조회 캐시를 우회한다
+        fetch: (force?: boolean) => Promise<AttendanceResult>;
         stamp: (action: 'come' | 'leave') => Promise<AttendanceResult>;
         getReminders: () => Promise<ReminderConfig>;
         setReminders: (config: ReminderConfig) => Promise<ReminderConfig>;
@@ -272,8 +275,12 @@ declare global {
         onChanged: (cb: (projects: Project[]) => void) => () => void;
       };
       prs: {
-        // light=true 는 개수만 필요한 홈 카드용 — 리뷰/브랜치 보강 생략
-        fetch: (opts?: { light?: boolean }) => Promise<PrListResult>;
+        // light=true 는 목록만 — 리뷰/브랜치 보강 생략(섹션의 1단계 로딩).
+        // force=true 는 수동 새로고침 — main 의 목록 캐시를 우회한다.
+        fetch: (opts?: {
+          light?: boolean;
+          force?: boolean;
+        }) => Promise<PrListResult>;
         getConfig: () => Promise<PrsConfig>;
         setConfig: (config: PrsConfig) => Promise<PrsConfig>;
         getBranches: (repo: string) => Promise<PrBranchesResult>;

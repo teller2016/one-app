@@ -6,6 +6,7 @@
 // 의존을 없애고 브라우저 기동 비용도 줄인다(2026-08 전환).
 // confirm 자동 수락은 browser.ts 의 DIALOG_OVERRIDE 가 담당한다(출퇴근 저장 시 confirm 이 뜬다).
 import { ATTENDANCE_CONFIG } from './config';
+import { invalidateAttendance } from './statusCache';
 import type { AttendanceInfo } from '../../../shared/types';
 import { sleep, localDateKey } from '../../lib/util';
 import { gotoWithSessionInWindow, isLoginUrl } from '../groupware/session';
@@ -115,6 +116,9 @@ export async function runAttendance(
     await gotoWithSessionInWindow(page, ATTENDANCE_CONFIG.mainUrl);
 
     if (action !== 'status') {
+      // 찍고 나면 캐시된 조회 결과는 옛것이다 — 어느 경로로 찍든(위젯·트레이·리마인더)
+      // 여기를 지나므로 무효화를 한곳에 둔다
+      invalidateAttendance();
       // 위젯 로드 확인 후 그룹웨어 자체 함수 호출 (사이트와 동일한 저장 흐름)
       await readInfo(page);
       const flag = ATTENDANCE_CONFIG.flags[action];

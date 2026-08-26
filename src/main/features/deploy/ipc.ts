@@ -65,6 +65,19 @@ function resolveTarget(
 // 진행 중인 배포 (projectId:targetId) — 같은 대상 중복 트리거 방지
 const inFlight = new Set<string>();
 
+// 배포 상태 캐시 — 섹션 재진입마다 반복되던 전체 재조회를 막는다.
+// 주기 조회(force)·트리거·watchBuild 이벤트가 최신성을 담당한다.
+const STATUS_TTL_MS = 30_000;
+const statusCache = new Map<
+  string,
+  { at: number; p: Promise<Record<string, DeployStatus>> }
+>();
+
+/** 배포를 걸었으면 그 프로젝트의 캐시된 상태는 이미 옛것이다 */
+function invalidateDeployStatus(projectId: string): void {
+  statusCache.delete(projectId);
+}
+
 /** 배포(젠킨스) 관련 IPC 핸들러 등록 */
 export function registerDeployIpc() {
   handleShared('deploy:projects:get', async () => listProjects());
@@ -81,8 +94,27 @@ export function registerDeployIpc() {
     deleteProject(id),
   );
 
-  // 프로젝트의 배포 대상별 최근 빌드 상태 조회 (화면 진입/새로고침 시)
-  handleShared('deploy:status:fetch', async (projectId: string) => {
+  // 프로젝트의 배포 대상별 최근 빌드 상태 조회 (화면 진입/새로고침 시).
+  // 섹션에 들어올 때마다 젠킨스를 대상 수만큼 다시 때리던 것을 짧은 캐시로 막는다 —
+  // 주기 조회(force)와 watchBuild 이벤트가 최신성을 담당하므로 진입 표시는 캐시로 충분하다.
+  handleShared('deploy:status:fetch', async (projectId: string, force?: boolean) => {
+    if (force === true) statusCache.delete(projectId);
+    else {
+      const hit = statusCache.get(projectId);
+      if (hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.p;
+    }
+    const p = fetchProjectStatuses(projectId);
+    statusCache.set(projectId, { at: Date.now(), p });
+    // 실패는 캐시에 남기지 않는다 (다음 조회가 다시 시도하도록)
+    void p.catch(() => {
+      if (statusCache.get(projectId)?.p === p) statusCache.delete(projectId);
+    });
+    return p;
+  });
+
+  async function fetchProjectStatuses(
+    projectId: string,
+  ): Promise<Record<string, DeployStatus>> {
     const cred = getProjectCredentials(projectId);
     if (!cred) return {};
     const auth: JenkinsAuth = {
@@ -113,7 +145,7 @@ export function registerDeployIpc() {
       }),
     );
     return Object.fromEntries(entries) as Record<string, DeployStatus>;
-  });
+  }
 
   // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) — 카드별 현황 팝업용
   handleShared(
@@ -329,6 +361,7 @@ export function registerDeployIpc() {
       const key = `${projectId}:${targetId}`;
       if (inFlight.has(key))
         return { ok: false, error: '이미 배포가 진행 중입니다.' };
+      invalidateDeployStatus(projectId); // 이 프로젝트의 캐시된 상태는 곧 옛것이 된다
 
       const cred = getProjectCredentials(projectId);
       if (!cred)

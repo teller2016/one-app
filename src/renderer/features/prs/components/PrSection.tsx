@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   PrItem,
   PrListResult,
@@ -79,18 +79,36 @@ export function PrSection() {
     else toast(res.error ?? '전환에 실패했습니다', 'fail');
   };
 
-  const load = useCallback(async () => {
+  // 뒤늦은 응답이 최신 화면을 덮지 않게 하는 순번 (2단계 로딩·수동 새로고침이 겹칠 때)
+  const loadSeq = useRef(0);
+
+  /**
+   * 목록 조회 — 2단계다.
+   * 1단계는 목록만(요청 1건) 받아 즉시 그리고, 승인 수·머지 방향 보강본(PR별 리뷰
+   * 조회가 붙어 수 초)이 오면 갈아끼운다. 보강 전까지 그 값들은 undefined 라
+   * '충돌' 같은 표시가 잘못 뜨지 않는다(전부 optional 필드).
+   */
+  const load = useCallback(async (force = false) => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
-      setResult(await window.oneApp.prs.fetch());
+      const quick = await window.oneApp.prs.fetch({ light: true, force });
+      if (seq !== loadSeq.current) return;
+      setResult(quick);
+      // 2단계는 force 를 넘기지 않는다 — 1단계가 이미 캐시를 새로 채웠고,
+      // main 은 light 캐시를 보강 요청의 히트로 쳐주지 않는다
+      const full = await window.oneApp.prs.fetch();
+      if (seq !== loadSeq.current) return;
+      setResult(full);
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setResult({
         ok: false,
         configured: true,
         error: errMsg(err) ?? '조회 실패',
       });
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, []);
 
@@ -300,7 +318,8 @@ export function PrSection() {
             bordered
             size={14}
             spinning={loading}
-            onClick={() => void load()}
+            // 수동 새로고침은 main 의 목록 캐시를 우회한다
+            onClick={() => void load(true)}
             disabled={loading}
             title="PR 목록 새로고침"
           />

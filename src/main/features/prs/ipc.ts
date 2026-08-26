@@ -29,6 +29,17 @@ import type {
   PrMergeResult,
 } from '../../../shared/types';
 
+// 목록 캐시 — 섹션을 오갈 때마다 리뷰 N+1 을 포함한 전체 재조회가 돌던 것을 막는다.
+// 수동 새로고침(force)·PR 생성·머지는 캐시를 버린다.
+const LIST_TTL_MS = 60_000;
+let listCache: { at: number; full: boolean; result: PrListResult } | null = null;
+let listInflight: { full: boolean; p: Promise<PrListResult> } | null = null;
+
+/** 목록 캐시 무효화 — 내가 만든 변화(생성·머지)는 즉시 목록에 반영돼야 한다 */
+function invalidatePrList(): void {
+  listCache = null;
+}
+
 const NO_GITEA = 'Gitea 주소가 설정되지 않았습니다. [환경설정 → 연동]을 확인하세요.';
 const NO_TOKEN =
   'PR 생성/머지에는 Gitea 토큰이 필요합니다. [환경설정 → 연동]에 토큰을 저장하세요.';
@@ -38,6 +49,29 @@ const BAD_REPO = '저장소 이름이 올바르지 않습니다.';
 // (API 경로에 그대로 들어가는 값 — '..' 같은 세그먼트로 다른 엔드포인트를 때릴 수 없게)
 const isValidRepo = (repo: unknown): repo is string =>
   typeof repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes('..');
+
+/** 열린 PR 목록 실조회 — light 면 보강(리뷰 N+1 · 브랜치)을 건너뛴다 */
+async function fetchPrList(light: boolean): Promise<PrListResult> {
+  const gitea = getGiteaConfig();
+  if (!gitea) return { ok: true, configured: false };
+  try {
+    const prs = await fetchOpenPrs(gitea.url, gitea.token);
+    if (light) return { ok: true, configured: true, prs };
+    // 승인 수(PR별 요청)와 머지 방향(저장소별 요청)은 서로 독립이라 함께 돌린다
+    const [approved, branched] = await Promise.all([
+      enrichApprovals(gitea.url, gitea.token, prs),
+      enrichBranches(gitea.url, gitea.token, prs),
+    ]);
+    const dirs = new Map(branched.map((p) => [`${p.repo}#${p.number}`, p]));
+    const enriched = approved.map((p) => {
+      const d = dirs.get(`${p.repo}#${p.number}`);
+      return d ? { ...p, head: d.head, base: d.base, mergeable: d.mergeable } : p;
+    });
+    return { ok: true, configured: true, prs: enriched };
+  } catch (err) {
+    return { ok: false, configured: true, error: (err as Error).message };
+  }
+}
 
 /** PR 대시보드 IPC 핸들러 등록 */
 export function registerPrsIpc() {
@@ -49,29 +83,38 @@ export function registerPrsIpc() {
   );
 
   // 열린 PR 목록 조회 (+ 승인 수 보강)
-  // light=true 는 개수만 쓰는 홈 카드용 — PR별 리뷰 조회(N+1)·브랜치 보강을 생략해
-  // 요청을 1건으로 줄인다(2026-08-07 성능 감사: 카드 하나에 60여 요청).
-  handleShared('prs:fetch', async (opts?: { light?: boolean }): Promise<PrListResult> => {
-    const gitea = getGiteaConfig();
-    if (!gitea) return { ok: true, configured: false };
-    try {
-      const prs = await fetchOpenPrs(gitea.url, gitea.token);
-      if (opts?.light) return { ok: true, configured: true, prs };
-      // 승인 수(PR별 요청)와 머지 방향(저장소별 요청)은 서로 독립이라 함께 돌린다
-      const [approved, branched] = await Promise.all([
-        enrichApprovals(gitea.url, gitea.token, prs),
-        enrichBranches(gitea.url, gitea.token, prs),
-      ]);
-      const dirs = new Map(branched.map((p) => [`${p.repo}#${p.number}`, p]));
-      const enriched = approved.map((p) => {
-        const d = dirs.get(`${p.repo}#${p.number}`);
-        return d ? { ...p, head: d.head, base: d.base, mergeable: d.mergeable } : p;
+  // light=true 는 목록만 — PR별 리뷰 조회(N+1)·브랜치 보강을 생략해 요청을 1건으로
+  // 줄인다(2026-08-07 성능 감사: 카드 하나에 60여 요청). 섹션은 이것을 먼저 그린 뒤
+  // 보강본으로 갈아끼운다.
+  handleShared(
+    'prs:fetch',
+    async (opts?: { light?: boolean; force?: boolean }): Promise<PrListResult> => {
+      const light = opts?.light === true;
+      if (opts?.force === true) {
+        invalidatePrList();
+      } else {
+        // light 요청은 보강된 캐시도 그대로 쓴다 — 더 풍부한 결과라 손해가 없다
+        const hit = listCache;
+        if (hit && Date.now() - hit.at < LIST_TTL_MS && (hit.full || light)) {
+          return hit.result;
+        }
+        // 같은 조회가 이미 떠 있으면 붙는다 (2단계 로딩과 폴링이 겹칠 때 중복 방지)
+        const cur = listInflight;
+        if (cur && (cur.full || light)) return cur.p;
+      }
+
+      const p = fetchPrList(light).then((r) => {
+        // 성공한 조회만 캐시한다 — 실패를 캐시하면 1분간 에러 화면이 굳는다
+        if (r.ok && r.configured) listCache = { at: Date.now(), full: !light, result: r };
+        return r;
       });
-      return { ok: true, configured: true, prs: enriched };
-    } catch (err) {
-      return { ok: false, configured: true, error: (err as Error).message };
-    }
-  });
+      listInflight = { full: !light, p };
+      void p.finally(() => {
+        if (listInflight?.p === p) listInflight = null;
+      });
+      return p;
+    },
+  );
 
   // 저장소의 최근 브랜치 목록 (빠른 PR 후보)
   handleShared(
@@ -155,6 +198,7 @@ export function registerPrsIpc() {
       if (!isValidRepo(input?.repo)) return { ok: false, error: BAD_REPO };
       try {
         const { number, url } = await createPr(gitea.url, gitea.token, input);
+        invalidatePrList(); // 방금 만든 PR 이 다음 목록 조회에 바로 보이게
         return { ok: true, number, url };
       } catch (err) {
         return { ok: false, error: (err as Error).message };
@@ -209,6 +253,7 @@ export function registerPrsIpc() {
       if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
       try {
         await mergePr(gitea.url, gitea.token, repo, number, method);
+        invalidatePrList(); // 머지된 PR 이 목록에 남아 있지 않게
         return { ok: true };
       } catch (err) {
         return { ok: false, error: (err as Error).message };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   JiraIssue,
   JiraTransition,
@@ -70,8 +70,12 @@ const prioInfo = (name: string): { level: string; icon: IconName } | null => {
 /** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
 type MenuState = 'loading' | JiraTransition[] | { error: string };
 
-/** 이슈 한 줄 — 티켓명 클릭 = 앱 내 상세 패널, 티켓번호 클릭 = 브라우저 열기, 뱃지 = 전환 메뉴 */
-function IssueRow({
+/**
+ * 이슈 한 줄 — 티켓명 클릭 = 앱 내 상세 패널, 티켓번호 클릭 = 브라우저 열기, 뱃지 = 전환 메뉴.
+ * ⚠️ memo 다 — 터미널 세션 브로드캐스트가 잦아(출력·상태 변화마다) 목록 전체가 다시
+ * 그려지던 것을 막는다. 부모가 넘기는 콜백은 전부 useCallback 으로 고정돼 있어야 한다.
+ */
+const IssueRow = memo(function IssueRow({
   issue,
   menu,
   transitioning,
@@ -263,7 +267,7 @@ function IssueRow({
       </Tooltip>
     </div>
   );
-}
+});
 
 /** Jira 내 이슈 — 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹. */
 export function JiraSection() {
@@ -296,15 +300,28 @@ export function JiraSection() {
 
   // 터미널 세션 — 어떤 티켓이 이미 돌고 있는지 표시하려고 구독한다(main 이 상태까지 실어 준다)
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
+  // ⚠️ 이 화면이 쓰는 건 femc 세션의 id·제목·상태·cwd 뿐인데, 세션 브로드캐스트는
+  // 그 밖의 변화로도 자주 온다. 그대로 담으면 갱신마다 목록 전체가 다시 그려진다
+  // — 관심 있는 값이 같으면 이전 배열을 유지해 memo 된 행을 지킨다.
+  const sessionsKeyRef = useRef('');
+  const applySessions = useCallback((list: TerminalSessionInfo[]) => {
+    const key = list
+      .filter((s) => s.agentId === 'femc')
+      .map((s) => `${s.id}|${s.title}|${s.status}|${s.cwd}`)
+      .join('\n');
+    if (key === sessionsKeyRef.current) return;
+    sessionsKeyRef.current = key;
+    setSessions(list);
+  }, []);
   useEffect(() => {
     const api = window.oneApp?.terminal;
     if (!api) return;
-    void api.list().then(setSessions);
+    void api.list().then(applySessions);
     return api.onSessions((list) => {
-      if (list) setSessions(list);
-      else void api.list().then(setSessions); // payload 미탑재(구버전 main) 폴백
+      if (list) applySessions(list);
+      else void api.list().then(applySessions); // payload 미탑재(구버전 main) 폴백
     });
-  }, []);
+  }, [applySessions]);
 
   /**
    * 티켓 키 → 그 티켓으로 시작한 femc 세션.
@@ -352,9 +369,13 @@ export function JiraSection() {
   // 돌아오면 훅이 즉시 1회 따라잡는다(주간 화면은 자체 수동 새로고침).
   usePolling(load, 120_000, { enabled: view === 'mine' });
 
-  // 메뉴 토글 — 열 때마다 그 이슈의 가능한 전환을 새로 조회
-  const toggleMenu = async (key: string) => {
-    if (menuKey === key) {
+  // 메뉴 토글 — 열 때마다 그 이슈의 가능한 전환을 새로 조회.
+  // ⚠️ 열린 메뉴 키는 ref 로 읽는다 — 의존성에 넣으면 메뉴를 열고 닫을 때마다 콜백이
+  // 새로 만들어져 memo 된 행이 전부 다시 그려진다.
+  const menuKeyRef = useRef(menuKey);
+  menuKeyRef.current = menuKey;
+  const toggleMenu = useCallback(async (key: string) => {
+    if (menuKeyRef.current === key) {
       menuSeq.current += 1; // 진행 중인 조회 결과를 버린다
       setMenuKey(null);
       return;
@@ -369,7 +390,7 @@ export function JiraSection() {
     if (seq !== menuSeq.current) return;
     if (res.ok && res.transitions) setMenuState(res.transitions);
     else setMenuState({ error: res.error ?? '전환 목록을 불러오지 못했습니다' });
-  };
+  }, []);
 
   // 메뉴 밖 클릭·Escape 로 닫기
   useEffect(() => {
@@ -405,28 +426,35 @@ export function JiraSection() {
 
   // 이슈 링크 클립보드 복사
   const copy = useCopy();
-  const copyLink = (issue: JiraIssue) =>
-    copy(issue.url, { success: `${issue.key} 링크를 복사했습니다` });
+  const copyLink = useCallback(
+    (issue: JiraIssue) => {
+      void copy(issue.url, { success: `${issue.key} 링크를 복사했습니다` });
+    },
+    [copy],
+  );
 
   // 상세 패널 열기 — 제목 클릭 (같은 이슈를 다시 열어도 새로 조회)
-  const openDetail = (key: string) => {
+  const openDetail = useCallback((key: string) => {
     setDetailKey(key);
     setDetailOpen(true);
-  };
+  }, []);
 
   // 전환 실행 — 성공 시 목록 갱신 (그룹 이동 반영)
-  const handleTransition = async (key: string, t: JiraTransition) => {
-    setMenuKey(null);
-    setTransitioningKey(key);
-    const res = await window.oneApp.jira.transition(key, t.id);
-    if (res.ok) {
-      toast(`${key} → ${t.name}`);
-      await load();
-    } else {
-      toast(res.error ?? '전환에 실패했습니다', 'fail');
-    }
-    setTransitioningKey(null);
-  };
+  const handleTransition = useCallback(
+    async (key: string, t: JiraTransition) => {
+      setMenuKey(null);
+      setTransitioningKey(key);
+      const res = await window.oneApp.jira.transition(key, t.id);
+      if (res.ok) {
+        toast(`${key} → ${t.name}`);
+        await load();
+      } else {
+        toast(res.error ?? '전환에 실패했습니다', 'fail');
+      }
+      setTransitioningKey(null);
+    },
+    [load, toast],
+  );
 
   // 프로젝트 목록 (이슈 많은 순) — 탭은 프로젝트가 2개 이상일 때만 노출
   const projects = useMemo(() => {
@@ -451,19 +479,24 @@ export function JiraSection() {
     localStorage.setItem(VIEW_KEY, next);
   };
 
-  const visible =
-    effectiveProject === 'all'
-      ? issues
-      : issues.filter((it) => it.projectKey === effectiveProject);
+  // ⚠️ 파생 목록은 전부 memo 다 — 매 렌더 새 배열이면 아래 groups 의 useMemo 가
+  // 항상 무효가 되고, 세션 갱신 같은 무관한 리렌더에도 그룹핑이 다시 돈다.
+  const visible = useMemo(
+    () =>
+      effectiveProject === 'all'
+        ? issues
+        : issues.filter((it) => it.projectKey === effectiveProject),
+    [issues, effectiveProject],
+  );
 
   // 해결됨은 타입 그룹에서 빼서 하단 접힘 그룹으로
-  const open = visible.filter((it) => !isDone(it));
-  const done = visible.filter(isDone);
+  const open = useMemo(() => visible.filter((it) => !isDone(it)), [visible]);
+  const done = useMemo(() => visible.filter(isDone), [visible]);
 
   // 직접 추가한 티켓은 타입 그룹 위 별도 그룹 — 내 담당이 아니라 성격이 다르고,
   // 빼는 조작도 한군데 모인다. (해결되면 아래 '해결됨' 그룹으로 함께 내려간다)
-  const pinnedOpen = open.filter((it) => it.pinned);
-  const typedOpen = open.filter((it) => !it.pinned);
+  const pinnedOpen = useMemo(() => open.filter((it) => it.pinned), [open]);
+  const typedOpen = useMemo(() => open.filter((it) => !it.pinned), [open]);
 
   // 타입별 그룹핑 — 그룹은 rank 순, 그룹 안은 API 정렬(최신 갱신순) 유지
   const groups = useMemo(() => {
@@ -574,13 +607,13 @@ export function JiraSection() {
                     menu={menuKey === it.key ? menuState : null}
                     transitioning={transitioningKey === it.key}
                     workSession={workByKey.get(it.key) ?? null}
-                    onToggleMenu={(k) => void toggleMenu(k)}
-                    onTransition={(k, t) => void handleTransition(k, t)}
-                    onCopyLink={(it2) => void copyLink(it2)}
+                    onToggleMenu={toggleMenu}
+                    onTransition={handleTransition}
+                    onCopyLink={copyLink}
                     onOpenDetail={openDetail}
                     onStartWork={setWorkIssue}
                     onOpenSession={openSession}
-                    onUnpin={(k) => void unpin(k)}
+                    onUnpin={unpin}
                   />
                 ))}
               </div>
@@ -604,13 +637,13 @@ export function JiraSection() {
                     menu={menuKey === it.key ? menuState : null}
                     transitioning={transitioningKey === it.key}
                     workSession={workByKey.get(it.key) ?? null}
-                    onToggleMenu={(k) => void toggleMenu(k)}
-                    onTransition={(k, t) => void handleTransition(k, t)}
-                    onCopyLink={(it2) => void copyLink(it2)}
+                    onToggleMenu={toggleMenu}
+                    onTransition={handleTransition}
+                    onCopyLink={copyLink}
                     onOpenDetail={openDetail}
                     onStartWork={setWorkIssue}
                     onOpenSession={openSession}
-                    onUnpin={(k) => void unpin(k)}
+                    onUnpin={unpin}
                   />
                 ))}
               </div>
@@ -636,13 +669,13 @@ export function JiraSection() {
                       menu={menuKey === it.key ? menuState : null}
                       transitioning={transitioningKey === it.key}
                       workSession={workByKey.get(it.key) ?? null}
-                      onToggleMenu={(k) => void toggleMenu(k)}
-                      onTransition={(k, t) => void handleTransition(k, t)}
-                      onCopyLink={(it2) => void copyLink(it2)}
+                      onToggleMenu={toggleMenu}
+                      onTransition={handleTransition}
+                      onCopyLink={copyLink}
                       onOpenDetail={openDetail}
                       onStartWork={setWorkIssue}
                       onOpenSession={openSession}
-                      onUnpin={(k) => void unpin(k)}
+                      onUnpin={unpin}
                     />
                   ))}
                 </div>

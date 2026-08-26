@@ -25,11 +25,16 @@ export function AttendanceWidget() {
   const [error, setError] = useState('');
   const [overtimeOpen, setOvertimeOpen] = useState(false);
 
-  const refresh = async () => {
+  /**
+   * 조회 — force 는 사용자가 새로고침을 눌렀을 때만.
+   * 마운트 조회는 main 의 캐시를 그대로 쓴다(폰에서 탭을 오갈 때마다 헤드리스
+   * 브라우저가 다시 뜨던 것을 막는다). 찍기·리마인더는 main 이 캐시를 버린다.
+   */
+  const refresh = async (force = false) => {
     setBusy('fetch');
     setError('');
     publishAttendance({ loading: true });
-    const res = await window.oneApp.attendance.fetch();
+    const res = await window.oneApp.attendance.fetch(force);
     if (res.ok && res.info) {
       setInfo(res.info);
       publishAttendance({ info: res.info, error: '', loading: false });
@@ -158,7 +163,7 @@ export function AttendanceWidget() {
             <RefreshButton
               size={12}
               spinning={busy === 'fetch'}
-              onClick={refresh}
+              onClick={() => void refresh(true)}
               disabled={busy !== null}
               title="출퇴근 시각 새로고침"
             />
