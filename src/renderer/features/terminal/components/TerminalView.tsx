@@ -423,6 +423,22 @@ export const TerminalView = memo(function TerminalView({
         if (!disposed) window.oneApp.terminal.write(id, seq);
       }, 0);
     };
+    // 핸들러가 직접 보내는 제어 시퀀스는 전부 이걸로 — ⚠️ compositionend 직후 정리 창에서는
+    // 즉시 보내면 **조합 글자보다 먼저 도착**한다. IME 가 ⌘← 에서 '과' 를 확정하면 xterm 은
+    // 그 글자를 setTimeout(0) 으로 미뤄 보내는데, 우리는 keydown 에서 \x01 을 바로 쏘니
+    // '사과' 조합 중 ⌘U(=⌘←) → "과사"(2026-08-26 신고). xterm 자체는 이 창에 키가 오면
+    // 글자를 먼저 flush 하지만(`CompositionHelper.keydown`), 커스텀 핸들러가 그보다 앞서
+    // `return false` 하므로 그 경로를 못 탄다. 정리 창이면 같은 setTimeout(0) 으로 미룬다 —
+    // xterm 의 타이머가 먼저 예약돼 있어 우리 것이 그 뒤에 실행된다.
+    const writeKeySeq = (seq: string) => {
+      if (!compositionSettling) {
+        window.oneApp.terminal.write(id, seq);
+        return;
+      }
+      window.setTimeout(() => {
+        if (!disposed) window.oneApp.terminal.write(id, seq);
+      }, 0);
+    };
     composeTarget?.addEventListener('compositionend', onCompositionEnd);
     // ⚠️ 조합 중 **단독 수정키 keydown 은 xterm 에 넘기지 않는다** — `CompositionHelper.keydown`
     // 의 면제 목록은 CapsLock(20)·229·Shift/Ctrl/Alt(16/17/18) 뿐이라 **Meta(⌘, 91/93) 는
@@ -486,7 +502,7 @@ export const TerminalView = memo(function TerminalView({
         !ev.isComposing
       ) {
         ev.preventDefault(); // 기본 동작(deleteToBeginningOfLine)이 textarea 를 건드리지 않게
-        if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x15');
+        if (ev.type === 'keydown') writeKeySeq('\x15');
         return false; // keypress·keyup 도 막는다 (Shift+Enter 와 같은 이유)
       }
       // ⌘←/⌘→ = 줄 처음/끝 (macOS 관례) — xterm 은 meta+화살표를 아예 버려서
@@ -504,8 +520,7 @@ export const TerminalView = memo(function TerminalView({
         // ⚠️ preventDefault 필수 — 없으면 ⌘← 가 숨은 textarea 캐럿을 맨 앞으로 옮겨 이후
         // 한글 조합이 전부 마지막 글자로 바뀐다(위 '숨은 textarea 캐럿').
         ev.preventDefault();
-        if (ev.type === 'keydown')
-          window.oneApp.terminal.write(id, ev.key === 'ArrowLeft' ? '\x01' : '\x05');
+        if (ev.type === 'keydown') writeKeySeq(ev.key === 'ArrowLeft' ? '\x01' : '\x05');
         return false;
       }
       if (
@@ -522,7 +537,7 @@ export const TerminalView = memo(function TerminalView({
         // 줄바꿈은 조합이 끝난 다음 누름에서 들어간다.
         if (!ev.isComposing) {
           ev.preventDefault(); // 기본 동작(textarea 에 개행 삽입)을 막는다 — 조합 중엔 IME 에 맡긴다
-          if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x1b\r');
+          if (ev.type === 'keydown') writeKeySeq('\x1b\r');
         }
         return false; // keydown 외 keypress·keyup 도 막아야 xterm 이 \r 를 덧보내지 않는다
       }
