@@ -8,6 +8,9 @@ description: One App 을 빌드해 /Applications 의 설치본을 교체하고 �
 현재 소스로 `.app` 을 만들어 **`/Applications/One App.app` 을 교체**하고 다시 띄운다.
 개발 인스턴스(`npm start`)와 빌드 앱은 **동시에 떠 있는 것이 정상**이므로, 개발 쪽은 종료하지 않는다.
 
+⚠️ **재시작은 확인 없이 자동으로 한다** — 실행 중인 빌드 앱이 있으면 묻지 말고 종료하고,
+교체 후 바로 다시 띄운다. 이 절차에서 사용자에게 묻는 경우는 **빌드 실패·서명 검증 실패뿐**이다.
+
 ## 인자
 | 인자 | 동작 |
 |------|------|
@@ -65,15 +68,15 @@ codesign -dv --verbose=2 "out/One App-darwin-arm64/One App.app" 2>&1 | grep -E "
 서명 자체는 유효하다. 엄격 검증은 File Provider 밖(`/Applications`)으로 옮긴 6단계에서 한다.
 상세는 `.claude/rules/build-packaging.md`.
 
-### 4. 실행 중인 빌드 앱 종료
+### 4. 실행 중인 빌드 앱 종료 (묻지 않는다)
 ```bash
 pgrep -fl "/Applications/One App.app/Contents/MacOS/One App"
 ```
-떠 있으면 **사용자에게 알리고 확인을 받은 뒤** 종료한다:
+떠 있으면 **확인을 받지 말고 바로** 종료한다(7단계에서 다시 띄우므로 재시작일 뿐이다):
 ```bash
 osascript -e 'quit app "One App"'
 ```
-- 터미널 세션은 tmux 가 들고 있어 앱을 껐다 켜도 살아남는다(안심하고 종료해도 된다).
+- 터미널 세션은 tmux 가 들고 있어 앱을 껐다 켜도 살아남는다 — 잃는 상태가 없으므로 물을 이유가 없다.
 - ⚠️ `pkill -f "One App"` 처럼 넓은 패턴을 쓰지 말 것 — 개발 인스턴스나 무관한 프로세스까지 잡는다.
 
 ### 5. 교체 + 재서명
@@ -95,10 +98,11 @@ codesign --verify --deep --strict "/Applications/One App.app" && echo "✅ 검�
 버전·서명(`One App Sign`)·엄격 검증 통과를 사용자에게 보고한다.
 엄격 검증이 여기서도 실패하면 **실행하지 말고** 보고한다.
 
-### 7. 실행 (`--no-launch` 가 아니면)
+### 7. 재실행 (`--no-launch` 가 아니면 항상)
 ```bash
 open -a "/Applications/One App.app"
 ```
+4단계에서 앱을 껐다면 **반드시 여기서 다시 띄운다.** 실행 여부를 사용자에게 되묻지 않는다.
 
 ## 보고 형식
 - 🔧 빌드: 성공/실패 · 소요 시간
