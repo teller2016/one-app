@@ -1,8 +1,9 @@
 // 야근 결재 — 숨긴 브라우저 창으로 그룹웨어 전자결재 '연장근무내역서'를 작성해 상신한다.
 // 결재선 기본값이 '본인'이라 상신 후 미결함에서 본인이 승인하면 끝 (승인은 사용자가 직접).
 //
-// One App 본체(src/main/features/overtime/submit.ts)의 puppeteer 판을
-// Electron 자체 BrowserWindow 자동화(browser.ts)로 옮긴 것 — 판정 기준·대기 조건은 동일하다.
+// One App 본체(src/main/features/approval/overtime.ts)를 복사해 온 것 —
+// 판정 기준·대기 조건은 동일하다. 다만 본체는 작성만 하고 창을 사용자에게 넘기고,
+// 이 앱은 [상신]까지 자동으로 누른다(동료 배포판 정책). 그 차이는 README 참고.
 import {
   closePage,
   evalInPage,
@@ -29,11 +30,17 @@ const toMinutes = (t: string) => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
 };
 
-/** 근무시간 합계 문구 — 자정을 넘겨도 계산되도록 wrap-around. 예: 2시간 · 2.5시간 */
+/**
+ * 근무시간 합계 문구 — 자정을 넘겨도 계산되도록 wrap-around. 예: 2시간 · 2.5시간.
+ * 형식이 어긋나거나 시작=종료면 빈 문자열.
+ *
+ * ⚠️ 본체 `src/shared/approval-format.ts` 의 같은 함수와 **문자열이 일치해야 한다**.
+ * `start === end` 가드가 빠져 있어 시작=종료일 때 '0시간' 이 기입되던 것을 맞췄다(2026-08-26).
+ */
 export function formatHoursTotal(startTime: string, endTime: string): string {
   const start = toMinutes(startTime);
   const end = toMinutes(endTime);
-  if (Number.isNaN(start) || Number.isNaN(end)) return '';
+  if (Number.isNaN(start) || Number.isNaN(end) || start === end) return '';
   const diff = (end - start + 24 * 60) % (24 * 60);
   const hours = diff / 60;
   return `${parseFloat(hours.toFixed(1))}시간`;
