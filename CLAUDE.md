@@ -56,6 +56,7 @@ standalone/overtime/          # 📦 동료 배포용 단독 앱 (야근 결재�
 - **⚠️ 그룹웨어 접근은 공용 세션(`main/features/groupware/session.ts`)을 쓸 것** — 같은 계정 동시 로그인은 서버가 거부한다.
 - **⚠️ 보존할 데이터를 localStorage 에 저장하지 말 것** — 강제 종료 시 flush 안 됨(2026-07-29 실측). IPC 로 userData JSON 에 저장한다.
 - **⚠️ 개발 인스턴스(`npm start`)와 빌드 앱은 동시에 띄우는 것이 기본** — **설정(userData)은 공유**하고 포트·tmux 소켓·창 상태만 가른다(`main/lib/devInstance.ts`). `app.setName`/`setPath('userData')` 로 프로필을 가르면 **safeStorage 키체인이 달라져 저장된 계정이 전부 날아간다.** 상세는 `.claude/rules/build-packaging.md`.
+- **⚠️ "테스트해봐" 는 개발 인스턴스(`npm start`)에서 확인하라는 뜻이다** — 렌더러 변경은 HMR 로 바로 보이고, main/preload 변경은 `npm start` 를 재실행한다. **빌드(`/build`·`npm run package`·`npm run make`)는 사용자가 명시적으로 요청했을 때만** 한다(빌드는 `/Applications` 설치본을 교체하며, 서명이 빠지면 저장된 계정이 날아간다).
 
 ## 컨벤션
 - 코드 주석·문서·대화는 **한국어**.
