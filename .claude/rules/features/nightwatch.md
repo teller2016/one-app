@@ -22,6 +22,13 @@ Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 
 을 불러 **재시작 없이** 붙었다 떨어지고, 꺼두면 인터벌 자체가 없다.
 - **저장소 결정 3단 폴백**: ① 학습값(`repoDefaults`) → ② `pickRepoWithClaude()` 경량 호출(도구 전면
   차단·`--output-format json`·신뢰도 0.5 미만이면 불채택) → ③ Jira 키 일치 프로젝트가 **정확히 하나**일 때.
+  ⚠️ 셋 다 설정의 **분석 대상 저장소**(`config.json` 의 `auto.repoIds` — 빈 배열이면 제한 없음)를
+  통과해야 한다. 게이트는 `usableRepoId()` **한 곳**에 둔다 — ②의 후보 목록만 좁히면 ①의 학습값이
+  게이트를 우회한다(2026-08-26: FE 담당인데 `SSB:BO → bbj-api` 학습값이 굳어 API 저장소를 계속
+  분석했다. 원인이 서버에 있는 티켓이면 모델이 api 를 고르는 게 합리적 판단이라, 프롬프트로는 못 막고
+  후보 자체를 좁혀야 한다). **수동 [분석]에는 적용하지 않는다** — 필요할 때 직접 고를 수 있어야 한다.
+  대상으로 고른 프로젝트가 레지스트리에서 전부 사라져도 **무제한으로 되돌리지 않는다**(일부러 뺀
+  저장소가 조용히 다시 대상이 되면 안 된다) — 그 tick 은 `lastError` 를 남기고 쉰다.
   ⚠️ 선택 호출은 **haiku 고정**(`PICK_MODEL`)이고 설정의 자동 분석 모델과 분리돼 있다 — 2026-08-20 실측
   8초·$0.033 로 분류엔 충분했고, 상위 모델로 돌리면 학습값 없는 티켓마다 고정비가 붙는다.
   ⚠️ "no code fence" 라고 지시해도 응답이 ```json 펜스로 온다(실측) → `extractJsonObject()` 로만 파싱.
@@ -45,4 +52,4 @@ Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 
 
 안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존).
 
-산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 자동 순회 진행 `auto-state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분 — 분석 대상 저장소 목록은 프로젝트 레지스트리로 이관). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
+산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 자동 순회 진행 `auto-state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분·자동 분석 대상 저장소 `auto.repoIds` — 저장소 정보 자체는 프로젝트 레지스트리가 출처). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.

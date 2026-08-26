@@ -34,10 +34,12 @@ export function ensureNwDirs() {
 }
 
 // 자동 순회 기본값 — 끄고 시작한다. maxPerDay 0 = 무제한(후보가 소진되면 알아서 멈춘다)
+// repoIds 빈 배열 = 대상 제한 없음(설정 전 기존 사용자는 지금까지와 같이 전체 프로젝트가 대상)
 const DEFAULT_AUTO: NightwatchAutoConfig = {
   enabled: false,
   model: "opus",
   maxPerDay: 0,
+  repoIds: [],
 };
 
 // 분석 대상 저장소는 프로젝트 레지스트리(features/projects) 참조 — 여기엔 목록이 없다
@@ -69,6 +71,15 @@ function sanitizeAuto(
       typeof input?.enabled === "boolean" ? input.enabled : prev.enabled,
     model,
     maxPerDay: clamp(input?.maxPerDay, 0, 50, prev.maxPerDay),
+    repoIds: Array.isArray(input?.repoIds)
+      ? [
+          ...new Set(
+            input.repoIds.filter(
+              (id): id is string => typeof id === "string" && id.trim().length > 0
+            )
+          ),
+        ]
+      : prev.repoIds,
   };
 }
 

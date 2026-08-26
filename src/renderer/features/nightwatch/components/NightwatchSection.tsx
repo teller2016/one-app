@@ -277,6 +277,13 @@ export function NightwatchSection() {
   const patchAuto = (p: Partial<NightwatchAutoConfig>) =>
     setForm((f) => (f ? { ...f, auto: { ...f.auto, ...p } } : f));
 
+  // 자동 분석 대상 저장소 토글 — 빈 목록은 "제한 없음"(등록된 프로젝트 전체)이라
+  // 체크를 모두 해제하면 예전 동작으로 돌아간다. 수동 [분석]에는 영향이 없다.
+  const toggleAutoRepo = (id: string, on: boolean) => {
+    const cur = form?.auto.repoIds ?? [];
+    patchAuto({ repoIds: on ? [...cur, id] : cur.filter((r) => r !== id) });
+  };
+
   // 자동 분석 토글은 [저장] 없이 즉시 반영한다 — 스위치를 올렸는데 저장을 또 눌러야
   // 도는 건 토글의 의미를 잃는다. (메인이 그 자리에서 스케줄러를 붙였다 뗀다)
   const toggleAuto = async (enabled: boolean) => {
@@ -638,8 +645,9 @@ export function NightwatchSection() {
             />
             <p className="hint">
               켜 두면 5분마다 미처리 후보를 확인해 <b>한 건씩</b> 분석합니다.
-              저장소는 지난 선택(학습값) → claude 자동 선택 → Jira 키 일치 순으로
-              정하고, 못 정한 티켓은 그날 하루 건너뜁니다. 분석 이력이 생긴
+              저장소는 아래 <b>대상 저장소</b> 안에서 지난 선택(학습값) → claude
+              자동 선택 → Jira 키 일치 순으로 정하고, 못 정한 티켓은 그날 하루
+              건너뜁니다. 분석 이력이 생긴
               티켓은 후보에서 빠지므로 같은 티켓을 다시 돌리지 않습니다.
             </p>
             {status && form.auto.enabled && (
@@ -679,11 +687,33 @@ export function NightwatchSection() {
               title="0 이면 상한 없이 후보가 소진될 때까지 돌립니다"
             />
           </FormRow>
-          <FormRow label="분석 대상 프로젝트">
-            <p className="hint">
-              분석 대상은 <b>프로젝트</b> 탭에서 관리합니다. (로컬 경로가 있는
-              프로젝트가 후보로 표시됩니다)
-            </p>
+          <FormRow label="자동 분석 대상 저장소" column>
+            {projects.length === 0 ? (
+              <p className="hint">
+                등록된 프로젝트가 없습니다 — <b>프로젝트</b> 섹션에서 먼저
+                추가하세요.
+              </p>
+            ) : (
+              <>
+                <div className="nightwatch__auto-repos">
+                  {projects.map((p) => (
+                    <Checkbox
+                      key={p.id}
+                      label={p.name}
+                      checked={form.auto.repoIds.includes(p.id)}
+                      onChange={(e) => toggleAutoRepo(p.id, e.target.checked)}
+                    />
+                  ))}
+                </div>
+                <p className="hint">
+                  <b>자동 분석</b>이 고를 수 있는 저장소입니다 — 담당하지 않는
+                  저장소(예: 서버 API)를 빼 두면 지난 선택(학습값)이 그쪽을
+                  가리켜도 무시합니다. 하나도 고르지 않으면{" "}
+                  <b>제한 없음</b>(등록된 프로젝트 전체)으로 동작하고, 수동
+                  [분석]에는 적용되지 않습니다.
+                </p>
+              </>
+            )}
           </FormRow>
           <FormRow label="티켓당 타임아웃(분)">
             <Input

@@ -995,6 +995,13 @@ export type NightwatchAutoConfig = {
   enabled: boolean; // 자동 순회 on/off — 이 값만으로 스케줄러가 붙었다 떨어진다
   model: string | null; // 자동 분석 모델 (claude CLI --model 별칭, null 이면 CLI 기본)
   maxPerDay: number; // 하루 최대 자동 분석 건수 — 0 이면 무제한
+  /**
+   * 자동 순회가 고를 수 있는 저장소 id (프로젝트 레지스트리 기준) — **빈 배열이면 제한 없음**.
+   * 3단 폴백 전체(학습값·claude 선택·Jira 키 일치)에 걸리는 게이트다. FE 담당인데 원인이
+   * 서버에 있는 티켓이면 모델이 api 저장소를 고르는 게 합리적 판단이라, 후보 자체를 좁히지
+   * 않으면 막을 수 없다. 수동 [분석]에는 적용하지 않는다(필요할 때 직접 고를 수 있어야 한다).
+   */
+  repoIds: string[];
 };
 
 // 폼 친화적으로 평평하게 유지 — 저장은 userData/nightwatch/config.json

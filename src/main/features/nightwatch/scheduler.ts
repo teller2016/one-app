@@ -11,6 +11,11 @@
 //   ③ Jira 프로젝트 키가 일치하는 프로젝트가 정확히 하나일 때
 // 셋 다 실패하면 그 티켓은 **오늘 하루** 건너뛴다(auto-state 의 skipped) — 매 tick 마다
 // 같은 티켓에 선택 미션을 다시 태우면 비용만 쓴다.
+//
+// ⚠️ 세 폴백 모두 설정의 **분석 대상 저장소(auto.repoIds)** 게이트를 통과해야 한다
+// (빈 배열이면 제한 없음). ②의 후보 목록만 좁히면 ①의 학습값이 그 게이트를 우회한다 —
+// 한 번 잘못 고른 저장소가 repoDefaults 에 굳으면 계속 그리로 가므로 게이트는
+// usableRepoId() 한 곳에 둔다. 수동 [분석]은 이 게이트와 무관하다.
 import { getJiraApiConfig } from "../settings/store";
 import { findProjectsByJiraKey, getProject, listProjects } from "../projects/store";
 import { analyzeTicket, isAnalysisActive, listCandidates } from "./engine";
@@ -47,9 +52,16 @@ function patchAutoState(patch: Partial<NightwatchAutoState>) {
 
 const jiraKeyOf = (ticketKey: string) => ticketKey.split("-")[0];
 
-/** 저장소로 쓸 수 있는 프로젝트인지 — 레지스트리에 있고 실제 git 작업 트리인지까지 */
-function usableRepoId(repoId: string | null | undefined): string | null {
+/**
+ * 자동 순회가 이 저장소를 쓸 수 있는지 — 설정의 분석 대상이고, 레지스트리에 있고,
+ * 실제 git 작업 트리인지까지. `allowed` 가 비어 있으면 대상 제한이 없다는 뜻이다.
+ */
+function usableRepoId(
+  repoId: string | null | undefined,
+  allowed: Set<string>
+): string | null {
   if (!repoId) return null;
+  if (allowed.size > 0 && !allowed.has(repoId)) return null;
   const project = getProject(repoId);
   if (!project) return null;
   return fs.existsSync(path.join(project.localPath, ".git")) ? repoId : null;
@@ -61,14 +73,17 @@ function usableRepoId(repoId: string | null | undefined): string | null {
  */
 async function resolveRepoId(
   candidate: NightwatchCandidate,
-  claudeConfigDir: string
+  claudeConfigDir: string,
+  allowed: Set<string>
 ): Promise<{ repoId: string; how: string } | null> {
-  // ① 학습값
-  const learned = usableRepoId(candidate.suggestedRepoId);
+  // ① 학습값 (분석 대상에서 뺀 저장소를 가리키면 무시하고 다음 폴백으로 넘어간다)
+  const learned = usableRepoId(candidate.suggestedRepoId, allowed);
   if (learned) return { repoId: learned, how: "학습값" };
 
-  // ② claude 에게 고르게 한다 (레지스트리에서 로컬 경로가 있는 프로젝트만 후보로)
-  const projects = listProjects().filter((p) => p.localPath.trim());
+  // ② claude 에게 고르게 한다 (분석 대상이면서 로컬 경로가 있는 프로젝트만 후보로)
+  const projects = listProjects().filter(
+    (p) => p.localPath.trim() && (allowed.size === 0 || allowed.has(p.id))
+  );
   const pickCandidates: RepoPickCandidate[] = projects.map((p) => ({
     id: p.id,
     name: p.name,
@@ -88,8 +103,8 @@ async function resolveRepoId(
       claudeConfigDir,
       cwd: nwPaths().base, // 저장소가 정해지기 전이라 어떤 작업 트리에도 들어가지 않는다
     });
-    // 모델이 목록에 없는 id 를 낼 수 있으므로 레지스트리로 다시 검증한다
-    const picked = usableRepoId(pick?.repoId);
+    // 모델이 목록에 없는 id 를 낼 수 있으므로 레지스트리·분석 대상으로 다시 검증한다
+    const picked = usableRepoId(pick?.repoId, allowed);
     if (picked && (pick?.confidence ?? 0) >= PICK_MIN_CONFIDENCE) {
       return {
         repoId: picked,
@@ -109,7 +124,7 @@ async function resolveRepoId(
 
   // ③ Jira 프로젝트 키가 일치하는 프로젝트가 정확히 하나일 때만
   const byKey = findProjectsByJiraKey(jiraKeyOf(candidate.key)).filter((p) =>
-    usableRepoId(p.id)
+    usableRepoId(p.id, allowed)
   );
   if (byKey.length === 1) return { repoId: byKey[0].id, how: "Jira 키 일치" };
 
@@ -139,6 +154,18 @@ async function tick() {
     return;
   }
 
+  // 설정에서 고른 분석 대상 저장소 — 비어 있으면 제한 없음(등록된 프로젝트 전체가 대상)
+  const allowed = new Set(cfg.auto.repoIds);
+  if (allowed.size > 0 && !listProjects().some((p) => allowed.has(p.id))) {
+    // 대상으로 고른 프로젝트가 레지스트리에서 전부 사라진 경우 — 무제한으로 되돌리지 않는다
+    // (그러면 일부러 뺀 저장소가 조용히 다시 대상이 된다)
+    patchAutoState({
+      lastCheckAt: new Date().toISOString(),
+      lastError: "분석 대상 저장소가 프로젝트 목록에 없습니다",
+    });
+    return;
+  }
+
   ticking = true;
   try {
     const list = await listCandidates();
@@ -162,7 +189,7 @@ async function tick() {
 
     for (const candidate of targets.slice(0, PICK_ATTEMPTS_PER_TICK)) {
       // 저장소 선택은 분류라 haiku 고정(mission 의 PICK_MODEL) — 설정 모델은 분석 본편에만 쓴다
-      const resolved = await resolveRepoId(candidate, cfg.claudeConfigDir);
+      const resolved = await resolveRepoId(candidate, cfg.claudeConfigDir, allowed);
       if (!resolved) {
         // 오늘은 이 티켓을 다시 시도하지 않는다 (수동 [분석]으로는 언제든 가능)
         const cur = loadAutoState();

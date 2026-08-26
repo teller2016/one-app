@@ -34,6 +34,13 @@
     margin-top: 6px;
   }
 
+  // 자동 분석 대상 저장소 체크박스 — 프로젝트가 늘어도 설정이 세로로 길어지지 않게 다열 배치
+  &__auto-repos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 4px 12px;
+  }
+
   // 분석 설정 모달 — 저장소·모델·부가설명 입력 묶음
   &__pick-opts {
     display: flex;
