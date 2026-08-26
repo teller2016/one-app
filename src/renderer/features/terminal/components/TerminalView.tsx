@@ -366,7 +366,88 @@ export const TerminalView = memo(function TerminalView({
     // Option+Enter 와 같은 경로의 별칭이다.
     // ⚠️ 대체 화면(TUI)에서만 개입한다 — 일반 화면(zsh 프롬프트)에서는 ESC+CR 이 개행이
     // 되지 않고 그 줄이 그대로 실행됐다(2026-08-06 실측). 셸은 기본 Enter 동작 유지.
+    // ── 한글 조합 중 커서 이동 ─────────────────────────────────────────
+    // ⚠️ 조합 중인 방향키를 xterm 에 넘기면 **마지막 글자가 복제된다**(2026-08-26 신고:
+    // "가나다라마바사" → "사사사", "입력" → "입력력"). `CompositionHelper.keydown` 이
+    // 방향키를 보면 `_finalizeComposition(false)` 로 조합을 **즉시** 확정하는데, 그때 쓰는
+    // `_compositionPosition.end` 는 compositionupdate 의 setTimeout(0) 으로 갱신되므로
+    // 아직 낡은 값이라 이미 보낸 글자를 다시 보낸다. 중복 방지 보정(`_dataAlreadySent`,
+    // xterm #3191)은 `waitForPropagation=true` 경로에만 있어 이 경로엔 안 걸린다.
+    // 물리 방향키·Home 은 IME 가 먼저 조합을 확정해 이 경로를 타지 않지만, **키를 합성해
+    // 보내는 경우**(Karabiner 로 ⌘U/⌘J 를 방향키로 리맵 등)는 그 setTimeout 과 경합해
+    // 조합 중에 도착한다.
+    // 대응: 조합 중 커서 이동 키는 xterm 에 넘기지 않고(`return false` 면
+    // `CoreBrowserTerminal._keyDown` 이 즉시 반환해 CompositionHelper 를 아예 안 탄다)
+    // 보류했다가 compositionend 뒤에 시퀀스를 직접 보낸다 — 확정과 이동이 한 번에 된다.
+    // ⚠️ ⌥+방향키는 넣지 않아도 된다 — `macOptionIsMeta: true` 라 xterm 이 alt 키를 조합
+    // 처리에서 제외한다(`shouldIgnoreComposition`). ⇧ 동반 조합도 개입하지 않는다.
+    let pendingCursorSeq: string | null = null;
+    const composingCursorSeq = (ev: KeyboardEvent): string | null => {
+      if (ev.ctrlKey || ev.altKey || ev.shiftKey) return null;
+      // ⌘←/⌘→ 는 아래 비-조합 분기와 같은 시퀀스로 맞춘다 (줄 처음/끝)
+      if (ev.metaKey) {
+        if (ev.key === 'ArrowLeft') return '\x01';
+        if (ev.key === 'ArrowRight') return '\x05';
+        return null;
+      }
+      switch (ev.key) {
+        case 'ArrowLeft':
+          return '\x1b[D';
+        case 'ArrowRight':
+          return '\x1b[C';
+        case 'ArrowUp':
+          return '\x1b[A';
+        case 'ArrowDown':
+          return '\x1b[B';
+        default:
+          return null;
+      }
+    };
+    // 조합 글자가 먼저 나간 다음에 이동해야 한다 — CompositionHelper 도 compositionend 에서
+    // setTimeout(0) 으로 조합 결과를 보내는데, 이 리스너는 `term.open()` **이후** 등록이라
+    // xterm 자신의 리스너보다 나중에 호출되고 그래서 우리 타이머가 뒤에 실행된다.
+    const composeTarget = term.textarea;
+    const onCompositionEnd = () => {
+      if (!pendingCursorSeq) return;
+      const seq = pendingCursorSeq;
+      pendingCursorSeq = null;
+      window.setTimeout(() => {
+        if (!disposed) window.oneApp.terminal.write(id, seq);
+      }, 0);
+    };
+    composeTarget?.addEventListener('compositionend', onCompositionEnd);
+    // ── 숨은 textarea 캐럿 ──────────────────────────────────────────────
+    // ⚠️ 아래 핸들러에서 가로채 `return false` 하는 키는 반드시 `ev.preventDefault()` 도
+    // 함께 한다 — xterm 은 커스텀 핸들러가 false 를 주면 cancel() 없이 바로 빠져나가므로
+    // 브라우저의 기본 편집 명령(⌘← = moveToBeginningOfLine, ⌘⌫ = deleteToBeginningOfLine,
+    // Enter = 개행 삽입)이 **xterm 의 숨은 textarea** 에 그대로 적용된다. 한글 등 IME 입력은
+    // 그 textarea 를 거치는데, `CompositionHelper` 는 조합 위치를 `textarea.value.length`
+    // (= 항상 끝에 붙는다는 가정)로만 계산한다. 그래서 캐럿이 앞으로 옮겨진 뒤에는 조합이
+    // 끝날 때마다 새 글자 대신 textarea 끝에 남은 글자가 잘려 나갔다 — '가나다라' 입력 →
+    // ⌘←(Karabiner ⌘U) → 아무 글자나 쳐도 '라라라라 가나다라'(2026-08-26 신고). textarea 는
+    // Enter/^C 때만 비워지므로 한 번 어긋나면 그 줄 내내 반복된다.
+    const rehomeCaret = () => {
+      // 안전망 — 어떤 경로로든 캐럿이 끝에서 벗어났으면 다음 조합이 시작되기 전에 되돌린다.
+      // 조합 첫 keydown 은 keyCode 229·isComposing=false 로 오고 IME 의 텍스트 삽입은 그 뒤에
+      // 처리되므로 이 시점에 고치면 삽입 위치가 맞는다. 조합 중엔 IME 가 캐럿의 주인이라
+      // 건드리지 않는다.
+      const ta = term.textarea;
+      if (!ta) return;
+      const len = ta.value.length;
+      if (ta.selectionStart !== len || ta.selectionEnd !== len) ta.setSelectionRange(len, len);
+    };
     term.attachCustomKeyEventHandler((ev) => {
+      if (ev.type === 'keydown' && !ev.isComposing) rehomeCaret();
+      // 한글 조합 중 커서 이동 — 위 설명 참고. keydown 에서만 보류하고 keypress·keyup 까지
+      // 막아 xterm 이 손대지 못하게 한다.
+      if (ev.isComposing) {
+        const seq = composingCursorSeq(ev);
+        if (seq) {
+          ev.preventDefault(); // 편집 명령이 textarea 캐럿을 옮기지 않게 (위 '숨은 textarea 캐럿')
+          if (ev.type === 'keydown') pendingCursorSeq = seq;
+          return false;
+        }
+      }
       // ⌘⌫ = 줄 지우기 (macOS 관례) — xterm 은 Backspace 에서 meta 를 무시해 한 글자만
       // 지워진다. VS Code·iTerm 처럼 Ctrl+U(\x15)로 바꿔 보내면 zsh(kill-whole-line)·
       // claude 입력줄 모두 커서가 있는 줄 전체를 지운다.
@@ -378,6 +459,7 @@ export const TerminalView = memo(function TerminalView({
         !ev.shiftKey &&
         !ev.isComposing
       ) {
+        ev.preventDefault(); // 기본 동작(deleteToBeginningOfLine)이 textarea 를 건드리지 않게
         if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x15');
         return false; // keypress·keyup 도 막는다 (Shift+Enter 와 같은 이유)
       }
@@ -393,6 +475,9 @@ export const TerminalView = memo(function TerminalView({
         !ev.isComposing &&
         (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')
       ) {
+        // ⚠️ preventDefault 필수 — 없으면 ⌘← 가 숨은 textarea 캐럿을 맨 앞으로 옮겨 이후
+        // 한글 조합이 전부 마지막 글자로 바뀐다(위 '숨은 textarea 캐럿').
+        ev.preventDefault();
         if (ev.type === 'keydown')
           window.oneApp.terminal.write(id, ev.key === 'ArrowLeft' ? '\x01' : '\x05');
         return false;
@@ -409,8 +494,10 @@ export const TerminalView = memo(function TerminalView({
         // 넘기면 CompositionHelper 가 '조합 확정 + \r 전송'으로 처리해 메시지가 그대로
         // 제출됐다(2026-08-12). 조합 확정은 IME/compositionend 가 알아서 하고,
         // 줄바꿈은 조합이 끝난 다음 누름에서 들어간다.
-        if (!ev.isComposing && ev.type === 'keydown')
-          window.oneApp.terminal.write(id, '\x1b\r');
+        if (!ev.isComposing) {
+          ev.preventDefault(); // 기본 동작(textarea 에 개행 삽입)을 막는다 — 조합 중엔 IME 에 맡긴다
+          if (ev.type === 'keydown') window.oneApp.terminal.write(id, '\x1b\r');
+        }
         return false; // keydown 외 keypress·keyup 도 막아야 xterm 이 \r 를 덧보내지 않는다
       }
       return true;
@@ -571,6 +658,7 @@ export const TerminalView = memo(function TerminalView({
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
       if (wheelTimer !== null) window.clearTimeout(wheelTimer);
       window.removeEventListener('focus', reclaimSize);
+      composeTarget?.removeEventListener('compositionend', onCompositionEnd);
       // detach — 안 보는 세션의 출력 방송을 멈춘다 (?. 는 구 preload 재시작 전 대비)
       window.oneApp.terminal.detach?.(id);
       offData();
