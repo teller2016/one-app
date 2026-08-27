@@ -83,19 +83,65 @@ function timingEqual(a: string, b: string): boolean {
 // 홈 화면 추가 시 브라우저는 manifest·아이콘을 쿠키 없이 받아갈 수 있다(스펙상 credentials
 // 모드가 다름) — 비밀이 없는 이 파일들만 인증에서 제외한다. 앱 화면(index.html)은 그대로 보호.
 // 앱 셸(`/`)과 터미널(`/terminal/`)이 각자 manifest·아이콘을 가진다(홈 화면 아이콘 각각).
-const PUBLIC_FILES = new Set(['manifest.webmanifest', 'icon-192.png', 'icon-512.png']);
-const isPublicPath = (pathname: string) =>
-  PUBLIC_FILES.has(path.basename(pathname));
+const PUBLIC_FILES = ['manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+// ⚠️ basename 이 아니라 **정확한 경로**로 비교한다. basename 비교는 `/무엇이든/icon-192.png`
+// 처럼 이름만 맞춘 임의 경로를 인증 없이 통과시키고, dev 모드에서는 그것이 그대로 Vite dev
+// 서버로 프록시된다(정적 서빙의 경로 탈출 방어와는 별개의 표면 — 2026-08-26 보안 검토).
+const PUBLIC_PATHS = new Set([
+  ...PUBLIC_FILES.map((f) => `/${f}`),
+  ...PUBLIC_FILES.map((f) => `${TERMINAL_PREFIX}/${f}`),
+]);
+const isPublicPath = (pathname: string) => PUBLIC_PATHS.has(pathname);
+
+// 응답 공통 보안 헤더 — 접속 토큰이 쿼리스트링으로 한 번 오므로 Referer 로 새 나가지 않게
+// 막고(no-referrer), MIME 스니핑·프레임 삽입도 함께 닫는다.
+const SECURITY_HEADERS: Record<string, string> = {
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+};
+
+/**
+ * WS 핸드셰이크가 우리 페이지에서 온 것인가 (CSWSH 방어).
+ *
+ * ⚠️ WebSocket 에는 CORS 가 없다 — 브라우저는 어느 사이트에서든 우리 서버로 핸드셰이크를
+ * 보낼 수 있고, 서버가 Origin 을 보지 않으면 쿠키의 `SameSite=Lax` 하나만이 방벽이 된다.
+ * `/term` 을 잡으면 셸 세션 생성·attach 가 되므로 사실상 원격 실행이라 방벽을 하나 더 둔다.
+ * Origin 이 없는 요청(브라우저가 아닌 클라이언트)은 통과 — 그쪽은 토큰이 그대로 관문이다.
+ */
+function isSameOrigin(req: http.IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  const host = req.headers.host;
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false; // 파싱 불가한 Origin (`null` 등) — 우리 페이지가 보낸 것이 아니다
+  }
+}
+
+/**
+ * 쿼리스트링의 `?token=` 이 **유효한** 토큰인가.
+ *
+ * ⚠️ 쿠키 승격은 이 판정을 거쳐야 한다. 예전엔 handler 가 `searchParams.get('token')` 의
+ * **존재만** 보고 `getOrCreateToken()`(진짜 토큰)을 Set-Cookie 로 내려줬다 — 인증을 건너뛰는
+ * 공개 경로(manifest·아이콘)에 아무 값이나 붙이면
+ *   `GET /manifest.webmanifest?token=WRONG` → 진짜 토큰 쿠키 발급 → `GET /` 200 → `/term` attach
+ * 로 **토큰을 모른 채 셸에 닿는 인증 우회**가 됐다(2026-08-26 실측 확인 후 수정).
+ */
+function hasValidQueryToken(url: URL): boolean {
+  const q = url.searchParams.get('token');
+  return !!q && timingEqual(q, getOrCreateToken());
+}
 
 function isAuthed(req: http.IncomingMessage): boolean {
-  const token = getOrCreateToken();
   const url = new URL(req.url ?? '/', 'http://local');
-  const q = url.searchParams.get('token');
-  if (q && timingEqual(q, token)) return true;
+  if (hasValidQueryToken(url)) return true;
   const m = (req.headers.cookie ?? '').match(
     new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`)
   );
-  return !!m && timingEqual(decodeURIComponent(m[1]), token);
+  return !!m && timingEqual(decodeURIComponent(m[1]), getOrCreateToken());
 }
 
 // ── 정적 서빙 (prod: asar 안 mobile_window 빌드 / dev: Vite dev 서버 프록시) ──
@@ -350,16 +396,21 @@ export async function startServer(): Promise<TerminalServerStatus> {
   const handler: http.RequestListener = (req, res) => {
     const url = new URL(req.url ?? '/', 'http://local');
     if (!isPublicPath(url.pathname) && !isAuthed(req)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(403, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        ...SECURITY_HEADERS,
+      });
       res.end('Forbidden — One App 터미널 탭의 접속 URL(QR)로 여세요.');
       return;
     }
-    const extraHeaders: Record<string, string> = {};
-    if (url.searchParams.get('token')) {
+    const extraHeaders: Record<string, string> = { ...SECURITY_HEADERS };
+    if (hasValidQueryToken(url)) {
       // 첫 진입(토큰 쿼리)을 쿠키로 승격 — 이후엔 토큰 없는 주소(북마크·홈 화면 아이콘)로도 인증
+      // ⚠️ `Secure` 는 TLS 로 떴을 때만 붙인다 — 평문 폴백에서 붙이면 브라우저가 쿠키를 아예
+      //    저장하지 않아 폰에서 매번 QR 을 다시 찍어야 한다.
       extraHeaders['Set-Cookie'] =
         `${COOKIE_NAME}=${encodeURIComponent(getOrCreateToken())}; HttpOnly; SameSite=Lax; ` +
-        `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}`;
+        `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}${tls ? '; Secure' : ''}`;
     }
     // 엔트리 분기 — `/terminal*` 은 터미널 페이지, 그 외는 폰 앱 셸.
     // 각 엔트리의 Vite `base` 와 경로가 같아 asset(`/assets/*` vs `/terminal/assets/*`)이 안 겹친다.
@@ -420,7 +471,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
     const url = new URL(req.url ?? '/', 'http://local');
     const target =
       url.pathname === WS_PATH ? wsServer : url.pathname === RPC_PATH ? rpcServer : null;
-    if (!target || !isAuthed(req)) {
+    if (!target || !isSameOrigin(req) || !isAuthed(req)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;

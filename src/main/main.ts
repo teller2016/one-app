@@ -112,6 +112,12 @@ const createWindow = () => {
     visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      // ⚠️ Electron 43 의 기본값과 같은 값이지만 **명시**한다 — 옵션을 덧붙이거나 기본값이
+      // 바뀔 때 프로세스 격리가 조용히 풀리는 것을 막는다. preload 는 `electron` 만
+      // import 하므로 sandbox 와 호환된다(값 import 가 늘면 이 전제를 다시 확인할 것).
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
     },
   });
 

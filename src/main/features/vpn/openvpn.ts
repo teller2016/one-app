@@ -270,6 +270,12 @@ function launchAsRoot(bin: string, ovpnPath: string, port: number): Promise<void
   const cmd = [
     shellQuote(bin),
     '--config', shellQuote(ovpnPath),
+    // ⚠️ 이 프로세스는 **root** 다. 설정 파일이 `script-security 2` + `up`/`route-up` 을
+    // 담고 있으면 그 스크립트가 root 로 실행되므로, 기본값(1 = 내장 실행파일만)을 다시 못박는다.
+    // **`--config` 뒤에 와야 한다** — 앞에 두면 설정 파일이 이 값을 덮어써 무효다(2026-08-26
+    // openvpn 2.7.4 실측: 뒤 → "'--script-security 2' or higher is required", 앞 → 무효).
+    // 0 이 아니라 1 인 이유: 0 은 ifconfig·route 호출까지 막아 연결 자체가 되지 않는다.
+    '--script-security', '1',
     '--cd', shellQuote(path.dirname(ovpnPath)), // ca 등 상대 경로 파일 기준
     '--daemon', 'one-app-vpn',
     '--management', '127.0.0.1', String(port), shellQuote(mgmtPwPath()),

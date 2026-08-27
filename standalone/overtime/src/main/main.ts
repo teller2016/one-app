@@ -23,6 +23,11 @@ const createWindow = () => {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#f5f5f7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // ⚠️ 본체(src/main/main.ts)와 같은 이유로 기본값을 명시한다 — 격리가 조용히
+      // 풀리는 것을 막는다. 이 preload 도 `electron` 만 import 해 sandbox 와 호환된다.
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
     },
   });
 
