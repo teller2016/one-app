@@ -2,7 +2,11 @@
   "name": "one-app",
   "productName": "One App",
   "version": "0.1.0",
-  "description": "사내 도구 통합 허브 — VPN·터미널·API·대시보드를 한 창에서 관리",
+  "description": "사내 도구 통합 허브 — 터미널·Jira·PR·배포·결재·근태·메일·VPN 을 한 창(macOS)에서 관리",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/teller2016/one-app.git"
+  },
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {

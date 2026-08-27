@@ -5,7 +5,7 @@
 
 ## 기술 스택
 - **Electron + React + TypeScript** / 빌드·패키징 **Electron Forge + Vite**
-- 런타임: Node.js 22 · Electron 43 · React 18
+- 런타임: Node.js 22 · Electron 43 · React 19
 - 스타일: SCSS (`sass-embedded`) — 룩앤필 기준은 `DESIGN.md`
 
 ## 명령어
