@@ -999,7 +999,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [closeSession]
   );
 
-  // ── 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료.
+  // ── 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료 · ⌘B 변경사항 드로어.
   // ⚠️ capture 단계 + stopPropagation 으로 잡는다 — bubble 로 잡으면 xterm 의 textarea
   // 핸들러가 먼저 처리해 같은 키가 셸에도 전달된다(⌃Tab 이 특히 그렇다).
   // ⚠️ ⌘W(창 닫기)·⌘+/-(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다.
@@ -1044,6 +1044,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       if (!canCreate) return;
       claim();
       void createShell(); // 모달 없이 바로 셸 — 에이전트 선택은 [+] 또는 프리셋 바
+    } else if (e.key.toLowerCase() === 'b') {
+      claim();
+      toggleChanges(); // 변경사항 드로어 열고 닫기 — 탑바 git 버튼과 같은 동작
     } else if (e.key >= '1' && e.key <= '9') {
       const target = tabs[Number(e.key) - 1];
       if (!target) return;
