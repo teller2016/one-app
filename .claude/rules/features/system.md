@@ -28,10 +28,11 @@ paths:
 ## 알림 (공통 인프라)
 `main/features/notify`
 
-`notify({title, body, section, action})` 호출 시 앱 창을 앞으로 가져와(`app.focus({steal:true})`) **알럿(`dialog.showMessageBox`)** 으로 표시.
+`notify({title, body, section, action, checkbox})` 호출 시 앱 창을 앞으로 가져와(`app.focus({steal:true})`) **알럿(`dialog.showMessageBox`)** 으로 표시. 반환은 `{ primary, checked }`(`NotifyResult`).
 
 - `section` 지정 시 '이동' 버튼 → `app:navigate` IPC 로 해당 섹션 이동(App.tsx `onNavigate` 구독)
-- `action`(버튼 라벨) 지정 시 그 버튼이 기본 버튼이 되고 **클릭 여부를 반환**해 호출부가 후속 동작을 처리한다
+- `action`(버튼 라벨) 지정 시 그 버튼이 기본 버튼이 되고 **클릭 여부를 `primary` 로 반환**해 호출부가 후속 동작을 처리한다
+- `checkbox`(라벨) 지정 시 알럿 안에 체크박스를 그리고 상태를 `checked` 로 반환한다(닫기로 닫아도 값은 온다 — 근태 리마인더의 '오늘은 더 알리지 않기'). ⚠️ 라벨이 없을 때 `checkboxLabel: ''` 를 넘기면 체크박스가 안 그려지므로 **옵션 자체를 넘기지 않는다**
 - macOS 미서명/개발 모드에서 Electron `Notification` 이 표시되지 않아(UNErrorDomain 1) OS 알림 권한과 무관한 알럿 방식을 사용한다
 - 창이 닫혀 있으면(맥) 알럿만 독립적으로 뜬다. 창 참조는 `main.ts` 에서 `setNotifyWindow()` 로 등록
 - 사용처: **배포 완료/실패**(`settings.notifyDeploy` on/off) · 출퇴근 리마인더 · 환경설정의 테스트 알림(`notify:test` — 배포 알림 미리보기라 실제와 같은 알럿이어야 한다) — 즉 **놓치면 안 되는 알림**은 포커스를 뺏어 확실히 보여준다

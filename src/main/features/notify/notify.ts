@@ -17,18 +17,25 @@ type NotifyOptions = {
   body: string;
   section?: string; // '이동' 클릭 시 이동할 사이드바 섹션 id (예: 'deploy')
   action?: string; // 지정하면 기본 버튼 라벨 — 후속 동작은 호출부가 반환값으로 처리 (section 보다 우선)
+  checkbox?: string; // 지정하면 알럿 안에 체크박스 표시 — 체크 여부는 반환값 checked (예: '오늘은 더 알리지 않기')
+};
+
+export type NotifyResult = {
+  primary: boolean; // 기본 버튼(action 라벨 또는 '이동')을 눌렀는가
+  checked: boolean; // checkbox 를 지정했을 때 체크 상태 (닫기로 닫아도 유지된다)
 };
 
 /**
  * 알림 표시 — 앱을 앞으로 가져와 알럿을 띄운다.
- * 기본 버튼(action 라벨 또는 '이동')을 눌렀으면 true 를 반환한다.
+ * 어느 버튼으로 닫았는지(primary)와 체크박스 상태(checked)를 반환한다.
  */
 export async function notify({
   title,
   body,
   section,
   action,
-}: NotifyOptions): Promise<boolean> {
+  checkbox,
+}: NotifyOptions): Promise<NotifyResult> {
   // macOS 는 창을 닫아도 앱이 살아 있으므로, 창이 없으면 알럿만 독립적으로 띄운다
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
 
@@ -49,8 +56,10 @@ export async function notify({
     buttons,
     defaultId: 0,
     cancelId: buttons.length - 1,
+    // ⚠️ checkboxLabel 은 라벨이 있을 때만 넘긴다 — 빈 문자열이면 체크박스가 그려지지 않는다
+    ...(checkbox ? { checkboxLabel: checkbox, checkboxChecked: false } : {}),
   };
-  const { response } = win
+  const { response, checkboxChecked } = win
     ? await dialog.showMessageBox(win, options)
     : await dialog.showMessageBox(options);
 
@@ -59,7 +68,7 @@ export async function notify({
   if (primaryClicked && !action && win && section && !win.isDestroyed()) {
     win.webContents.send('app:navigate', section);
   }
-  return primaryClicked;
+  return { primary: primaryClicked, checked: !!checkboxChecked };
 }
 
 /** 창이 화면에 있고 포커스인가 — 토스트가 지금 바로 보이는 상태인지의 판정 */

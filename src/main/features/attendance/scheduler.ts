@@ -28,6 +28,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 // 하루 단위 상태 — 날짜가 바뀌면 초기화한다. key = `${dateKey}-${day}-${type}`
 const lastAttempt = new Map<string, number>(); // 마지막 시도 시각(분) — 반복 간격 판정
 const doneToday = new Set<string>(); // 찍은 게 확인됨 → 오늘은 더 안 봄
+const mutedToday = new Set<string>(); // 알럿에서 '오늘은 더 알리지 않기' 체크 → 오늘은 발화 안 함
 const failSafeFired = new Set<string>(); // 상태 확인 실패 알림은 하루 1회만
 const alertOpen = new Set<'come' | 'leave'>(); // 알럿이 떠 있는 동안 반복 억제
 const inProgress = new Set<'come' | 'leave'>(); // 상태 조회~알럿 처리 중 재진입 방지
@@ -44,6 +45,7 @@ const STATE_FILE = 'reminder-state.json';
 type PersistedState = {
   date: string;
   done: string[];
+  muted: string[];
   failSafe: string[];
   lastAttempt: Record<string, number>;
 };
@@ -52,6 +54,7 @@ function persistState() {
   const state: PersistedState = {
     date: stateDate,
     done: [...doneToday],
+    muted: [...mutedToday],
     failSafe: [...failSafeFired],
     lastAttempt: Object.fromEntries(lastAttempt),
   };
@@ -69,6 +72,7 @@ function restoreState() {
   if (saved.date !== today) return;
   stateDate = today;
   for (const k of saved.done ?? []) doneToday.add(k);
+  for (const k of saved.muted ?? []) mutedToday.add(k);
   for (const k of saved.failSafe ?? []) failSafeFired.add(k);
   for (const [k, v] of Object.entries(saved.lastAttempt ?? {})) {
     if (typeof v === 'number') lastAttempt.set(k, v);
@@ -81,6 +85,17 @@ function markDone(key: string) {
   persistState();
 }
 
+/**
+ * 사용자가 알럿에서 '오늘은 더 알리지 않기' 를 체크함 → 오늘 이 슬롯은 발화하지 않는다.
+ * ⚠️ doneToday 와 섞지 않는다 — '찍은 게 확인됨' 과 '사용자가 껐음' 은 근거가 달라
+ * 로그·디버깅 때 구분이 필요하다. 날짜가 바뀌면 함께 초기화되므로 내일은 정상 발화한다.
+ */
+function markMuted(key: string, type: 'come' | 'leave') {
+  mutedToday.add(key);
+  persistState();
+  console.log(`[reminder] ${type === 'come' ? '출근' : '퇴근'} 알림 오늘 중지 (사용자 체크)`);
+}
+
 const toMinutes = (time: string) => {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -88,7 +103,7 @@ const toMinutes = (time: string) => {
 
 const nowMinutes = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
-async function handleReminder(type: 'come' | 'leave', key: string) {
+async function handleReminder(type: 'come' | 'leave', key: string, repeating: boolean) {
   // 스마트 스킵 — 이미 찍었으면 알림하지 않는다.
   // 조회는 재시도하고, 그래도 실패하면 오늘 다른 경로(위젯 등)로 확인된 근태로 판단한다.
   // 그 근거조차 없을 때만(계정 없음·VPN 지속 불가) 놓치지 않도록 알림한다(하루 1회).
@@ -149,14 +164,18 @@ async function handleReminder(type: 'come' | 'leave', key: string) {
   console.log(`[reminder] ${label} 알림 발화`, checkFailed ? '(상태 확인 실패)' : '');
   alertOpen.add(type);
   try {
-    const stampNow = await notify({
+    const { primary: stampNow, checked: mute } = await notify({
       title: type === 'come' ? '🕘 출근 체크' : '🕕 퇴근 체크',
       body: checkFailed
         ? `${label} 찍는 것을 잊지 마세요.`
         : `아직 ${label}을 안 찍었어요.`,
       // 계정이 있으면 알럿에서 바로 찍기 제공 (알럿 자체가 확인 대화상자 역할)
       action: cred ? `지금 ${label} 찍기` : undefined,
+      // 반복 알림이 켜졌을 때만 — 1회 알림은 어차피 다시 안 뜨므로 체크박스가 무의미하다
+      checkbox: repeating ? '오늘은 더 알리지 않기' : undefined,
     });
+    // 체크는 어느 버튼으로 닫았든(찍기 포함) 먼저 반영한다
+    if (mute) markMuted(key, type);
     if (stampNow && cred) await stampFromAlert(type, key);
   } finally {
     // 반복 간격은 알럿(결과 알럿 포함)을 닫은 시점부터 다시 센다 (방치 중 중복 알럿 방지)
@@ -212,6 +231,7 @@ function tick() {
   if (dateKey !== stateDate) {
     lastAttempt.clear();
     doneToday.clear();
+    mutedToday.clear();
     failSafeFired.clear();
     stateDate = dateKey;
     persistState(); // 날짜가 바뀐 직후 재시작해도 어제 상태가 남지 않게
@@ -231,6 +251,7 @@ function tick() {
     if (!slot.enabled) return;
     const key = `${dateKey}-${day}-${type}`;
     if (doneToday.has(key)) return; // 오늘 찍은 게 확인됨
+    if (mutedToday.has(key)) return; // 사용자가 알럿에서 '오늘은 더 알리지 않기' 체크
     if (alertOpen.has(type)) return; // 이전 알럿이 아직 떠 있음
     if (inProgress.has(type)) return; // 이전 발화가 아직 처리 중(상태 조회 지연 등)
 
@@ -246,7 +267,7 @@ function tick() {
     lastAttempt.set(key, nowMin);
     persistState();
     inProgress.add(type);
-    void handleReminder(type, key).finally(() => inProgress.delete(type));
+    void handleReminder(type, key, repeat.enabled).finally(() => inProgress.delete(type));
   });
 }
 
