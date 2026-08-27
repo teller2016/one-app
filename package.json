@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "icon:dev": "node scripts/make-dev-icon.mjs",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
+    "postinstall": "node scripts/patch-node-pty.mjs; chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "keywords": [],
   "author": {

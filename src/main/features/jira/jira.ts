@@ -12,6 +12,7 @@ import type {
   JiraValidateResult,
 } from '../../../shared/types';
 import { getJiraApiConfig } from '../settings/store';
+import { mapLimit } from '../../lib/util';
 import {
   addTicket,
   isAdded,
@@ -354,6 +355,11 @@ async function inlineJiraImages(
 ): Promise<string[]> {
   const MAX_IMAGES = 12; // 과도한 본문(대량 스크린샷) 방어
   const MAX_BYTES = 4 * 1024 * 1024;
+  // base64 문자열은 원본의 1.33배로 V8 힙에 남고 IPC 로 렌더러에 복사까지 된다 —
+  // 총량을 막지 않으면 12장 × 4MB = 64MB+ 가 한 이슈에서 튄다(2026-08-27 메모리 감사)
+  const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+  const CONCURRENCY = 3;
+  let total = 0;
   let origin: string;
   try {
     origin = new URL(baseUrl).origin;
@@ -380,23 +386,31 @@ async function inlineJiraImages(
   if (targets.length === 0) return htmls;
 
   const inlined = new Map<string, string>();
-  await Promise.all(
-    targets.map(async (src) => {
-      try {
-        const res = await fetch(new URL(src, origin).toString(), {
-          headers: { Authorization: authHeader },
-        });
-        if (!res.ok) return;
-        const type = res.headers.get('content-type') ?? '';
-        if (!type.startsWith('image/')) return;
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.byteLength > MAX_BYTES) return;
-        inlined.set(src, `data:${type};base64,${buf.toString('base64')}`);
-      } catch {
-        /* 실패한 이미지는 원본 유지 */
+  await mapLimit(targets, CONCURRENCY, async (src) => {
+    if (total >= MAX_TOTAL_BYTES) return;
+    try {
+      const res = await fetch(new URL(src, origin).toString(), {
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) return;
+      const type = res.headers.get('content-type') ?? '';
+      if (!type.startsWith('image/')) return;
+      // 총량은 받기 '전에' 예약한다 — 뒤에 더하면 워커 3개가 동시에 검사를 통과해 상한을 넘는다.
+      // Content-Length 가 없는(chunked) 응답은 최대치로 잡아 두고 실제 크기로 정정한다.
+      const declared = Number(res.headers.get('content-length') ?? 0) || MAX_BYTES;
+      if (declared > MAX_BYTES || total + declared > MAX_TOTAL_BYTES) {
+        void res.body?.cancel().catch(() => {});
+        return;
       }
-    }),
-  );
+      total += declared;
+      const buf = Buffer.from(await res.arrayBuffer());
+      total += buf.byteLength - declared; // 예약분을 실제 크기로 정정
+      if (buf.byteLength > MAX_BYTES) return;
+      inlined.set(src, `data:${type};base64,${buf.toString('base64')}`);
+    } catch {
+      /* 실패한 이미지는 원본 유지 */
+    }
+  });
   if (inlined.size === 0) return htmls;
 
   return htmls.map((html) => {

@@ -20,6 +20,31 @@ export const localDateKey = (d: Date) =>
  */
 export const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
+/**
+ * 동시 실행 수를 제한한 map — 결과 순서는 입력 순서를 따른다.
+ * 첨부·이미지처럼 하나가 수 MB~수십 MB 인 요청을 Promise.all 로 한꺼번에 띄우면
+ * 메모리 피크가 (개수 × 크기) 로 튀고 V8 고수위가 RSS 에 남는다 — 2~3개씩 흘린다.
+ */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return out;
+}
+
 /** 지정 시간 안에 끝나지 않으면 거부 — Electron 의 loadURL·executeJavaScript 무한 대기 방지 */
 export function withTimeout<T>(
   promise: Promise<T>,

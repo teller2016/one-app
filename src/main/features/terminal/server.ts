@@ -468,6 +468,9 @@ export async function startServer(): Promise<TerminalServerStatus> {
   const wsServer = new WebSocketServer({ noServer: true });
   const rpcServer = new WebSocketServer({ noServer: true });
   srv.on('upgrade', (req, socket, head) => {
+    // 403 을 쓰는 사이 상대가 끊으면 EPIPE/ECONNRESET 이 'error' 로 오고, 리스너가 없으면
+    // throw → main 사망. 미인증으로도 닿는 경로라 반드시 받아 둔다.
+    socket.on('error', (err) => console.error('[term:upgrade]', err.message));
     const url = new URL(req.url ?? '/', 'http://local');
     const target =
       url.pathname === WS_PATH ? wsServer : url.pathname === RPC_PATH ? rpcServer : null;
@@ -488,6 +491,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       if (st) st.alive = true;
     });
     ws.on('close', () => socketState.delete(ws));
+    ws.on('error', (err) => console.error('[rpc:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
     attachRpcSocket(ws);
   });
 
@@ -513,6 +517,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       }
     });
     ws.on('close', () => socketState.delete(ws));
+    ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
     send(ws, { type: 'sessions', sessions: listSessions() });
     send(ws, {
       type: 'cwds',

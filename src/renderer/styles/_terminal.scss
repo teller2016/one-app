@@ -670,7 +670,12 @@
     // 1.6s — 0.9s 는 작은 타일 둘레를 도는 짧은 아크라 '휙휙' 지나가 산만했다.
     // 느긋하게 한 바퀴 도는 쪽이 '작업 중'을 알리면서도 시선을 덜 빼앗는다
     // (2026-08-20 리디자인 시안에서 채택한 박자).
-    animation: sq-arc-dash 1.6s linear infinite;
+    // ⚠️ stroke-dashoffset 은 컴포지터가 못 다루는 **paint 속성**이라 프레임마다 리페인트가
+    //    난다. steps(40) 으로 초당 25번만 바뀌게 하고(1.6s 주기, 눈으로는 매끈함), will-change
+    //    로 자체 레이어를 만들어 리페인트 영역을 30px 타일 하나로 가둔다 — 안 그러면 LNB 전체가
+    //    다시 그려진다(2026-08-27 메모리·CPU 감사).
+    animation: sq-arc-dash 1.6s steps(40) infinite;
+    will-change: transform;
     pointer-events: none;
   }
 

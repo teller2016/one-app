@@ -13,6 +13,7 @@ import type {
 } from '../../../shared/types';
 import { isDoneStatus } from '../../../shared/types';
 import { todayKey } from '../../../shared/date';
+import { mapLimit } from '../../lib/util';
 import { fetchWithTimeout as fetch } from '../../lib/http';
 import {
   jiraAuth,
@@ -276,27 +277,6 @@ async function fetchHistories(
   if (total <= HISTORY_PAGE || coversRange(histories, bounds)) return histories;
   const last = await page(total - HISTORY_PAGE);
   return last?.histories ? [...histories, ...last.histories] : histories;
-}
-
-/** 동시 실행 수를 제한한 map (Jira 를 한꺼번에 두드리지 않기 위해) */
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      const i = next++;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i]);
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
-  );
-  return out;
 }
 
 /** 검색 응답에 실려 온 이력이 통째로 다 왔는지 (잘렸으면 개별 조회로 보강한다) */

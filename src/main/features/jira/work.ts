@@ -22,7 +22,7 @@ import type {
   JiraWorkSkill,
 } from '../../../shared/types';
 import { fetchWithTimeout as fetch } from '../../lib/http';
-import { shQuote } from '../../lib/util';
+import { mapLimit, shQuote } from '../../lib/util';
 import { jiraAuth } from './jira';
 import { listSessions } from '../terminal/pty';
 
@@ -31,6 +31,8 @@ const KEEP_TICKETS = 20;
 /** 티켓당 내려받을 첨부 수 상한 — 스크린샷 20장짜리 티켓이 femc 컨텍스트를 통째로 먹는 것 방지 */
 const MAX_ATTACHMENTS = 12;
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+/** 첨부 동시 다운로드 수 — 12개 × 20MB 를 한꺼번에 arrayBuffer 로 받으면 순간 240MB 를 쥔다 */
+const ATTACHMENT_CONCURRENCY = 3;
 const ISSUE_TIMEOUT_MS = 20_000;
 const ATTACHMENT_TIMEOUT_MS = 60_000;
 
@@ -247,8 +249,10 @@ async function downloadAttachments(
 
   fs.mkdirSync(dir, { recursive: true });
   const used = new Set<string>();
-  await Promise.all(
-    targets.map(async (att, i) => {
+  await mapLimit(
+    targets.map((att, i) => [att, i] as const),
+    ATTACHMENT_CONCURRENCY,
+    async ([att, i]) => {
       const id = att.id ?? String(i);
       let name = safeFileName(att.filename ?? '', `attachment-${id}`);
       // 같은 이름이 여러 개면 id 를 붙여 구분한다
@@ -261,6 +265,12 @@ async function downloadAttachments(
           ATTACHMENT_TIMEOUT_MS,
         );
         if (!res.ok) return;
+        // 크기를 헤더로 먼저 보고 큰 파일은 본문을 받기 전에 버린다
+        const declared = Number(res.headers.get('content-length') ?? 0);
+        if (declared > ATTACHMENT_MAX_BYTES) {
+          void res.body?.cancel().catch(() => {});
+          return;
+        }
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.byteLength > ATTACHMENT_MAX_BYTES) return;
         fs.writeFileSync(path.join(dir, name), buf);
@@ -268,7 +278,7 @@ async function downloadAttachments(
       } catch {
         /* 실패한 첨부는 건너뛴다 — 본문만으로도 작업은 시작된다 */
       }
-    }),
+    },
   );
   return saved;
 }

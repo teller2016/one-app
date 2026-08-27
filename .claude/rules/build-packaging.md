@@ -13,6 +13,7 @@ paths:
 - `node-pty` prebuild 의 `spawn-helper` 는 **실행 권한이 없는 채로 설치**돼 `posix_spawnp failed` 가 난다 → `package.json` 의 `postinstall` 이 `chmod +x` 로 보정한다(`npm i` 후 오류 시 이 스크립트 확인).
 
 ## ⚠️ node-pty 패키징
+- **fd 누수 패치가 걸려 있다** — `scripts/patch-node-pty.mjs`(postinstall) 가 `node-pty/src/unix/pty.cc` 세 곳(`pty_posix_spawn` 의 프로브 `low_fds[0]` 미해제 · 부모 쪽 `slave` 미해제 · 종료 감시 스레드의 `kqueue` 미해제)을 고치고 `electron-rebuild -f -w node-pty` 로 `build/Release/` 를 재컴파일한다. node-pty 로더는 **`build/Release` → `prebuilds/`** 순이라 재컴파일 결과가 실제로 로드된다(`lib/utils.js loadNativeModule`). 패치 전엔 세션 생성→종료마다 main 에 `/dev/ptmx` 1개 + `(revoked)` 1개 + KQUEUE 1개가 영구 잔류했다(2026-08-27 실측: 17h 구동 후 ptmx·revoked 만 34개). upstream `main` 엔 고쳐져 있고 릴리스 1.1.0 엔 없다 — **node-pty 를 올릴 때** 스크립트가 "패치 지점을 못 찾음" 을 찍으면 새 버전에 반영됐는지 확인하고 스크립트를 지운다.
 - `packagerConfig.asar.unpack` 으로 **통째 unpack** 해야 한다 — macOS 의 `spawn-helper` 는 확장자가 없어 AutoUnpackNatives 의 `*.node` 글롭에 안 걸리고, asar 안에 갇히면 PTY 생성이 전부 실패한다.
 - `postPackage` 는 앱 서명 **전에** unpacked 바이너리를 같은 identity 로 선서명하는데, **Mach-O 만** 서명할 것 — 함께 담긴 win32 prebuild(PE)를 서명하면 codesign 이 서명을 `com.apple.cs.*` 확장 속성으로 붙이고 그게 detritus 로 잡혀 앱 `--deep` 서명이 실패한다(2026-08 실측).
 

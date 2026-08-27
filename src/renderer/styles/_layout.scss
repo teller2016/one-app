@@ -373,6 +373,12 @@
       visibility: hidden;
       position: absolute;
       inset: var(--titlebar-h) 0 0 0;
+      // ⚠️ 화면 밖으로 옮겨야 xterm 이 멈춘다 — `visibility:hidden` 은 IntersectionObserver
+      // 교차 판정에 영향이 없어, 다른 섹션을 보는 동안에도 터미널의 활성 pane 이 계속 WebGL 로
+      // 그려졌다(pane 단위 `.terminal__pane--hidden` 과 같은 기법 — 2026-08-27 메모리 감사:
+      // 갓 뜬 인스턴스에서도 렌더러 20~27%·GPU 25~30% 가 나오던 원인 후보).
+      // 크기·레이아웃은 그대로라 PTY 리사이즈는 발생하지 않는다.
+      transform: translateX(-200vw);
       // ⚠️ 기반 클래스의 height:100% 를 풀어야 한다 — absolute 에서 top+height 가
       // bottom:0 을 이기므로(over-constrained) 래퍼가 .content 아래로 44px 삐져나가
       // 숨은 크기 ≠ 활성 크기가 된다(E2E 실측 859→903). auto 면 inset 이 크기를 정한다.

@@ -382,8 +382,22 @@ export function closePopups(page: Page) {
   page.popups.length = 0;
 }
 
-/** 창 닫기 — 이미 닫혔으면 무시 */
+/**
+ * 창 닫기 — 이미 닫혔으면 무시.
+ * ⚠️ 팝업을 먼저 닫는다 — 팝업은 `outlivesOpener: true` 라 부모를 destroy 해도 살아남고,
+ *    숨은 부모의 팝업은 숨은 창이라 사용자가 닫을 수도 없다. 자동화가 팝업 대기 타임아웃으로
+ *    throw 하거나 재로그인 뒤 그룹웨어 공지 팝업이 뜬 채 끝나면 렌더러 프로세스 하나(수십 MB)가
+ *    앱 종료까지 남아 모든 broadcast 를 받는다(2026-08-27 메모리 감사).
+ * 파티션이 인메모리(`persist:` 아님)라 HTTP 캐시가 세션당 최대 50MB 까지 쌓이고 비울 곳이 없어
+ * 창을 닫을 때 함께 비운다 — 한 자동화 안(다중 페이지)에서는 캐시가 그대로 도움이 된다.
+ */
 export function closePage(page: Page | null) {
-  if (!page || page.win.isDestroyed()) return;
+  if (!page) return;
+  closePopups(page);
+  if (page.win.isDestroyed()) return;
+  const ses = page.wc.isDestroyed() ? null : page.wc.session;
   page.win.destroy();
+  void ses?.clearCache().catch(() => {
+    /* 이미 파기된 세션 — 무해 */
+  });
 }

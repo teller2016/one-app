@@ -138,6 +138,15 @@ export function JiraDetailPanel({
     };
   }, [issueKey, open]);
 
+  // 닫힌 뒤에는 본문을 내려놓는다 — 안 그러면 마지막 이슈의 iframe(본문 HTML + 인라인 이미지)이
+  // Jira 섹션이 살아 있는 내내 DOM 에 남는다(2026-08-27 메모리 감사). 슬라이드아웃(--dur-2 =
+  // 0.18s)이 끝난 뒤 비워야 닫히는 도중 내용이 사라지는 깜빡임이 없다.
+  useEffect(() => {
+    if (open) return;
+    const t = setTimeout(() => setState({ kind: 'idle' }), 220);
+    return () => clearTimeout(t);
+  }, [open]);
+
   // Escape 로 닫기 (열려 있을 때만)
   useEffect(() => {
     if (!open) return;
