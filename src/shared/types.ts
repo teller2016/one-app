@@ -428,6 +428,12 @@ export type DeployCommit = {
    * 젠킨스 경로는 부모 정보가 없어 채우지 않는다(undefined = 알 수 없음).
    */
   isMerge?: boolean;
+  /**
+   * 다른 주요 브랜치에 이미 들어가 있는 커밋이면 그 브랜치명 (예: 'main').
+   * PR 미리보기(compare) 경로만 채운다 — main 머지를 거친 브랜치를 develop 으로
+   * PR 할 때 같은 커밋이 제목·본문에 또 나오는 것을 거르는 근거.
+   */
+  alreadyIn?: string;
 };
 
 /**

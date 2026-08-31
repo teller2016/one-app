@@ -209,8 +209,19 @@ export function PrDetail({
           <div className="prs__detail-panel">
             <ul className="prs__detail-commits">
               {commits.map((c) => (
-                <li key={c.id} className={isMergeCommit(c) ? 'prs__commit--merge' : undefined}>
+                <li
+                  key={c.id}
+                  className={
+                    // 머지 커밋과 같은 수준으로 가라앉힘 — 실제 새 작업 커밋만 도드라지게
+                    isMergeCommit(c)
+                      ? 'prs__commit--merge'
+                      : c.alreadyIn
+                        ? 'prs__commit--already'
+                        : undefined
+                  }
+                >
                   {c.message.split('\n')[0]}
+                  {c.alreadyIn && <Badge variant="pill">{c.alreadyIn} 포함</Badge>}
                 </li>
               ))}
             </ul>

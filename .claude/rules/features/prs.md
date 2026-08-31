@@ -27,6 +27,8 @@ push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **마스터-
 
 **새 PR 모달**(`CreatePrModal`, 툴바 버튼으로 진입): **저장소는 현재 탭으로 고정**(모달에 저장소 셀렉트 없음 — 제목에 `새 PR — 표시명`). `원본(head) → 대상(base)` 한 줄(둘 다 검색형 Select, `Modal wide`) → 그 사이 커밋·변경 파일 확인 → 제목(브랜치명의 BBJ-#### 자동 추출)·본문(커밋 불릿) 자동 생성. 생성 성공 시 **낙관적 항목으로 그 PR 을 자동 선택**해 상세 패널에서 바로 머지로 잇는다(재조회 완료 전에도 상세가 뜬다). 사용자가 손댄 제목·본문은 덮어쓰지 않는다(dirty ref). 서로를 후보에서 제외하므로 head=base 는 고를 수 없다. 저장소 등록·관리는 프로젝트 탭(`remoteKind==='gitea'` + owner/repo 파싱 가능해야 탭·생성 대상이 된다).
 
+**이미 다른 주요 브랜치에 머지된 커밋은 초안에서 뺀다**(2026-08-31): compare 는 sha 기준이라 main 머지를 거친 브랜치를 develop 으로 PR 하면 main 에서 딸려온 커밋이 통째로 다시 잡혀 — 남의 옛 커밋이 제목이 되고 본문이 중복 나열됐다. `fetchBranchCommits` 가 base·head 가 아닌 주요 브랜치(기본 브랜치 우선, 최대 2개 — `fetchAlreadyInSets`)와 `{주요}...head` compare 를 병렬로 한 번 더 떠서, 그 "head 에만 있는" 집합에 **없는** 커밋에 `alreadyIn: 브랜치명` 을 붙인다(실패는 조용히 무시 — 초안 품질 보강일 뿐). `prDraft.ts` 가 머지 커밋과 같은 방식으로 제목 후보·본문 불릿에서 제외하고(새 커밋이 0개면 제목은 라벨만·본문은 비머지 전체 폴백 — 테스트 `prDraft.test.ts`), 모달 개수 줄에 "N개는 제목·본문에서 제외" 안내, 상세 패널 커밋 목록은 흐림 + `main 포함` 뱃지(pill)로 표시한다.
+
 **브랜치 후보** — 모달을 열 때 두 채널을 함께 부른다: `prs:base-branches`(주요 브랜치 = 저장소 `default_branch` + 보호 + `mainBranchRank()` 관례 이름)와 `prs:all-branches`(전체 이름, 검색용 프리페치). 정렬은 `renderer/features/prs/lib/baseBranches.ts` 한 곳 — **프로젝트 설정 defaultBranch → Gitea default_branch → 최근 사용(MRU) → 관례 이름표 → 보호 → 커밋 최신순**. head 는 최근 push 8개(시각 표시)를 위로, 나머지 전체를 이름순으로 붙인다. 팝오버는 `limit={50}` 이라 초과분은 개수만 알리고 검색으로 좁히게 한다.
 
 - 고른 base 는 **저장소별로 `userData/prs.json`(`PrsConfig.recentBases`)에 영구 저장** → 다음 PR 의 기본 선택값.

@@ -270,6 +270,15 @@
     li.prs__commit--merge {
       opacity: 0.45;
     }
+
+    // 다른 주요 브랜치에 이미 머지된 커밋 — 머지 커밋과 같은 수준으로 가라앉히고 뱃지로 출처 표시
+    li.prs__commit--already {
+      opacity: 0.45;
+
+      .badge {
+        margin-left: 6px;
+      }
+    }
   }
 
   &__detail-file-list {

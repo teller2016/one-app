@@ -373,6 +373,55 @@ export async function fetchAllBranchNames(
   return names;
 }
 
+/** alreadyIn 판별에 쓸 다른 주요 브랜치 수 상한 — 보통 main 하나, 요청 폭주 방지 */
+const ALREADY_IN_MAX = 2;
+
+/**
+ * base·head 가 아닌 주요 브랜치별로 "head 에만 있는 커밋" sha 집합을 만든다.
+ * 이 집합에 **없는** head 커밋 = 그 브랜치에 이미 머지된 커밋(`alreadyIn` 근거).
+ * 기본 브랜치를 앞세우고, 실패·후보 없음은 빈 배열 — PR 초안 품질 보강일 뿐이라
+ * 본 조회를 막지 않는다. 후보는 `fetchBaseCandidates` 60초 캐시를 그대로 탄다.
+ */
+async function fetchAlreadyInSets(
+  giteaUrl: string,
+  token: string | null,
+  repo: string,
+  base: string,
+  head: string,
+): Promise<{ name: string; aheadShas: Set<string> }[]> {
+  try {
+    const { branches, defaultBranch } = await fetchBaseCandidates(giteaUrl, token, repo);
+    const rank = (n: string) =>
+      n === defaultBranch ? -1 : mainBranchRank(n) ?? 99;
+    const names = branches
+      .map((b) => b.name)
+      .filter((n) => n !== base && n !== head)
+      .sort((a, b) => rank(a) - rank(b))
+      .slice(0, ALREADY_IN_MAX);
+
+    const sets = await Promise.all(
+      names.map(async (name) => {
+        const res = await giteaFetch(
+          `${giteaUrl}/api/v1/repos/${repo}/compare/${encodeURIComponent(`${name}...${head}`)}`,
+          token,
+          { raw: true },
+        );
+        if (!res.ok) return null;
+        const data = (await res.json()) as { commits?: { sha?: string }[] };
+        return {
+          name,
+          aheadShas: new Set(
+            (data.commits ?? []).flatMap((c) => (c.sha ? [c.sha] : [])),
+          ),
+        };
+      }),
+    );
+    return sets.filter((s) => s != null);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * base 대비 head 가 가진 커밋 목록 (PR 제목/본문 자동 생성용).
  *
@@ -383,6 +432,10 @@ export async function fetchAllBranchNames(
  * 응답의 `parents` 로 머지 커밋을 표시해 준다(부모 2개 이상) — 브랜치에 `develop` 을
  * 끌어온 머지 커밋이 목록 맨 앞에 오면 그게 PR 제목이 돼 버렸다(실측: PR #1223).
  * 메시지 패턴(`Merge branch …`)으로 추측하면 한국어 머지 메시지를 놓치므로 부모 수로 본다.
+ *
+ * `alreadyIn` 은 다른 주요 브랜치(main 등)에 이미 머지된 커밋 표시 — compare 는 sha
+ * 기준이라 main 을 거친 커밋이 develop PR 에 통째로 다시 잡히는데(브랜치 전략상 정상),
+ * 그걸 제목·본문 초안에서 걸러내기 위한 근거다. 판별은 `fetchAlreadyInSets` 참고.
  */
 export async function fetchBranchCommits(
   giteaUrl: string,
@@ -395,29 +448,40 @@ export async function fetchBranchCommits(
   files: PrChangedFile[];
   stats: { additions: number; deletions: number };
 }> {
-  const data = await giteaJson<{
-    commits?: {
-      sha?: string;
-      commit?: { message?: string; author?: { name?: string; date?: string } };
-      parents?: { sha?: string }[];
-      files?: { filename?: string; status?: string }[];
-      stats?: { additions?: number; deletions?: number };
-    }[];
-  }>(
-    `${giteaUrl}/api/v1/repos/${repo}/compare/${encodeURIComponent(`${base}...${head}`)}`,
-    token,
-    { label: '브랜치 비교' },
-  );
+  const [data, alreadyInSets] = await Promise.all([
+    giteaJson<{
+      commits?: {
+        sha?: string;
+        commit?: { message?: string; author?: { name?: string; date?: string } };
+        parents?: { sha?: string }[];
+        files?: { filename?: string; status?: string }[];
+        stats?: { additions?: number; deletions?: number };
+      }[];
+    }>(
+      `${giteaUrl}/api/v1/repos/${repo}/compare/${encodeURIComponent(`${base}...${head}`)}`,
+      token,
+      { label: '브랜치 비교' },
+    ),
+    fetchAlreadyInSets(giteaUrl, token, repo, base, head),
+  ]);
   const raw = data.commits ?? [];
 
   const commits = raw
-    .map((c) => ({
-      id: c.sha ?? '',
-      message: (c.commit?.message ?? '').trim(),
-      author: c.commit?.author?.name ?? '',
-      timestamp: c.commit?.author?.date ? Date.parse(c.commit.author.date) : undefined,
-      isMerge: (c.parents?.length ?? 0) > 1,
-    }))
+    .map((c) => {
+      const sha = c.sha ?? '';
+      // "head 에만 있는" 집합에 없다 = 그 주요 브랜치가 이미 갖고 있는 커밋
+      const alreadyIn = sha
+        ? alreadyInSets.find((s) => !s.aheadShas.has(sha))?.name
+        : undefined;
+      return {
+        id: sha,
+        message: (c.commit?.message ?? '').trim(),
+        author: c.commit?.author?.name ?? '',
+        timestamp: c.commit?.author?.date ? Date.parse(c.commit.author.date) : undefined,
+        isMerge: (c.parents?.length ?? 0) > 1,
+        ...(alreadyIn ? { alreadyIn } : {}),
+      };
+    })
     .reverse();
 
   // 변경 파일: 커밋 전체에서 경로 기준 중복 제거 (뒤 커밋 상태가 이김)

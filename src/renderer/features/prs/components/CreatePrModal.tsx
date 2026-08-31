@@ -150,6 +150,10 @@ export function CreatePrModal({
     };
   }, [repo, head, base]);
 
+  // 다른 주요 브랜치(main 등)에 이미 머지돼 제목·본문 초안에서 빠진 커밋 — 안내 문구용
+  const alreadyIns = (commits ?? []).filter((c) => c.alreadyIn);
+  const alreadyBranches = [...new Set(alreadyIns.map((c) => c.alreadyIn))].join('·');
+
   // 원본(head) 후보 — 최근 push 8개를 위로, 나머지 전체 브랜치는 이름순. base 는 제외
   const headOptions = useMemo(() => {
     const recentList = recent ?? [];
@@ -324,6 +328,13 @@ export function CreatePrModal({
                 {' · '}
                 <span className="prs__stat-add">+{stats.additions}</span>{' '}
                 <span className="prs__stat-del">−{stats.deletions}</span>
+              </>
+            )}
+            {alreadyIns.length > 0 && (
+              <>
+                {' · '}
+                <b>{alreadyBranches}</b> 에 이미 있는 {alreadyIns.length}개는
+                제목·본문에서 제외
               </>
             )}
           </p>
