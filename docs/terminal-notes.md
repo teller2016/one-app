@@ -141,6 +141,11 @@ Finder 파일을 pane 에 끌어다 놓으면 **경로를 셸 입력으로** 넣
   - ⚠️ **'대체 화면' 판정은 xterm 이 `?1049h` 를 봤느냐에 달려 있다** — 그 시퀀스는 tmux 클라이언트 시작 때 **딱 한 번** 나온다(attach 캡처 실측). TUI 세션은 attach replay 를 생략하므로(잔상 방지) **재마운트된 pane(앱 재시작·livePanes 축출 복귀 — 섹션 이동은 2026-08-13 keep-alive 로 재마운트가 없어졌다)은 buffer 를 'normal' 로 오판해 게이트가 꺼지고 Shift+Enter 가 그대로 제출**됐다(2026-08-12 사용자 신고 — "다른 메뉴 갔다 오면 재현"). 지금은 `attachSession` 이 `alt`(= `isTmuxAltScreen` 결과)를 응답에 실어 주고, 데스크톱(`TerminalView`)·MO(`mobile.ts`) 가 **`?1049h` 를 합성 write** 해 모델을 실제 상태와 맞춘다. cat -v E2E 로 재마운트 후 `^[^M` 전달 확인.
   - ⚠️ **한글 조합 중(isComposing) Enter 를 xterm 에 넘기면 '조합 확정 + `\r` 전송'이 된다**(`CompositionHelper.keydown` — keyCode 13 이면 finalize 후 계속 처리) — 조합 중 Shift+Enter 로 메시지가 제출되던 두 번째 원인. 지금은 조합 중이면 `return false` 로 차단만 한다(조합 확정은 compositionend 가 처리, 줄바꿈은 다음 누름). 합성 composition E2E 로 `\r` 미전송 + 확정 글자 전달 확인(2026-08-12).
 - **⌘←/⌘→ = 줄 처음/끝** (macOS 관례, 2026-08-12) — **xterm 은 meta+화살표를 아예 버린다**(`Keyboard.ts` 의 `if (ev.metaKey) break` — 시퀀스를 안 만들고 종료). 그래서 Karabiner 로 Cmd+U/O → ⌘←/→ 를 매핑해 둔 사용자 입력이 셸에 전혀 안 갔다(사용자 신고로 발견). 같은 커스텀 키 핸들러가 `Ctrl+A(\x01)`/`Ctrl+E(\x05)` 로 바꿔 PTY 에 보낸다 — zsh(emacs 모드)·claude 둘 다 표준. ⚠️ Home/End 시퀀스(`ESC[H/F`)를 쓰지 않은 이유: 맨 zsh 는 Home/End 를 안 묶는 경우가 많다. ⇧ 동반 조합(텍스트 선택)은 터미널에 대응 개념이 없어 개입하지 않는다.
+- ⚠️ **포커스 직후 첫 한글 조합 자모 분리는 macOS 기본 한국어 IME 의 OS 버그다 — 앱에서 쫓지 말 것** (2026-08-31 판정)
+  - 증상: 포커스를 새로 얻은 뒤(터미널 진입·pane 클릭·창 복귀·한동안 입력 없다 재개) 첫 음절만 자모가 낱개로 확정("한글"→"ㅎㅏㄴ글"), 이후 정상. 간헐 발생.
+  - 판정 근거: ①자모가 **복제 없이 깨끗하게** 확정 = compositionstart→end 가 키마다 완결 — xterm/커스텀 핸들러가 만드는 복제 계열("입력력"·"사사사", 2026-08-26)과 다른 계열 ②코드 검토 — `rehomeCaret` 은 캐럿이 끝이면 no-op, 커스텀 핸들러는 조합 중 textarea 를 안 건드림 ③**Slack 에서도 동일 발생**(사용자 확인) + Spotlight·구글 검색·iPad 재현 리포트 = 앱 무관 OS 문제.
+  - 업스트림: Apple 포럼 스레드(developer.apple.com/forums/thread/783005 — Qt 도 macOS IME 문제로 확인, FB17460926 등록)·클리앙 cm_mac/18626410("첫 글자만 분리, 지우고 다시 치면 정상").
+  - 우회: 지우고 재입력(두 번째 조합부터 정상). 클리앙 댓글은 입력 소스를 두벌식→'한자(한글)' 변경 제안. 근본 수정은 Apple 몫 — **앱 쪽 대응 카드 없음**.
 
 ## xterm addon 구성 (2026-08-05)
 `fit`(기존) + `unicode11` + `webgl` + `web-links` + `search`. 전부 xterm 6.0.0 과 같은 릴리스 배치이고 Vite 가 번들하므로 **devDependencies** 에 둔다(prod 의존성에 넣으면 `copyRuntimeDeps` 가 패키지에 복사한다).
