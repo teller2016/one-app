@@ -174,6 +174,12 @@ window.open('', '_blank')            ← 빈 창을 먼저 연다 (URL 로 판�
 - ⚠️ **[결재상신] 은 서버에 근태신청을 저장한다**(`InsertEaAttReq`) — 이후 상신을 안 해도 신청
   레코드와 '작성 중' 전자결재 문서가 남는다. 검증용으로 돌렸다면 그룹웨어에서 정리할 것.
 
+- ⚠️ **연차 현황 조회(`fetchVacationStatus`)는 전용 파티션(`AUTOMATION_PARTITION.vacationStatus`)** —
+  eaBox 와 같은 이유다. `openPage` 가 파티션 쿠키를 비우므로 기본 파티션(gw-approval)으로 열면
+  [상신] 하라고 넘겨둔 작성 창의 로그인이 끊긴다(2026-08-31 감사에서 발견·수정). 이 조회는
+  `closeKeptPage()` 를 부르면 안 되는 경로라 파티션 분리가 유일한 해법이고, 조회 자체도
+  `statusRunning` 플래그로 동시 실행을 막는다(겹치면 뒤 openPage 가 앞 조회의 쿠키를 비운다).
+
 **Kendo 위젯 입력** — `input.value` 에 직접 쓰면 위젯 모델이 갱신되지 않아 코드가 비어 나간다.
 ComboBox 는 `value()/text()/trigger('change')`, DatePicker 는 `value(Date)/trigger('change')`.
 날짜 change 를 발화해야 화면이 신청일수·연차차감을 서버에서 계산해 채운다.

@@ -8,6 +8,7 @@
 // 마지막 단계에서 **작성 창이 스스로 닫히며 전자결재 창을 연다**. 그 창에서 [상신]까지 눌러
 // 완료하고, 자동으로 마무리하지 못하면 창을 사용자에게 넘긴다(결재는 언제나 사용자 몫).
 import {
+  AUTOMATION_PARTITION,
   closePage,
   evalInPage,
   openPage,
@@ -34,6 +35,9 @@ import type {
 
 /** 동시 실행 방지 */
 let running = false;
+
+/** 연차 현황 조회 동시 실행 방지 — 겹치면 뒤 openPage 가 앞 조회의 파티션 쿠키를 비운다 */
+let statusRunning = false;
 
 /** 제목에 쓰는 부문 문구 — 근무자 소속("플랫폼서비스사업부문 FE")의 앞부분 */
 const WORKER_DIVISION = WORKER_DEPT.split(/\s+/)[0];
@@ -592,10 +596,17 @@ export async function runVacationDraft(
   const step = (s: string) => onStep?.(s);
   const sel = VACATION_CONFIG.selectors;
 
-  closeKeptPage();
-
-  // 작성 과정을 사용자가 보도록 띄운다. save() 가 window.open 을 쓰므로 팝업 허용도 필수
-  const page = await openPage(true, { allowPopups: true });
+  let page: Page;
+  try {
+    closeKeptPage();
+    // 작성 과정을 사용자가 보도록 띄운다. save() 가 window.open 을 쓰므로 팝업 허용도 필수
+    page = await openPage(true, { allowPopups: true });
+  } catch (err) {
+    // 창을 열기도 전에 실패 — 여기서 running 을 풀지 않으면 아래 finally 에 못 가서
+    // 재시작 전까지 휴가 결재·연차 조회가 전부 "진행 중" 으로 막힌다
+    running = false;
+    throw err;
+  }
   let handed = false;
   try {
     step('휴가신청서 양식 여는 중…');
@@ -712,14 +723,25 @@ export async function runVacationDraft(
  */
 export async function fetchVacationStatus(): Promise<VacationStatus> {
   if (running) throw new Error('휴가신청서 작업이 진행 중입니다.');
-  const page = await openPage(false, { allowPopups: true });
+  if (statusRunning) throw new Error('연차 현황 조회가 이미 진행 중입니다.');
+  statusRunning = true;
+  // openPage 실패도 finally 로 플래그가 풀리도록 창 열기부터 try 안에서 한다
+  let page: Page | null = null;
   try {
+    // ⚠️ 작성 창과 파티션을 나눈다 — openPage 는 그 파티션의 쿠키를 비우므로, 기본
+    // 파티션(gw-approval)으로 열면 [상신] 하라고 넘겨둔 작성 창의 로그인이 끊긴다
+    // (eaBox 와 같은 이유의 분리. 이 조회는 closeKeptPage 를 부르면 안 되기도 하다).
+    page = await openPage(false, {
+      allowPopups: true,
+      partition: AUTOMATION_PARTITION.vacationStatus,
+    });
     await gotoAsUser(page, VACATION_CONFIG.formUrl);
     await waitFormReady(page);
     const status = await readStatus(page);
     const { name, chapter } = parseApplicant(await readApplicant(page));
     return { ...status, name, chapter, division: WORKER_DIVISION };
   } finally {
+    statusRunning = false;
     closePage(page);
   }
 }

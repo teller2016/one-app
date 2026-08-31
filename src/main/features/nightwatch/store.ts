@@ -159,6 +159,22 @@ export function saveNwState(state: NwState) {
   writeJson(nwPaths().state, state);
 }
 
+/**
+ * 원장을 방금 읽어 고친 뒤 곧바로 저장한다 — 짧은 read-modify-write 한 단위.
+ *
+ * ⚠️ 오래 걸리는 작업(미션은 수십 분)이 시작 때 읽은 state 스냅샷을 들고 있다가
+ * 종료 시 `saveNwState(state)` 로 통째로 저장하면, 그 사이의 숨김·삭제·자동 정리가
+ * 전부 되돌아간다(lost update — 2026-08-31 감사에서 확인). 장기 작업의 종료 기록은
+ * 스냅샷 저장이 아니라 반드시 이 함수로 쓸 것. mutate 는 동기 함수여야 한다
+ * (await 를 끼우면 다시 같은 병이 된다).
+ */
+export function updateNwState<T>(mutate: (state: NwState) => T): T {
+  const state = loadNwState();
+  const result = mutate(state);
+  saveNwState(state);
+  return result;
+}
+
 // ── 자동 순회 진행 상태 ──────────────────────────────────────────────────
 // ⚠️ 메모리에만 두면 안 된다 — 앱 재시작이 하루 상한과 '오늘 건너뛴 티켓' 기억을
 // 지워버려, 저장소를 못 정한 티켓에 매 tick 마다 선택 미션을 다시 태운다.

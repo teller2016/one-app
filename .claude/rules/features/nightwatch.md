@@ -50,6 +50,11 @@ Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 
 그룹이 없다). 대신 후보에 `resolved` 를 실어 **자동 순회는 해결건을 건너뛴다**(이미 끝난 일에 무인
 비용을 쓰지 않는다 — 수동 [분석]은 언제든 가능). 후보 행에는 `pin` 아이콘으로 출처를 표시한다.
 
+⚠️ **원장(state.json) 쓰기는 `updateNwState()`(방금 읽어 병합 저장)로 한다** — 미션이 시작 때
+읽은 state 스냅샷을 수십 분 들고 있다가 종료 시 `saveNwState(state)` 로 통째 저장하면, 그 사이의
+숨김·삭제·자동 정리가 전부 되돌아간다(lost update — 2026-08-31 감사에서 발견·수정). 미션 종료
+기록은 해당 티켓 키만 병합하고, 미션 중 사용자가 지운 행은 되살리지 않는다(기록 생략 + 사이클 로그).
+
 안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존).
 
 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 자동 순회 진행 `auto-state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분·자동 분석 대상 저장소 `auto.repoIds` — 저장소 정보 자체는 프로젝트 레지스트리가 출처). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.

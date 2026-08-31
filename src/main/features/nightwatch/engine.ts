@@ -33,6 +33,7 @@ import {
   nwPaths,
   readCycleLogTail,
   saveNwState,
+  updateNwState,
 } from "./store";
 import type { NwState } from "./store";
 import { execFile } from "node:child_process";
@@ -393,9 +394,10 @@ async function runAnalysis(
       `/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS}`
     )) as unknown as JiraIssueRaw;
     // 같은 프로젝트·말머리의 다음 분석 때 이 저장소가 기본 선택되도록 기억
-    const state = loadNwState();
-    state.repoDefaults[repoDefaultKey(key, issue.fields.summary)] = repo.id;
-    return await processTicket(getNightwatchConfig(), state, issue, repo, opts);
+    updateNwState((s) => {
+      s.repoDefaults[repoDefaultKey(key, issue.fields.summary)] = repo.id;
+    });
+    return await processTicket(getNightwatchConfig(), issue, repo, opts);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     appendCycleLog(`분석 오류: ${message}`);
@@ -495,7 +497,6 @@ type JiraIssueRaw = {
 
 async function processTicket(
   cfg: NightwatchConfig,
-  state: NwState,
   issue: JiraIssueRaw,
   repo: AnalysisRepo,
   opts: NightwatchAnalyzeOpts
@@ -506,14 +507,18 @@ async function processTicket(
   const attachmentsDir = path.join(ticketDir, "attachments");
   fs.mkdirSync(attachmentsDir, { recursive: true });
   const startedAt = new Date().toISOString();
-  state.tickets[key] = {
-    status: "in_progress",
-    startedAt,
-    repo: repo.name,
-    title: issue.fields.summary,
-    model: opts.model ?? null,
-  };
-  saveNwState(state);
+  // ⚠️ state 스냅샷을 미션(수십 분) 내내 들고 있으면 안 된다 — 종료 시 통째 저장이
+  // 그 사이의 숨김·삭제·자동 정리를 되덮는다(lost update). 원장 쓰기는 매번
+  // updateNwState 로 "방금 읽은 원장"에 이 티켓만 병합한다.
+  updateNwState((s) => {
+    s.tickets[key] = {
+      status: "in_progress",
+      startedAt,
+      repo: repo.name,
+      title: issue.fields.summary,
+      model: opts.model ?? null,
+    };
+  });
   appendCycleLog(`ticket ${key}: 시작 (${repo.name} — ${issue.fields.summary})`);
   // 미션 전 단계도 UI 라이브 패널에 보이도록 미션 로그를 여기서 초기화한다
   const missionLogPath = path.join(p.logs, `${key}.mission.log`);
@@ -600,34 +605,53 @@ async function processTicket(
     const durationMin = Math.round(
       (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 60000
     );
-    const entry = state.tickets[key];
-    Object.assign(entry, {
-      finishedAt,
-      durationMin,
-      costUsd: outcome.costUsd,
-      summary: result?.summary ?? null,
-      error: outcome.ok ? null : outcome.error,
-      status: violation
-        ? "violation_edited"
-        : outcome.ok && result
-        ? "analyzed"
-        : "failed",
+    const status = violation
+      ? ("violation_edited" as const)
+      : outcome.ok && result
+      ? ("analyzed" as const)
+      : ("failed" as const);
+    // 미션 중 사용자가 이 행을 지웠으면(원장에 키 없음) 되살리지 않는다 — 삭제 존중.
+    // 이때 미션이 삭제 뒤 다시 써 둔 산출물(리포트·로그·work)도 함께 지운다 —
+    // 원장에 없는 파일은 UI 에도 안 보이고 30일 정리도 원장만 돌아 영구히 남는다.
+    const recorded = updateNwState((s) => {
+      const entry = s.tickets[key];
+      if (!entry) return false;
+      Object.assign(entry, {
+        finishedAt,
+        durationMin,
+        costUsd: outcome.costUsd,
+        summary: result?.summary ?? null,
+        error: outcome.ok ? null : outcome.error,
+        status,
+      });
+      return true;
     });
-    saveNwState(state);
+    if (!recorded) removeTicketArtifacts(key);
     appendCycleLog(
-      `ticket ${key}: ${entry.status} (${durationMin}분${
+      `ticket ${key}: ${status} (${durationMin}분${
         outcome.costUsd != null ? `, $${outcome.costUsd.toFixed(2)}` : ""
-      })`
+      })${recorded ? "" : " — 미션 중 삭제된 티켓이라 원장 기록·산출물 생략"}`
     );
-    return { ok: true, output: `${key}: ${entry.status} (${durationMin}분)` };
+    return {
+      ok: true,
+      output: `${key}: ${status} (${durationMin}분)${
+        recorded ? "" : " — 미션 중 삭제되어 원장에는 기록하지 않음"
+      }`,
+    };
   } catch (e) {
     runningChild = null;
     runningTicket = null;
     const message = e instanceof Error ? e.message : String(e);
-    state.tickets[key].status = "failed";
-    state.tickets[key].error = message;
-    state.tickets[key].finishedAt = new Date().toISOString();
-    saveNwState(state);
+    const recorded = updateNwState((s) => {
+      const entry = s.tickets[key];
+      if (!entry) return false; // 미션 중 삭제된 행은 되살리지 않는다
+      entry.status = "failed";
+      entry.error = message;
+      entry.finishedAt = new Date().toISOString();
+      return true;
+    });
+    // 삭제 존중 — 그 사이 다시 생긴 산출물(미션 로그 등)도 함께 정리 (위 성공 경로와 동일)
+    if (!recorded) removeTicketArtifacts(key);
     appendCycleLog(`ticket ${key}: failed (${message})`);
     return { ok: false, output: `${key} 실패: ${message}` };
   }

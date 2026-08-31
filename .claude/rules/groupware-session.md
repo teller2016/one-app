@@ -21,7 +21,7 @@ paths:
 - 근태 조회가 **0.9초 → 0.2초**(Chrome 기동이 없어짐). 패키지에서 8.4MB 감소.
 - ⚠️ **`openPage` 는 열 때 그 파티션의 쿠키를 비운다** — 동시에 돌 수 있는 기능은 파티션을
   달리해야 서로의 세션을 지우지 않는다. `AUTOMATION_PARTITION`(approval/login/attendance/
-  schedule/weekly)에 목록이 있고, `openPage(show, {partition})` 로 지정한다.
+  schedule/weekly/eaBox/vacationStatus/altLogin)에 목록이 있고, `openPage(show, {partition})` 로 지정한다.
 
 ## 사용법
 - `getGroupwareSession()` → 쿠키 확보(TTL 20분 캐시, 동시 요청은 하나의 로그인을 공유).
