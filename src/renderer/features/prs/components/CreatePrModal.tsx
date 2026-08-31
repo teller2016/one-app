@@ -13,6 +13,7 @@ import { Input } from '../../../components/Input';
 import { Select } from '../../../components/Select';
 import { Textarea } from '../../../components/Textarea';
 import { FormRow } from '../../../components/FormRow';
+import { errMsg } from '../../../lib/errMsg';
 import { baseTagOf, needsBaseConfirm, sortBaseOptions } from '../lib/baseBranches';
 import { draftPr } from '../lib/prDraft';
 import { rel } from '../lib/relTime';
@@ -222,25 +223,35 @@ export function CreatePrModal({
     if (!title.trim() || !confirmOk || !head) return;
     setCreating(true);
     setCreateError('');
-    const res = await window.oneApp.prs.create({
-      repo,
-      head,
-      base,
-      title: title.trim(),
-      body,
-    });
-    setCreating(false);
-    if (!res.ok || res.number == null) {
-      setCreateError(res.error ?? 'PR 생성에 실패했습니다.');
+    // invoke 거부(폰 셸 WS 끊김 등)도 잡는다 — 안 잡으면 creating 스피너가 영영 남는다
+    let created: { number: number; url?: string };
+    try {
+      const res = await window.oneApp.prs.create({
+        repo,
+        head,
+        base,
+        title: title.trim(),
+        body,
+      });
+      // number 0 도 실패로 본다 — main 의 `?? 0` 폴백이 성공으로 통과하면 #0 을 조회하게 된다
+      if (!res.ok || !res.number) {
+        setCreateError(res.error ?? 'PR 생성에 실패했습니다.');
+        return;
+      }
+      created = { number: res.number, url: res.url };
+    } catch (err) {
+      setCreateError(errMsg(err, 'PR 생성에 실패했습니다.'));
       return;
+    } finally {
+      setCreating(false);
     }
     onCreated({
       repo,
-      number: res.number,
+      number: created.number,
       title: title.trim(),
       head,
       base,
-      url: res.url,
+      url: created.url,
     });
   };
 

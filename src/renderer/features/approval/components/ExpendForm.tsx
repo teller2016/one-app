@@ -6,6 +6,7 @@ import { DatePicker } from '../../../components/DatePicker';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
+import { errMsg } from '../../../lib/errMsg';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import {
@@ -67,16 +68,22 @@ export function ExpendForm() {
     setBusy(true);
     setStep('실행 준비 중…');
     setError('');
-    const res = await window.oneApp.approval.runExpend({
-      month,
-      parking: parkingOn ? { manCount: man, halfCount: half } : null,
-      dinners: dinnerOn ? dinnerRows.map((d) => ({ date: d.date, amount: d.won })) : [],
-    });
-    setBusy(false);
-    if (res.ok) setDone(res);
-    else {
-      setError(res.error ?? '작성에 실패했습니다.');
-      setDone(res.added ? res : null); // 일부라도 들어갔으면 결과 화면으로
+    // invoke 거부도 잡는다 — busy 가 남으면 폼 전체가 disabled 로 잠긴다
+    try {
+      const res = await window.oneApp.approval.runExpend({
+        month,
+        parking: parkingOn ? { manCount: man, halfCount: half } : null,
+        dinners: dinnerOn ? dinnerRows.map((d) => ({ date: d.date, amount: d.won })) : [],
+      });
+      if (res.ok) setDone(res);
+      else {
+        setError(res.error ?? '작성에 실패했습니다.');
+        setDone(res.added ? res : null); // 일부라도 들어갔으면 결과 화면으로
+      }
+    } catch (err) {
+      setError(errMsg(err, '작성에 실패했습니다.'));
+    } finally {
+      setBusy(false);
     }
   };
 

@@ -4,6 +4,7 @@ import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { errMsg } from '../../../lib/errMsg';
 import { useBackClose } from '../../../lib/useBackClose';
 import { useThemeMode } from '../../../lib/theme';
 import { isDone } from '../lib/issue';
@@ -124,15 +125,25 @@ export function JiraDetailPanel({
     if (!open || !issueKey) return;
     let stale = false; // 다른 이슈로 갈아탄 뒤 늦게 도착한 응답 무시
     setState({ kind: 'loading' });
-    void window.oneApp.jira.getDetail(issueKey).then((res) => {
-      if (stale) return;
-      if (res.ok && res.detail) setState({ kind: 'ok', detail: res.detail });
-      else
-        setState({
-          kind: 'error',
-          message: res.error ?? '이슈를 불러오지 못했습니다.',
-        });
-    });
+    void window.oneApp.jira
+      .getDetail(issueKey)
+      .then((res) => {
+        if (stale) return;
+        if (res.ok && res.detail) setState({ kind: 'ok', detail: res.detail });
+        else
+          setState({
+            kind: 'error',
+            message: res.error ?? '이슈를 불러오지 못했습니다.',
+          });
+      })
+      .catch((err) => {
+        // invoke 거부(핸들러 미등록·폰 WS 끊김)도 잡는다 — 안 잡으면 스피너가 영영 남는다
+        if (!stale)
+          setState({
+            kind: 'error',
+            message: errMsg(err, '이슈를 불러오지 못했습니다.'),
+          });
+      });
     return () => {
       stale = true;
     };

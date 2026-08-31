@@ -7,6 +7,7 @@ import { Input } from '../../../components/Input';
 import { Select } from '../../../components/Select';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import { Icon } from '../../../components/Icon';
@@ -137,41 +138,53 @@ export function VacationForm() {
 
   const loadStatus = async () => {
     setStatusBusy(true);
-    const res = await window.oneApp.approval.vacationStatus();
-    setStatusBusy(false);
-    if (res.ok && res.status) setStatus(res.status);
-    else setError(res.error ?? '연차 현황을 불러오지 못했습니다.');
+    // invoke 거부(핸들러 미등록 등)도 잡는다 — finally 가 없으면 busy 가 영영 남아 폼이 잠긴다
+    try {
+      const res = await window.oneApp.approval.vacationStatus();
+      if (res.ok && res.status) setStatus(res.status);
+      else setError(res.error ?? '연차 현황을 불러오지 못했습니다.');
+    } catch (err) {
+      setError(errMsg(err, '연차 현황을 불러오지 못했습니다.'));
+    } finally {
+      setStatusBusy(false);
+    }
   };
 
   const run = async () => {
     setBusy(true);
     setStep('실행 준비 중…');
     setError('');
-    const res = await window.oneApp.approval.submitVacation({
-      attDivName,
-      fromDate,
-      toDate: singleDay ? fromDate : toDate,
-      // 제목 표기 표준 — 시차·반차는 시간대, 대체휴가는 휴일근무일이 제목에 들어간다
-      useStartTime: timed ? useStartTime : undefined,
-      useEndTime: timed ? useEndTime : undefined,
-      holidayWorkDate: substitute ? holidayWorkDate : undefined,
-      // 사용자가 직접 고친 제목만 보낸다 — 비우면 main 이 신청자 이름까지 넣어 만든다.
-      // 자리표시가 남아 있으면 고치다 만 것이므로 main 에 맡긴다(그대로 올라가면 곤란하다).
-      title: titleEdited && !title.includes(APPLICANT_PLACEHOLDER) ? title.trim() : '',
-      remark: remark.trim(),
-      reason,
-      reasonEtc: reasonEtc.trim(),
-      emergencyContact: emergencyContact.trim(),
-      handovers: handovers
-        .filter((h) => h.project.trim() || h.members.trim())
-        .map((h) => ({ project: h.project.trim(), members: h.members.trim() })),
-    });
-    setBusy(false);
-    if (res.ok) {
-      setDone(res);
-      toast('휴가신청서를 작성했습니다. 창에서 [상신] 하세요.');
-    } else {
-      setError(res.error ?? '실행에 실패했습니다.');
+    // invoke 거부도 잡는다 — busy 가 남으면 폼 전체가 disabled 로 잠긴다
+    try {
+      const res = await window.oneApp.approval.submitVacation({
+        attDivName,
+        fromDate,
+        toDate: singleDay ? fromDate : toDate,
+        // 제목 표기 표준 — 시차·반차는 시간대, 대체휴가는 휴일근무일이 제목에 들어간다
+        useStartTime: timed ? useStartTime : undefined,
+        useEndTime: timed ? useEndTime : undefined,
+        holidayWorkDate: substitute ? holidayWorkDate : undefined,
+        // 사용자가 직접 고친 제목만 보낸다 — 비우면 main 이 신청자 이름까지 넣어 만든다.
+        // 자리표시가 남아 있으면 고치다 만 것이므로 main 에 맡긴다(그대로 올라가면 곤란하다).
+        title: titleEdited && !title.includes(APPLICANT_PLACEHOLDER) ? title.trim() : '',
+        remark: remark.trim(),
+        reason,
+        reasonEtc: reasonEtc.trim(),
+        emergencyContact: emergencyContact.trim(),
+        handovers: handovers
+          .filter((h) => h.project.trim() || h.members.trim())
+          .map((h) => ({ project: h.project.trim(), members: h.members.trim() })),
+      });
+      if (res.ok) {
+        setDone(res);
+        toast('휴가신청서를 작성했습니다. 창에서 [상신] 하세요.');
+      } else {
+        setError(res.error ?? '실행에 실패했습니다.');
+      }
+    } catch (err) {
+      setError(errMsg(err, '실행에 실패했습니다.'));
+    } finally {
+      setBusy(false);
     }
   };
 

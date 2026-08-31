@@ -14,6 +14,7 @@ import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
 import { RECHECK_POLL_MS } from '../lib/conflictRecheck';
 import { rel } from '../lib/relTime';
@@ -112,11 +113,18 @@ export function PrDetail({
     if (!ok) return;
     setMerging(true);
     setMergeError('');
-    const res = await window.oneApp.prs.merge(pr.repo, pr.number, method);
-    setMerging(false);
-    if (!res.ok) {
-      setMergeError(res.error ?? '머지에 실패했습니다.');
+    // invoke 거부(폰 셸 WS 끊김 등)도 잡는다 — 안 잡으면 merging 스피너가 영영 남는다
+    try {
+      const res = await window.oneApp.prs.merge(pr.repo, pr.number, method);
+      if (!res.ok) {
+        setMergeError(res.error ?? '머지에 실패했습니다.');
+        return;
+      }
+    } catch (err) {
+      setMergeError(errMsg(err, '머지에 실패했습니다.'));
       return;
+    } finally {
+      setMerging(false);
     }
     onMerged(pr);
   };

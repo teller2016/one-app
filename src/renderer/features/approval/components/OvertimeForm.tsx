@@ -7,6 +7,7 @@ import { Input } from '../../../components/Input';
 import { Textarea } from '../../../components/Textarea';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import { defaultEndTime, hoursTotal, today } from '../lib/calc';
@@ -55,20 +56,26 @@ export function OvertimeForm({
     setBusy(true);
     setStep('실행 준비 중…');
     setError('');
-    const res = await window.oneApp.approval.submitOvertime({
-      date,
-      startTime,
-      endTime,
-      target: target.trim(),
-      content: content.trim(),
-      reason: reason.trim(),
-    });
-    setBusy(false);
-    if (res.ok) {
-      setDone(res);
-      toast('연장근무내역서를 작성했습니다. 창에서 [상신] 하세요.');
-    } else {
-      setError(res.error ?? '실행에 실패했습니다.');
+    // invoke 거부도 잡는다 — busy 가 남으면 폼 전체가 disabled 로 잠긴다
+    try {
+      const res = await window.oneApp.approval.submitOvertime({
+        date,
+        startTime,
+        endTime,
+        target: target.trim(),
+        content: content.trim(),
+        reason: reason.trim(),
+      });
+      if (res.ok) {
+        setDone(res);
+        toast('연장근무내역서를 작성했습니다. 창에서 [상신] 하세요.');
+      } else {
+        setError(res.error ?? '실행에 실패했습니다.');
+      }
+    } catch (err) {
+      setError(errMsg(err, '실행에 실패했습니다.'));
+    } finally {
+      setBusy(false);
     }
   };
 

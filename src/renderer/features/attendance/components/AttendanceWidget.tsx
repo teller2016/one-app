@@ -6,6 +6,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
+import { errMsg } from '../../../lib/errMsg';
 import { publishAttendance } from '../lib/shared';
 
 // ⚠️ lazy — 사이드바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
@@ -34,15 +35,23 @@ export function AttendanceWidget() {
     setBusy('fetch');
     setError('');
     publishAttendance({ loading: true });
-    const res = await window.oneApp.attendance.fetch(force);
-    if (res.ok && res.info) {
-      setInfo(res.info);
-      publishAttendance({ info: res.info, error: '', loading: false });
-    } else {
-      setError(res.error ?? '조회 실패');
-      publishAttendance({ error: res.error ?? '조회 실패', loading: false });
+    // invoke 거부도 잡는다 — finally 가 없으면 busy·팝오버 loading 이 영영 남는다
+    try {
+      const res = await window.oneApp.attendance.fetch(force);
+      if (res.ok && res.info) {
+        setInfo(res.info);
+        publishAttendance({ info: res.info, error: '', loading: false });
+      } else {
+        setError(res.error ?? '조회 실패');
+        publishAttendance({ error: res.error ?? '조회 실패', loading: false });
+      }
+    } catch (err) {
+      const msg = errMsg(err, '조회 실패');
+      setError(msg);
+      publishAttendance({ error: msg, loading: false });
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
   };
 
   useEffect(() => {
@@ -74,14 +83,20 @@ export function AttendanceWidget() {
     if (!ok) return;
     setBusy(action);
     setError('');
-    const res = await window.oneApp.attendance.stamp(action);
-    if (res.ok && res.info) {
-      setInfo(res.info);
-      publishAttendance({ info: res.info, error: '', loading: false });
-    } else {
-      setError(res.error ?? `${label} 처리 실패`);
+    // 찍기 invoke 거부도 잡는다 — busy 가 남으면 출퇴근 버튼이 영영 비활성이다
+    try {
+      const res = await window.oneApp.attendance.stamp(action);
+      if (res.ok && res.info) {
+        setInfo(res.info);
+        publishAttendance({ info: res.info, error: '', loading: false });
+      } else {
+        setError(res.error ?? `${label} 처리 실패`);
+      }
+    } catch (err) {
+      setError(errMsg(err, `${label} 처리 실패`));
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
   };
 
   // 다음에 할 행동: 출근 전이면 출근, 출근만 했으면 퇴근, 둘 다면 없음

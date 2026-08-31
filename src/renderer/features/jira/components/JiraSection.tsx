@@ -17,6 +17,7 @@ import { StatusDot } from '../../../components/StatusDot';
 import { Tooltip } from '../../../components/Tooltip';
 import { useToast } from '../../../components/Toast';
 import { EmptyState } from '../../../components/EmptyState';
+import { errMsg } from '../../../lib/errMsg';
 import { openTerminalSession } from '../../../lib/sectionNav';
 import { usePolling } from '../../../lib/usePolling';
 import { useCopy } from '../../../lib/useCopy';
@@ -351,17 +352,24 @@ export function JiraSection() {
   // force — 수동 새로고침은 main 의 TTL 캐시를 우회해 항상 최신을 본다
   const load = useCallback(async (force = false) => {
     setLoading(true);
-    const res = await window.oneApp.jira.list(force);
-    setConfigured(res.configured);
-    if (res.ok && res.issues) {
-      setIssues(res.issues);
-      setError('');
-    } else {
-      setError(res.error ?? '이슈를 불러오지 못했습니다.');
+    try {
+      const res = await window.oneApp.jira.list(force);
+      setConfigured(res.configured);
+      if (res.ok && res.issues) {
+        setIssues(res.issues);
+        setError('');
+      } else {
+        setError(res.error ?? '이슈를 불러오지 못했습니다.');
+      }
+      // 추가 티켓 조회만 실패한 경우 — 본 목록은 살아 있으므로 따로 알린다
+      setAddedError(res.addedError ?? '');
+    } catch (err) {
+      // invoke 거부(핸들러 미등록·폰 WS 끊김)도 잡는다 — 안 잡으면 loading 이 영영 남는다
+      setError(errMsg(err, '이슈를 불러오지 못했습니다.'));
+      setAddedError(''); // 이전 조회의 추가 티켓 경고가 새 실패 배너와 겹치지 않게
+    } finally {
+      setLoading(false);
     }
-    // 추가 티켓 조회만 실패한 경우 — 본 목록은 살아 있으므로 따로 알린다
-    setAddedError(res.addedError ?? '');
-    setLoading(false);
   }, []);
 
   // 최초 로드 + 2분 자동 새로고침 (PR 섹션과 동일 주기).

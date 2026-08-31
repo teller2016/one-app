@@ -34,10 +34,17 @@ import type {
 const LIST_TTL_MS = 60_000;
 let listCache: { at: number; full: boolean; result: PrListResult } | null = null;
 let listInflight: { full: boolean; p: Promise<PrListResult> } | null = null;
+// 무효화 세대 — 무효화 이전에 시작된 조회가 늦게 돌아와 stale 목록을 다시 캐시하는 것을 막는다
+let listGen = 0;
 
 /** 목록 캐시 무효화 — 내가 만든 변화(생성·머지)는 즉시 목록에 반영돼야 한다 */
 function invalidatePrList(): void {
   listCache = null;
+  // ⚠️ 캐시만 비우면 부족하다 — 생성·머지 직후의 재조회가 "생성 전에 시작된" in-flight
+  // 조회에 합류해 새 PR 없는 목록을 받고, 그 결과가 다시 캐시로 앉아 최대 60초 굳었다
+  // (2026-08-31 감사). in-flight 합류를 끊고 세대를 올려 늦은 결과의 캐시 기록도 막는다.
+  listInflight = null;
+  listGen++;
 }
 
 const NO_GITEA = 'Gitea 주소가 설정되지 않았습니다. [환경설정 → 연동]을 확인하세요.';
@@ -103,9 +110,12 @@ export function registerPrsIpc() {
         if (cur && (cur.full || light)) return cur.p;
       }
 
+      const gen = listGen;
       const p = fetchPrList(light).then((r) => {
-        // 성공한 조회만 캐시한다 — 실패를 캐시하면 1분간 에러 화면이 굳는다
-        if (r.ok && r.configured) listCache = { at: Date.now(), full: !light, result: r };
+        // 성공한 조회만 캐시한다 — 실패를 캐시하면 1분간 에러 화면이 굳는다.
+        // 조회 중 무효화(생성·머지)가 지나갔으면 stale 결과라 캐시에 앉히지 않는다.
+        if (gen === listGen && r.ok && r.configured)
+          listCache = { at: Date.now(), full: !light, result: r };
         return r;
       });
       listInflight = { full: !light, p };

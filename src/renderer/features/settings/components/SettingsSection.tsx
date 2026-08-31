@@ -11,6 +11,7 @@ import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 import { AltAccountsCard } from '../../mail';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
 import {
@@ -64,6 +65,7 @@ export function SettingsSection() {
   );
   const [termNotify, setTermNotify] = useState<TerminalNotifyLevel>('sound');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   // 키체인 암호화 가능 여부 — false 면 비밀이 평문으로 저장되므로 배너로 알린다.
   // 기본값을 true 로 둬야 로딩 중 배너가 깜빡이지 않는다.
@@ -71,33 +73,71 @@ export function SettingsSection() {
   const toast = useToast();
 
   useEffect(() => {
-    window.oneApp?.settings.get().then((s) => {
-      setBizboxId(s.bizboxId);
-      setHasPassword(s.hasPassword);
-      setNotifyDeploy(s.notifyDeploy);
-      setJiraUrl(s.jiraUrl);
-      setJiraEmail(s.jiraEmail);
-      setHasJiraToken(s.hasJiraToken);
-      setGiteaUrl(s.giteaUrl);
-      setHasGiteaToken(s.hasGiteaToken);
-      setNotionRootUrl(s.notionRootUrl);
-      setHasNotionToken(s.hasNotionToken);
-      setSecureStorage(s.secureStorage);
-      // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
-      setTheme(s.theme);
-      applyThemePref(s.theme);
+    // 프리로드가 깨진 비정상 상황 — 옵셔널 체이닝이 체인 전체를 단락시켜 아래
+    // finally 도 안 돌므로, 여기서 loading 을 내려야 화면이 잠기지 않는다
+    if (!window.oneApp) {
       setLoading(false);
-    });
-    window.oneApp?.getAutostart().then((r) => setAutostart(r.enabled));
-    window.oneApp?.terminal?.notifyLevel.get().then(setTermNotify);
-    window.oneApp?.attendance.getReminders().then((r) => {
-      if (r.days?.length) setReminders(r.days);
-      if (r.repeat) {
-        setRepeatEnabled(r.repeat.enabled);
-        setRepeatMinutes(String(r.repeat.minutes));
-      }
-    });
-    window.oneApp?.schedule.getStartConfig().then(setSchedStart);
+      setLoadError('앱 브리지를 사용할 수 없습니다 — 앱을 다시 시작해 보세요.');
+      return;
+    }
+    window.oneApp.settings
+      .get()
+      .then((s) => {
+        setBizboxId(s.bizboxId);
+        setHasPassword(s.hasPassword);
+        setNotifyDeploy(s.notifyDeploy);
+        setJiraUrl(s.jiraUrl);
+        setJiraEmail(s.jiraEmail);
+        setHasJiraToken(s.hasJiraToken);
+        setGiteaUrl(s.giteaUrl);
+        setHasGiteaToken(s.hasGiteaToken);
+        setNotionRootUrl(s.notionRootUrl);
+        setHasNotionToken(s.hasNotionToken);
+        setSecureStorage(s.secureStorage);
+        // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
+        setTheme(s.theme);
+        applyThemePref(s.theme);
+      })
+      .catch((err) => {
+        // 안 잡으면 loading 이 영영 true 라 모든 입력이 조용히 disabled 로 남는다
+        setLoadError(errMsg(err, '설정을 불러오지 못했습니다.'));
+      })
+      .finally(() => setLoading(false));
+    // 부가 설정 조회 실패는 기본값으로 두되 조용히 넘기지 않는다 — 이대로 [저장] 하면
+    // 기본값이 저장된 값을 덮을 수 있어 사용자가 알아야 한다
+    const warn = (what: string) => () =>
+      setLoadError(
+        (prev) =>
+          prev || `${what} 설정을 불러오지 못했습니다. 저장 전에 값을 확인하세요.`,
+      );
+    window.oneApp
+      ?.getAutostart()
+      .then((r) => setAutostart(r.enabled))
+      .catch(warn('자동 시작'));
+    // 터미널 알림 강도는 [저장] 이 아니라 Segment 변경 즉시 저장이라 "저장 전에 확인"
+    // 안내가 어긋난다 — 사용자가 건드리기 전엔 덮어쓸 일도 없으니 문구를 달리 한다
+    window.oneApp?.terminal?.notifyLevel
+      .get()
+      .then(setTermNotify)
+      .catch(() =>
+        setLoadError(
+          (prev) => prev || '터미널 알림 설정을 불러오지 못했습니다.',
+        ),
+      );
+    window.oneApp?.attendance
+      .getReminders()
+      .then((r) => {
+        if (r.days?.length) setReminders(r.days);
+        if (r.repeat) {
+          setRepeatEnabled(r.repeat.enabled);
+          setRepeatMinutes(String(r.repeat.minutes));
+        }
+      })
+      .catch(warn('리마인더'));
+    window.oneApp?.schedule
+      .getStartConfig()
+      .then(setSchedStart)
+      .catch(warn('일정 시작'));
   }, []);
 
   // 재택 요일 토글 — 오름차순 유지
@@ -139,57 +179,82 @@ export function SettingsSection() {
     });
   };
 
+  // 저장은 4개 채널에 나눠 쓴다 — 하나의 catch 로 뭉뚱그리면 중간에 실패했을 때
+  // "절반만 저장된" 상태를 알 수 없어, 단계별로 잡아 실패한 항목을 구분해 알린다
   const save = async () => {
     setSaving(true);
+    const failed: string[] = [];
+    let firstErr: unknown;
+    const fail = (what: string, err: unknown) => {
+      failed.push(what);
+      firstErr ??= err;
+    };
     try {
-      const res = await window.oneApp.settings.set({
-        bizboxId,
-        password,
-        notifyDeploy,
-        jiraUrl,
-        jiraEmail,
-        jiraToken,
-        giteaUrl,
-        giteaToken,
-        notionRootUrl,
-        notionToken,
-      });
-      const savedReminders: ReminderConfig =
-        await window.oneApp.attendance.setReminders({
-          days: reminders,
-          repeat: {
-            enabled: repeatEnabled,
-            minutes: Number(repeatMinutes) || 10,
-          },
+      try {
+        const res = await window.oneApp.settings.set({
+          bizboxId,
+          password,
+          notifyDeploy,
+          jiraUrl,
+          jiraEmail,
+          jiraToken,
+          giteaUrl,
+          giteaToken,
+          notionRootUrl,
+          notionToken,
         });
-      const savedSchedStart =
-        await window.oneApp.schedule.setStartConfig(schedStart);
-      setSchedStart(savedSchedStart);
-      const auto = await window.oneApp.setAutostart(autostart);
-      setAutostart(auto.enabled);
-      setHasPassword(res.hasPassword);
-      setNotifyDeploy(res.notifyDeploy);
-      setJiraUrl(res.jiraUrl);
-      setJiraEmail(res.jiraEmail);
-      setHasJiraToken(res.hasJiraToken);
-      setJiraToken('');
-      setGiteaUrl(res.giteaUrl);
-      setHasGiteaToken(res.hasGiteaToken);
-      setGiteaToken('');
-      setNotionRootUrl(res.notionRootUrl);
-      setHasNotionToken(res.hasNotionToken);
-      setSecureStorage(res.secureStorage);
-      setNotionToken('');
-      if (savedReminders.days?.length) setReminders(savedReminders.days);
-      if (savedReminders.repeat) {
-        setRepeatEnabled(savedReminders.repeat.enabled);
-        setRepeatMinutes(String(savedReminders.repeat.minutes));
+        setHasPassword(res.hasPassword);
+        setNotifyDeploy(res.notifyDeploy);
+        setJiraUrl(res.jiraUrl);
+        setJiraEmail(res.jiraEmail);
+        setHasJiraToken(res.hasJiraToken);
+        setJiraToken('');
+        setGiteaUrl(res.giteaUrl);
+        setHasGiteaToken(res.hasGiteaToken);
+        setGiteaToken('');
+        setNotionRootUrl(res.notionRootUrl);
+        setHasNotionToken(res.hasNotionToken);
+        setSecureStorage(res.secureStorage);
+        setNotionToken('');
+        setPassword('');
+      } catch (err) {
+        fail('계정·연동', err);
       }
-      setPassword('');
-      toast('저장되었습니다');
-    } catch {
-      // IPC/파일 쓰기 실패 시 침묵하지 않고 알린다
-      toast('저장에 실패했습니다. 다시 시도해 주세요.', 'fail');
+      try {
+        const savedReminders: ReminderConfig =
+          await window.oneApp.attendance.setReminders({
+            days: reminders,
+            repeat: {
+              enabled: repeatEnabled,
+              minutes: Number(repeatMinutes) || 10,
+            },
+          });
+        if (savedReminders.days?.length) setReminders(savedReminders.days);
+        if (savedReminders.repeat) {
+          setRepeatEnabled(savedReminders.repeat.enabled);
+          setRepeatMinutes(String(savedReminders.repeat.minutes));
+        }
+      } catch (err) {
+        fail('리마인더', err);
+      }
+      try {
+        setSchedStart(await window.oneApp.schedule.setStartConfig(schedStart));
+      } catch (err) {
+        fail('일정 시작', err);
+      }
+      try {
+        const auto = await window.oneApp.setAutostart(autostart);
+        setAutostart(auto.enabled);
+      } catch (err) {
+        fail('자동 시작', err);
+      }
+      if (failed.length === 0) toast('저장되었습니다');
+      else {
+        // 4 = 저장 채널 수(계정·연동 / 리마인더 / 일정 시작 / 자동 시작)
+        const label =
+          failed.length === 4 ? '저장 실패' : `일부 저장 실패 (${failed.join('·')})`;
+        toast(`${label} — ${errMsg(firstErr, '다시 시도해 주세요.')}`, 'fail');
+      }
     } finally {
       setSaving(false);
     }
@@ -212,6 +277,8 @@ export function SettingsSection() {
           해제한 뒤 비밀 값을 다시 저장하세요.
         </Banner>
       )}
+
+      {loadError && <Banner variant="warning">{loadError}</Banner>}
 
       <Collapsible
         title="비즈박스 계정"

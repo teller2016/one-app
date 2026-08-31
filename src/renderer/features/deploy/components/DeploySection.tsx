@@ -6,6 +6,7 @@ import type {
   SaveDeployProjectInput,
 } from '../../../../shared/types';
 import { statusKey, jenkinsJobUrl, giteaCommitBase } from '../lib/format';
+import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
@@ -34,6 +35,7 @@ export function DeploySection() {
   const [projects, setProjects] = useState<DeployProjectView[]>([]);
   const [statuses, setStatuses] = useState<Record<string, DeployStatus>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [form, setForm] = useState<ProjectFormState | null>(null); // null 이면 목록 화면
   const [formError, setFormError] = useState('');
   const [details, setDetails] = useState<Record<string, DetailState>>({});
@@ -58,7 +60,10 @@ export function DeploySection() {
   useEffect(() => {
     window.oneApp?.settings
       .get()
-      .then((s) => setLinkCfg({ jiraUrl: s.jiraUrl, giteaUrl: s.giteaUrl }));
+      .then((s) => setLinkCfg({ jiraUrl: s.jiraUrl, giteaUrl: s.giteaUrl }))
+      .catch(() => {
+        // 커밋 링크화는 부가 기능 — 실패해도 해시·이슈 키가 평문으로 보일 뿐이다
+      });
   }, []);
 
   useTick(60_000); // "n분 전" 갱신용 1분 틱
@@ -144,11 +149,17 @@ export function DeploySection() {
   );
 
   useEffect(() => {
-    window.oneApp?.deploy.getProjects().then((list) => {
-      setProjects(list);
-      setLoading(false);
-      refreshStatuses(list);
-    });
+    window.oneApp?.deploy
+      .getProjects()
+      .then((list) => {
+        setProjects(list);
+        refreshStatuses(list);
+      })
+      .catch((err) => {
+        // 안 잡으면 loading 이 영영 true 라 섹션 전체가 "불러오는 중" 에 고착된다
+        setLoadError(errMsg(err, '프로젝트 목록을 불러오지 못했습니다.'));
+      })
+      .finally(() => setLoading(false));
     // 배포 진행 상태 이벤트 구독
     const off = window.oneApp?.deploy.onStatus(
       ({ projectId, targetId, status }) => {
@@ -187,10 +198,14 @@ export function DeploySection() {
     void window.oneApp.deploy
       .getPreview(projectId, targetId)
       .then((result) => setPreview({ loading: false, result }))
-      .catch((err: Error) =>
+      .catch((err: unknown) =>
         setPreview({
           loading: false,
-          result: { ok: false, configured: true, error: err.message },
+          result: {
+            ok: false,
+            configured: true,
+            error: errMsg(err, '미리보기 조회 실패'),
+          },
         }),
       );
   };
@@ -200,24 +215,32 @@ export function DeploySection() {
     const key = statusKey(projectId, targetId);
     optimistic.current.add(key); // watchBuild 가 몰고 갈 대상 — 주기 조회 보호
     setStatuses((prev) => ({ ...prev, [key]: { state: 'queued' } }));
-    const res = await window.oneApp.deploy.trigger(projectId, targetId);
-    if (!res.ok) {
+    // ⚠️ invoke 거부(폰 셸 WS 끊김 등)도 잡아야 한다 — 안 잡으면 낙관적 '대기중'이
+    // 주기 조회 보호(optimistic)에 걸려 폴링으로도 회복되지 않고 영영 남는다
+    try {
+      const res = await window.oneApp.deploy.trigger(projectId, targetId);
+      if (!res.ok) throw new Error(res.error ?? '실행 실패');
+    } catch (err) {
       optimistic.current.delete(key);
       setStatuses((prev) => ({
         ...prev,
-        [key]: { state: 'error', error: res.error ?? '실행 실패' },
+        [key]: { state: 'error', error: errMsg(err, '실행 실패') },
       }));
     }
   };
 
   // ── 커밋 내역 조회 (buildNumber 없으면 최근 빌드 기준) ──
   // 패널은 한 번에 하나만 — 하나를 열면 다른 대상의 패널은 닫는다
+  // 이력 스트립에서 빌드를 연달아 클릭하면 조회가 겹친다 — 늦게 도착한(먼저 요청한)
+  // 응답이 나중에 고른 빌드를 되덮지 않게 대상 키별 순번으로 stale 응답을 버린다
+  const detailSeq = useRef<Record<string, number>>({});
   const loadDetail = async (
     projectId: string,
     targetId: string,
     buildNumber?: number,
   ) => {
     const key = statusKey(projectId, targetId);
+    const seq = (detailSeq.current[key] = (detailSeq.current[key] ?? 0) + 1);
     setDetails((prev) => {
       const next: Record<string, DetailState> = {};
       for (const [k, v] of Object.entries(prev)) next[k] = { ...v, open: false };
@@ -230,40 +253,57 @@ export function DeploySection() {
       };
       return next;
     });
-    const res = await window.oneApp.deploy.getBuildDetail(
-      projectId,
-      targetId,
-      buildNumber,
-    );
-    setDetails((prev) => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        // 조회 중에 다른 패널을 열었으면(=이 패널은 닫힘) 닫힌 상태를 유지한다
-        open: prev[key]?.open ?? false,
-        loading: false,
-        detail: res.detail,
-        error: res.ok ? undefined : res.error ?? '조회 실패',
-        // 최근 빌드 기준 조회면 실제 번호로 동기화
-        selected: res.detail?.number ?? prev[key]?.selected,
-      },
-    }));
+    let detail: DetailState['detail'];
+    let error: string | undefined;
+    try {
+      const res = await window.oneApp.deploy.getBuildDetail(
+        projectId,
+        targetId,
+        buildNumber,
+      );
+      detail = res.detail;
+      error = res.ok ? undefined : res.error ?? '조회 실패';
+    } catch (err) {
+      // invoke 거부까지 잡는다 — 안 잡으면 loading 스피너가 영영 남는다
+      error = errMsg(err, '조회 실패');
+    }
+    setDetails((prev) => {
+      if (detailSeq.current[key] !== seq) return prev; // 더 새 요청이 나감 — 버림
+      return {
+        ...prev,
+        [key]: {
+          ...prev[key],
+          // 조회 중에 다른 패널을 열었으면(=이 패널은 닫힘) 닫힌 상태를 유지한다
+          open: prev[key]?.open ?? false,
+          loading: false,
+          detail,
+          error,
+          // 최근 빌드 기준 조회면 실제 번호로 동기화
+          selected: detail?.number ?? prev[key]?.selected,
+        },
+      };
+    });
   };
 
   // ── 빌드 이력 조회 (패널 상단 스트립) ──
   const loadHistory = async (projectId: string, targetId: string) => {
     const key = statusKey(projectId, targetId);
-    const res = await window.oneApp.deploy.getHistory(projectId, targetId);
+    let builds: DetailState['history'];
+    let historyError: string | undefined;
+    try {
+      const res = await window.oneApp.deploy.getHistory(projectId, targetId);
+      builds = res.builds;
+      historyError = res.ok ? undefined : res.error ?? '이력 조회 실패';
+    } catch (err) {
+      // invoke 거부도 잡는다 — unhandled rejection 없이 이력 자리에 오류를 표시
+      historyError = errMsg(err, '이력 조회 실패');
+    }
     setDetails((prev) => {
       const cur = prev[key];
       if (!cur?.open) return prev; // 그 사이 패널이 닫혔으면 무시
       return {
         ...prev,
-        [key]: {
-          ...cur,
-          history: res.builds,
-          historyError: res.ok ? undefined : res.error ?? '이력 조회 실패',
-        },
+        [key]: { ...cur, history: builds, historyError },
       };
     });
   };
@@ -306,11 +346,22 @@ export function DeploySection() {
     buildNumber: number,
   ) => {
     const key = statusKey(projectId, targetId);
-    const res = await window.oneApp.deploy.getLog(
-      projectId,
-      targetId,
-      buildNumber,
-    );
+    let text: string | undefined;
+    let truncated: boolean | undefined;
+    let error: string | undefined;
+    try {
+      const res = await window.oneApp.deploy.getLog(
+        projectId,
+        targetId,
+        buildNumber,
+      );
+      text = res.text;
+      truncated = res.truncated;
+      error = res.ok ? undefined : res.error ?? '로그 조회 실패';
+    } catch (err) {
+      // invoke 거부도 잡는다 — 안 잡으면 로그 스피너가 영영 남는다
+      error = errMsg(err, '로그 조회 실패');
+    }
     setDetails((prev) => {
       const cur = prev[key];
       if (!cur?.log?.open) return prev; // 그 사이 로그를 닫았으면 무시
@@ -318,13 +369,7 @@ export function DeploySection() {
         ...prev,
         [key]: {
           ...cur,
-          log: {
-            open: true,
-            loading: false,
-            text: res.text,
-            truncated: res.truncated,
-            error: res.ok ? undefined : res.error ?? '로그 조회 실패',
-          },
+          log: { open: true, loading: false, text, truncated, error },
         },
       };
     });
@@ -379,13 +424,16 @@ export function DeploySection() {
     });
     if (!ok) return;
 
-    const res = await window.oneApp.deploy.stopBuild(
-      projectId,
-      targetId,
-      buildNumber,
-    );
-    if (!res.ok) {
-      window.alert(`중지 실패: ${res.error ?? '알 수 없는 오류'}`);
+    try {
+      const res = await window.oneApp.deploy.stopBuild(
+        projectId,
+        targetId,
+        buildNumber,
+      );
+      if (!res.ok) throw new Error(res.error ?? '알 수 없는 오류');
+    } catch (err) {
+      // window.alert 는 렌더러 프로세스를 블로킹하고 OS 스타일이라 쓰지 않는다 (공용 토스트)
+      toast(`중지 실패: ${errMsg(err, '알 수 없는 오류')}`, 'fail');
       return;
     }
     // 젠킨스가 중단을 반영할 시간을 준 뒤 상태 갱신
@@ -498,7 +546,9 @@ export function DeploySection() {
         </Button>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <Banner variant="danger">{loadError}</Banner>
+      ) : loading ? (
         <p className="hint">불러오는 중...</p>
       ) : projects.length === 0 ? (
         <EmptyState
