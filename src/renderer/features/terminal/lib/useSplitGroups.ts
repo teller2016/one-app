@@ -68,10 +68,33 @@ function savedLayouts(): Record<string, LayoutNode[]> {
   }
 }
 
-function persistLayouts(map: Record<string, LayoutNode[]>): void {
-  if (Object.keys(map).length === 0) localStorage.removeItem(LAYOUT_STORAGE_KEY);
-  else localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(map));
+/**
+ * 저장 — ⚠️ 통째 쓰기가 아니라 **자기 소유 키만** 갈아끼운다(read-merge-write).
+ * localStorage 는 메인 창과 팝아웃 창들이 공유하는데, 각 창의 state 는 자기 마운트
+ * 시점의 스냅숏이라 통째로 쓰면 다른 창이 그 사이 저장한 키를 옛값으로 되돌린다.
+ */
+function persistLayouts(
+  map: Record<string, LayoutNode[]>,
+  ownsKey: (key: string) => boolean
+): void {
+  let stored: Record<string, unknown> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    stored = {};
+  }
+  const next: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(stored)) if (!ownsKey(k)) next[k] = v;
+  for (const [k, v] of Object.entries(map)) if (ownsKey(k)) next[k] = v;
+  if (Object.keys(next).length === 0) localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  else localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(next));
 }
+
+/** 메인 창의 레이아웃 키 소유 범위 — 팝아웃 키(win:*)만 남의 것이다 */
+const OWNS_MAIN_KEYS = (key: string): boolean => !key.startsWith('win:');
 
 /** 그룹이 하나도 없는 selKey 에 쓰는 고정 빈 배열 — 매번 [] 를 만들면 파생 memo 가 깨진다 */
 const NO_GROUPS: LayoutNode[] = [];
@@ -103,6 +126,12 @@ export type SplitGroups = {
   onDragEndSession: () => void;
   /** 그룹 멤버 탭을 탭바 빈 영역에 드롭 = 그룹에서 분리 */
   detachSession: (id: string) => void;
+  /** 그 세션이 속한 그룹의 멤버·직렬화 트리 — **무변경 조회**(팝아웃 창 밖 드롭이
+   *  최초 레이아웃으로 쓴다). 트리 제거는 배정 변경 후 sanitize 가 알아서 한다. */
+  peekGroup: (id: string) => { ids: string[]; layout: string } | null;
+  /** 임의 세션을 지금 화면의 pane 자리에 드롭한 것처럼 배치 — 크로스 윈도우 드롭이
+   *  배정 이동(브로드캐스트) **후에** 분할을 완성할 때 쓴다(참조 고정) */
+  applyDropAt: (sessionId: string, panelId: string, side: DropSide) => void;
   // 드롭 존 오버레이가 그대로 쓰는 세 핸들러 — 판정(X자·중앙 데드존)은 전부 안에서 한다
   onZoneDragOver: (e: ReactDragEvent<HTMLDivElement>, panelId: string) => void;
   onZoneDragLeave: () => void;
@@ -119,6 +148,10 @@ export function useSplitGroups({
   activeIdRef,
   setActiveId,
   rememberActive,
+  windowId = 'main',
+  remoteDragId = null,
+  onRemoteZoneDrop,
+  ownsLayoutKey = OWNS_MAIN_KEYS,
 }: {
   selKey: string;
   /** 최신값 ref — 드롭·그립 콜백의 참조를 고정하기 위한 것(pane·탭바 memo 유지) */
@@ -130,6 +163,16 @@ export function useSplitGroups({
   activeIdRef: MutableRefObject<string | null>;
   setActiveId: (id: string | null) => void;
   rememberActive: (key: string, id: string) => void;
+  /** 이 창의 id ('main' | popoutId) — 창 간 드래그 중계의 출처 표기 */
+  windowId?: string;
+  /** 다른 창에서 끌고 있는 세션(중계 미러) — 있으면 이 창도 드롭 존을 켠다 */
+  remoteDragId?: string | null;
+  /** 다른 창의 세션이 이 창 pane 존에 드롭됐다 — 배정 이동은 호스트가 정한다
+   *  (이 훅은 로컬 트리만 소유하고 IPC 를 모른다) */
+  onRemoteZoneDrop?: (sessionId: string, panelId: string, side: DropSide) => void;
+  /** localStorage 레이아웃 맵에서 이 창이 소유한 키 — 저장은 이 범위만 갈아끼운다
+   *  (기본 = 메인 창: win:* 제외 전부. 팝아웃은 자기 `win:<id>` 하나) */
+  ownsLayoutKey?: (key: string) => boolean;
 }): SplitGroups {
   const toast = useToast();
   const [layouts, setLayouts] = useState<Record<string, LayoutNode[]>>(savedLayouts);
@@ -165,8 +208,8 @@ export function useSplitGroups({
   const layoutDraggingRef = useRef(false);
   useEffect(() => {
     if (layoutDraggingRef.current) return;
-    persistLayouts(layouts);
-  }, [layouts]);
+    persistLayouts(layouts, ownsLayoutKey);
+  }, [layouts, ownsLayoutKey]);
 
   // 죽은 세션을 그룹에서 걷어낸다(형제 승격 → 1개 남으면 그룹 해체) —
   // ⌘⇧W·자연사·외부 tmux kill 이 전부 여기로 수렴한다.
@@ -231,12 +274,48 @@ export function useSplitGroups({
   // 자기 화면의 탭을 끌면 놓을 곳이 없다 — **드래그 중 다른 탭 위에 올리면 그 탭
   // (그룹 멤버면 그 그룹)의 화면이 열린다**(SessionTabs 의 스프링 로딩, selectTab 경유).
   // 원하는 화면을 하버로 열어 두고 아래 pane 에 놓으면 분할된다(2026-08-10 사용자 요청).
-  const onDragStartSession = useCallback((id: string) => setDragSession(id), []);
+  const onDragStartSession = useCallback(
+    (id: string) => {
+      setDragSession(id);
+      // 창 간 드래그 중계 — main 을 거쳐 전 창에 미러돼 다른 창도 드롭 존을 켠다.
+      // 그룹 멤버면 멤버 전원을 실어 보낸다(창 밖 드롭의 그룹째 분리 판단용 참고 정보)
+      const g = groupOf(layoutsRef.current[selKeyRef.current] ?? NO_GROUPS, id);
+      window.oneApp?.terminal?.windows?.drag({
+        sessionId: id,
+        sourceWindowId: windowId,
+        groupIds: g ? sessionIdsOf(g) : undefined,
+      });
+    },
+    [windowId, selKeyRef]
+  );
   const onDragEndSession = useCallback(() => {
     // 드롭이 밖에서 끝나도(무효 드롭 포함) 표시·드롭 존이 남지 않게 — WorkspaceNav 동일
     setDragSession(null);
     setDropHint(null);
+    // 중계 회수 — 크로스 드롭으로 소스 탭이 언마운트되면 dragend 가 안 오지만,
+    // 그 경우는 main 의 move-session 이 무조건 null 을 브로드캐스트해 준다
+    window.oneApp?.terminal?.windows?.drag(null);
   }, []);
+
+  // 다른 창의 드래그가 끝났는데 이 창에 드롭 프리뷰가 남았으면 거둔다 —
+  // (원격 드래그는 이 창의 document dragend 안전망에 걸리지 않는다)
+  useEffect(() => {
+    if (!remoteDragId) setDropHint((cur) => (dragSession ? cur : null));
+  }, [remoteDragId, dragSession]);
+
+  // ⚠️ 크로스 윈도우 드롭은 배정 브로드캐스트로 **소스 탭이 언마운트**돼 dragend 가
+  // 유실될 수 있다(document 안전망도 이 창의 drop/dragend 만 듣는다) — main 의
+  // move-session 이 무조건 브로드캐스트하는 dragState null 을 회수 신호로도 쓴다.
+  // 드래그 중에만 구독하므로 자기 dragend 가 보낸 null 에코로 루프가 돌지 않는다
+  // (회수 즉시 구독 해제).
+  useEffect(() => {
+    if (!dragSession) return;
+    const api = window.oneApp?.terminal?.windows;
+    if (!api?.onDragState) return;
+    return api.onDragState((state) => {
+      if (state === null) onDragEndSession();
+    });
+  }, [dragSession, onDragEndSession]);
 
   // ⚠️ **드래그가 어떻게 끝나든 드롭 존은 반드시 사라져야 한다** — `dragend` 는 드래그
   // 소스 노드가 드롭 처리 중에 언마운트되면 오지 않는다(브라우저 공통 동작). 그러면
@@ -277,6 +356,18 @@ export function useSplitGroups({
     [updateGroups, rememberActive, onDragEndSession, selKeyRef, setActiveId]
   );
 
+  /** 그룹 무변경 조회 — 창 밖 드롭이 그룹째 분리할 때 멤버·트리를 미리 떠 간다.
+   *  여기서 트리를 지우지 않는 이유: 창 생성이 거부될 수 있고(다른 창 위 드롭 등),
+   *  성공하면 배정 브로드캐스트로 세션들이 이 화면에서 빠져 sanitize 가 지운다. */
+  const peekGroup = useCallback(
+    (id: string): { ids: string[]; layout: string } | null => {
+      const list = layoutsRef.current[selKeyRef.current] ?? NO_GROUPS;
+      const g = groupOf(list, id);
+      return g ? { ids: sessionIdsOf(g), layout: JSON.stringify(g) } : null;
+    },
+    [selKeyRef]
+  );
+
   /** 존 안 포인터 위치 → X자(대각선) 판정 */
   const zoneSide = (e: ReactDragEvent<HTMLDivElement>): DropSide => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -302,7 +393,20 @@ export function useSplitGroups({
     const dragged = dragSession;
     setDragSession(null);
     setDropHint(null);
-    if (!dragged) return;
+    if (!dragged) {
+      // 다른 창의 탭이 이 창 pane 존에 드롭됐다 — 로컬 트리를 여기서 만지지 않는다
+      // (세션이 아직 이 창 소속이 아니라 sanitize 가 즉시 걷어낸다). 배정 이동과
+      // 도착 후 배치(applyDropAt)는 호스트가 정한다.
+      if (remoteDragId && onRemoteZoneDrop) onRemoteZoneDrop(remoteDragId, panelId, side);
+      return;
+    }
+    applyDropAt(dragged, panelId, side);
+  };
+
+  /** 드롭 배치의 몸통 — dragged 세션을 panelId 의 side 에 놓는다.
+   *  참조 고정 — 크로스 윈도우 드롭의 '도착 후 배치'가 effect 에서 부른다. */
+  const applyDropAt = useCallback(
+    (dragged: string, panelId: string, side: DropSide) => {
     const key = selKeyRef.current;
     const list = layoutsRef.current[key] ?? NO_GROUPS;
     const cur = activeIdRef.current;
@@ -361,10 +465,14 @@ export function useSplitGroups({
     }
     rememberActive(key, dragged);
     setActiveId(dragged); // 방금 놓은 세션이 포커스를 갖는다
-  };
+    },
+    [updateGroups, rememberActive, setActiveId, toast, selKeyRef, activeIdRef]
+  );
 
-  // 드롭 존 목록 — 분할 중이면 pane 마다, 단일 모드면 화면 전체 하나
-  const dropZones = !dragSession
+  // 드롭 존 목록 — 분할 중이면 pane 마다, 단일 모드면 화면 전체 하나.
+  // 다른 창의 드래그(remoteDragId 미러)도 이 창의 드롭 존을 켠다 — 크로스 윈도우 드롭
+  const draggingAny = dragSession ?? remoteDragId;
+  const dropZones = !draggingAny
     ? null
     : layoutRects
       ? layoutRects.panes.map((p) => ({ panelId: p.panelId, rect: p.rect }))
@@ -421,7 +529,7 @@ export function useSplitGroups({
       },
       onEnd: () => {
         layoutDraggingRef.current = false;
-        persistLayouts(layoutsRef.current); // 놓는 순간 1회 저장
+        persistLayouts(layoutsRef.current, ownsLayoutKey); // 놓는 순간 1회 저장
       },
     });
   };
@@ -437,6 +545,8 @@ export function useSplitGroups({
     onDragStartSession,
     onDragEndSession,
     detachSession,
+    peekGroup,
+    applyDropAt,
     onZoneDragOver,
     onZoneDragLeave,
     onZoneDrop,

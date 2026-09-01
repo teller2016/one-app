@@ -64,6 +64,20 @@ paths:
   자동 경로는 기록 없는 `applyTab`/`selectAndSave` 를 쓴다(새 세션 자동 활성화·죽은 세션 보정·
   Jira [작업] 진입·분할 pane 포커스 이동 — 노이즈가 되거나 화면이 안 바뀐다).
 
+## 팝아웃 창 (세션 별도 창 분리 — 2026-09-01)
+- **세션↔창 배정의 정본은 main `windows.ts`** — sidecar `runtimeFile('terminal-windows.json')`, 렌더러는 `terminal:windows` payload 브로드캐스트 미러만. 창 bounds 는 `windowState` 의 `popout:<id>` 키.
+- **"한 세션 = 전 창 통틀어 pane 1개"를 배정으로 강제** — 메인 창은 분리 세션의 pane 을 만들지 않고(자리표시자 탭), 각 창의 `TerminalPanes` 에는 **자기 소속 세션만**(mainSessions/mySessions) 넘긴다. 배정에서 빠지면 pane 언마운트 = detach. `useSplitGroups` 에도 소속 목록을 넘겨 sanitize 가 남의 창 세션을 그룹에서 걷어낸다.
+- ⚠️ **ipc.ts attach 추적은 sender 별**(`attachedBySender: Map<WebContents, Set<id>>`) — 전역 Set + `clear()` 로 되돌리면 창 하나의 파괴·리로드가 **다른 창 방송까지 끊는다**(팝아웃 이전의 결함).
+- 창 재사용: 팝아웃은 `main_window` 엔트리를 `?popout=<id>` 로 로드(새 Vite 엔트리 금지 — cacheDir 함정). `renderer.tsx` 분기 → `TerminalPopoutApp`. 그룹째 분리 시 최초 트리는 open→init 인자로 전달하고 **마운트 전에** localStorage `win:<id>` 키에 심는다(훅 초기 로드가 읽는다).
+- ⚠️ **localStorage(레이아웃·탭순서·lastActive)는 창들이 공유** — 저장은 반드시 **자기 소유 키만 read-merge-write**(`persistLayouts(ownsLayoutKey)`·`persistTabOrder`·`rememberActive`). 통째 쓰기로 되돌리면 다른 창이 그 사이 저장한 키를 마운트 시점 스냅숏으로 되돌린다. 닫힌 창의 `win:*` 키는 메인 창이 배정 목록 기준으로 청소(`pruneWindowScreenState`, windowsReady 게이트 필수).
+- 창 밖 드롭 판정은 **탭 자신의 dragend**(document 안전망보다 먼저 옴): `dropEffect==='none'` + screen 좌표가 창 밖. main 의 open 은 좌표가 다른 앱 창 위면 no-op(오발 방지). 그룹 트리는 `peekGroup`(무변경 조회)으로 떠 간다 — 거부돼도 잃는 것 없음.
+- 창 밖에 놓으면 새 창이 뜨기 직전 탭이 제자리로 되돌아가는 모션(HTML5 DnD 의 snap-back — 이 제스처는 OS 입장에서 언제나 '실패한 드롭'이다)이 보인다. **`setDragImage` 로 고스트를 투명하게 지우는 안은 시도했다가 되돌렸다**(2026-09-01 — "더 이상해졌다"). 끌리는 것이 눈에 안 보이는 쪽이 더 나빴다. 다시 가지 말 것.
+- ⚠️ 팝아웃 탭바는 곧 타이틀바다 — **컨테이너(`__tabs-list`·`__tabs-actions`)에 `no-drag` 를 걸지 말 것.** 리스트가 `flex:1` 이라 탭 오른쪽 빈 공간을 전부 먹어 창을 잡을 곳이 신호등 여백만 남는다(2026-09-01 사용자 지적). 빈 공간은 drag 로 두고 **실제로 누를 것(탭·[+]·우측 버튼)만** no-drag. 탭바 높이는 `--titlebar-h` — 신호등(y:16) 정렬 + 탭 위 여백이 손잡이가 된다.
+- 크로스 윈도우 DnD: dragstart/dragend 를 `terminal:drag` → `terminal:dragState` 로 전 창 미러(`remoteDragId`). ⚠️ **드롭을 받은 창은 로컬 트리에 바로 넣지 말 것** — 세션이 아직 그 창 소속이 아니라 sanitize 가 즉시 걷어낸다. `moveSession` 후 소속 브로드캐스트 도착을 기다려 배치(`pendingDropRef` → `applyDropAt`). ⚠️ 크로스 드롭은 소스 탭 언마운트로 dragend 가 유실될 수 있다 — main 의 move-session 이 **무조건 dragState null 브로드캐스트** + `useSplitGroups` 가 드래그 중에만 null 을 구독해 회수(dragSession 고착 = 드롭 존 오버레이가 휠·클릭을 삼키는 그 버그).
+- 닫힘 의미: 사용자 닫기(⌘W) = 세션 전원 메인 복귀(레코드 삭제가 곧 복귀 — 세션은 절대 안 죽음), 앱 종료 = 레코드 유지 → 재시작 복원. ⚠️ 복원(`initTerminalWindows`)은 **restoreSessions() 완료 후에만**(빈 목록 대조 = 배정 오파기). 마지막 세션이 죽은 창은 자동 닫힘.
+  - ⚠️ **정리를 `close` 이벤트에만 걸지 말 것 — `closed` 에도 걸어야 한다**(2026-09-01 E2E 실측). 창이 강제 파괴되는 경로(CDP/devtools 로 닫기, 렌더러 크래시)는 `close` 를 건너뛰고 `closed` 만 보낸다. 그때 배정이 남아 **창은 없는데 세션이 그 창에 갇히고**(자리표시자 클릭이 무반응), 재시작하면 **닫은 창이 되살아났다**. `closed` 는 어느 경로로든 반드시 오고, `removePopout` 은 두 번 불려도 no-op 이다.
+- 부수 규칙: 트레이·`activate` 의 '메인 창' 판정은 `getNotifyWindow()`(getAllWindows()[0] 금지 — 팝아웃이 잡힘). `setNotifyWindow` 는 메인 창 전용. 입력대기 토스트는 main 이 `isVisibleInPopout` 로 발신 게이트 + 팝아웃 visible 보고 시 `app:toast:dismiss` 로 회수. [이동]·focusReq 는 분리 세션이면 그 창 포커스로 라우팅.
+
 ## 분할(스플릿) 그룹
 - ⚠️ 아래 규칙(특히 '한 세션 = pane 하나'와 무변화 시 **원본 참조 반환**)은 `lib/layout.test.ts` 가 고정한다 — 트리 함수를 손볼 때는 `npm test` 로 확인할 것(`status.ts` 와 같은 방식).
 - `lib/layout.ts` 의 **이진 트리**(PanelNode/SplitNode + ratio)가 그룹 상태. **pane 들은 `__panes` 의 플랫 형제 유지** — React 재부모화 = xterm 언마운트라 트리 모양대로 중첩 금지. 렌더는 `computeLayout` 의 %rect 인라인.

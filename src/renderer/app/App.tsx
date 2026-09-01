@@ -142,6 +142,12 @@ function AppToastBridge(): null {
     if (!api?.onExit) return;
     return api.onExit((ev) => dismissToast(termWaitToastKey(ev.id)));
   }, [dismissToast]);
+  // 팝아웃 창이 그 세션을 화면에 올리면 main 이 회수 신호를 보낸다 — 팝아웃의 가시
+  // 세션은 이 창(sectionNav)이 모르므로 TerminalSection 의 dismiss 경로에 안 걸린다
+  useEffect(() => {
+    if (!window.oneApp?.onToastDismiss) return;
+    return window.oneApp.onToastDismiss(dismissToast);
+  }, [dismissToast]);
   useEffect(() => {
     if (!window.oneApp?.onToast) return;
     return window.oneApp.onToast((p) => {
@@ -160,11 +166,20 @@ function AppToastBridge(): null {
         action: term
           ? {
               label: p.actionLabel ?? "이동",
-              onClick: () =>
-                openTerminalSession({
-                  sessionId: term.sessionId,
-                  cwd: term.cwd,
-                }),
+              onClick: () => {
+                // 세션이 팝아웃 창에 있으면 그 창 포커스가 곧 '이동'이다 —
+                // 아니면 종전대로 터미널 섹션의 그 세션으로 간다
+                void (async () => {
+                  const res = await window.oneApp?.terminal?.windows?.focusSession(
+                    term.sessionId
+                  );
+                  if (!res?.handled)
+                    openTerminalSession({
+                      sessionId: term.sessionId,
+                      cwd: term.cwd,
+                    });
+                })();
+              },
             }
           : p.section
             ? { label: p.actionLabel ?? "이동", section: p.section }

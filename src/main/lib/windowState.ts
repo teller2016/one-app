@@ -21,6 +21,19 @@ type SavedState = {
   maximized?: boolean;
 };
 
+/** 파일 포맷: 창 키(메인 'main', 팝아웃 'popout:<id>') → 상태 */
+type StateFile = Record<string, SavedState>;
+
+function readAll(): StateFile {
+  const raw = readUserJson<Record<string, unknown>>(FILE, {});
+  // 구포맷(루트에 x/width 가 바로 있던 단일 창 시절) → main 레코드로 해석.
+  // 다음 저장 때 새 포맷으로 굳으므로 별도 마이그레이션 저장은 하지 않는다.
+  if (typeof raw.width === 'number' || typeof raw.x === 'number') {
+    return { main: raw as SavedState };
+  }
+  return raw as StateFile;
+}
+
 /**
  * 저장된 사각형이 지금 연결된 화면에서 실제로 잡을 수 있는 자리인지.
  * 외부 모니터에 두고 껐다가 노트북만으로 켜면 좌표가 화면 밖이라
@@ -39,17 +52,17 @@ function isReachable(b: Rectangle): boolean {
 /**
  * 저장된 창 상태를 BrowserWindow 옵션으로 — 없거나 화면 밖이면 기본값(중앙 배치).
  * `maximized` 는 창을 만든 뒤 호출부가 처리한다.
+ * 메인 창 외의 창(팝아웃)은 `key` 로 갈라 저장하고, 기본·최소 크기가 다르면 `spec` 으로 준다.
  */
-export function loadWindowState(): SavedState & { width: number; height: number } {
-  const saved = readUserJson<SavedState>(FILE, {});
-  const width = Math.max(
-    WINDOW_MIN.width,
-    Math.round(saved.width ?? WINDOW_DEFAULT.width)
-  );
-  const height = Math.max(
-    WINDOW_MIN.height,
-    Math.round(saved.height ?? WINDOW_DEFAULT.height)
-  );
+export function loadWindowState(
+  key = 'main',
+  spec: { defaults?: typeof WINDOW_DEFAULT; min?: typeof WINDOW_MIN } = {}
+): SavedState & { width: number; height: number } {
+  const def = spec.defaults ?? WINDOW_DEFAULT;
+  const min = spec.min ?? WINDOW_MIN;
+  const saved = readAll()[key] ?? {};
+  const width = Math.max(min.width, Math.round(saved.width ?? def.width));
+  const height = Math.max(min.height, Math.round(saved.height ?? def.height));
   const maximized = saved.maximized === true;
 
   if (typeof saved.x !== 'number' || typeof saved.y !== 'number') {
@@ -67,7 +80,7 @@ export function loadWindowState(): SavedState & { width: number; height: number 
  * resize/move 는 드래그 중 초당 수십 번 오므로 디바운스하고, 닫을 때 마지막 상태를
  * 한 번 더 확정한다(디바운스 대기 중 닫으면 마지막 이동이 유실되므로).
  */
-export function trackWindowState(win: BrowserWindow): void {
+export function trackWindowState(win: BrowserWindow, key = 'main'): void {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const save = () => {
@@ -75,7 +88,10 @@ export function trackWindowState(win: BrowserWindow): void {
     // ⚠️ getBounds() 가 아니라 getNormalBounds() — 최대화·전체화면 상태에서는
     // 화면 전체 크기가 잡혀서, 다음 실행 때 창을 되돌릴 크기를 잃는다.
     const b = win.getNormalBounds();
-    writeUserJson(FILE, { ...b, maximized: win.isMaximized() });
+    writeUserJson(FILE, {
+      ...readAll(),
+      [key]: { ...b, maximized: win.isMaximized() },
+    });
   };
 
   const schedule = () => {
@@ -89,4 +105,30 @@ export function trackWindowState(win: BrowserWindow): void {
     if (timer) clearTimeout(timer);
     save();
   });
+}
+
+/** 창 상태 삭제 — 팝아웃을 사용자가 닫아 레코드가 사라질 때 함께 지운다 */
+export function clearWindowState(key: string): void {
+  const all = readAll();
+  if (!(key in all)) return;
+  delete all[key];
+  writeUserJson(FILE, all);
+}
+
+/**
+ * 고아 키 정리 — `keep` 이 false 인 popout:* 키를 지운다 (시작 시 1회).
+ * main 키는 건드리지 않는다.
+ */
+export function pruneWindowStates(keep: (key: string) => boolean): void {
+  const all = readAll();
+  const next: StateFile = {};
+  let changed = false;
+  for (const [key, state] of Object.entries(all)) {
+    if (key !== 'main' && key.startsWith('popout:') && !keep(key)) {
+      changed = true;
+      continue;
+    }
+    next[key] = state;
+  }
+  if (changed) writeUserJson(FILE, next);
 }

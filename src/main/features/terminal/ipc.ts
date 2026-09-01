@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import path from 'node:path';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -7,13 +6,17 @@ import type {
   TerminalSessionInfo,
 } from '../../../shared/types';
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
-import { broadcast, onBroadcast } from '../../lib/broadcast';
+import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
 import { sleep } from '../../lib/util';
 import { notifyToast, sendToast } from '../notify/notify';
-import { worktreePaths } from '../workspaces/git';
-import { listWorkspaces } from '../workspaces/store';
 import { listAgents } from './agents';
+import { sessionLocationLabel } from './location';
+import {
+  initTerminalWindows,
+  isVisibleInPopout,
+  registerTerminalWindowsIpc,
+} from './windows';
 import {
   attachSession,
   createSession,
@@ -52,67 +55,40 @@ function updateDockBadge(sessions: TerminalSessionInfo[]) {
   setWaitingBadge(sessions.filter((s) => s.status === 'waiting').length);
 }
 
-// 세션 위치 라벨 캐시 — cwd 는 세션 수명 동안 불변이라 waiting 마다 git 을 돌리지 않는다.
-// ⚠️ 다만 **워크스페이스 목록이 바뀌면 답도 바뀐다** — 워크스페이스를 나중에 등록하면
-// 그 전에 만든 세션은 `null`(라벨 없음)로 캐시돼 있어 알림 제목에 위치가 영영 안 붙었고,
-// 이름 변경·제거 뒤에는 옛 이름이 계속 나왔다. 목록 변경 브로드캐스트에 맞춰 비운다.
-const locationLabels = new Map<string, string | null>();
-onBroadcast((channel) => {
-  if (channel === 'workspaces:changed') locationLabels.clear();
-});
-
-/**
- * 세션 cwd 가 속한 "작업 영역 · 워크트리" 라벨 (입력대기 알림용).
- * 워크스페이스별 `git worktree list`(경량 — 상태 조회 없음)로 경로를 대조하고,
- * 등록된 워크스페이스 밖(홈 등)이면 null — 호출부가 라벨 없이 표시한다.
- */
-async function sessionLocationLabel(cwd: string): Promise<string | null> {
-  const cached = locationLabels.get(cwd);
-  if (cached !== undefined) return cached;
-  let best: { ws: string; wtPath: string } | null = null;
-  for (const ws of listWorkspaces()) {
-    try {
-      const paths = await worktreePaths(ws.repoPath);
-      for (const p of paths) {
-        if (cwd !== p && !cwd.startsWith(p + '/')) continue;
-        // 중첩 매치(주 워크트리 폴더 안의 워크트리)는 더 깊은 경로가 정답
-        if (!best || p.length > best.wtPath.length) best = { ws: ws.name, wtPath: p };
-      }
-    } catch {
-      // git 실패(저장소 삭제 등)는 라벨 생략 사유일 뿐 — 알림은 그대로 나간다
-    }
-  }
-  const label = best ? `${best.ws} · ${path.basename(best.wtPath)}` : null;
-  locationLabels.set(cwd, label);
-  return label;
-}
-
 /** 터미널 관련 IPC 핸들러 등록 */
 export function registerTerminalIpc() {
   // 데스크톱 attach 추적 — pane 이 떠 있는 세션에만 terminal:data 를 방송한다.
   // 없으면 다른 섹션(Jira 등)에 있어 리스너가 0개여도 세션당 최대 62 msg/s 를
   // 계속 직렬화·전송했다(2026-08-07 성능 감사). MO(WS)는 server.ts 가 소켓별
   // attachedId 로 자체 필터하므로 이 게이트와 무관하다.
-  const desktopAttached = new Set<string>();
-  const trackedSenders = new WeakSet<Electron.WebContents>();
+  // ⚠️ 창(sender)별로 나눠 들어야 한다 — 전역 Set 하나면 창 하나의 파괴·리로드
+  // 정리가 다른 창(팝아웃)이 attach 한 세션의 방송까지 끊는다.
+  const attachedBySender = new Map<Electron.WebContents, Set<string>>();
+  const isDesktopAttached = (id: string): boolean => {
+    for (const ids of attachedBySender.values()) if (ids.has(id)) return true;
+    return false;
+  };
 
   ipcMain.handle('terminal:list', () => listSessions());
   ipcMain.handle('terminal:create', (_e, opts: TerminalCreateInput) =>
     createSession(opts ?? {})
   );
   ipcMain.handle('terminal:attach', (e, id: string, cols: number, rows: number) => {
-    desktopAttached.add(id);
-    // 렌더러 리로드·창 파괴 시 detach 가 안 오므로 sender 수명에 묶어 정리한다
-    if (!trackedSenders.has(e.sender)) {
-      trackedSenders.add(e.sender);
-      const clear = () => desktopAttached.clear();
-      e.sender.once('destroyed', clear);
-      e.sender.on('did-navigate', clear);
+    let ids = attachedBySender.get(e.sender);
+    if (!ids) {
+      ids = new Set();
+      attachedBySender.set(e.sender, ids);
+      // 렌더러 리로드·창 파괴 시 detach 가 안 오므로 sender 수명에 묶어 정리한다
+      // — 단 그 sender 의 몫만. 파괴는 엔트리째, 리로드는 내용만 비운다(재attach 대비)
+      const sender = e.sender;
+      sender.once('destroyed', () => attachedBySender.delete(sender));
+      sender.on('did-navigate', () => attachedBySender.get(sender)?.clear());
     }
+    ids.add(id);
     return attachSession(id, cols, rows);
   });
-  ipcMain.on('terminal:detach', (_e, id: string) => {
-    desktopAttached.delete(id);
+  ipcMain.on('terminal:detach', (e, id: string) => {
+    attachedBySender.get(e.sender)?.delete(id);
   });
   // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
   ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
@@ -173,10 +149,10 @@ export function registerTerminalIpc() {
   // 세션 이벤트를 모든 창에 push (모바일 WS 는 server.ts 가 별도 구독).
   // 출력은 데스크톱 pane 이 attach 한 세션만 — 안 보는 출력은 보내지 않는다.
   onTerminalData((id, data, seq) => {
-    if (desktopAttached.has(id)) broadcast('terminal:data', { id, data, seq });
+    if (isDesktopAttached(id)) broadcast('terminal:data', { id, data, seq });
   });
   onTerminalExit((id, exitCode) => {
-    desktopAttached.delete(id);
+    for (const ids of attachedBySender.values()) ids.delete(id);
     broadcast('terminal:exit', { id, exitCode });
   });
   // 목록·상태 변경 — payload 를 실어 렌더러의 재조회를 없애고, 독 뱃지도 함께 갱신
@@ -202,6 +178,10 @@ export function registerTerminalIpc() {
     // sticky 지만 dedupeKey 로 세션당 1장만 유지되고, 이미 보고 있는 세션이면
     // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.
     void (async () => {
+      // 팝아웃 창에서 이미 보고 있는 세션이면 생략 — 메인 창의 렌더러 판정
+      // (AppToastBridge 의 isSessionOnScreen)과 짝을 이루는 main 쪽 게이트다.
+      // 팝아웃의 가시 세션은 메인 렌더러가 모르므로 여기서 걸러야 한다.
+      if (isVisibleInPopout(info.id)) return;
       const location = await sessionLocationLabel(info.cwd);
       const payload = {
         // 어느 작업 영역의 어느 워크트리인지를 제목에 싣는다 (2026-08-14 사용자 요청)
@@ -233,8 +213,14 @@ export function registerTerminalIpc() {
     });
   }
 
-  // tmux 백엔드면 이전 실행의 영속 세션을 재접속 복원 (미설치면 no-op)
-  void restoreSessions().catch((e) =>
-    console.error('[terminal] 세션 복원 실패:', e)
-  );
+  // 팝아웃 창 — 세션↔창 배정 레지스트리 + 창 IPC (열기·포커스·이동·드래그 중계)
+  registerTerminalWindowsIpc();
+
+  // tmux 백엔드면 이전 실행의 영속 세션을 재접속 복원 (미설치면 no-op).
+  // 팝아웃 창 복원은 **세션 복원 완료 후에만** — 세션 생존 판정이 빈 목록으로 돌면
+  // 저장된 창 배정을 오파기한다(렌더러 sessionsReady 게이트와 같은 교훈).
+  // 복원 실패 시 팝아웃도 만들지 않는다 — sidecar 가 남아 다음 시작에 다시 시도한다.
+  void restoreSessions()
+    .then(() => initTerminalWindows())
+    .catch((e) => console.error('[terminal] 세션 복원 실패:', e));
 }

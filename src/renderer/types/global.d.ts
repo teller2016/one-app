@@ -111,6 +111,9 @@ import type {
   TerminalServerStatus,
   TerminalAgentInfo,
   TerminalNotifyLevel,
+  TerminalDragState,
+  TerminalPopoutOpenInput,
+  TerminalWindowInfo,
 } from '../../shared/types';
 
 declare global {
@@ -421,6 +424,28 @@ declare global {
           regenToken: () => Promise<TerminalServerStatus>;
           onChanged: (cb: () => void) => () => void;
         };
+        // 팝아웃 창 — 세션↔창 배정은 main 이 소유, 렌더러는 미러.
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        windows?: {
+          list: () => Promise<TerminalWindowInfo[]>;
+          open: (
+            input: TerminalPopoutOpenInput,
+          ) => Promise<{ ok: boolean; id?: string; error?: string }>;
+          focus: (id: string) => Promise<{ handled: boolean }>;
+          focusSession: (sessionId: string) => Promise<{ handled: boolean }>;
+          moveSession: (
+            sessionId: string,
+            to: string,
+          ) => Promise<{ ok: boolean; error?: string }>;
+          init: (
+            id: string,
+          ) => Promise<{ sessionIds: string[]; layout?: string }>;
+          onChanged: (cb: (windows: TerminalWindowInfo[]) => void) => () => void;
+          reportVisible: (windowId: string, ids: string[]) => void;
+          drag: (state: TerminalDragState) => void;
+          onDragState: (cb: (state: TerminalDragState) => void) => () => void;
+        };
+        locationLabel?: (sessionId: string) => Promise<string | null>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;
@@ -430,6 +455,8 @@ declare global {
       // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
       getPathForFile?: (file: File) => string;
       onToast: (cb: (payload: AppToastPayload) => void) => () => void;
+      // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+      onToastDismiss?: (cb: (dedupeKey: string) => void) => () => void;
       onNavigate: (cb: (section: string) => void) => () => void;
       onHistoryNav: (cb: (dir: 'back' | 'forward') => void) => () => void;
     };

@@ -38,6 +38,8 @@ export type IconName =
   | "clipboard-list"
   | "bug"
   | "corner-down-right"
+  | "corner-up-left"
+  | "app-window"
   | "smartphone"
   | "x"
   | "check"
@@ -246,6 +248,20 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <polyline points="15 10 20 15 15 20" />
       <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+    </>
+  ),
+  "corner-up-left": (
+    <>
+      <polyline points="9 14 4 9 9 4" />
+      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+    </>
+  ),
+  "app-window": (
+    <>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M10 4v4" />
+      <path d="M2 8h20" />
+      <path d="M6 4v4" />
     </>
   ),
   smartphone: (

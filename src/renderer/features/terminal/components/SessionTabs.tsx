@@ -4,7 +4,7 @@
 // 탭을 끌어 **다른 탭의 좌우 가장자리**에 놓으면 탭 순서가 바뀐다(아래 REORDER_EDGE).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
 import { memo, useEffect, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
 import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
@@ -40,10 +40,12 @@ const REORDER_EDGE = 0.3;
 
 // memo — 패널 드래그(프레임마다 상태 변경)·pane 리렌더에 탭바가 끌려가지 않게.
 // 상위가 콜백을 useCallback 으로 안정화하고 sessions 는 useMemo 파생값이라 실제로 유지된다.
-/** 탭바 표시 항목 — 단일 세션 또는 분할 그룹(멤버들이 하나의 박스로 묶인다) */
+/** 탭바 표시 항목 — 단일 세션 | 분할 그룹(멤버들이 하나의 박스로 묶인다) |
+ *  자리표시자(다른 창으로 분리된 세션 — 클릭 = 그 창 포커스, pane 없음) */
 export type TabItem =
   | { kind: 'single'; session: TerminalSessionInfo }
-  | { kind: 'group'; members: TerminalSessionInfo[] };
+  | { kind: 'group'; members: TerminalSessionInfo[] }
+  | { kind: 'detached'; session: TerminalSessionInfo; windowId: string };
 
 export const SessionTabs = memo(function SessionTabs({
   items,
@@ -63,7 +65,14 @@ export const SessionTabs = memo(function SessionTabs({
   onDragStartSession,
   onDragEndSession,
   onDetachSession,
+  onDetachToWindow,
+  onFocusWindow,
+  onReturnSession,
+  dragSourceId,
+  remoteDraggingId,
+  onAdoptSession,
   onReorder,
+  rightActions,
 }: {
   /** 표시 항목(순서 = 표시 순서) — 그룹은 멤버 칩들을 tab-pack 박스로 감싼다 */
   items: TabItem[];
@@ -88,8 +97,22 @@ export const SessionTabs = memo(function SessionTabs({
   onDragEndSession: () => void;
   /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리(혼자 보기) */
   onDetachSession: (id: string) => void;
+  /** 탭을 **창 밖**에 놓았다 — 그 screen 좌표에 팝아웃 창을 만든다 (없으면 기능 꺼짐) */
+  onDetachToWindow?: (id: string, x: number, y: number) => void;
+  /** 자리표시자 탭 클릭 — 그 세션이 있는 팝아웃 창 포커스 */
+  onFocusWindow?: (windowId: string) => void;
+  /** 자리표시자 hover [↩] — 세션을 메인 창으로 되돌린다 */
+  onReturnSession?: (sessionId: string) => void;
+  /** 창 간 드래그 페이로드의 출처 표기 — 'main'(기본) | popoutId */
+  dragSourceId?: string;
+  /** 다른 창에서 끌고 있는 세션(중계 미러) — 있으면 탭바가 '가져오기' 드롭 존이 된다 */
+  remoteDraggingId?: string | null;
+  /** 다른 창의 탭을 탭바에 드롭 — 그 세션을 이 창으로 가져온다 */
+  onAdoptSession?: (sessionId: string) => void;
   /** 탭 순서 변경 — 새 순서의 세션 id 배열(그룹 멤버는 인접한 채로 함께 옮겨진다) */
   onReorder: (ids: string[]) => void;
+  /** 우측 액션 교체 슬롯 — 팝아웃 창이 변경사항·MO 버튼 대신 레포 라벨 등을 꽂는다 */
+  rightActions?: ReactNode;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 탭을 더블클릭하면 제목이 입력창으로 바뀐다
@@ -105,6 +128,8 @@ export const SessionTabs = memo(function SessionTabs({
     items.some(
       (it) => it.kind === 'group' && it.members.some((m) => m.id === draggingId)
     );
+  // 다른 창의 탭을 끌고 있으면 탭바가 '이 창으로 가져오기' 드롭 존이 된다
+  const adoptable = !draggingId && !!remoteDraggingId && !!onAdoptSession;
   /** 탭(또는 그룹 장) 위인지 — 탭 위에서는 분리 하이라이트·드롭을 끈다: 탭 하버는
    *  '그 화면 열기'(스프링 로딩)지 분리가 아니다(2026-08-10 사용자 지적 — 탭 위인데
    *  바 전체가 accent 로 칠해졌다). 자기 탭 제자리 드롭 방지도 이걸로 함께 해결된다. */
@@ -164,9 +189,9 @@ export const SessionTabs = memo(function SessionTabs({
   const fromIndex = !draggingId
     ? -1
     : items.findIndex((it) =>
-        it.kind === 'single'
-          ? it.session.id === draggingId
-          : it.members.some((m) => m.id === draggingId)
+        it.kind === 'group'
+          ? it.members.some((m) => m.id === draggingId)
+          : it.kind === 'single' && it.session.id === draggingId
       );
 
   /** 놓아도 순서가 그대로인 자리(자기 앞·자기 뒤) — 표시도 드롭도 만들지 않는다 */
@@ -213,9 +238,9 @@ export const SessionTabs = memo(function SessionTabs({
     // (terminal.md '분할 그룹' 절 — detachSession 이 같은 이유로 직접 정리한다).
     onDragEndSession();
     if (!at || fromIndex < 0) return;
-    // 아이템 = 블록(단일은 1개, 그룹은 멤버 전원) — 블록째로 옮기고 평탄화한다
+    // 아이템 = 블록(단일·자리표시자는 1개, 그룹은 멤버 전원) — 블록째로 옮기고 평탄화한다
     const blocks = items.map((it) =>
-      it.kind === 'single' ? [it.session.id] : it.members.map((m) => m.id)
+      it.kind === 'group' ? it.members.map((m) => m.id) : [it.session.id]
     );
     const [moved] = blocks.splice(fromIndex, 1);
     const to = at.index + (at.after ? 1 : 0);
@@ -242,13 +267,13 @@ export const SessionTabs = memo(function SessionTabs({
     }
   };
 
-  // 표시 순서상의 번호 — ⌘1..9 안내 (그룹 멤버도 한 자리씩 차지한다)
+  // 표시 순서상의 번호 — ⌘1..9 안내 (그룹 멤버·자리표시자도 한 자리씩 차지한다)
   const flatIndex = new Map<string, number>();
   {
     let n = 0;
     for (const it of items) {
-      if (it.kind === 'single') flatIndex.set(it.session.id, n++);
-      else for (const m of it.members) flatIndex.set(m.id, n++);
+      if (it.kind === 'group') for (const m of it.members) flatIndex.set(m.id, n++);
+      else flatIndex.set(it.session.id, n++);
     }
   }
 
@@ -295,9 +320,29 @@ export const SessionTabs = memo(function SessionTabs({
         onDragStart={(e: ReactDragEvent) => {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', s.id);
+          // 창 간 드래그의 유일한 데이터 채널 — 상대 창은 이 페이로드로 출처를 검증한다.
+          // 같은 창 안 드롭(분할·순서)은 종전대로 콜백 상태(draggingId)만 쓴다.
+          e.dataTransfer.setData(
+            'application/x-oneapp-term',
+            JSON.stringify({ sessionId: s.id, sourceWindowId: dragSourceId ?? 'main' })
+          );
           onDragStartSession(s.id);
         }}
-        onDragEnd={onDragEndSession} // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
+        onDragEnd={(e: ReactDragEvent) => {
+          // 창 밖 드롭 = 팝아웃 분리 — 아무 드롭 존도 받지 않았고(dropEffect none)
+          // 포인터가 이 창 밖에서 놓였을 때만. Esc 취소도 dropEffect 가 none 이라
+          // 포인터가 창 밖에 있으면 구분할 수 없다(HTML5 DnD 한계) — 창 안 Esc 는 무사하다.
+          if (
+            onDetachToWindow &&
+            e.dataTransfer.dropEffect === 'none' &&
+            (e.screenX < window.screenX ||
+              e.screenX > window.screenX + window.outerWidth ||
+              e.screenY < window.screenY ||
+              e.screenY > window.screenY + window.outerHeight)
+          )
+            onDetachToWindow(s.id, e.screenX, e.screenY);
+          onDragEndSession(); // 드롭이 밖에서 끝나도 표시·드롭 존이 남지 않게
+        }}
         onDragOver={(e: ReactDragEvent) => {
           // 가장자리(순서 조준)면 스프링 로딩을 걸지 않는다 — 두 뜻이 겹치지 않게
           if (item && onItemDragOver(e, item.index)) return;
@@ -362,15 +407,81 @@ export const SessionTabs = memo(function SessionTabs({
     );
   };
 
+  /** 자리표시자 탭 — 다른 창으로 분리된 세션. 드래그 소스가 아니고 pane 도 없다.
+   *  클릭(⌘n 포함) = 그 창 포커스, 앞자리 hover [↩] = 되돌리기, 우측 [×] = 세션 종료.
+   *  ⚠️ **우측 슬롯은 일반 탭과 똑같이 하나만** 둔다(상태점 → hover 시 ×) — 되돌리기를
+   *  거기 함께 넣었더니 22px 고정 슬롯이 넘쳐 × 가 오른쪽으로 밀려 다른 탭들과 정렬이
+   *  어긋났다(2026-09-01 사용자 지적). 되돌리기는 앞자리('다른 창' 표식)가 맡는다.
+   *  data-session 은 overTabArea 판정용 — 이 위 드래그가 '그룹 분리' 존을 켜지 않게. */
+  const renderDetachedTab = (s: TerminalSessionInfo, windowId: string) => {
+    const i = flatIndex.get(s.id) ?? 9;
+    return (
+      <span
+        key={s.id}
+        data-session={s.id}
+        className="terminal__tab terminal__tab--detached"
+      >
+        {/* 앞자리 — 평소엔 '다른 창' 표식, 탭에 hover 하면 되돌리기 버튼으로 바뀐다
+            (우측 슬롯의 상태점 ↔ × 교체와 같은 규칙) */}
+        <span className="terminal__tab-lead">
+          <span className="terminal__tab-lead-icon" aria-hidden="true">
+            <Icon name="app-window" size={13} />
+          </span>
+          <Tooltip label="메인 창으로 되돌리기">
+            <button
+              type="button"
+              className="terminal__tab-close terminal__tab-close--hover"
+              aria-label={`'${s.title}' 세션을 메인 창으로 되돌리기`}
+              onClick={() => onReturnSession?.(s.id)}
+            >
+              <Icon name="corner-up-left" size={14} />
+            </button>
+          </Tooltip>
+        </span>
+        <button
+          type="button"
+          role="tab"
+          className="terminal__tab-hit"
+          aria-selected={false}
+          title={`${s.title} — 별도 창에서 열림${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 메인 창으로 되돌리기`}
+          onClick={() => onFocusWindow?.(windowId)}
+        >
+          <span className="terminal__tab-title">{s.title}</span>
+        </button>
+        {/* 우측 — 일반 비활성 탭과 완전히 같은 구조라 × 자리가 정확히 맞는다.
+            분리된 세션의 작업 중·입력 대기도 여기서 그대로 보인다 */}
+        <span className="terminal__tab-side">
+          {s.status !== 'idle' && (
+            <span className="terminal__tab-dot" aria-hidden="true">
+              <StatusDot status={STATUS_DOT[s.status]} />
+            </span>
+          )}
+          <Tooltip label="세션 종료">
+            <button
+              type="button"
+              className="terminal__tab-close terminal__tab-close--hover"
+              aria-label={`'${s.title}' 세션 종료`}
+              onClick={() => onClose(s)}
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </Tooltip>
+        </span>
+      </span>
+    );
+  };
+
   return (
     /* 그룹 멤버를 끌어 올리면 탭바의 **빈 영역**이 '그룹에서 분리' 드롭 존이 된다 —
        pane 위 드롭 존(분할·교체)과 달리 "탭으로 돌려보낸다" = 혼자 보기.
        탭 위에서는 preventDefault 를 안 해 드롭이 성립하지 않는다 — 탭 하버는
        스프링 로딩(그 화면 열기)이 맡고, 제자리 드롭(클릭에 가까운 손놀림)도 막힌다. */
     <div
-      className={`terminal__tabs${detachHover ? ' terminal__tabs--detach' : ''}`}
+      className={`terminal__tabs${
+        detachHover ? (adoptable ? ' terminal__tabs--adopt' : ' terminal__tabs--detach') : ''
+      }`}
       onDragOver={(e) => {
-        if (!detachable) return;
+        if (!detachable && !adoptable) return;
         if (overTabArea(e)) {
           setDetachHover(false);
           return;
@@ -388,11 +499,24 @@ export const SessionTabs = memo(function SessionTabs({
         setDropAt(null);
       }}
       onDrop={(e) => {
-        if (!detachable) return;
+        if (!detachable && !adoptable) return;
         e.preventDefault();
         setDetachHover(false);
         clearHoverOpen();
-        if (draggingId) onDetachSession(draggingId);
+        if (draggingId) {
+          onDetachSession(draggingId);
+        } else if (adoptable && onAdoptSession && remoteDraggingId) {
+          // 크로스 윈도우 드롭 — 중계 상태가 낡았을 수 있어 dataTransfer 페이로드로 검증
+          let id = remoteDraggingId;
+          try {
+            const raw = e.dataTransfer.getData('application/x-oneapp-term');
+            const parsed = raw ? (JSON.parse(raw) as { sessionId?: string }) : null;
+            if (parsed?.sessionId) id = parsed.sessionId;
+          } catch {
+            // 페이로드 손상 — 중계 상태값으로 진행한다
+          }
+          onAdoptSession(id);
+        }
       }}
     >
       <div
@@ -404,6 +528,8 @@ export const SessionTabs = memo(function SessionTabs({
         {items.map((it, idx) =>
           it.kind === 'single' ? (
             renderTab(it.session, { index: idx })
+          ) : it.kind === 'detached' ? (
+            renderDetachedTab(it.session, it.windowId)
           ) : (
             /* 분할 그룹 = 탭 한 장(통탭) — 멤버는 일반 탭과 같은 마크업(클릭·더블클릭·
                드래그·가운데 클릭 전부 동일)이고, 장이 활성(멤버 중 하나가 activeId)이면
@@ -445,46 +571,54 @@ export const SessionTabs = memo(function SessionTabs({
       </div>
 
       <div className="terminal__tabs-actions">
-        {editorName && (
-          <Tooltip
-            label={
-              canOpenEditor
-                ? `선택한 워크트리를 ${editorName} 로 열기`
-                : `워크트리를 선택하면 ${editorName} 로 열 수 있습니다`
-            }
-          >
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={`${editorName} 로 열기`}
-              disabled={!canOpenEditor}
-              onClick={onOpenEditor}
+        {rightActions !== undefined ? (
+          rightActions
+        ) : (
+          <>
+            {editorName && (
+              <Tooltip
+                label={
+                  canOpenEditor
+                    ? `선택한 워크트리를 ${editorName} 로 열기`
+                    : `워크트리를 선택하면 ${editorName} 로 열 수 있습니다`
+                }
+              >
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`${editorName} 로 열기`}
+                  disabled={!canOpenEditor}
+                  onClick={onOpenEditor}
+                >
+                  <Icon name="code-xml" size={16} />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip label="변경사항 (⌘B) — 선택한 워크트리의 git 상태·커밋·푸시">
+              <button
+                type="button"
+                className={`icon-btn${changesOpen ? ' terminal__changes-btn--on' : ''}`}
+                aria-label="변경사항"
+                aria-pressed={changesOpen}
+                onClick={onToggleChanges}
+              >
+                <Icon name="git-branch" size={16} />
+              </button>
+            </Tooltip>
+            <Tooltip
+              label={`모바일(MO) 접속${moRunning ? ' — 서버 켜짐' : ' — 서버 꺼짐'}`}
             >
-              <Icon name="code-xml" size={16} />
-            </button>
-          </Tooltip>
+              <button
+                type="button"
+                className={`icon-btn terminal__mo-btn${moRunning ? ' terminal__mo-btn--on' : ''}`}
+                aria-label="모바일(MO) 접속"
+                onClick={onOpenMo}
+              >
+                <Icon name="smartphone" size={16} />
+              </button>
+            </Tooltip>
+          </>
         )}
-        <Tooltip label="변경사항 (⌘B) — 선택한 워크트리의 git 상태·커밋·푸시">
-          <button
-            type="button"
-            className={`icon-btn${changesOpen ? ' terminal__changes-btn--on' : ''}`}
-            aria-label="변경사항"
-            aria-pressed={changesOpen}
-            onClick={onToggleChanges}
-          >
-            <Icon name="git-branch" size={16} />
-          </button>
-        </Tooltip>
-        <Tooltip label={`모바일(MO) 접속${moRunning ? ' — 서버 켜짐' : ' — 서버 꺼짐'}`}>
-          <button
-            type="button"
-            className={`icon-btn terminal__mo-btn${moRunning ? ' terminal__mo-btn--on' : ''}`}
-            aria-label="모바일(MO) 접속"
-            onClick={onOpenMo}
-          >
-            <Icon name="smartphone" size={16} />
-          </button>
-        </Tooltip>
       </div>
     </div>
   );

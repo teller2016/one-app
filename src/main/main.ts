@@ -10,7 +10,11 @@ import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
-import { setNotifyWindow, registerNotifyIpc } from "./features/notify/notify";
+import {
+  getNotifyWindow,
+  setNotifyWindow,
+  registerNotifyIpc,
+} from "./features/notify/notify";
 import { registerProjectsIpc } from "./features/projects/ipc";
 import { registerPrsIpc } from "./features/prs/ipc";
 import {
@@ -125,7 +129,9 @@ const createWindow = () => {
   // 이후의 크기·위치 변화를 저장 (디바운스 + 닫을 때 확정)
   trackWindowState(mainWindow);
 
-  // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록
+  // 알림(알럿)이 이 창에 붙어 뜨고 섹션 이동할 수 있도록 참조 등록.
+  // ⚠️ 메인 창 전용 — 터미널 팝아웃(features/terminal/windows.ts)에서 호출하면
+  // 토스트·app:navigate 가 그쪽 창으로 넘어간다
   setNotifyWindow(mainWindow);
 
   // 개발 인스턴스의 "— DEV" 제목을 지킨다 — 페이지가 로드되면 index.html 의
@@ -190,9 +196,11 @@ app.on("ready", () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
-  // 메뉴바 트레이 — 창이 닫혀 있어도 열기·출퇴근 찍기 가능
+  // 메뉴바 트레이 — 창이 닫혀 있어도 열기·출퇴근 찍기 가능.
+  // ⚠️ getAllWindows()[0] 을 쓰지 말 것 — 터미널 팝아웃 창이 잡힐 수 있다.
+  // '메인 창' 판정은 setNotifyWindow 로 등록된 참조가 정본이다.
   createTray(() => {
-    const win = BrowserWindow.getAllWindows()[0];
+    const win = getNotifyWindow();
     if (win) {
       if (win.isMinimized()) win.restore();
       win.show();
@@ -225,8 +233,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  // macOS: dock 아이콘 클릭 시 창이 없으면 재생성
-  if (BrowserWindow.getAllWindows().length === 0) {
+  // macOS: dock 아이콘 클릭 시 메인 창이 없으면 재생성.
+  // ⚠️ '창 0개' 판정이 아니다 — 터미널 팝아웃만 남긴 채 메인 창을 닫았을 수 있다
+  if (!getNotifyWindow()) {
     createWindow();
   }
 });

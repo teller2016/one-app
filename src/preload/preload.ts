@@ -29,9 +29,12 @@ import type {
   ChangesDiffScope,
   ChangesMode,
   TerminalCreateInput,
+  TerminalDragState,
   TerminalNotifyLevel,
+  TerminalPopoutOpenInput,
   TerminalPreset,
   TerminalSessionInfo,
+  TerminalWindowInfo,
   TerminalWorkspace,
   WorkspaceSaveInput,
   WorktreeAddInput,
@@ -549,6 +552,44 @@ contextBridge.exposeInMainWorld("oneApp", {
           ipcRenderer.removeListener("terminal:server:changed", listener);
       },
     },
+    // 팝아웃 창 — 세션↔창 배정의 정본은 main(features/terminal/windows.ts)
+    windows: {
+      list: () => ipcRenderer.invoke("terminal:windows:list"),
+      // 창 밖 드롭 — 그 좌표에 팝아웃 창 생성 (좌표가 다른 앱 창 위면 no-op)
+      open: (input: TerminalPopoutOpenInput) =>
+        ipcRenderer.invoke("terminal:windows:open", input),
+      focus: (id: string) => ipcRenderer.invoke("terminal:windows:focus", id),
+      // 세션이 배정된 팝아웃 창 포커스 — 자리표시자 탭·토스트 [이동] 공용
+      focusSession: (sessionId: string) =>
+        ipcRenderer.invoke("terminal:windows:focus-session", sessionId),
+      // 배정 변경 (to: 'main' | popoutId) — 크로스 윈도우 드롭·되돌리기 버튼 공용
+      moveSession: (sessionId: string, to: string) =>
+        ipcRenderer.invoke("terminal:windows:move-session", { sessionId, to }),
+      // 팝아웃 부팅 1회 — 배정 세션 + (그룹째 분리 시) 최초 분할 트리
+      init: (id: string) => ipcRenderer.invoke("terminal:windows:init", id),
+      // 배정 변경 구독 — payload 로 전체 목록 (terminal:sessions 관례). 해제 함수 반환
+      onChanged: (cb: (windows: TerminalWindowInfo[]) => void) => {
+        const listener = (_e: unknown, windows: TerminalWindowInfo[]) =>
+          cb(windows);
+        ipcRenderer.on("terminal:windows", listener);
+        return () => ipcRenderer.removeListener("terminal:windows", listener);
+      },
+      // 팝아웃 렌더러의 화면 세션 보고 — 알림 게이트·창 타이틀 (fire-and-forget)
+      reportVisible: (windowId: string, ids: string[]) =>
+        ipcRenderer.send("terminal:windows:visible", { windowId, ids }),
+      // 창 간 드래그 중계 — dragstart 에 상태를, dragend 에 null 을 보낸다
+      drag: (state: TerminalDragState) =>
+        ipcRenderer.send("terminal:drag", state),
+      // 드래그 상태 미러 구독 — 소스가 아닌 창이 드롭 존을 켜는 신호. 해제 함수 반환
+      onDragState: (cb: (state: TerminalDragState) => void) => {
+        const listener = (_e: unknown, state: TerminalDragState) => cb(state);
+        ipcRenderer.on("terminal:dragState", listener);
+        return () => ipcRenderer.removeListener("terminal:dragState", listener);
+      },
+    },
+    // 세션 위치 라벨 ("워크스페이스 · 워크트리") — 팝아웃 헤더 표시용
+    locationLabel: (sessionId: string) =>
+      ipcRenderer.invoke("terminal:location-label", sessionId),
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
   getAutostart: () => ipcRenderer.invoke("app:autostart:get"),
@@ -567,6 +608,12 @@ contextBridge.exposeInMainWorld("oneApp", {
     const listener = (_e: unknown, payload: AppToastPayload) => cb(payload);
     ipcRenderer.on("app:toast", listener);
     return () => ipcRenderer.removeListener("app:toast", listener);
+  },
+  // 떠 있는 토스트 회수 신호 — 팝아웃 창이 그 세션을 화면에 올리면 main 이 보낸다
+  onToastDismiss: (cb: (dedupeKey: string) => void) => {
+    const listener = (_e: unknown, dedupeKey: string) => cb(dedupeKey);
+    ipcRenderer.on("app:toast:dismiss", listener);
+    return () => ipcRenderer.removeListener("app:toast:dismiss", listener);
   },
   // 알림 클릭 등으로 특정 섹션으로 이동하라는 신호 구독. 해제 함수를 반환한다.
   onNavigate: (cb: (section: string) => void) => {

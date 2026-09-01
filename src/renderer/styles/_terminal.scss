@@ -724,6 +724,20 @@
         pointer-events: none; // 라벨이 드롭 이벤트를 가로채지 않게
       }
     }
+
+    // 다른 창의 탭을 끌어 올린 상태 — 탭바 = '이 창으로 가져오기' 드롭 존 (팝아웃↔메인)
+    &--adopt {
+      background: var(--accent-soft);
+
+      &::after {
+        content: '놓으면 이 창으로 가져오기';
+        @include type-small;
+        color: var(--accent);
+        flex-shrink: 0;
+        align-self: center;
+        pointer-events: none;
+      }
+    }
   }
 
   &__tabs-list {
@@ -789,6 +803,41 @@
     &--dragging {
       opacity: 0.65;
     }
+
+    // 자리표시자 — 다른 창으로 분리된 세션. pane 이 없는 '바깥 창의 그림자'라
+    // 점선 테두리 + 보조색으로 한눈에 구분한다(클릭 = 그 창 포커스).
+    &--detached {
+      border-style: dashed;
+
+      .terminal__tab-title {
+        color: var(--text-3);
+      }
+
+      // 앞자리 슬롯이 여백을 대신한다 — 기본 10px 을 그대로 두면 제목이 더 밀린다
+      .terminal__tab-hit {
+        padding-left: 2px;
+      }
+    }
+  }
+
+  // 자리표시자 탭 앞자리 — 우측 슬롯(__tab-side)과 **같은 기하(22px)** 로 둔다.
+  // ⚠️ 되돌리기를 우측에 함께 넣지 말 것 — 22px 고정 슬롯이 넘쳐 × 가 밀리면서
+  // 다른 탭들과 정렬이 어긋난다(2026-09-01 사용자 지적). 우측은 언제나 하나다.
+  &__tab-lead {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    margin-left: 4px;
+    color: var(--text-3);
+  }
+
+  // 평소 표식 → 탭 hover 시 되돌리기 버튼으로 교체.
+  // hover 숨김 규칙은 __tab-dot 과 함께 `__tab-close` 뒤 블록에 모여 있다(순서 함정 주석 참고)
+  &__tab-lead-icon {
+    display: inline-flex;
   }
 
   // 순서 변경 삽입선 — 놓을 자리를 아이템 좌/우에 액센트 선으로 (LNB 워크스페이스 행의
@@ -871,18 +920,6 @@
     display: inline-flex;
   }
 
-  &__tab-close--hover {
-    display: none;
-  }
-
-  &__tab:hover &__tab-dot {
-    display: none;
-  }
-
-  &__tab:hover &__tab-close--hover {
-    display: inline-flex;
-  }
-
   &__tab-close {
     display: inline-flex;
     align-items: center;
@@ -903,6 +940,24 @@
       background: var(--overlay-hover);
       color: var(--text);
     }
+  }
+
+  // 슬롯 교체 — 평소엔 표식(상태점·'다른 창' 아이콘), 탭에 hover 하면 버튼으로 바뀐다.
+  // ⚠️ **이 블록은 반드시 `__tab-close` 뒤에 둘 것.** `--hover` 의 `display: none` 과
+  // `__tab-close` 의 `display: inline-flex` 는 특정도가 같아(0,1,0) **순서로만** 갈린다 —
+  // 앞에 두면 종료 버튼이 hover 없이 늘 떠서 상태점과 나란히 그려진다(2026-09-01 발견:
+  // 자리표시자 탭의 앞자리에서 아이콘과 되돌리기 버튼이 동시에 떠 드러났다).
+  &__tab-close--hover {
+    display: none;
+  }
+
+  &__tab:hover &__tab-dot,
+  &__tab:hover &__tab-lead-icon {
+    display: none;
+  }
+
+  &__tab:hover &__tab-close--hover {
+    display: inline-flex;
   }
 
   // [+] — 탭과 같은 높이·같은 윗라운드의 고스트 스텁 (브라우저 새 탭 버튼 문법).
@@ -1359,6 +1414,50 @@
 }
 
 // MO(모바일) 접속 모달 내용
+// ── 팝아웃 창 (TerminalPopoutApp) — 앱 셸 없이 탭바 + pane 만 있는 별도 창 ──
+.terminal--popout {
+  height: 100vh;
+
+  .terminal__tabs {
+    // 이 창엔 탑바가 없다 — 탭바가 곧 타이틀바다. 메인 창과 같은 높이(--titlebar-h)를
+    // 줘서 ①신호등(trafficLightPosition y:16)이 세로 중앙에 오고 ②탭(29px)이 바닥
+    // 정렬이라 위에 남는 15px 이 **창을 잡아 끄는 손잡이**가 된다.
+    min-height: var(--titlebar-h);
+    // hiddenInset 신호등이 탭바 좌상단에 얹힌다 — 예약폭 + 숨통 8px 만큼 비운다
+    padding-left: calc(var(--titlebar-safe) + 8px);
+    // 탭바 여백이 곧 타이틀바 — 창을 잡아 끌 수 있어야 한다 (사이드바·탑바와 같은 규칙)
+    -webkit-app-region: drag;
+  }
+
+  // ⚠️ 컨테이너(__tabs-list·__tabs-actions)에 no-drag 를 걸지 말 것 — 리스트가
+  // `flex: 1` 이라 **탭 오른쪽 빈 공간을 전부** 차지하고, 그러면 창을 잡을 곳이
+  // 좌측 신호등 여백밖에 남지 않는다(2026-09-01 사용자 지적). 빈 공간은 드래그로
+  // 두고 실제로 누를 것(탭·[+]·우측 버튼)만 no-drag 로 판다.
+  .terminal__tab,
+  .terminal__tab-pack,
+  .terminal__tab-add,
+  .terminal__tabs-actions button {
+    -webkit-app-region: no-drag;
+  }
+}
+
+// 팝아웃 우측 레포 라벨 — "워크스페이스 · 워크트리" (SessionTabs rightActions 슬롯)
+.terminal__popout-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  @include type-small;
+  min-width: 0;
+}
+
+.terminal__popout-loc-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
 .terminal-mo {
   display: flex;
   flex-direction: column;

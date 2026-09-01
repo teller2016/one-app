@@ -2,14 +2,12 @@
 // (Superset 스타일 오케스트레이터). 세션은 main 프로세스 소유라 탭·창을 닫아도 유지되고,
 // MO(모바일)와 같은 세션을 공유한다. 워크트리를 고르면 탭바가 그 위치(cwd)의 세션들로 바뀐다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-} from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type {
   ChangesTarget,
   TerminalPreset,
   TerminalSessionInfo,
+  TerminalWindowInfo,
   TerminalWorkspace,
   WorktreeInfo,
 } from '../../../../shared/types';
@@ -31,9 +29,15 @@ import { useSplitGroups } from '../lib/useSplitGroups';
 import { useWorkspaceActions } from '../lib/useWorkspaceActions';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
-// 분할 트리를 직접 만지는 것은 useSplitGroups 뿐이다 — 여기선 탭바가 '통탭'을 만들 때
-// 그룹 소속을 조회하는 두 함수만 쓴다
-import { groupOf, sessionIdsOf } from '../lib/layout';
+import type { DropSide } from '../lib/layout';
+import {
+  buildTabView,
+  orderTabSessions,
+  persistTabOrder,
+  pruneWindowScreenState,
+  savedTabOrders,
+  useLastActive,
+} from '../lib/tabs';
 import {
   agentIdFromCommand,
   presetsForWorkspace,
@@ -49,15 +53,10 @@ import { PresetsModal } from './PresetsModal';
 import { NewWorkspaceModal } from './NewWorkspaceModal';
 import { NewWorktreeModal } from './NewWorktreeModal';
 import { SessionTabs } from './SessionTabs';
-import type { TabItem } from './SessionTabs';
-import {
-  FONT_SIZE_DEFAULT,
-  FONT_SIZE_KEY,
-  FONT_SIZE_MAX,
-  FONT_SIZE_MIN,
-  TerminalView,
-} from './TerminalView';
-import type { TerminalPaneHandle } from './TerminalView';
+import { TerminalPanes } from './TerminalPanes';
+import { FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN } from './TerminalView';
+import { usePaneOrchestration } from '../lib/usePaneOrchestration';
+import { useTerminalShortcuts } from '../lib/useTerminalShortcuts';
 import { WorkspaceNav } from './WorkspaceNav';
 import { errMsg } from '../../../lib/errMsg';
 
@@ -67,16 +66,6 @@ const terminalApi = () => window.oneApp?.terminal;
 
 // 워크트리 목록·±변경량 갱신 주기 — 로컬 git 명령 몇 개라 수십 ms, 보이는 동안만 돈다
 const WORKTREE_POLL_MS = 10_000;
-
-/**
- * 동시에 살려 두는 xterm pane 수 상한 (최근 사용 순).
- *
- * 세션은 그대로 두고 **화면(pane)만** 재활용한다 — 버려진 pane 은 다시 고르는 순간
- * attach 로 복원되므로(tmux 가 전체 화면을 다시 그린다) 잃는 것은 xterm 쪽 스크롤백·
- * 선택 영역뿐이다. 상한이 필요한 이유는 WebGL 컨텍스트가 **브라우저 전역으로 개수 제한**이
- * 있어서, 넘기면 오래된 컨텍스트가 강제 유실되며 이미 열린 터미널이 깨지기 때문이다.
- */
-const MAX_LIVE_PANES = 8;
 
 /** 프리셋이 없는 위치에 넘길 고정 빈 배열 — 매번 [] 를 만들면 pane 의 memo 가 깨진다 */
 const NO_PRESETS: TerminalPreset[] = [];
@@ -101,15 +90,6 @@ const SIDE_DEFAULT_W = 240;
 /** 드래그로 이 폭 아래까지 끌면 축소 모드로 넘어간다 */
 const SIDE_SNAP_W = 140;
 
-// 터미널 글자 크기 — 세션 pane 이 여러 개 살아 있으므로 값은 여기 한 곳에서만 들고
-// 모든 pane 에 내려준다 (화면 취향이라 localStorage 로 충분 — 보존 대상 아님)
-function savedFontSize(): number {
-  const n = Number(localStorage.getItem(FONT_SIZE_KEY));
-  return Number.isFinite(n) && n >= FONT_SIZE_MIN && n <= FONT_SIZE_MAX
-    ? n
-    : FONT_SIZE_DEFAULT;
-}
-
 function savedChangesWidth(): number {
   const saved = Number(localStorage.getItem('terminal:changesWidth'));
   return Number.isFinite(saved) && saved >= CHANGES_MIN_W && saved <= CHANGES_MAX_W
@@ -130,26 +110,6 @@ function savedExpanded(): string[] {
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
   } catch {
     return [];
-  }
-}
-
-/** 탭 표시 순서 — 화면(selKey)별 세션 id 배열. 화면 취향이라 분할 레이아웃과 같이 localStorage */
-const TAB_ORDER_KEY = 'terminal:tabOrder';
-
-function savedTabOrders(): Record<string, string[]> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) ?? '{}') as Record<
-      string,
-      unknown
-    >;
-    const out: Record<string, string[]> = {};
-    for (const [key, v] of Object.entries(raw)) {
-      const ids = Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-      if (ids.length > 0) out[key] = ids;
-    }
-    return out;
-  } catch {
-    return {};
   }
 }
 
@@ -177,12 +137,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const [worktrees, setWorktrees] = useState<Record<string, WorktreeInfo[]>>({});
   const [expanded, setExpanded] = useState<string[]>(savedExpanded);
   const [selection, setSelection] = useState<WorkspaceSelection | null>(savedSelection);
-  // 탭 순서 — 사용자가 탭을 끌어 정한 표시 순서(화면별). 없는 화면·새 세션은 생성 순서
+  // 탭 순서 — 사용자가 탭을 끌어 정한 표시 순서(화면별). 없는 화면·새 세션은 생성 순서.
+  // 저장은 reorderTabs 가 그 화면 키만 갈아끼운다(persistTabOrder — 팝아웃 창과 공유 저장소)
   const [tabOrders, setTabOrders] = useState<Record<string, string[]>>(savedTabOrders);
-  useEffect(() => {
-    if (Object.keys(tabOrders).length > 0)
-      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(tabOrders));
-  }, [tabOrders]);
 
   const [newWsOpen, setNewWsOpen] = useState(false);
   const [worktreeFor, setWorktreeFor] = useState<TerminalWorkspace | null>(null);
@@ -214,13 +171,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     const el = document.activeElement;
     if (el instanceof HTMLElement && rootRef.current?.contains(el)) el.blur();
   }, [active]);
-
-  const [fontSize, setFontSize] = useState(savedFontSize);
-  // pane 들이 memo 로 묶여 있으므로 내려보내는 콜백은 전부 참조가 고정돼야 한다
-  const changeFontSize = useCallback((n: number) => {
-    localStorage.setItem(FONT_SIZE_KEY, String(n));
-    setFontSize(n);
-  }, []);
 
   // ── 워크스페이스 목록 — main 저장 + 브로드캐스트 구독 ──
   // ⚠️ ready 플래그 — 아래 '선택 보정' effect 가 목록 로드 **전**(빈 배열)에 돌면
@@ -294,6 +244,48 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     });
   }, []);
 
+  // ── 팝아웃 창 배정 미러 — 분리된 세션은 자리표시자 탭으로만 남고 pane 을 만들지
+  // 않는다("한 세션 = 전 창 통틀어 pane 1개" — 정본은 main 의 windows.ts) ──
+  const [termWindows, setTermWindows] = useState<TerminalWindowInfo[]>([]);
+  const [windowsReady, setWindowsReady] = useState(false);
+  useEffect(() => {
+    const api = terminalApi()?.windows;
+    if (!api) return;
+    void api.list().then((list) => {
+      setTermWindows(list);
+      setWindowsReady(true); // 아래 win:* 청소가 빈 초기 배열로 돌면 산 창 상태를 지운다
+    });
+    return api.onChanged(setTermWindows);
+  }, []);
+  // 닫힌 팝아웃의 화면 상태(localStorage win:* — 레이아웃·탭 순서·활성 기억) 청소 —
+  // 창 id 는 재사용되지 않아 다시 읽힐 일이 없다. 산 창의 키는 배정 목록이 지켜 준다.
+  useEffect(() => {
+    if (!windowsReady) return;
+    pruneWindowScreenState(termWindows.map((w) => w.id));
+  }, [windowsReady, termWindows]);
+  /** 분리 세션 id → 팝아웃 창 id */
+  const detachedIds = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of termWindows) for (const id of w.sessionIds) m.set(id, w.id);
+    return m;
+  }, [termWindows]);
+  const detachedIdsRef = useRef(detachedIds);
+  detachedIdsRef.current = detachedIds;
+  /** 이 창(메인) 소유 세션들 — 분할 sanitize·pane 렌더 기준. 분리된 세션이 빠지는
+   *  즉시 pane 이 언마운트돼 detach 되고, 그룹 트리는 sanitize 가 걷어낸다 */
+  const mainSessions = useMemo(
+    () =>
+      detachedIds.size === 0
+        ? sessions
+        : sessions.filter((s) => !detachedIds.has(s.id)),
+    [sessions, detachedIds]
+  );
+  /** livePanes 에서도 걷어낸다 — 참조 안정(useMemo) 필수 (usePaneOrchestration) */
+  const detachedIdSet = useMemo(
+    () => (detachedIds.size === 0 ? undefined : new Set(detachedIds.keys())),
+    [detachedIds]
+  );
+
   // ── 프리셋 — 프리셋 바(⚙ 옆 칩) 목록. ?. 가드는 구 preload(재시작 전) 대비 ──
   const [presets, setPresets] = useState<TerminalPreset[]>([]);
   useEffect(() => {
@@ -364,13 +356,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       : selection.kind === 'other'
         ? otherSessions
         : sessions.filter((s) => s.cwd === selection.path);
-    const order = tabOrders[selKey];
-    if (!order || base.length < 2) return base;
-    const rank = new Map(order.map((id, i) => [id, i]));
-    // ⚠️ 미지정은 MAX_SAFE_INTEGER — Infinity 로 두면 둘 다 미지정일 때 차가 NaN 이 되어
-    // 비교가 무의미해진다(같은 값이면 0 이어야 안정 정렬이 원래 순서를 지킨다).
-    const at = (id: string) => rank.get(id) ?? Number.MAX_SAFE_INTEGER;
-    return [...base].sort((a, b) => at(a.id) - at(b.id));
+    return orderTabSessions(base, tabOrders[selKey]);
   }, [selection, sessions, otherSessions, tabOrders, selKey]);
 
   const selectedWt: WorktreeInfo | null =
@@ -415,29 +401,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
 
   // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로.
   // 기억은 localStorage 에도 미러 — 섹션을 떠났다 와도(재마운트) 보던 세션이 유지된다
-  const lastActiveRef = useRef(
-    new Map<string, string>(
-      (() => {
-        try {
-          return Object.entries(
-            JSON.parse(localStorage.getItem('terminal:lastActive') ?? '{}') as Record<
-              string,
-              string
-            >
-          );
-        } catch {
-          return [];
-        }
-      })()
-    )
-  );
-  const rememberActive = useCallback((key: string, id: string) => {
-    lastActiveRef.current.set(key, id);
-    localStorage.setItem(
-      'terminal:lastActive',
-      JSON.stringify(Object.fromEntries(lastActiveRef.current))
-    );
-  }, []);
+  const { lastActiveRef, rememberActive } = useLastActive();
   // 최신값 ref — 드롭·그립·선택 콜백의 참조를 고정하기 위한 것(pane·탭바 memo 유지)
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
@@ -445,6 +409,70 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   selKeyRef.current = selKey;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
+  // ── 다른 섹션·다른 창에서 넘어온 '이 세션을 열어라' 요청 — 처리 effect 는 아래에.
+  // 선언이 여기(분할 그룹 훅보다 위)인 이유: 크로스 윈도우 드롭 콜백이 setFocusReq 를
+  // 캡처하는데, 뒤에 선언하면 렌더 중 TDZ 에 걸린다.
+  const [focusReq, setFocusReq] = useState<TerminalFocusRequest | null>(null);
+  useTerminalFocusRequest(setFocusReq); // setState 는 identity 가 고정이라 그대로 넘긴다
+
+  // ── 크로스 윈도우 드래그 미러 — 다른 창(팝아웃)이 끄는 세션이면 이 창도 드롭 존을 켠다 ──
+  const [remoteDragId, setRemoteDragId] = useState<string | null>(null);
+  useEffect(() => {
+    const api = terminalApi()?.windows;
+    if (!api) return;
+    return api.onDragState((state) => {
+      setRemoteDragId(
+        state && state.sourceWindowId !== 'main' ? state.sessionId : null
+      );
+    });
+  }, []);
+
+  // 크로스 드롭의 '도착 후 분할 배치' 대기 — moveSession 브로드캐스트로 세션이
+  // 이 창 소속이 된 **뒤에** 트리에 넣어야 sanitize 가 즉시 걷어내지 않는다
+  const pendingDropRef = useRef<{
+    sessionId: string;
+    panelId: string;
+    side: DropSide;
+  } | null>(null);
+
+  /** 다른 창의 세션이 이 창 pane 존에 드롭됐다 — 배정 이동 + 후속 배치 예약 */
+  const onRemoteZoneDrop = useCallback(
+    (id: string, panelId: string, side: DropSide) => {
+      const api = terminalApi()?.windows;
+      if (!api) return;
+      const s = sessionsRef.current.find((x) => x.id === id);
+      const sel = selectionRef.current;
+      // 이 화면(워크트리)의 세션일 때만 분할 의미를 살린다 — 그룹은 selKey 소유물이라
+      // 워크트리 경계를 넘는 분할은 만들지 않는다(복귀 + 그 워크트리로 이동 폴백)
+      const matches = !!s && sel?.kind === 'worktree' && s.cwd === sel.path;
+      void api.moveSession(id, 'main').then((res) => {
+        if (!res.ok) {
+          toast(res.error || '세션을 가져오지 못했습니다.', 'fail');
+          return;
+        }
+        if (matches) {
+          pendingDropRef.current = { sessionId: id, panelId, side };
+        } else if (s) {
+          toast('다른 워크트리의 세션이라 그 워크트리로 이동합니다.', 'info');
+          setFocusReq({ sessionId: id, cwd: s.cwd });
+        }
+      });
+    },
+    [toast]
+  );
+
+  /** 다른 창의 탭을 탭바에 드롭 — 메인으로 복귀 + 그 세션의 워크트리로 이동·활성화 */
+  const adoptSession = useCallback((id: string) => {
+    const api = terminalApi()?.windows;
+    if (!api) return;
+    const cwd = sessionsRef.current.find((s) => s.id === id)?.cwd;
+    void api.moveSession(id, 'main').then((res) => {
+      if (res.ok && cwd) setFocusReq({ sessionId: id, cwd });
+    });
+  }, []);
 
   // ── 분할 그룹 — 상태기계 전체가 훅 안에 있다 (lib/useSplitGroups.ts) ──
   // 트리 보관·영속화·죽은 세션 정리·드래그 앤 드롭·경계 그립까지.
@@ -461,6 +489,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     onDragStartSession,
     onDragEndSession,
     detachSession,
+    peekGroup,
+    applyDropAt,
     onZoneDragOver,
     onZoneDragLeave,
     onZoneDrop,
@@ -468,13 +498,30 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   } = useSplitGroups({
     selKey,
     selKeyRef,
-    sessions,
+    // ⚠️ sessions 가 아니라 **mainSessions** — 이 창의 sanitize 기준은 '세션 생존'이
+    // 아니라 '메인 창 소속'이다. 팝아웃으로 분리된 세션이 그룹 트리에 남으면
+    // 자리표시자와 pane 없는 그룹이 화면을 차지한다.
+    sessions: mainSessions,
     sessionsReady,
     activeId,
     activeIdRef,
     setActiveId,
     rememberActive,
+    // 크로스 윈도우 — 팝아웃 탭 드래그를 미러해 이 창 pane 존을 켜고, 드롭은 배정
+    // 이동(moveSession) + 도착 후 배치(pendingDropRef → applyDropAt)로 처리한다
+    remoteDragId,
+    onRemoteZoneDrop,
   });
+
+  // 크로스 드롭 후속 배치 — moveSession 브로드캐스트로 세션이 mainSessions 에
+  // 나타나면 예약해 둔 pane 자리에 넣는다 (그 전에 넣으면 sanitize 가 걷어낸다)
+  useEffect(() => {
+    const p = pendingDropRef.current;
+    if (!p) return;
+    if (!mainSessions.some((s) => s.id === p.sessionId)) return;
+    pendingDropRef.current = null;
+    applyDropAt(p.sessionId, p.panelId, p.side);
+  }, [mainSessions, applyDropAt]);
 
   /** 화면 전환만 — 히스토리에 남기지 않는다(새 세션 자동 활성화 등 자동 경로용).
    *  탭 클릭 = 화면 전환뿐이다 — 그룹 소속이면 그 그룹이, 아니면 단일 전체 화면이
@@ -501,6 +548,11 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   /** 탭 클릭·⌘1~9·⌃Tab — 사용자가 고른 전환이라 히스토리에 남긴다 */
   const selectTab = useCallback(
     (id: string) => {
+      // 자리표시자(팝아웃 세션) — 화면 전환이 아니라 그 창 포커스다
+      if (detachedIdsRef.current.has(id)) {
+        void terminalApi()?.windows?.focusSession(id);
+        return;
+      }
       if (activeIdRef.current !== id) recordVisit();
       applyTab(id);
     },
@@ -524,41 +576,16 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const reorderTabs = useCallback(
     (ids: string[]) => {
       setTabOrders((cur) => ({ ...cur, [selKeyRef.current]: ids }));
+      persistTabOrder(selKeyRef.current, ids);
     },
     [selKeyRef]
   );
 
-  // ── 탭바 표시 구조 — 단일 세션 | 분할 그룹(멤버 배열) 아이템 목록 ──
-  // 그룹은 첫 멤버의 원래 자리에 멤버들을 인접 정렬해 **하나의 박스(tab-pack)** 로
-  // 렌더된다. tabs 는 평탄화된 표시 순서(⌘1..9·⌃Tab·활성 보정용).
-  const tabView = useMemo(() => {
-    const byId = new Map(tabSessions.map((s) => [s.id, s]));
-    const placed = new Set<string>();
-    const items: TabItem[] = [];
-    const tabs: TerminalSessionInfo[] = [];
-    for (const s of tabSessions) {
-      if (placed.has(s.id)) continue;
-      const g = groups.length > 0 ? groupOf(groups, s.id) : null;
-      const members = g
-        ? sessionIdsOf(g)
-            .map((id) => byId.get(id))
-            .filter((x): x is TerminalSessionInfo => !!x)
-        : [];
-      if (members.length < 2) {
-        // 그룹 미소속(또는 sanitize 전 과도기라 멤버가 1개뿐) — 일반 탭
-        items.push({ kind: 'single', session: s });
-        tabs.push(s);
-        placed.add(s.id);
-        continue;
-      }
-      for (const m of members) {
-        placed.add(m.id);
-        tabs.push(m);
-      }
-      items.push({ kind: 'group', members });
-    }
-    return { items, tabs };
-  }, [tabSessions, groups]);
+  // ── 탭바 표시 구조 — 단일 | 그룹(통탭) | 자리표시자 아이템 목록 (lib/tabs.ts 공유) ──
+  const tabView = useMemo(
+    () => buildTabView(tabSessions, groups, detachedIds),
+    [tabSessions, groups, detachedIds]
+  );
 
   /** pane 클릭 = 포커스 이동 — 분할 중 어느 터미널이 키보드·⌘F 를 받는지 정한다 */
   const focusPane = useCallback(
@@ -570,59 +597,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [rememberActive]
   );
 
-  // ── 상단 공용 바 ↔ pane 연결 — 검색 열기·맨 아래로는 터미널 인스턴스를 직접
-  // 만져야 해서 pane 이 핸들을 등록하고, 바는 **포커스 pane** 의 핸들만 부른다.
-  const paneHandles = useRef(new Map<string, TerminalPaneHandle>());
-  const registerPaneHandle = useCallback(
-    (id: string, handle: TerminalPaneHandle | null) => {
-      if (handle) paneHandles.current.set(id, handle);
-      else paneHandles.current.delete(id);
-    },
-    []
-  );
-  const openActiveSearch = useCallback(() => {
-    if (activeIdRef.current)
-      paneHandles.current.get(activeIdRef.current)?.openSearch();
-  }, []);
-  const scrollActiveToBottom = useCallback(() => {
-    if (activeIdRef.current)
-      paneHandles.current.get(activeIdRef.current)?.scrollToBottom();
-  }, []);
-  // ── 포커스 안전망 — 섹션 안을 클릭했으면 키보드 포커스를 pane 으로 되돌린다 ────────
-  // ⌘C/⌘V 는 이 앱이 처리하지 않는다 — Electron 기본 메뉴의 role:copy/paste 라
-  // **포커스된 편집 요소**에만 작동하고, xterm 은 클립보드 리스너를 자기 element·textarea
-  // 에만 건다. 그래서 탭·툴바 버튼이 포커스를 쥐고 있으면 복사·붙여넣기가 조용히
-  // 무반응이 된다(2026-08-13 '가끔 안 된다'의 정체 — 이미지 붙여넣기 위임도 함께 죽는다).
-  // pane 의 포커스 복원 effect 는 `focused` 값이 **바뀔 때만** 도므로, 같은 탭을 다시
-  // 누르는 것처럼 값이 그대로인 경로에서는 포커스가 영영 돌아오지 않았다.
-  const reclaimFocus = useCallback((e: ReactMouseEvent) => {
-    // 모달·피커 팝오버는 body portal 이라 DOM 상 섹션 밖이지만 **React 트리로는** 여기까지
-    // 버블링된다 — 실제 DOM 포함 관계로 걸러야 모달 안 클릭을 건드리지 않는다.
-    if (!(e.target instanceof Node) || !rootRef.current?.contains(e.target)) return;
-    // ⚠️ rAF 로 미룬다 — 클릭이 만드는 포커스 이동(버튼 기본 포커스, 방금 열린 모달의
-    // autoFocus)이 이 핸들러보다 **뒤에** 확정된다. 즉시 부르면 그것들을 빼앗는다.
-    requestAnimationFrame(() => {
-      // portal 이 떠 있으면 포커스 주인은 그쪽이다
-      if (document.querySelector('.modal-overlay, .picker__pop')) return;
-      // ⚠️ 텍스트를 드래그 선택한 직후면 손대지 않는다 — 변경사항 diff 를 선택해
-      // ⌘C 하려는 순간 포커스를 옮기면 선택이 날아간다.
-      if (window.getSelection()?.toString()) return;
-      const el = document.activeElement as HTMLElement | null;
-      // 입력 중이면 그대로 둔다(검색·이름 편집·커밋 메시지). xterm 의 입력도 TEXTAREA 라
-      // 이 판정에 걸리는데, 그때는 이미 포커스가 터미널이므로 할 일이 없다.
-      if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return;
-      if (el?.isContentEditable) return;
-      if (activeIdRef.current)
-        paneHandles.current.get(activeIdRef.current)?.focus();
-    });
-  }, []);
-  // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정.
-  // tmux 세션은 xterm 이 아니라 tmux copy-mode 가 스크롤 상태의 주인이라, pane 이
-  // 휠 위임 응답(scrolledUp)으로 올려 준다(TerminalView 의 '휠 스크롤' 절).
-  const [scrolledUp, setScrolledUp] = useState<Record<string, boolean>>({});
-  const onScrolledChange = useCallback((id: string, v: boolean) => {
-    setScrolledUp((cur) => (!!cur[id] === v ? cur : { ...cur, [id]: v }));
-  }, []);
   const revealActive = useCallback(async () => {
     const id = activeIdRef.current;
     if (!id) return;
@@ -702,18 +676,24 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
 
   useEffect(() => {
     if (pendingRef.current) return;
-    if (activeId && tabSessions.some((s) => s.id === activeId)) return;
+    if (
+      activeId &&
+      tabSessions.some((s) => s.id === activeId) &&
+      // 활성 세션이 팝아웃으로 분리됐다 — 자리표시자를 activeId 로 두면 화면이 빈다
+      !detachedIds.has(activeId)
+    )
+      return;
     // ⚠️ 이 effect 는 useSplitGroups 의 sanitize effect **뒤에** 돌아야 한다(훅 호출이
     // 위에 있어 그렇게 된다) — 그룹 뷰에서 focused 가 죽으면 그쪽이 남은 멤버를
     // rememberActive 로 먼저 기억해 두고, 여기서 그 remembered 를 읽어 같은 세션을
     // 고른다. 순서가 뒤집히면 둘이 서로 다른 setActiveId 를 쌓아 나중 것이 이긴다.
     const remembered = lastActiveRef.current.get(selKey);
+    // 자리표시자는 폴백 후보가 아니다 — pane 이 없는 세션을 고르면 화면이 빈다
+    const selectable = tabView.tabs.filter((s) => !detachedIds.has(s.id));
     setActiveId(
-      tabView.tabs.find((s) => s.id === remembered)?.id ??
-        tabView.tabs[0]?.id ??
-        null
+      selectable.find((s) => s.id === remembered)?.id ?? selectable[0]?.id ?? null
     );
-  }, [tabSessions, tabView, activeId, selKey, pendingCleared]);
+  }, [tabSessions, tabView, activeId, selKey, pendingCleared, lastActiveRef, detachedIds]);
 
   /** 세션 생성·복제 직후 — 목록에 나타나면 그 세션을 활성화한다.
    *  ⚠️ 목록에 **끝내 나타나지 않는 id**(이미 종료된 세션의 알림 [이동] 등)를 받으면
@@ -732,14 +712,20 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [clearPending, expirePending]
   );
 
-  // ── 다른 섹션에서 넘어온 '이 세션을 열어라' 요청 (Jira [작업] → femc 세션) ──
-  // ⚠️ 요청이 도착한 시점엔 워크스페이스·워크트리 목록이 아직 없다(섹션에 막 들어왔다).
+  // ── '이 세션을 열어라' 요청 처리 (Jira [작업] → femc 세션 · 크로스 윈도우 복귀) ──
+  // ⚠️ 요청이 도착한 시점엔 워크스페이스·워크트리 목록이 아직 없을 수 있다.
   // 그래서 담아 두고, 목록이 준비되면 **그 세션의 위치로 선택을 옮긴 뒤** 활성화한다 —
   // 선택을 안 옮기면 다른 워크트리를 보던 중일 때 탭 목록에 그 세션이 없다.
-  const [focusReq, setFocusReq] = useState<TerminalFocusRequest | null>(null);
-  useTerminalFocusRequest(setFocusReq); // setState 는 identity 가 고정이라 그대로 넘긴다
+  // (state 선언은 크로스 윈도우 드롭 콜백보다 위 — 그쪽 주석 참고)
   useEffect(() => {
     if (!focusReq) return;
+    // 그 세션이 팝아웃 창에 있으면 그 창 포커스가 곧 '열기'다 (Jira [작업] 등)
+    const popoutId = detachedIds.get(focusReq.sessionId);
+    if (popoutId) {
+      void terminalApi()?.windows?.focus(popoutId);
+      setFocusReq(null);
+      return;
+    }
     const wtReady = workspaces.every((w) => !!worktrees[w.id]);
     // 세션 목록도 기다린다 — 없으면 '이 세션이 살아 있는가' 판정을 할 수 없어
     // 죽은 세션 요청이 대기 만료(안내 토스트)로 흘러가야 할지 알 수 없다
@@ -762,29 +748,52 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     worktrees,
     selectAndSave,
     activateSession,
+    detachedIds,
   ]);
 
-  // ── 살아 있는 pane — **실제로 본 적 있는 세션만** xterm 을 만든다 ──
-  // 예전엔 sessions 전부를 마운트해서 터미널 섹션에 들어가는 순간 세션 수만큼
-  // xterm·WebGL 컨텍스트·attach(tmux 클라이언트 spawn)가 한꺼번에 생겼다.
-  // 지금은 화면의 세션(분할이면 레이아웃 전체, 아니면 활성 하나)만 붙이고, 한 번 연
-  // pane 은 상한(MAX_LIVE_PANES)까지 유지해 전환 즉시성과 스크롤백·검색 상태를 지킨다.
-  const [livePanes, setLivePanes] = useState<string[]>([]); // 화면 세션들 + 최근 사용 순
-  useEffect(() => {
-    const shown = activeGroupIds ?? (activeId ? [activeId] : []);
-    if (shown.length === 0) return;
-    setLivePanes((cur) => {
-      // LRU 축출은 **화면 밖 세션만** 잘라낸다 — 보이는 pane 을 버리면 그 자리가 빈다
-      const rest = cur.filter((id) => !shown.includes(id));
-      const next = [
-        ...shown,
-        ...rest.slice(0, Math.max(0, MAX_LIVE_PANES - shown.length)),
-      ];
-      return next.length === cur.length && next.every((id, i) => id === cur[i])
-        ? cur
-        : next;
-    });
-  }, [activeId, activeGroupIds]);
+  // ── pane 오케스트레이션 — 살아 있는 pane(LRU)·글자 크기·pane 핸들·포커스 안전망·
+  // 스크롤 상태. 팝아웃 창과 공유하는 훅(lib/usePaneOrchestration.ts)에 있다.
+  const {
+    livePanes,
+    fontSize,
+    changeFontSize,
+    registerPaneHandle,
+    openActiveSearch,
+    scrollActiveToBottom,
+    reclaimFocus,
+    scrolledUp,
+    onScrolledChange,
+  } = usePaneOrchestration({
+    activeId,
+    activeGroupIds,
+    activeIdRef,
+    rootRef,
+    excludeIds: detachedIdSet, // 분리 세션은 pane 을 만들지 않는다(그 창이 유일 pane)
+  });
+
+  // ── 팝아웃 분리·복귀 — 배정 변경은 전부 main(windows.ts)에 위임한다 ──
+  const focusWindow = useCallback((windowId: string) => {
+    void terminalApi()?.windows?.focus(windowId);
+  }, []);
+  const returnSession = useCallback((id: string) => {
+    void terminalApi()?.windows?.moveSession(id, 'main');
+  }, []);
+  /** 탭을 창 밖에 놓았다 — 그 좌표에 팝아웃 창을 만든다 (그룹 멤버면 그룹째) */
+  const detachToWindow = useCallback(
+    (id: string, x: number, y: number) => {
+      const api = terminalApi()?.windows;
+      if (!api) return;
+      // 트리는 무변경 조회(peekGroup)로 떠 간다 — 이 화면의 그룹 트리는 배정
+      // 브로드캐스트 뒤 sanitize 가 지우므로, 창 생성이 거부돼도 잃는 것이 없다
+      const group = peekGroup(id);
+      void api.open(
+        group
+          ? { sessionIds: group.ids, layout: group.layout, x, y }
+          : { sessionIds: [id], x, y }
+      );
+    },
+    [peekGroup]
+  );
 
   // 입력대기 토스트 억제 — "그 세션을 지금 보고 있는가"를 App 의 토스트 브리지에 제공.
   // 최신값은 activeIdRef 와 같은 render 시점 대입 패턴 (콜백 identity 는 고정).
@@ -999,73 +1008,17 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [closeSession]
   );
 
-  // ── 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료 · ⌘B 변경사항 드로어.
-  // ⚠️ capture 단계 + stopPropagation 으로 잡는다 — bubble 로 잡으면 xterm 의 textarea
-  // 핸들러가 먼저 처리해 같은 키가 셸에도 전달된다(⌃Tab 이 특히 그렇다).
-  // ⚠️ ⌘W(창 닫기)·⌘+/-(전체 UI 줌)는 Electron 기본 메뉴가 선점하므로 쓰지 않는다.
-  // ⚠️ 리스너는 `active` 가 바뀔 때만 다시 건다 — deps 에 tabView·activeSession 을 넣으면
-  // 세션 상태 브로드캐스트(초 단위)마다 걷었다 다시 달게 된다. 최신 클로저는 ref 로 넘긴다.
-  const onSessionKey = (e: KeyboardEvent) => {
-    // 이름 편집·검색 입력·커밋 메시지 작성 중에는 넘긴다.
-    // ⚠️ TEXTAREA 도 막아야 한다 — 변경사항 드로어의 커밋 메시지가 공용 Textarea 라
-    // 예전엔 작성 중 ⌘⇧W 가 확인 없이 세션을 죽였다. 단 xterm 의 입력도 textarea
-    // (`.xterm-helper-textarea`)이므로 그것만 예외 — 아니면 터미널에 포커스가 있는
-    // 동안 단축키가 전부 죽는다.
-    const focused = document.activeElement as HTMLElement | null;
-    if (focused?.tagName === 'INPUT') return;
-    if (
-      focused?.tagName === 'TEXTAREA' &&
-      !focused.classList.contains('xterm-helper-textarea')
-    )
-      return;
-    const claim = () => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    // 순회·번호는 **표시 순서**(tabView — 그룹 멤버 인접 정렬)를 따른다
-    const tabs = tabView.tabs;
-    if (e.ctrlKey && !e.metaKey && e.key === 'Tab') {
-      if (tabs.length < 2) return;
-      claim();
-      const cur = tabs.findIndex((s) => s.id === activeId);
-      const next = (cur + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length;
-      selectTab(tabs[next].id);
-      return;
-    }
-    if (!e.metaKey || e.altKey || e.ctrlKey) return;
-    if (e.shiftKey) {
-      if (e.key.toLowerCase() === 'w' && activeSession) {
-        claim();
-        void closeSession(activeSession);
-      }
-      return;
-    }
-    if (e.key === 't') {
-      if (!canCreate) return;
-      claim();
-      void createShell(); // 모달 없이 바로 셸 — 에이전트 선택은 [+] 또는 프리셋 바
-    } else if (e.key.toLowerCase() === 'b') {
-      claim();
-      toggleChanges(); // 변경사항 드로어 열고 닫기 — 탑바 git 버튼과 같은 동작
-    } else if (e.key >= '1' && e.key <= '9') {
-      const target = tabs[Number(e.key) - 1];
-      if (!target) return;
-      claim();
-      selectTab(target.id);
-    }
-  };
-  const onSessionKeyRef = useRef(onSessionKey);
-  useEffect(() => {
-    onSessionKeyRef.current = onSessionKey;
+  // ── 세션 단축키 — 팝아웃 창과 공유하는 훅(lib/useTerminalShortcuts.ts)에 있다 ──
+  useTerminalShortcuts(active, {
+    tabs: tabView.tabs,
+    activeId,
+    activeSession,
+    selectTab,
+    closeSession,
+    canCreate,
+    createShell,
+    toggleChanges,
   });
-  useEffect(() => {
-    // keep-alive 로 숨은 동안은 바인딩 자체를 걷는다 — 안 걷으면 다른 섹션에서 누른
-    // ⌘T·⌘⇧W 가 보이지 않는 터미널의 세션을 만들고 죽인다
-    if (!active) return;
-    const onKey = (e: KeyboardEvent) => onSessionKeyRef.current(e);
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [active]);
 
   // 워크스페이스·워크트리 CRUD 는 통째로 훅에 있다 — LNB 에 그대로 펼쳐 넘긴다
   const wsActions = useWorkspaceActions({ sessions, setWorkspaces, refreshWorktrees });
@@ -1184,6 +1137,11 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
+          onDetachToWindow={detachToWindow}
+          onFocusWindow={focusWindow}
+          onReturnSession={returnSession}
+          remoteDraggingId={remoteDragId}
+          onAdoptSession={adoptSession}
           onReorder={reorderTabs}
         />
 
@@ -1274,93 +1232,27 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           </div>
         )}
 
-        {/* ⚠️ 세션마다 pane 을 만들고 **보이지 않는 것도 언마운트하지 않는다** — 예전엔
-            key={activeId} 로 xterm 을 매번 파괴해서, 전환할 때마다 선택 영역·검색 상태가
-            사라지고 attach 왕복 + TUI 전체 리렌더를 다시 겪었다. 숨은 pane 은 absolute
-            inset:0 이라 활성 pane 과 같은 크기를 유지한다 — 탭바가 위에 생겼으므로
-            기준 컨테이너는 __main 이 아니라 이 __panes 다(아니면 탭바 높이만큼 어긋난다).
-            분할 중에는 트리의 pane 이 전부 보이고(%rect absolute), 트리 밖 pane 만 숨는다.
-            pane 들은 트리 구조와 무관하게 **플랫한 형제**로 둔다 — React 트리에서
-            재부모화되면 xterm 이 언마운트된다(토스 아티클과 같은 좌표 렌더 방식). */}
-        <div className="terminal__panes" ref={panesRef}>
-          {sessions
-            // 본 적 있는 세션만 pane 을 만든다 — 섹션 진입 시 전 세션 동시 attach 방지
-            .filter((s) => livePanes.includes(s.id))
-            .map((s) => {
-              const pane = layoutRects?.bySession.get(s.id);
-              return (
-                <TerminalView
-                  key={s.id}
-                  sessionId={s.id}
-                  // 섹션이 keep-alive 로 숨으면 pane 전부를 '숨은 pane' 으로 내린다 —
-                  // 크기 주장 중지(visibleRef)·⌘F 해제(focused)가 기존 게이트 그대로 걸리고,
-                  // 복귀 시 visible/focused effect 가 fit·재주장·리드로·포커스를 복원한다
-                  visible={active && (layoutRects ? !!pane : s.id === activeId)}
-                  focused={active && s.id === activeId}
-                  rectLeft={pane?.rect.left}
-                  rectTop={pane?.rect.top}
-                  rectW={pane?.rect.width}
-                  rectH={pane?.rect.height}
-                  onFocusPane={focusPane}
-                  fontSize={fontSize}
-                  onRegisterHandle={registerPaneHandle}
-                  onScrolledChange={onScrolledChange}
-                />
-              );
-            })}
-          {/* 분할 경계 그립 — SplitNode 마다 하나, 드래그 = 그 노드의 ratio 조절 */}
-          {layoutRects?.grips.map((g) => (
-            <div
-              key={g.splitId}
-              className={`terminal__split-grip terminal__split-grip--${g.orientation}`}
-              role="separator"
-              aria-orientation={g.orientation === 'row' ? 'vertical' : 'horizontal'}
-              aria-label="분할 비율 조절"
-              style={
-                g.orientation === 'row'
-                  ? {
-                      left: `${g.rect.left}%`,
-                      top: `${g.rect.top}%`,
-                      height: `${g.rect.height}%`,
-                    }
-                  : {
-                      left: `${g.rect.left}%`,
-                      top: `${g.rect.top}%`,
-                      width: `${g.rect.width}%`,
-                    }
-              }
-              onPointerDown={(e) => onSplitGripDown(e, g)}
-            />
-          ))}
-          {/* 드롭 존 — 탭 드래그 중에만 pane 전체를 덮는 투명 레이어.
-              X자 판정으로 상/하/좌/우(분할)·중앙(교체)을 정하고 프리뷰를 띄운다 */}
-          {dropZones?.map((z) => (
-            <div
-              key={z.panelId}
-              className="terminal__drop-zone"
-              style={{
-                left: `${z.rect.left}%`,
-                top: `${z.rect.top}%`,
-                width: `${z.rect.width}%`,
-                height: `${z.rect.height}%`,
-              }}
-              onDragOver={(e) => onZoneDragOver(e, z.panelId)}
-              onDragLeave={onZoneDragLeave}
-              onDrop={(e) => onZoneDrop(e, z.panelId)}
-            />
-          ))}
-          {/* 드롭 프리뷰 — 분할될 반쪽(중앙 드롭이면 pane 전체)을 액센트로 표시 */}
-          {hintRect && (
-            <div
-              className="terminal__drop-hint"
-              style={{
-                left: `${hintRect.left}%`,
-                top: `${hintRect.top}%`,
-                width: `${hintRect.width}%`,
-                height: `${hintRect.height}%`,
-              }}
-            />
-          )}
+        {/* pane 영역 — 마크업·불변식은 TerminalPanes(팝아웃 창과 공유)에 있다.
+            ⚠️ sessions 가 아니라 mainSessions — 분리 세션의 pane 이 숨은 채 attach 를
+            붙들면 '한 세션 = 전 창 pane 1개' 불변식이 깨진다(즉시 언마운트 = detach) */}
+        <TerminalPanes
+          sessions={mainSessions}
+          livePanes={livePanes}
+          active={active}
+          activeId={activeId}
+          fontSize={fontSize}
+          layoutRects={layoutRects}
+          panesRef={panesRef}
+          dropZones={dropZones}
+          hintRect={hintRect}
+          onFocusPane={focusPane}
+          onRegisterHandle={registerPaneHandle}
+          onScrolledChange={onScrolledChange}
+          onZoneDragOver={onZoneDragOver}
+          onZoneDragLeave={onZoneDragLeave}
+          onZoneDrop={onZoneDrop}
+          onSplitGripDown={onSplitGripDown}
+        >
           {!activeSession && (
             <div className="terminal__empty">
               {workspaces.length === 0 && otherSessions.length === 0 ? (
@@ -1394,7 +1286,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
               )}
             </div>
           )}
-        </div>
+        </TerminalPanes>
       </div>
 
       {/* 변경사항 드로어 — 선택한 워크트리의 git 상태. key 로 대상 전환 시 상태 리셋 */}

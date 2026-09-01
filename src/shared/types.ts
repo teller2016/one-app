@@ -1212,6 +1212,33 @@ export type TerminalSessionInfo = {
   createdAt: number;
 };
 
+// ── 터미널 팝아웃 창 — 세션↔창 배정의 정본은 main(windows.ts), 렌더러는 미러 ──
+
+/** 팝아웃 창 요약 — `terminal:windows` 브로드캐스트 payload (전체 목록 탑재) */
+export type TerminalWindowInfo = {
+  id: string; // popoutId — 창·windowState·레이아웃 selKey(`win:<id>`)의 축
+  sessionIds: string[];
+};
+
+/** 창 간 드래그 중계 — `terminal:dragState` 브로드캐스트. null = 드래그 없음 */
+export type TerminalDragState = {
+  sessionId: string;
+  /** 'main' | popoutId — 수신 창이 자기가 소스인지 판정한다 */
+  sourceWindowId: string;
+  /** 그룹 통탭 드래그면 멤버 전원 (sessionId 포함) */
+  groupIds?: string[];
+} | null;
+
+/** 팝아웃 창 열기 입력 — 창 밖 드롭이 부른다 */
+export type TerminalPopoutOpenInput = {
+  sessionIds: string[];
+  /** 그룹째 분리 시 직렬화된 분할 트리(JSON) — 팝아웃 init 이 1회 소비한다 */
+  layout?: string;
+  /** dragend 의 screen 좌표 — 창을 그 자리에 띄운다 (없으면 중앙) */
+  x?: number;
+  y?: number;
+};
+
 /** 새 세션 생성 옵션 */
 export type TerminalCreateInput = {
   cwd?: string; // 없으면 홈 디렉터리

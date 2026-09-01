@@ -29,5 +29,15 @@ window.addEventListener('drop', (e) => {
 
 const container = document.getElementById('root');
 if (container) {
-  createRoot(container).render(<App />);
+  // 팝아웃 창 — main(features/terminal/windows.ts)이 같은 엔트리를 `?popout=<id>` 로
+  // 로드한다(새 Vite 엔트리 금지 — cacheDir 분리 함정). 마운트 전에 배정(init)을
+  // 받아야 해서 비동기 마운트 함수를 쓴다.
+  const popoutId = new URLSearchParams(location.search).get('popout');
+  if (popoutId) {
+    void import('./features/terminal/components/TerminalPopoutApp').then((m) =>
+      m.mountTerminalPopout(container, popoutId)
+    );
+  } else {
+    createRoot(container).render(<App />);
+  }
 }
