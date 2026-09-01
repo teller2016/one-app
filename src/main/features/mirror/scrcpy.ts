@@ -1,9 +1,11 @@
 // scrcpy 실행·상태 추적 — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
 // ⚠️ spawn 자식은 부모(앱) 종료만으로 죽지 않는다(POSIX 재부모화) — 앱 종료 시
 // main.ts 의 before-quit 이 disposeMirror() 로 명시적으로 정리한다(2026-08-07).
+import { app } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
   type MirrorActionResult,
@@ -17,6 +19,46 @@ const MODE_ARGS: Record<MirrorMode, string[]> = {
   mirror: ['-d', '--turn-screen-off'], // Mirror USB.app
   control: ['-d', '--no-video', '--no-audio', '--keyboard=uhid', '--mouse=uhid'], // Control USB.app
 };
+
+// scrcpy 는 화면이 없는 control 모드에서도 키·마우스 입력을 받으려고 창을 띄우고,
+// 그 한가운데에 자기 아이콘(초록 안드로이드)을 크게 그린다. 소스를 고쳐 다시 빌드할 것 없이
+// **SCRCPY_ICON_DIR 로 아이콘 디렉터리를 통째로 갈아끼울 수 있어서**(scrcpy 4.0 실측,
+// 2026-09-01) 투명 PNG 를 넘겨 빈 창으로 만든다.
+// ⚠️ **1x1 로 만들지 말 것** — 창은 비지만 같은 이미지가 Dock 아이콘으로도 쓰여서,
+//    Dock 이 1x1 을 확대할 때 파란 사각형이 됐다(2026-09-01 실측). 256x256 이면 Dock 도
+//    빈 자리로 남는다.
+const BLANK_ICON_PNG = Buffer.from(
+  // 256x256 전체가 알파 0 인 PNG (334 바이트 — 전부 0 이라 압축이 잘 된다)
+  'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR42u3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAAB2ClDBAAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+let blankIconDir: string | null | undefined; // undefined = 아직 안 만듦 / null = 실패
+
+/**
+ * 투명 아이콘 디렉터리를 userData 아래에 확보하고 경로를 돌려준다.
+ * ⚠️ scrcpy 는 이 디렉터리에서 `scrcpy.png` 와 `disconnected.png` 두 이름을 찾는다 —
+ *    하나만 두면 기기가 빠질 때 원래 아이콘 폴백이 뜬다.
+ * 실패해도 null 만 돌려준다: 아이콘은 곁가지라 미러링 자체를 막지 않는다.
+ */
+function ensureBlankIconDir(): string | null {
+  if (blankIconDir !== undefined) return blankIconDir;
+  try {
+    const dir = path.join(app.getPath('userData'), 'mirror-icons');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of ['scrcpy.png', 'disconnected.png']) {
+      const file = path.join(dir, name);
+      // 존재 여부가 아니라 크기로 비교한다 — 예전에 다른 아이콘을 심어 뒀어도 갱신된다
+      if (fs.statSync(file, { throwIfNoEntry: false })?.size !== BLANK_ICON_PNG.length) {
+        fs.writeFileSync(file, BLANK_ICON_PNG);
+      }
+    }
+    blankIconDir = dir;
+  } catch {
+    blankIconDir = null;
+  }
+  return blankIconDir;
+}
 
 // Homebrew 경로 우선 탐색 (Apple Silicon → Intel)
 const SCRCPY_CANDIDATES = ['/opt/homebrew/bin/scrcpy', '/usr/local/bin/scrcpy'];
@@ -132,9 +174,15 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
 
     lastError = '';
     const stderrTail: string[] = []; // 비정상 종료 원인 표시용 — 마지막 몇 줄만 유지
+    const iconDir = ensureBlankIconDir();
     const proc = spawn(scrcpy, MODE_ARGS[mode], {
-      // adb 등 부속 바이너리를 찾도록 Homebrew 경로 보강 (Mirror USB.app 과 동일)
-      env: { ...process.env, PATH: `/opt/homebrew/bin:${process.env.PATH ?? ''}` },
+      env: {
+        ...process.env,
+        // adb 등 부속 바이너리를 찾도록 Homebrew 경로 보강 (Mirror USB.app 과 동일)
+        PATH: `/opt/homebrew/bin:${process.env.PATH ?? ''}`,
+        // 창 한가운데 안드로이드 아이콘을 지운다 (control 모드에서 보인다)
+        ...(iconDir ? { SCRCPY_ICON_DIR: iconDir } : {}),
+      },
       stdio: ['ignore', 'ignore', 'pipe'],
     });
     proc.stderr?.on('data', (d: Buffer) => {
