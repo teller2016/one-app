@@ -56,11 +56,18 @@ function isReachable(b: Rectangle): boolean {
  */
 export function loadWindowState(
   key = 'main',
-  spec: { defaults?: typeof WINDOW_DEFAULT; min?: typeof WINDOW_MIN } = {}
+  spec: {
+    defaults?: typeof WINDOW_DEFAULT;
+    min?: typeof WINDOW_MIN;
+    /** 이 키의 기억이 없을 때 물려받을 키 — 팝아웃의 '마지막 크기'(popout-last)용.
+     *  창 id 는 매번 새로 생기므로 개별 키만으로는 크기가 영영 기억되지 않는다. */
+    fallbackKey?: string;
+  } = {}
 ): SavedState & { width: number; height: number } {
   const def = spec.defaults ?? WINDOW_DEFAULT;
   const min = spec.min ?? WINDOW_MIN;
-  const saved = readAll()[key] ?? {};
+  const all = readAll();
+  const saved = all[key] ?? (spec.fallbackKey ? all[spec.fallbackKey] : undefined) ?? {};
   const width = Math.max(min.width, Math.round(saved.width ?? def.width));
   const height = Math.max(min.height, Math.round(saved.height ?? def.height));
   const maximized = saved.maximized === true;
@@ -105,6 +112,19 @@ export function trackWindowState(win: BrowserWindow, key = 'main'): void {
     if (timer) clearTimeout(timer);
     save();
   });
+}
+
+/**
+ * 크기만 다른 키로 물려준다 — 팝아웃이 닫힐 때 '마지막 팝아웃 크기' 승계용.
+ * 좌표는 옮기지 않는다(다음 창이 이전 창 자리에 겹쳐 뜨는 것을 막는다).
+ * ⚠️ `to` 는 `popout:` 접두사를 쓰지 말 것 — pruneWindowStates 가 고아로 보고 지운다.
+ */
+export function inheritWindowSize(from: string, to: string): void {
+  const all = readAll();
+  const s = all[from];
+  if (typeof s?.width !== 'number' || typeof s?.height !== 'number') return;
+  all[to] = { width: s.width, height: s.height };
+  writeUserJson(FILE, all);
 }
 
 /** 창 상태 삭제 — 팝아웃을 사용자가 닫아 레코드가 사라질 때 함께 지운다 */

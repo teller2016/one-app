@@ -437,6 +437,7 @@ declare global {
             sessionId: string,
             to: string,
           ) => Promise<{ ok: boolean; error?: string }>;
+          revealInMain: (sessionId: string) => Promise<{ handled: boolean }>;
           init: (
             id: string,
           ) => Promise<{ sessionIds: string[]; layout?: string }>;
@@ -446,6 +447,10 @@ declare global {
           onDragState: (cb: (state: TerminalDragState) => void) => () => void;
         };
         locationLabel?: (sessionId: string) => Promise<string | null>;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        onReveal?: (
+          cb: (req: { sessionId: string; cwd: string }) => void,
+        ) => () => void;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

@@ -565,6 +565,10 @@ contextBridge.exposeInMainWorld("oneApp", {
       // 배정 변경 (to: 'main' | popoutId) — 크로스 윈도우 드롭·되돌리기 버튼 공용
       moveSession: (sessionId: string, to: string) =>
         ipcRenderer.invoke("terminal:windows:move-session", { sessionId, to }),
+      // 되돌린 세션을 메인 창에서 열게 한다 — 메인 창이 다른 워크트리를 보고 있으면
+      // 되돌린 세션이 화면에 안 나타나므로, 창 포커스 + 그 세션으로 이동까지 시킨다
+      revealInMain: (sessionId: string) =>
+        ipcRenderer.invoke("terminal:windows:reveal-in-main", sessionId),
       // 팝아웃 부팅 1회 — 배정 세션 + (그룹째 분리 시) 최초 분할 트리
       init: (id: string) => ipcRenderer.invoke("terminal:windows:init", id),
       // 배정 변경 구독 — payload 로 전체 목록 (terminal:sessions 관례). 해제 함수 반환
@@ -590,6 +594,13 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 세션 위치 라벨 ("워크스페이스 · 워크트리") — 팝아웃 헤더 표시용
     locationLabel: (sessionId: string) =>
       ipcRenderer.invoke("terminal:location-label", sessionId),
+    // 팝아웃에서 되돌린 세션을 이 창(메인)에서 열라는 신호. 해제 함수를 반환한다.
+    onReveal: (cb: (req: { sessionId: string; cwd: string }) => void) => {
+      const listener = (_e: unknown, req: { sessionId: string; cwd: string }) =>
+        cb(req);
+      ipcRenderer.on("terminal:reveal", listener);
+      return () => ipcRenderer.removeListener("terminal:reveal", listener);
+    },
   },
   // 로그인 시 자동 시작 조회/설정 (OS 로그인 아이템)
   getAutostart: () => ipcRenderer.invoke("app:autostart:get"),

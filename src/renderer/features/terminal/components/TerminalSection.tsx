@@ -776,7 +776,14 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     void terminalApi()?.windows?.focus(windowId);
   }, []);
   const returnSession = useCallback((id: string) => {
-    void terminalApi()?.windows?.moveSession(id, 'main');
+    // 되돌린 세션을 곧바로 화면에 올린다 — 자리표시자는 지금 화면의 탭이지만,
+    // 그 사이 워크트리를 옮겼을 수 있어 focusReq 로 그 워크트리까지 맞춘다
+    const cwd = sessionsRef.current.find((s) => s.id === id)?.cwd;
+    void terminalApi()
+      ?.windows?.moveSession(id, 'main')
+      .then((res) => {
+        if (res?.ok && cwd) setFocusReq({ sessionId: id, cwd });
+      });
   }, []);
   /** 탭을 창 밖에 놓았다 — 그 좌표에 팝아웃 창을 만든다 (그룹 멤버면 그룹째) */
   const detachToWindow = useCallback(

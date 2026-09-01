@@ -570,6 +570,13 @@ export const SessionTabs = memo(function SessionTabs({
         )}
       </div>
 
+      {/* 탭과 우측 액션 사이의 빈 공간 — 팝아웃 창에서 **창을 잡아 끄는 손잡이**다.
+          ⚠️ 손잡이를 탭바 컨테이너 전체(app-region: drag)로 두면, 창이 비활성일 때
+          부모의 drag 가 탭의 no-drag 를 이겨 **탭을 잡아도 창이 끌린다**(2026-09-01
+          실측). 손잡이는 탭 바깥의 독립 요소여야 한다. 드롭 존(그룹 분리·가져오기)은
+          그대로다 — 진행 중인 드래그의 dragover 는 drag 영역도 정상 수신한다. */}
+      <div className="terminal__tabs-space" aria-hidden="true" />
+
       <div className="terminal__tabs-actions">
         {rightActions !== undefined ? (
           rightActions

@@ -22,6 +22,7 @@ import { IS_DEV_INSTANCE, runtimeFile } from '../../lib/devInstance';
 import { readUserJson, writeUserJson } from '../../lib/store';
 import {
   clearWindowState,
+  inheritWindowSize,
   loadWindowState,
   pruneWindowStates,
   trackWindowState,
@@ -36,6 +37,9 @@ type PersistedWindows = Record<string, { sessionIds: string[] }>;
 
 const POPOUT_DEFAULT = { width: 900, height: 600 };
 const POPOUT_MIN = { width: 480, height: 320 };
+// 마지막으로 닫힌 팝아웃의 크기 — 창 id 는 매번 새로 생겨 개별 키(popout:<id>)만으로는
+// 크기가 기억되지 않는다. ⚠️ `popout:` 접두사 금지(pruneWindowStates 가 고아로 지운다)
+const POPOUT_LAST_SIZE_KEY = 'popout-last';
 
 type PopoutEntry = {
   win: BrowserWindow | null;
@@ -70,8 +74,42 @@ function broadcastWindows(): void {
 function removePopout(id: string): void {
   if (!popouts.delete(id)) return;
   persist();
+  // 다음 팝아웃이 물려받을 크기로 남긴다 — 창 id 가 매번 새로 생기므로 개별 키만
+  // 지우면 사용자가 조정한 크기가 매번 900×600 으로 되돌아간다
+  inheritWindowSize(`popout:${id}`, POPOUT_LAST_SIZE_KEY);
   clearWindowState(`popout:${id}`);
   broadcastWindows();
+}
+
+/** 빈 창 닫기 — close 핸들러(removePopout)가 레코드·windowState 를 정리한다.
+ *  창이 이미 파괴됐으면(닫힘 이벤트 유실) 레코드만 직접 걷어낸다. */
+function closeEmptyWindow(id: string): void {
+  const entry = popouts.get(id);
+  if (entry?.win && !entry.win.isDestroyed()) entry.win.close();
+  else removePopout(id);
+}
+
+/**
+ * 배정에서 세션들을 걷어낸다 — **모든 배정 변경이 거치는 한 곳**.
+ * ⚠️ 비게 된 창을 닫지 않으면 세션 0개인 빈 팝아웃이 화면에 남는다(2026-09-01:
+ * open 경로에만 이 정리가 빠져 있어, 팝아웃의 마지막 세션·그룹을 다시 창 밖으로
+ * 끌면 빈 창이 그대로 떠 있었다 — 그 창의 안내문은 '자동으로 닫힙니다'인데도).
+ * 닫기 자체는 호출부가 정한다 — moveSession 은 방금 세션을 넣은 대상 창을 빼야 한다.
+ */
+function detachFromAll(sessionIds: readonly string[]): {
+  changed: boolean;
+  emptied: string[];
+} {
+  let changed = false;
+  const emptied: string[] = [];
+  for (const [id, entry] of popouts) {
+    const next = entry.sessionIds.filter((s) => !sessionIds.includes(s));
+    if (next.length === entry.sessionIds.length) continue;
+    entry.sessionIds = next;
+    changed = true;
+    if (next.length === 0) emptied.push(id);
+  }
+  return { changed, emptied };
 }
 
 /** 창 타이틀 — "워크스페이스 · 워크트리" (등록 밖이면 폴더명). 포커스 세션 변경 시 갱신 */
@@ -89,7 +127,11 @@ function createPopoutWindow(id: string, at?: { x: number; y: number }): void {
   const entry = popouts.get(id);
   if (!entry || entry.win) return;
   const stateKey = `popout:${id}`;
-  const saved = loadWindowState(stateKey, { defaults: POPOUT_DEFAULT, min: POPOUT_MIN });
+  const saved = loadWindowState(stateKey, {
+    defaults: POPOUT_DEFAULT,
+    min: POPOUT_MIN,
+    fallbackKey: POPOUT_LAST_SIZE_KEY, // 이 창의 기억이 없으면 마지막 팝아웃 크기
+  });
 
   // 드롭 좌표가 오면 그 자리를 창 중심으로 — 화면 밖으로 나가지 않게 workArea 로 클램프
   let x = saved.x;
@@ -196,13 +238,7 @@ export function isVisibleInPopout(sessionId: string): boolean {
 function moveSession(sessionId: string, to: string): { ok: boolean; error?: string } {
   const target = to === 'main' ? null : popouts.get(to);
   if (to !== 'main' && !target) return { ok: false, error: '창이 이미 닫혔습니다.' };
-  const emptied: string[] = [];
-  for (const [id, entry] of popouts) {
-    const idx = entry.sessionIds.indexOf(sessionId);
-    if (idx < 0) continue;
-    entry.sessionIds.splice(idx, 1);
-    if (entry.sessionIds.length === 0) emptied.push(id);
-  }
+  const { emptied } = detachFromAll([sessionId]);
   if (target) {
     target.sessionIds.push(sessionId);
     void updateTitle(to);
@@ -210,9 +246,7 @@ function moveSession(sessionId: string, to: string): { ok: boolean; error?: stri
   // 빈 창은 닫는다 — close 핸들러(removePopout)가 레코드·windowState 를 정리한다
   for (const id of emptied) {
     if (id === to) continue; // 방금 넣은 창이 비었을 리 없지만 방어
-    const entry = popouts.get(id);
-    if (entry?.win && !entry.win.isDestroyed()) entry.win.close();
-    else removePopout(id);
+    closeEmptyWindow(id);
   }
   persist();
   broadcastWindows();
@@ -227,17 +261,8 @@ export function registerTerminalWindowsIpc(): void {
 
   // 세션이 죽으면 배정에서도 걷어낸다 — 마지막 세션이 죽은 창은 자동으로 닫힌다
   onTerminalExit((sessionId) => {
-    let changed = false;
-    for (const [id, entry] of [...popouts]) {
-      const idx = entry.sessionIds.indexOf(sessionId);
-      if (idx < 0) continue;
-      changed = true;
-      entry.sessionIds.splice(idx, 1);
-      if (entry.sessionIds.length === 0) {
-        if (entry.win && !entry.win.isDestroyed()) entry.win.close();
-        else removePopout(id);
-      }
-    }
+    const { changed, emptied } = detachFromAll([sessionId]);
+    for (const id of emptied) closeEmptyWindow(id);
     if (changed) {
       persist();
       broadcastWindows();
@@ -266,13 +291,11 @@ export function registerTerminalWindowsIpc(): void {
       if (over) return { ok: false as const, error: 'over-window' };
     }
 
-    // 다른 팝아웃에 있던 세션이면 먼저 걷어낸다 (배정 단일 소유)
-    for (const entry of popouts.values()) {
-      for (const id of ids) {
-        const idx = entry.sessionIds.indexOf(id);
-        if (idx >= 0) entry.sessionIds.splice(idx, 1);
-      }
-    }
+    // 다른 팝아웃에 있던 세션이면 먼저 걷어낸다 (배정 단일 소유) —
+    // ⚠️ 그 결과 빈 창이 되면 반드시 닫는다. 팝아웃의 마지막 세션(그룹째 포함)을
+    // 다시 창 밖으로 끄는 경로라, 안 닫으면 세션 없는 창이 그대로 남는다.
+    const { emptied } = detachFromAll(ids);
+    for (const id of emptied) closeEmptyWindow(id);
 
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     popouts.set(id, {
@@ -346,6 +369,21 @@ export function registerTerminalWindowsIpc(): void {
   // 창 간 드래그 중계 — 소스 창의 dragstart/dragend 를 전 창에 미러한다
   ipcMain.on('terminal:drag', (_e, state: TerminalDragState) => {
     broadcast('terminal:dragState', state ?? null);
+  });
+
+  // 팝아웃 → 메인 창 '이 세션을 거기서 열어라' — 되돌리기(↩)가 세션을 메인 창의
+  // **다른 워크트리 화면**에 떨궈 눈에 안 보이는 것을 막는다(탭바 드롭 adoptSession 이
+  // 렌더러 안에서 하는 focusReq 와 같은 의미 — 창이 다르니 main 을 거친다).
+  ipcMain.handle('terminal:windows:reveal-in-main', (_e, sessionId: string) => {
+    const win = getNotifyWindow();
+    const s = listSessions().find((x) => x.id === sessionId);
+    if (!win || !s) return { handled: false };
+    win.webContents.send('terminal:reveal', { sessionId, cwd: s.cwd });
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    app.focus({ steal: true });
+    return { handled: true };
   });
 
   // 팝아웃 창 레포 라벨 — 렌더러 헤더 표시용 (알림 제목과 같은 sessionLocationLabel)

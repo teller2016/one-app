@@ -74,6 +74,12 @@ export function registerTerminalIpc() {
     createSession(opts ?? {})
   );
   ipcMain.handle('terminal:attach', (e, id: string, cols: number, rows: number) => {
+    // 죽은 sender 엔트리 청소 — 아래 'destroyed' 가 정본이지만 Map 은 강한 참조라
+    // 그 이벤트가 한 번이라도 유실되면 WebContents 가 영영 남는다(창 파괴 경로가
+    // close 를 건너뛰는 일이 실제로 있었다 — windows.ts 의 'closed' 주석 참고).
+    // attach 는 pane 이 뜰 때만 오는 저빈도 경로라 여기서 훑는 비용이 없다.
+    for (const sender of [...attachedBySender.keys()])
+      if (sender.isDestroyed()) attachedBySender.delete(sender);
     let ids = attachedBySender.get(e.sender);
     if (!ids) {
       ids = new Set();

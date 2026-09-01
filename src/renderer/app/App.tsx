@@ -148,6 +148,13 @@ function AppToastBridge(): null {
     if (!window.oneApp?.onToastDismiss) return;
     return window.oneApp.onToastDismiss(dismissToast);
   }, [dismissToast]);
+  // 팝아웃 창에서 [↩] 로 되돌린 세션 — 이 창의 터미널 섹션에서 그 워크트리를 열어
+  // 세션을 화면에 올린다(안 하면 다른 워크트리를 보고 있을 때 눈에 안 보인다)
+  useEffect(() => {
+    const api = window.oneApp?.terminal;
+    if (!api?.onReveal) return;
+    return api.onReveal((req) => openTerminalSession(req));
+  }, []);
   useEffect(() => {
     if (!window.oneApp?.onToast) return;
     return window.oneApp.onToast((p) => {

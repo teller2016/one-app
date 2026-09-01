@@ -346,7 +346,13 @@ function PopoutBody({
     if (!id) return;
     try {
       const res = await window.oneApp?.terminal?.windows?.moveSession(id, 'main');
-      if (res && !res.ok) toast(res.error || '되돌리지 못했습니다.', 'fail');
+      if (res && !res.ok) {
+        toast(res.error || '되돌리지 못했습니다.', 'fail');
+        return;
+      }
+      // 메인 창이 다른 워크트리를 보고 있으면 되돌린 세션이 화면에 안 나타난다 —
+      // 그 창을 앞으로 세우고 세션의 워크트리까지 열게 한다(main 경유)
+      void window.oneApp?.terminal?.windows?.revealInMain?.(id);
     } catch (err) {
       toast(errMsg(err, '되돌리지 못했습니다.'), 'fail');
     }

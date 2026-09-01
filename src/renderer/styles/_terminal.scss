@@ -987,6 +987,14 @@
     }
   }
 
+  // 탭과 우측 액션 사이의 빈 공간 — 메인 창에선 0폭(리스트가 flex:1 로 다 먹는다),
+  // 팝아웃 창에선 리스트가 자리를 내주어 **창을 잡아 끄는 손잡이**가 된다
+  &__tabs-space {
+    flex: 1;
+    min-width: 0;
+    align-self: stretch;
+  }
+
   &__tabs-actions {
     display: flex;
     align-items: center;
@@ -1429,10 +1437,23 @@
     -webkit-app-region: drag;
   }
 
-  // ⚠️ 컨테이너(__tabs-list·__tabs-actions)에 no-drag 를 걸지 말 것 — 리스트가
-  // `flex: 1` 이라 **탭 오른쪽 빈 공간을 전부** 차지하고, 그러면 창을 잡을 곳이
-  // 좌측 신호등 여백밖에 남지 않는다(2026-09-01 사용자 지적). 빈 공간은 드래그로
-  // 두고 실제로 누를 것(탭·[+]·우측 버튼)만 no-drag 로 판다.
+  // ⚠️ **탭이 있는 영역은 통째로 drag 에서 뺀다** — 탭에만 no-drag 를 걸어 두면
+  // 창이 비활성인 동안 부모(탭바)의 drag 가 그것을 이겨서, 탭을 잡아 끌었는데
+  // 탭이 아니라 **창이 끌린다**(2026-09-01 실측: 비활성 팝아웃의 탭을 60px 끌자
+  // 창이 정확히 60px 이동하고 DOM 에는 mousedown 조차 오지 않았다).
+  .terminal__tabs-list {
+    // 리스트는 내용만큼만 — 남는 폭은 손잡이(__tabs-space)에 넘긴다
+    flex: 0 1 auto;
+    -webkit-app-region: no-drag;
+  }
+
+  // 창을 잡는 곳: 탭 오른쪽 빈 공간(리스트가 내준 몫) + 탭 위·신호등 옆 여백.
+  // 리스트에서 no-drag 를 걷으면 안 된다 — 위 실측 그대로 되돌아간다.
+  .terminal__tabs-space {
+    -webkit-app-region: drag;
+  }
+
+  // 남은 방어 — 탭바 여백 위에 겹치는 실제 조작 대상들
   .terminal__tab,
   .terminal__tab-pack,
   .terminal__tab-add,
