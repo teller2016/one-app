@@ -55,6 +55,16 @@ const popouts = new Map<string, PopoutEntry>();
 // 사용자 닫기와 앱 종료를 가른다 — 종료로 닫히는 창은 레코드를 지우면 안 된다(복원 대상)
 let quitting = false;
 
+// 복원 게이트 — 렌더러의 첫 배정 조회(`terminal:windows:list`)는 복원 완료까지 보류한다.
+// ⚠️ 복원 전 빈 목록으로 응답하면 메인 렌더러가 windowsReady 로 오판하고, 곧 복원될
+// 창의 화면 상태(localStorage `win:*` — 분할 트리·탭 순서·lastActive)를 고아로 보고
+// 지운다(pruneWindowScreenState). restoreSessions 실패 시엔 게이트가 영영 안 풀리는데
+// 의도된 것이다 — 그 세션 동안 청소만 꺼지고(무해), 배정 미러는 onChanged 가 채운다.
+let markWindowsRestored: () => void = () => {};
+const windowsRestored = new Promise<void>((r) => {
+  markWindowsRestored = r;
+});
+
 function persist(): void {
   const out: PersistedWindows = {};
   for (const [id, entry] of popouts) out[id] = { sessionIds: entry.sessionIds };
@@ -269,7 +279,10 @@ export function registerTerminalWindowsIpc(): void {
     }
   });
 
-  ipcMain.handle('terminal:windows:list', () => windowInfoList());
+  ipcMain.handle('terminal:windows:list', async () => {
+    await windowsRestored; // 복원 게이트 — 위 windowsRestored 주석 참고
+    return windowInfoList();
+  });
 
   ipcMain.handle('terminal:windows:open', (_e, input: TerminalPopoutOpenInput) => {
     const alive = new Set(listSessions().map((s) => s.id));
@@ -405,7 +418,12 @@ export function registerTerminalWindowsIpc(): void {
  * ⚠️ 반드시 restoreSessions() **완료 후** 호출할 것(ipc.ts) — 복원 전 빈 세션 목록으로
  * 대조하면 저장된 배정을 통째로 오파기한다.
  */
-export function initTerminalWindows(): void {
+export async function initTerminalWindows(): Promise<void> {
+  // ⚠️ BrowserWindow 는 app 'ready' 전에 만들면 throw 다 — restoreSessions 는 모듈
+  // 최상위(main.ts 의 registerTerminalIpc)에서 시작해 tmux 왕복 몇 번이면 끝나므로,
+  // tmux 가 빠른 날엔 ready 를 이기는 레이스가 있다. 지면 예외가 ipc.ts 의 catch 에
+  // '세션 복원 실패'로 삼켜지고 win 없는 레코드만 남았다(자리표시자 클릭 무반응).
+  await app.whenReady();
   const saved = readUserJson<PersistedWindows>(FILE, {});
   const alive = new Set(listSessions().map((s) => s.id));
   for (const [id, rec] of Object.entries(saved)) {
@@ -420,4 +438,5 @@ export function initTerminalWindows(): void {
   persist(); // 죽은 세션·빈 창을 걷어낸 결과로 굳힌다
   pruneWindowStates((key) => popouts.has(key.slice('popout:'.length)));
   if (popouts.size > 0) broadcastWindows();
+  markWindowsRestored(); // 이제부터 list 응답 허용 — 렌더러의 win:* 청소 게이트가 풀린다
 }
