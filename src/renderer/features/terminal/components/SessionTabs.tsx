@@ -319,8 +319,13 @@ export const SessionTabs = memo(function SessionTabs({
         draggable
         onDragStart={(e: ReactDragEvent) => {
           e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', s.id);
+          // ⚠️ **`text/plain` 을 싣지 말 것** — 드래그가 앱 밖으로 나가면 그것이 macOS
+          // 붙여넣기판의 '텍스트'가 되어, 텍스트를 받는 자리(바탕화면·에디터·브라우저·
+          // 메신저)에 놓으면 그쪽이 드롭을 수락한다(dropEffect ≠ 'none'). 그러면 아래
+          // dragend 의 창 밖 분리 판정이 탈락해 **놓는 자리에 따라 팝아웃이 열리다 말다
+          // 한다**(2026-09-01 신고 "어떤 곳은 창이 열리고 어떤 곳은 안 열린다").
           // 창 간 드래그의 유일한 데이터 채널 — 상대 창은 이 페이로드로 출처를 검증한다.
+          // 커스텀 타입이라 다른 앱은 인식하지 못해 수락하지 않는다(그게 목적이다).
           // 같은 창 안 드롭(분할·순서)은 종전대로 콜백 상태(draggingId)만 쓴다.
           e.dataTransfer.setData(
             'application/x-oneapp-term',
@@ -329,12 +334,18 @@ export const SessionTabs = memo(function SessionTabs({
           onDragStartSession(s.id);
         }}
         onDragEnd={(e: ReactDragEvent) => {
-          // 창 밖 드롭 = 팝아웃 분리 — 아무 드롭 존도 받지 않았고(dropEffect none)
-          // 포인터가 이 창 밖에서 놓였을 때만. Esc 취소도 dropEffect 가 none 이라
-          // 포인터가 창 밖에 있으면 구분할 수 없다(HTML5 DnD 한계) — 창 안 Esc 는 무사하다.
+          // 창 밖 드롭 = 팝아웃 분리. 판정은 **좌표만** 본다.
+          // ⚠️ `dropEffect === 'none'` 을 조건에 넣지 말 것 — 그 값은 우리가 아니라
+          // **놓은 자리의 앱이** 정한다. 노트·IDE 처럼 드래그를 받아들이는 앱은 실을
+          // 데이터가 없어도(=`text/plain` 을 걷어낸 뒤에도) 수락 응답을 내서 'copy' 가
+          // 되고, 그러면 분리가 조용히 취소돼 **자리에 따라 열리다 말다 한다**
+          // (2026-09-01 신고 — text/plain 제거만으로는 절반만 고쳐졌다).
+          // 앱 자신의 창 위 드롭(= 놓친 드롭)은 main 의 open 히트테스트가 거르므로
+          // 여기서 한 번 더 볼 필요가 없다.
+          // Esc 취소는 여전히 구분할 수 없다(HTML5 DnD 한계) — 포인터가 창 밖일 때만
+          // 성립하는 조건이라 창 안에서의 Esc 는 무사하다.
           if (
             onDetachToWindow &&
-            e.dataTransfer.dropEffect === 'none' &&
             (e.screenX < window.screenX ||
               e.screenX > window.screenX + window.outerWidth ||
               e.screenY < window.screenY ||

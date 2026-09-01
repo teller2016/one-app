@@ -276,9 +276,16 @@ export function registerTerminalWindowsIpc(): void {
     const ids = input.sessionIds.filter((id) => alive.has(id));
     if (ids.length === 0) return { ok: false as const, error: '살아 있는 세션이 없습니다.' };
 
-    // 오발 방지 히트테스트 — 드롭 지점이 앱의 다른 창 위면 분리가 아니라 놓친 드롭이다
+    // 오발 방지 히트테스트 — 드롭 지점이 **탭을 받을 수 있는 창** 위면 분리가 아니라
+    // 놓친 드롭이다. ⚠️ `getAllWindows()` 로 넓히지 말 것 — 그룹웨어 자동 작성 창
+    // (lib/browser.ts, 1440×900)처럼 탭 드롭과 무관한 창까지 잡아 **그 창이 떠 있는
+    // 자리에서는 분리가 조용히 거부된다**(2026-09-01 신고의 원인 하나).
     if (typeof input.x === 'number' && typeof input.y === 'number') {
-      const over = BrowserWindow.getAllWindows().some((w) => {
+      const dropTargets = [
+        getNotifyWindow(),
+        ...[...popouts.values()].map((e) => e.win),
+      ].filter((w): w is BrowserWindow => !!w);
+      const over = dropTargets.some((w) => {
         if (w.isDestroyed() || !w.isVisible() || w.isMinimized()) return false;
         const b = w.getBounds();
         return (
