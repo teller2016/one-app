@@ -1,10 +1,20 @@
 // 상단 세션 탭바 — 선택된 워크트리의 세션들 + [+] 새 세션 (Superset 스타일).
-// 탭 더블클릭 = 이름 인라인 편집(main 의 sidecar 에 반영 — 재시작 후에도 유지).
+// 탭 우클릭 = 메뉴(별도 창 분리·이름 변경·Finder·종료). 이름은 인라인 편집으로 바뀌고
+// main 의 sidecar 에 반영된다(재시작 후에도 유지).
 // 탭을 끌어 pane 위에 놓으면 화면이 분할된다(드롭 존·판정은 TerminalSection 소유).
 // 탭을 끌어 **다른 탭의 좌우 가장자리**에 놓으면 탭 순서가 바뀐다(아래 REORDER_EDGE).
 // 우측 끝에는 변경사항 토글·MO 접속 버튼이 상주한다(선택이 없어도 접근 가능해야 한다).
 import { memo, useEffect, useRef, useState } from 'react';
-import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
+import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from '../../../components/ContextMenu';
+import type {
+  DragEvent as ReactDragEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from 'react';
 import type {
   TerminalSessionInfo,
   TerminalSessionStatus,
@@ -66,6 +76,7 @@ export const SessionTabs = memo(function SessionTabs({
   onDragEndSession,
   onDetachSession,
   onDetachToWindow,
+  onRevealCwd,
   onFocusWindow,
   onReturnSession,
   dragSourceId,
@@ -97,8 +108,11 @@ export const SessionTabs = memo(function SessionTabs({
   onDragEndSession: () => void;
   /** 그룹 멤버 탭을 탭바에 드롭 = 그룹에서 분리(혼자 보기) */
   onDetachSession: (id: string) => void;
-  /** 탭을 **창 밖**에 놓았다 — 그 screen 좌표에 팝아웃 창을 만든다 (없으면 기능 꺼짐) */
-  onDetachToWindow?: (id: string, x: number, y: number) => void;
+  /** 별도 창으로 분리 — 좌표를 주면 그 자리에, 없으면 기억된 자리·크기로 뜬다.
+   *  창 밖 드롭(dragend)은 좌표를 주고, 우클릭 메뉴는 생략한다(없으면 기능 꺼짐) */
+  onDetachToWindow?: (id: string, x?: number, y?: number) => void;
+  /** 우클릭 메뉴 [Finder 에서 열기] — 세션 cwd 를 Finder 로 (없으면 항목 숨김) */
+  onRevealCwd?: (id: string) => void;
   /** 자리표시자 탭 클릭 — 그 세션이 있는 팝아웃 창 포커스 */
   onFocusWindow?: (windowId: string) => void;
   /** 자리표시자 hover [↩] — 세션을 메인 창으로 되돌린다 */
@@ -115,9 +129,23 @@ export const SessionTabs = memo(function SessionTabs({
   rightActions?: ReactNode;
 }) {
   const toast = useToast();
-  // 이름 인라인 편집 — 탭을 더블클릭하면 제목이 입력창으로 바뀐다
+  // 이름 인라인 편집 — 우클릭 메뉴 [이름 변경] 이 제목을 입력창으로 바꾼다.
+  // ⚠️ 더블클릭 진입은 걷어냈다(2026-09-01 사용자 판단) — 탭을 빠르게 두 번 누르는
+  // 손놀림에 편집 모드가 걸려 오조작이 됐고, 우클릭 메뉴가 더 찾기 쉬운 표준 경로다.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  // 탭 우클릭 메뉴 — 드래그(정밀 조작 + 창 밖까지 끌어야 함)의 지름길이다.
+  // `kind: 'detached'` 는 다른 창으로 분리된 자리표시자 탭(pane 이 없다).
+  const [menu, setMenu] = useState<{
+    session: TerminalSessionInfo;
+    kind: TabItem['kind'];
+    inGroup: boolean;
+    windowId?: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  /** 이 탭바가 팝아웃 창의 것인가 — 메뉴의 '분리/되돌리기' 방향이 갈린다 */
+  const isPopout = (dragSourceId ?? 'main') !== 'main';
   // 분리 드롭 존 표시 — 그룹 멤버를 끌어 탭바 위에 올렸을 때만
   const [detachHover, setDetachHover] = useState(false);
   // 순서 변경 삽입선 — 놓을 자리(아이템 인덱스 + 그 앞/뒤)
@@ -365,6 +393,7 @@ export const SessionTabs = memo(function SessionTabs({
         onAuxClick={(e) => {
           if (e.button === 1) onClose(s);
         }}
+        onContextMenu={(e) => openTabMenu(e, s, 'single')}
       >
         <button
           type="button"
@@ -373,12 +402,8 @@ export const SessionTabs = memo(function SessionTabs({
           aria-selected={s.id === activeId}
           title={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
             STATUS_LABELS[s.status]
-          }${i < 9 ? ` (⌘${i + 1})` : ''}\n더블클릭: 이름 변경 · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
+          }${i < 9 ? ` (⌘${i + 1})` : ''}\n우클릭: 메뉴(별도 창 분리·이름 변경·종료) · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
           onClick={() => onSelect(s.id)}
-          onDoubleClick={() => {
-            setDraft(s.title);
-            setEditingId(s.id);
-          }}
         >
           <span className="terminal__tab-title">{s.title}</span>
         </button>
@@ -418,6 +443,111 @@ export const SessionTabs = memo(function SessionTabs({
     );
   };
 
+  const openTabMenu = (
+    e: ReactMouseEvent,
+    s: TerminalSessionInfo,
+    kind: TabItem['kind'],
+    windowId?: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation(); // 탭바 컨테이너까지 올라가 기본 메뉴가 뜨지 않게
+    setMenu({
+      session: s,
+      kind,
+      inGroup: items.some(
+        (it) => it.kind === 'group' && it.members.some((m) => m.id === s.id)
+      ),
+      windowId,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  // 자리표시자 탭의 창 id — 지역 const 로 캡처해야 콜백 안에서도 좁혀진다(단언 불필요)
+  const menuWindowId = menu?.kind === 'detached' ? menu.windowId : undefined;
+
+  /** 탭 우클릭 메뉴 — 드래그로만 되던 분리·되돌리기의 지름길 + 기존 조작 모음 */
+  const tabMenu = !menu ? null : (
+    <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      onClose={() => setMenu(null)}
+      aria-label={`'${menu.session.title}' 세션 메뉴`}
+    >
+      {menuWindowId && onFocusWindow && (
+        <ContextMenuItem
+          icon="app-window"
+          label="그 창으로 이동"
+          onSelect={() => {
+            setMenu(null);
+            onFocusWindow(menuWindowId);
+          }}
+        />
+      )}
+      {/* 분리 방향 — 메인 창의 일반 탭은 '내보내기', 그 밖(팝아웃 탭·자리표시자)은 '되돌리기' */}
+      {menu.kind !== 'detached' && !isPopout && onDetachToWindow && (
+        <ContextMenuItem
+          icon="app-window"
+          label={menu.inGroup ? '분할째 별도 창으로 분리' : '별도 창으로 분리'}
+          onSelect={() => {
+            setMenu(null);
+            onDetachToWindow(menu.session.id); // 좌표 없음 = 기억된 자리·크기
+          }}
+        />
+      )}
+      {(menu.kind === 'detached' || isPopout) && onReturnSession && (
+        <ContextMenuItem
+          icon="corner-up-left"
+          label="메인 창으로 되돌리기"
+          onSelect={() => {
+            setMenu(null);
+            onReturnSession(menu.session.id);
+          }}
+        />
+      )}
+      {menu.kind !== 'detached' && menu.inGroup && (
+        <ContextMenuItem
+          icon="corner-down-right"
+          label="분할에서 빼기 (혼자 보기)"
+          onSelect={() => {
+            setMenu(null);
+            onDetachSession(menu.session.id);
+          }}
+        />
+      )}
+      <ContextMenuSeparator />
+      <ContextMenuItem
+        icon="pencil"
+        label="이름 변경"
+        onSelect={() => {
+          setDraft(menu.session.title);
+          setEditingId(menu.session.id);
+          setMenu(null);
+        }}
+      />
+      {onRevealCwd && (
+        <ContextMenuItem
+          icon="folder"
+          label="Finder 에서 열기"
+          onSelect={() => {
+            setMenu(null);
+            onRevealCwd(menu.session.id);
+          }}
+        />
+      )}
+      <ContextMenuSeparator />
+      <ContextMenuItem
+        icon="x"
+        danger
+        label="세션 종료"
+        onSelect={() => {
+          setMenu(null);
+          onClose(menu.session);
+        }}
+      />
+    </ContextMenu>
+  );
+
   /** 자리표시자 탭 — 다른 창으로 분리된 세션. 드래그 소스가 아니고 pane 도 없다.
    *  클릭(⌘n 포함) = 그 창 포커스, 앞자리 hover [↩] = 되돌리기, 우측 [×] = 세션 종료.
    *  ⚠️ **우측 슬롯은 일반 탭과 똑같이 하나만** 둔다(상태점 → hover 시 ×) — 되돌리기를
@@ -431,6 +561,7 @@ export const SessionTabs = memo(function SessionTabs({
         key={s.id}
         data-session={s.id}
         className="terminal__tab terminal__tab--detached"
+        onContextMenu={(e) => openTabMenu(e, s, 'detached', windowId)}
       >
         {/* 앞자리 — 평소엔 '다른 창' 표식, 탭에 hover 하면 되돌리기 버튼으로 바뀐다
             (우측 슬롯의 상태점 ↔ × 교체와 같은 규칙) */}
@@ -454,7 +585,7 @@ export const SessionTabs = memo(function SessionTabs({
           role="tab"
           className="terminal__tab-hit"
           aria-selected={false}
-          title={`${s.title} — 별도 창에서 열림${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 메인 창으로 되돌리기`}
+          title={`${s.title} — 별도 창에서 열림${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 되돌리기 · 우클릭: 메뉴`}
           onClick={() => onFocusWindow?.(windowId)}
         >
           <span className="terminal__tab-title">{s.title}</span>
@@ -542,7 +673,7 @@ export const SessionTabs = memo(function SessionTabs({
           ) : it.kind === 'detached' ? (
             renderDetachedTab(it.session, it.windowId)
           ) : (
-            /* 분할 그룹 = 탭 한 장(통탭) — 멤버는 일반 탭과 같은 마크업(클릭·더블클릭·
+            /* 분할 그룹 = 탭 한 장(통탭) — 멤버는 일반 탭과 같은 마크업(클릭·우클릭·
                드래그·가운데 클릭 전부 동일)이고, 장이 활성(멤버 중 하나가 activeId)이면
                --active 로 아래 면과 이어진다(스타일은 SCSS __tab-pack).
                순서 변경 드롭은 **장 전체**가 받는다 — 멤버 위 dragover 도 여기로 버블하므로
@@ -587,6 +718,8 @@ export const SessionTabs = memo(function SessionTabs({
           실측). 손잡이는 탭 바깥의 독립 요소여야 한다. 드롭 존(그룹 분리·가져오기)은
           그대로다 — 진행 중인 드래그의 dragover 는 drag 영역도 정상 수신한다. */}
       <div className="terminal__tabs-space" aria-hidden="true" />
+
+      {tabMenu}
 
       <div className="terminal__tabs-actions">
         {rightActions !== undefined ? (

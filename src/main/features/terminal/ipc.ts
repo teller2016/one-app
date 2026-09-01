@@ -184,10 +184,6 @@ export function registerTerminalIpc() {
     // sticky 지만 dedupeKey 로 세션당 1장만 유지되고, 이미 보고 있는 세션이면
     // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.
     void (async () => {
-      // 팝아웃 창에서 이미 보고 있는 세션이면 생략 — 메인 창의 렌더러 판정
-      // (AppToastBridge 의 isSessionOnScreen)과 짝을 이루는 main 쪽 게이트다.
-      // 팝아웃의 가시 세션은 메인 렌더러가 모르므로 여기서 걸러야 한다.
-      if (isVisibleInPopout(info.id)) return;
       const location = await sessionLocationLabel(info.cwd);
       const payload = {
         // 어느 작업 영역의 어느 워크트리인지를 제목에 싣는다 (2026-08-14 사용자 요청)
@@ -199,8 +195,14 @@ export function registerTerminalIpc() {
         terminalSession: { sessionId: info.id, cwd: info.cwd },
         dedupeKey: termWaitToastKey(info.id),
       };
+      // 팝아웃 창이 그 세션을 **포커스 상태로** 보고 있으면 토스트를 생략한다 —
+      // 메인 창의 렌더러 판정(AppToastBridge 의 isSessionOnScreen)과 짝을 이루는
+      // main 쪽 게이트다(팝아웃의 가시 세션은 메인 렌더러가 모른다).
+      // ⚠️ 알럿(OS 알림)은 이 게이트를 통과시킨다 — 메인 창도 '보고 있어도 alert 는
+      // 나간다'가 규칙인데, 여기서 통째로 return 하면 **팝아웃 세션만 alert 를 잃어**
+      // 뒤에 둔 창의 완료를 영영 모른다(2026-09-01 수정).
       if (level === 'alert') void notifyToast(payload);
-      else sendToast(payload);
+      else if (!isVisibleInPopout(info.id)) sendToast(payload);
     })();
   });
 

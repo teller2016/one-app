@@ -236,11 +236,20 @@ export function popoutIdOfSession(sessionId: string): string | null {
   return null;
 }
 
-/** 입력대기 토스트 게이트 — 그 세션이 팝아웃 화면에 올라와 있는가(포커스 불요) */
+/**
+ * 입력대기 토스트 게이트 — 사용자가 그 세션을 **지금 실제로 보고 있는가**.
+ * ⚠️ '그 창이 렌더 중'만으로는 안 된다 — 최소화됐거나 다른 앱 뒤에 있는 팝아웃도
+ * 렌더는 계속하므로, 그것만 보면 **뒤에 둔 팝아웃의 입력대기가 통째로 무음**이 된다
+ * (2026-09-01: 팝아웃의 존재 이유가 여러 세션 병렬 관리인데 그게 팝아웃에서만 죽었다).
+ * 포커스가 곧 판정이다 — 포커스된 창은 최소화·숨김일 수 없고, 앱이 백그라운드면
+ * 어느 창도 포커스를 갖지 않으므로 `isVisible`·`isMinimized` 를 겹쳐 볼 필요가 없다.
+ */
 export function isVisibleInPopout(sessionId: string): boolean {
-  for (const entry of popouts.values())
-    if (entry.win && !entry.win.isDestroyed() && entry.visibleIds.includes(sessionId))
-      return true;
+  for (const entry of popouts.values()) {
+    const w = entry.win;
+    if (!w || w.isDestroyed() || !entry.visibleIds.includes(sessionId)) continue;
+    if (w.isFocused()) return true;
+  }
   return false;
 }
 
@@ -371,17 +380,16 @@ export function registerTerminalWindowsIpc(): void {
     (_e, args: { windowId: string; ids: string[] }) => {
       const entry = popouts.get(args.windowId);
       if (!entry) return;
-      const prev = entry.visibleIds;
       entry.visibleIds = args.ids;
-      // 팝아웃 화면에 새로 올라온 세션 — 메인 창에 떠 있던 sticky 입력대기 토스트를
-      // 거둔다(TerminalSection 이 자기 화면 세션에 하는 dismiss 와 같은 의미)
+      // 이 창이 보고 있는 세션의 sticky 입력대기 토스트를 메인 창에서 거둔다
+      // (TerminalSection 이 자기 화면 세션에 하는 dismiss 와 같은 의미).
+      // ⚠️ '직전 목록에 없던 것만'으로 좁히지 말 것 — 이 창이 뒤에 있는 동안 뜬 토스트는
+      // **화면 세션이 그대로인 채 창만 포커스될 때** 거둬야 하는데, 그때 보고되는 목록은
+      // 직전과 같다. dismiss 는 없는 키에 no-op 이라 매번 보내도 무해하다.
       const notifyWin = getNotifyWindow();
-      if (notifyWin) {
-        for (const id of args.ids) {
-          if (!prev.includes(id))
-            notifyWin.webContents.send('app:toast:dismiss', termWaitToastKey(id));
-        }
-      }
+      if (notifyWin)
+        for (const id of args.ids)
+          notifyWin.webContents.send('app:toast:dismiss', termWaitToastKey(id));
       void updateTitle(args.windowId);
     }
   );

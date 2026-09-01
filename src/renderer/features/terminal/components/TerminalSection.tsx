@@ -597,12 +597,21 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [rememberActive]
   );
 
-  const revealActive = useCallback(async () => {
+  /** 그 세션의 cwd 를 Finder 로 — 툴바[Finder]·탭 우클릭 메뉴 공용 */
+  const revealSessionCwd = useCallback(
+    (id: string) => {
+      void (async () => {
+        const res = await terminalApi()?.revealCwd(id);
+        if (res && !res.ok) toast('위치를 열지 못했습니다.', 'fail');
+      })();
+    },
+    [toast]
+  );
+  /** 툴바 [Finder] — 대상은 포커스 세션 */
+  const revealActive = useCallback(() => {
     const id = activeIdRef.current;
-    if (!id) return;
-    const res = await terminalApi()?.revealCwd(id);
-    if (res && !res.ok) toast('위치를 열지 못했습니다.', 'fail');
-  }, [toast]);
+    if (id) revealSessionCwd(id);
+  }, [revealSessionCwd]);
 
   // ── 워크트리를 IDE(Antigravity)로 열기 — 탭바 우측 액션 ──
   // 설치 여부는 한 번만 묻고, 미설치면 이름이 null 이라 버튼이 그려지지 않는다.
@@ -785,18 +794,20 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         if (res?.ok && cwd) setFocusReq({ sessionId: id, cwd });
       });
   }, []);
-  /** 탭을 창 밖에 놓았다 — 그 좌표에 팝아웃 창을 만든다 (그룹 멤버면 그룹째) */
+  /** 별도 창으로 분리 (그룹 멤버면 그룹째) — 좌표는 창 밖 드롭만 준다.
+   *  우클릭 메뉴는 좌표를 생략해 기억된 자리·크기로 띄운다(오발 방지 히트테스트도 생략). */
   const detachToWindow = useCallback(
-    (id: string, x: number, y: number) => {
+    (id: string, x?: number, y?: number) => {
       const api = terminalApi()?.windows;
       if (!api) return;
       // 트리는 무변경 조회(peekGroup)로 떠 간다 — 이 화면의 그룹 트리는 배정
       // 브로드캐스트 뒤 sanitize 가 지우므로, 창 생성이 거부돼도 잃는 것이 없다
       const group = peekGroup(id);
+      const at = typeof x === 'number' && typeof y === 'number' ? { x, y } : {};
       void api.open(
         group
-          ? { sessionIds: group.ids, layout: group.layout, x, y }
-          : { sessionIds: [id], x, y }
+          ? { sessionIds: group.ids, layout: group.layout, ...at }
+          : { sessionIds: [id], ...at }
       );
     },
     [peekGroup]
@@ -1145,6 +1156,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
+          onRevealCwd={revealSessionCwd}
           onFocusWindow={focusWindow}
           onReturnSession={returnSession}
           remoteDraggingId={remoteDragId}
@@ -1230,7 +1242,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
                   className="icon-btn"
                   aria-label="Finder 에서 열기"
                   disabled={!activeSession}
-                  onClick={() => void revealActive()}
+                  onClick={revealActive}
                 >
                   <Icon name="folder" size={14} />
                 </button>

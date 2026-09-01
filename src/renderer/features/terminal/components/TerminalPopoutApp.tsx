@@ -306,6 +306,16 @@ function PopoutBody({
     },
     [closeSession]
   );
+  /** 탭 우클릭 [Finder 에서 열기] — main 이 세션 id 로 cwd 를 해석한다 */
+  const revealSessionCwd = useCallback(
+    (id: string) => {
+      void (async () => {
+        const res = await window.oneApp?.terminal?.revealCwd(id);
+        if (res && !res.ok) toast('위치를 열지 못했습니다.', 'fail');
+      })();
+    },
+    [toast]
+  );
   const activeSession = tabSessions.find((s) => s.id === activeId) ?? null;
 
   useTerminalShortcuts(true, {
@@ -318,9 +328,16 @@ function PopoutBody({
   });
 
   // ── 화면 세션 보고 — main 이 입력대기 토스트 게이트·창 타이틀에 쓴다 ──
+  // ⚠️ **창 포커스에서도 다시 보고한다** — 알림 게이트가 포커스를 보므로 이 창이 뒤에
+  // 있는 동안에는 그 세션의 입력대기 토스트가 메인 창에 뜬다. 이동해 와도 화면 세션이
+  // 그대로면 아래 deps 가 안 바뀌어 **그 sticky 토스트가 영영 남았다**(2026-09-01).
   useEffect(() => {
     const ids = activeGroupIds ?? (activeId ? [activeId] : []);
-    window.oneApp?.terminal?.windows?.reportVisible(windowId, ids);
+    const report = () =>
+      window.oneApp?.terminal?.windows?.reportVisible(windowId, ids);
+    report();
+    window.addEventListener('focus', report);
+    return () => window.removeEventListener('focus', report);
   }, [windowId, activeId, activeGroupIds]);
 
   // ── 레포 라벨 — "워크스페이스 · 워크트리" (main 의 sessionLocationLabel, cwd 캐시) ──
@@ -340,39 +357,45 @@ function PopoutBody({
     };
   }, [labelSid]);
 
-  /** 되돌리기 폴백 — 포커스 세션을 메인 창 탭으로 (창 닫기 = 전부 되돌리기) */
-  const returnActive = useCallback(async () => {
-    const id = activeIdRef.current;
-    if (!id) return;
-    try {
-      const res = await window.oneApp?.terminal?.windows?.moveSession(id, 'main');
-      if (res && !res.ok) {
-        toast(res.error || '되돌리지 못했습니다.', 'fail');
-        return;
-      }
-      // 메인 창이 다른 워크트리를 보고 있으면 되돌린 세션이 화면에 안 나타난다 —
-      // 그 창을 앞으로 세우고 세션의 워크트리까지 열게 한다(main 경유)
-      void window.oneApp?.terminal?.windows?.revealInMain?.(id);
-    } catch (err) {
-      toast(errMsg(err, '되돌리지 못했습니다.'), 'fail');
-    }
-  }, [toast]);
+  /** 세션 하나를 메인 창 탭으로 되돌린다 — 우측 [↩]·탭 우클릭 메뉴 공용
+   *  (창 닫기 = 배정 전부 삭제 = 전부 되돌리기) */
+  const returnSession = useCallback(
+    (id: string): void => {
+      void (async () => {
+        try {
+          const res = await window.oneApp?.terminal?.windows?.moveSession(id, 'main');
+          if (res && !res.ok) {
+            toast(res.error || '되돌리지 못했습니다.', 'fail');
+            return;
+          }
+          // 메인 창이 다른 워크트리를 보고 있으면 되돌린 세션이 화면에 안 나타난다 —
+          // 그 창을 앞으로 세우고 세션의 워크트리까지 열게 한다(main 경유)
+          void window.oneApp?.terminal?.windows?.revealInMain?.(id);
+        } catch (err) {
+          toast(errMsg(err, '되돌리지 못했습니다.'), 'fail');
+        }
+      })();
+    },
+    [toast]
+  );
   const returnActiveFromBar = useCallback((): void => {
-    void returnActive();
-  }, [returnActive]);
+    const id = activeIdRef.current;
+    if (id) returnSession(id);
+  }, [returnSession]);
 
   /** 이 창의 탭을 또 창 밖에 놓았다 — 그 좌표에 새 팝아웃 창 (그룹 멤버면 그룹째) */
   const detachToWindow = useCallback(
-    (id: string, x: number, y: number) => {
+    (id: string, x?: number, y?: number) => {
       const api = window.oneApp?.terminal?.windows;
       if (!api) return;
       // 트리는 무변경 조회(peekGroup) — 이 창의 트리·배정 정리는 open 의 배정
       // 브로드캐스트 뒤 sanitize·onChanged 가 처리한다
       const group = peekGroup(id);
+      const at = typeof x === 'number' && typeof y === 'number' ? { x, y } : {};
       void api.open(
         group
-          ? { sessionIds: group.ids, layout: group.layout, x, y }
-          : { sessionIds: [id], x, y }
+          ? { sessionIds: group.ids, layout: group.layout, ...at }
+          : { sessionIds: [id], ...at }
       );
     },
     [peekGroup]
@@ -430,6 +453,8 @@ function PopoutBody({
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
+          onReturnSession={returnSession}
+          onRevealCwd={revealSessionCwd}
           dragSourceId={windowId}
           remoteDraggingId={remoteDragId}
           onAdoptSession={adoptSession}
