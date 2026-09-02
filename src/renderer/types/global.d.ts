@@ -390,6 +390,8 @@ declare global {
         revealCwd: (
           id: string,
         ) => Promise<{ ok: boolean; error?: string }>;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        openEditor?: (id: string) => Promise<{ ok: boolean; error?: string }>;
         kill: (id: string) => Promise<{ ok: boolean }>;
         agents: () => Promise<TerminalAgentInfo[]>;
         backend: () => Promise<{ tmux: boolean }>;

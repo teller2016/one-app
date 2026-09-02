@@ -10,8 +10,9 @@ import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
 import { sleep } from '../../lib/util';
 import { notifyToast, sendToast } from '../notify/notify';
+import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
-import { sessionLocationLabel } from './location';
+import { sessionLocation, sessionLocationLabel } from './location';
 import {
   initTerminalWindows,
   isVisibleInPopout,
@@ -112,6 +113,20 @@ export function registerTerminalIpc() {
     if (!s) return { ok: false };
     const error = await shell.openPath(s.cwd);
     return { ok: !error, error: error || undefined };
+  });
+  // 세션이 속한 **워크트리**를 IDE 로 — 탭 우클릭 메뉴·팝아웃 헤더가 쓴다.
+  // 팝아웃은 워크트리 선택이 없고 서로 다른 워크트리의 세션이 한 창에 섞일 수 있어
+  // 대상을 세션 단위로 해석한다. 경로는 sessionLocation 이 git 워크트리 목록과 대조한
+  // 것만 쓴다(workspaces:open-editor 와 같은 규칙 — 임의 경로 실행 방지). 등록 밖
+  // 세션(홈 등)은 열 대상이 없어 거부한다.
+  ipcMain.handle('terminal:open-editor', async (_e, id: string) => {
+    const s = listSessions().find((x) => x.id === id);
+    if (!s) return { ok: false, error: '세션을 찾을 수 없습니다.' };
+    const editor = findEditorApp();
+    if (!editor) return { ok: false, error: `${EDITOR_NAME} 가 설치되어 있지 않습니다.` };
+    const loc = await sessionLocation(s.cwd);
+    if (!loc) return { ok: false, error: '등록된 워크트리 안의 세션이 아닙니다.' };
+    return openWithApp(editor, loc.wtPath);
   });
   ipcMain.handle('terminal:agents', () => listAgents());
   // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다

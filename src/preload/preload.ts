@@ -494,6 +494,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     kill: (id: string) => ipcRenderer.invoke("terminal:kill", id),
     // 세션 위치(cwd)를 Finder 로 열기 — 경로가 아니라 세션 id 로 지시한다
     revealCwd: (id: string) => ipcRenderer.invoke("terminal:reveal-cwd", id),
+    // 세션이 속한 워크트리를 IDE 로 — 탭 우클릭·팝아웃 헤더. 경로 해석은 main(세션 id 만)
+    openEditor: (id: string) => ipcRenderer.invoke("terminal:open-editor", id),
     // 에이전트 후보 목록 (로그인 셸 PATH 기준 설치 감지 포함)
     agents: () => ipcRenderer.invoke("terminal:agents"),
     // 백엔드 정보 — tmux(영속) 가용 여부 (미설치 힌트 표시용)

@@ -339,6 +339,39 @@ function PopoutBody({
     },
     [closeSession]
   );
+  // ── IDE 열기 — 설치 여부는 한 번만 묻고, 미설치면 이름이 null 이라 버튼·메뉴가 안 그려진다
+  // (TerminalSection 과 같은 조회) ──
+  const [editorName, setEditorName] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const api = window.oneApp?.workspaces;
+    if (!api) return;
+    api
+      .editorInfo()
+      .then((info): void => {
+        if (alive && info.available) setEditorName(info.name);
+      })
+      .catch((): void => setEditorName(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  /** 그 세션이 속한 **워크트리**를 IDE 로 — 탭 우클릭·헤더 버튼 공용. 팝아웃은 서로 다른
+   *  워크트리의 세션이 섞일 수 있어 대상을 세션 단위로 잡는다(경로 해석·검증은 main) */
+  const openEditorFor = useCallback(
+    (id: string) => {
+      void (async () => {
+        try {
+          const res = await window.oneApp?.terminal?.openEditor?.(id);
+          if (res && !res.ok) toast(res.error || '열지 못했습니다.', 'fail');
+        } catch (err) {
+          toast(errMsg(err, '열지 못했습니다.'), 'fail');
+        }
+      })();
+    },
+    [toast]
+  );
+
   /** 탭 우클릭 [Finder 에서 열기] — main 이 세션 id 로 cwd 를 해석한다 */
   const revealSessionCwd = useCallback(
     (id: string) => {
@@ -439,6 +472,12 @@ function PopoutBody({
     const id = activeIdRef.current;
     if (id) revealSessionCwd(id);
   }, [revealSessionCwd]);
+  /** 헤더 [IDE] — 활성 세션 기준. 레포 라벨·Finder 와 같은 규칙이라 "라벨에 뜬 그 워크트리가
+   *  열린다"로 읽힌다. 라벨이 없으면(등록 밖 세션) 열 대상이 없어 버튼을 비활성으로 */
+  const openEditorActive = useCallback(() => {
+    const id = activeIdRef.current;
+    if (id) openEditorFor(id);
+  }, [openEditorFor]);
 
   // 우측 액션 — 변경사항·MO 버튼 대신 레포 라벨 + 메인 툴바의 축약판(글자 크기·맨 아래로·
   // Finder) + 항상 위 + 되돌리기. 팝아웃은 탭바가 곧 타이틀바라 **툴바를 한 줄 더 두지
@@ -510,6 +549,25 @@ function PopoutBody({
             <Icon name="folder" size={14} />
           </button>
         </Tooltip>
+        {editorName && (
+          <Tooltip
+            label={
+              locLabel
+                ? `${locLabel} 를 ${editorName} 로 열기`
+                : `등록된 워크트리 안의 세션이 아니라 ${editorName} 로 열 수 없습니다`
+            }
+          >
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`${editorName} 로 열기`}
+              disabled={!activeSession || !locLabel}
+              onClick={openEditorActive}
+            >
+              <Icon name="code-xml" size={14} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip
           label={
             alwaysOnTop
@@ -549,6 +607,8 @@ function PopoutBody({
       activeScrolledUp,
       scrollActiveToBottom,
       revealActive,
+      editorName,
+      openEditorActive,
       alwaysOnTop,
       toggleAlwaysOnTop,
     ]
@@ -568,7 +628,7 @@ function PopoutBody({
           canCreate={false}
           changesOpen={false}
           moRunning={false}
-          editorName={null}
+          editorName={editorName}
           canOpenEditor={false}
           onSelect={selectTab}
           onClose={closeSessionFromTab}
@@ -582,6 +642,7 @@ function PopoutBody({
           onDetachToWindow={detachToWindow}
           onReturnSession={returnSession}
           onRevealCwd={revealSessionCwd}
+          onOpenEditorFor={openEditorFor}
           dragSourceId={windowId}
           remoteDraggingId={remoteDragId}
           onAdoptSession={adoptSession}

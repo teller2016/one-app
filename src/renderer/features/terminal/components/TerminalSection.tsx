@@ -607,6 +607,21 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     },
     [toast]
   );
+  /** 탭 우클릭 [IDE 로 열기] — **그 세션이 속한 워크트리**. 워크트리 선택(툴바 버튼)과
+   *  달리 세션 단위라 대상이 항상 명확하다. 경로 해석·검증은 main(세션 id 만 넘긴다) */
+  const openEditorFor = useCallback(
+    (id: string) => {
+      void (async () => {
+        try {
+          const res = await terminalApi()?.openEditor?.(id);
+          if (res && !res.ok) toast(res.error || '열지 못했습니다.', 'fail');
+        } catch (err) {
+          toast(errMsg(err, '열지 못했습니다.'), 'fail');
+        }
+      })();
+    },
+    [toast]
+  );
   /** 툴바 [Finder] — 대상은 포커스 세션 */
   const revealActive = useCallback(() => {
     const id = activeIdRef.current;
@@ -1157,6 +1172,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
           onRevealCwd={revealSessionCwd}
+          onOpenEditorFor={openEditorFor}
           onFocusWindow={focusWindow}
           onReturnSession={returnSession}
           remoteDraggingId={remoteDragId}

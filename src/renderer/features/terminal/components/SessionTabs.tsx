@@ -77,6 +77,7 @@ export const SessionTabs = memo(function SessionTabs({
   onDetachSession,
   onDetachToWindow,
   onRevealCwd,
+  onOpenEditorFor,
   onFocusWindow,
   onReturnSession,
   dragSourceId,
@@ -113,6 +114,9 @@ export const SessionTabs = memo(function SessionTabs({
   onDetachToWindow?: (id: string, x?: number, y?: number) => void;
   /** 우클릭 메뉴 [Finder 에서 열기] — 세션 cwd 를 Finder 로 (없으면 항목 숨김) */
   onRevealCwd?: (id: string) => void;
+  /** 우클릭 메뉴 [IDE 로 열기] — **그 세션이 속한 워크트리**를 IDE 로. 팝아웃처럼
+   *  워크트리 선택이 없는 화면에서도 대상이 명확한 경로다(없거나 editorName 이 null 이면 숨김) */
+  onOpenEditorFor?: (id: string) => void;
   /** 자리표시자 탭 클릭 — 그 세션이 있는 팝아웃 창 포커스 */
   onFocusWindow?: (windowId: string) => void;
   /** 자리표시자 hover [↩] — 세션을 메인 창으로 되돌린다 */
@@ -532,6 +536,16 @@ export const SessionTabs = memo(function SessionTabs({
           onSelect={() => {
             setMenu(null);
             onRevealCwd(menu.session.id);
+          }}
+        />
+      )}
+      {editorName && onOpenEditorFor && (
+        <ContextMenuItem
+          icon="code-xml"
+          label={`${editorName} 로 열기`}
+          onSelect={() => {
+            setMenu(null);
+            onOpenEditorFor(menu.session.id);
           }}
         />
       )}
