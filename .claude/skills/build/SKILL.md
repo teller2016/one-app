@@ -72,12 +72,22 @@ codesign -dv --verbose=2 "out/One App-darwin-arm64/One App.app" 2>&1 | grep -E "
 ```bash
 pgrep -fl "/Applications/One App.app/Contents/MacOS/One App"
 ```
-떠 있으면 **확인을 받지 말고 바로** 종료한다(7단계에서 다시 띄우므로 재시작일 뿐이다):
+떠 있으면 **확인을 받지 말고 바로** 종료한다(7단계에서 다시 띄우므로 재시작일 뿐이다).
+⚠️ **개발 인스턴스가 떠 있는지에 따라 종료 방식이 갈린다** — 두 앱의 이름이 같아서
+`osascript -e 'quit app "One App"'` 은 **dev 까지 함께 끈다**(2026-09-01 실측 — 사용자의 dev 를
+말없이 내렸다). dev 가 있으면 전체 경로로 빌드 앱만 특정한다.
 ```bash
-osascript -e 'quit app "One App"'
+if pgrep -f "electron-forge start" >/dev/null; then
+  # dev 보존 — 경로로 빌드 앱만. SIGTERM 이라 before-quit 은 안 돌지만 잃는 상태가 없다
+  # (tmux 세션은 별개 서버, 팝아웃 배정은 레코드가 남아 재시작 때 복원된다)
+  pkill -f "/Applications/One App.app/Contents/MacOS/One App"
+else
+  osascript -e 'quit app "One App"'   # graceful — dev 가 없을 때만
+fi
 ```
+종료 뒤 `pgrep -f "electron-forge start"` 로 **dev 가 살아 있는지 반드시 확인**한다.
 - 터미널 세션은 tmux 가 들고 있어 앱을 껐다 켜도 살아남는다 — 잃는 상태가 없으므로 물을 이유가 없다.
-- ⚠️ `pkill -f "One App"` 처럼 넓은 패턴을 쓰지 말 것 — 개발 인스턴스나 무관한 프로세스까지 잡는다.
+- ⚠️ `pkill -f "One App"` 처럼 넓은 패턴을 쓰지 말 것 — 개발 인스턴스나 무관한 프로세스까지 잡는다. 위처럼 **`/Applications/…/MacOS/One App` 전체 경로**여야 빌드 앱만 잡힌다.
 
 ### 5. 교체 + 재서명
 `/Applications` 는 File Provider 밖이라 여기서 정리한 확장 속성은 **다시 붙지 않는다.**

@@ -154,7 +154,7 @@ paths:
   - ⚠️ 축소 아크를 **원형 border 링이나 회전하는 conic-gradient 로 바꾸지 말 것** — 사각 타일과
     기하가 안 맞아 타일을 관통하거나 코너가 밖으로 튄다. dash 합 = 둘레, 이동량은 음수를 인라인
     변수로(키프레임의 `calc` 은 보간되지 않음). 근거는 `_terminal.scss`·`WorkspaceNav.tsx` 주석.
-- 세션 행 = 래퍼 div + `[선택 button][닫기 button]` 형제(활성은 `aria-current`). 이름 변경 = 더블클릭 인라인 편집(`terminal:rename` → sidecar 영속), 진입 시 `select()`.
+- 세션 목록은 이 패널이 아니라 **상단 탭바(`SessionTabs`)** 에 있다(예전의 '세션 행'은 없어졌다). 이름 변경은 탭 **우클릭 메뉴 [이름 변경]** → 인라인 편집(`Input bare`, `terminal:rename` → sidecar 영속), 진입 시 `select()`. 워크스페이스 이름도 같은 방식(타일 우클릭). ⚠️ 인라인 편집은 공용 `.input` 의 `min-height: var(--control-h)` 하한을 `bare` 가 지워야 감싸는 행·탭이 부풀지 않는다(2026-09-02).
 
 ## xterm 구성
 - addon: fit·unicode11·webgl·web-links·search — 전부 **devDependencies**(prod 에 두면 `copyRuntimeDeps` 가 패키지에 복사).
