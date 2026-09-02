@@ -315,7 +315,7 @@ export const SessionTabs = memo(function SessionTabs({
       return (
         <span key={s.id} className="terminal__tab terminal__tab--edit">
           <Input
-            small
+            bare
             autoFocus
             aria-label="세션 이름"
             value={draft}

@@ -717,6 +717,27 @@ input.input--sm {
   min-height: var(--control-h-sm);
 }
 
+// 인라인 편집 — 감싸는 요소(세션 탭 등)가 이미 테두리·배경을 갖고 있어 입력은
+// **글자만** 보여야 한다. 자체 박스를 그리면 이중 테두리 위에 포커스 링(2px)까지
+// 겹쳐, 그 자리에 둥근 캡슐이 떠 있는 모양이 된다(2026-09-02 사용자 지적).
+// ⚠️ `input.input--sm` **뒤**에 둘 것 — 특정도가 같아 순서로 height 를 이긴다.
+input.input--bare {
+  height: 100%;
+  // 인라인 편집 자리는 늘 좁은 flex 컨테이너다 — 기본 min-width:auto 면 긴 이름이
+  // 컨테이너를 밀어낸다(탭 150px 고정폭·워크스페이스 행 모두 해당)
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit; // 감싸는 요소의 활자를 그대로 — 편집 전후로 글자가 안 움직인다
+  color: inherit;
+
+  &:focus {
+    outline: 0;
+  }
+}
+
 // 셀렉트 트리거 — .input 실루엣의 버튼. 옵션 리스트는 커스텀 팝오버(.picker__pop 재사용)
 .select {
   display: inline-flex;

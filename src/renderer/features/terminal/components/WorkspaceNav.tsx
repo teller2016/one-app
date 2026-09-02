@@ -470,7 +470,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     {initials(ws.name)}
                   </span>
                   <Input
-                    small
+                    bare
                     autoFocus
                     aria-label="워크스페이스 이름"
                     value={draft}
