@@ -268,8 +268,10 @@
   // 이름 편집 중 — **행 기하를 그대로 둔다**. padding 을 `__ws-hit` 과 똑같이 줘야
   // 편집에 들어가는 순간 행 높이가 변하지 않는다(전에는 세로 4px 대 6px 이라 목록이
   // 출렁였다). 입력은 `Input` 의 `bare` 변형이라 자체 테두리·배경·포커스 링을 그리지
-  // 않고, 편집 중임은 **안쪽 윤곽 한 겹**으로 알린다 — `outline` 은 자리를 차지하지
-  // 않아 옆 요소가 밀리지 않는다(세션 탭 `__tab--edit` 과 같은 원칙, 2026-09-02).
+  // 않는다.
+  // ⚠️ **편집 표시로 테두리·배경을 얹지 말 것** — accent 윤곽 + 틴트를 줬더니 그 행만
+  // 파란 박스가 되어 목록에서 튀었다(2026-09-02 사용자 지적). 진입하면 이름이 전체
+  // 선택되므로 **선택 하이라이트와 커서만으로 편집 중임이 충분히 보인다**.
   &__ws-edit {
     flex: 1;
     min-width: 0;
@@ -277,10 +279,6 @@
     align-items: center;
     gap: 8px;
     padding: 6px 4px 6px 6px;
-    border-radius: var(--r-md);
-    outline: 1px solid var(--accent);
-    outline-offset: -1px;
-    background: var(--accent-soft);
     @include type-small;
     color: var(--text);
   }
@@ -802,8 +800,9 @@
       padding: 0 10px;
       @include type-small;
       color: var(--text);
+      // 표시는 **테두리 색 한 겹까지만** — 원래 테두리가 있던 자리라 무게가 늘지 않는다.
+      // 배경 틴트까지 얹으면 활성 탭과 뜻이 겹치고 그 탭만 덩어리져 보인다(2026-09-02).
       border-color: var(--accent);
-      background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
     }
 
     // 분할 드래그 중인 탭 — 0.45(WorkspaceNav 값)는 활성 탭의 채움·테두리·글자가
