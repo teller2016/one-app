@@ -28,6 +28,12 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-commit-skill.mjs\"",
             "timeout": 10,
             "statusMessage": "커밋 가드 확인 중"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-build-skill.mjs\"",
+            "timeout": 10,
+            "statusMessage": "빌드 가드 확인 중"
           }
         ]
       }
