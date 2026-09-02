@@ -1488,6 +1488,11 @@
   max-width: 220px;
 }
 
+// 팝아웃 헤더 [📌 항상 위] 켜짐 — 변경사항 토글(__changes-btn--on)과 같은 표시 규칙
+.terminal__popout-pin--on {
+  color: var(--accent);
+}
+
 .terminal-mo {
   display: flex;
   flex-direction: column;

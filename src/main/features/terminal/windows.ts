@@ -33,7 +33,7 @@ import { listSessions, onTerminalExit } from './pty';
 // 배정 영속 — 창 bounds 는 windowState(`popout:<id>` 키)가, 배정은 이 sidecar 가 맡는다.
 // 개발 인스턴스는 별도 파일(runtimeFile) — 창·세션(tmux 소켓)이 갈라져 있으므로 배정도 가른다.
 const FILE = runtimeFile('terminal-windows.json');
-type PersistedWindows = Record<string, { sessionIds: string[] }>;
+type PersistedWindows = Record<string, { sessionIds: string[]; alwaysOnTop?: boolean }>;
 
 const POPOUT_DEFAULT = { width: 900, height: 600 };
 const POPOUT_MIN = { width: 480, height: 320 };
@@ -49,6 +49,8 @@ type PopoutEntry = {
   pendingLayout?: string;
   /** 팝아웃 렌더러가 보고한 화면 세션들 — 입력대기 토스트 게이트·창 타이틀에 쓴다 */
   visibleIds: string[];
+  /** 항상 위 — 한 화면에서 다른 앱을 쓰며 세션을 지켜보는 용도. 재시작 복원 대상 */
+  alwaysOnTop: boolean;
 };
 
 const popouts = new Map<string, PopoutEntry>();
@@ -67,7 +69,8 @@ const windowsRestored = new Promise<void>((r) => {
 
 function persist(): void {
   const out: PersistedWindows = {};
-  for (const [id, entry] of popouts) out[id] = { sessionIds: entry.sessionIds };
+  for (const [id, entry] of popouts)
+    out[id] = { sessionIds: entry.sessionIds, alwaysOnTop: entry.alwaysOnTop || undefined };
   writeUserJson(FILE, out);
 }
 
@@ -164,6 +167,7 @@ function createPopoutWindow(id: string, at?: { x: number; y: number }): void {
     minWidth: POPOUT_MIN.width,
     minHeight: POPOUT_MIN.height,
     title: IS_DEV_INSTANCE ? '터미널 — DEV' : '터미널',
+    alwaysOnTop: entry.alwaysOnTop,
     // 메인 창과 같은 신호등 통합 — 단 vibrancy 는 없다: 전면이 불투명 터미널 패널이라
     // 재질이 보일 면적이 없고, 대신 backgroundColor 를 칠해 로드 전 플래시를 막는다
     // (--bg 토큰과 동기화 — _base.scss 참고)
@@ -332,6 +336,7 @@ export function registerTerminalWindowsIpc(): void {
       sessionIds: ids,
       pendingLayout: input.layout,
       visibleIds: [],
+      alwaysOnTop: false,
     });
     persist();
     broadcastWindows();
@@ -368,11 +373,24 @@ export function registerTerminalWindowsIpc(): void {
   // 팝아웃 부팅 1회 — 배정 세션 + (있으면) 최초 분할 트리. layout 은 소비 후 폐기
   ipcMain.handle('terminal:windows:init', (_e, id: string) => {
     const entry = popouts.get(id);
-    if (!entry) return { sessionIds: [] as string[] };
+    if (!entry) return { sessionIds: [] as string[], alwaysOnTop: false };
     const layout = entry.pendingLayout;
     entry.pendingLayout = undefined;
-    return { sessionIds: [...entry.sessionIds], layout };
+    return { sessionIds: [...entry.sessionIds], layout, alwaysOnTop: entry.alwaysOnTop };
   });
+
+  // 항상 위 토글 — 렌더러 헤더의 [📌]. 배정 레코드에 실어 재시작 복원까지 유지한다
+  ipcMain.handle(
+    'terminal:windows:always-on-top',
+    (_e, args: { windowId: string; on: boolean }) => {
+      const entry = popouts.get(args.windowId);
+      if (!entry) return { ok: false as const, error: '창이 이미 닫혔습니다.' };
+      entry.alwaysOnTop = args.on;
+      if (entry.win && !entry.win.isDestroyed()) entry.win.setAlwaysOnTop(args.on);
+      persist();
+      return { ok: true as const, on: args.on };
+    }
+  );
 
   // 팝아웃 렌더러의 화면 세션 보고 — 알림 게이트(isVisibleInPopout)·창 타이틀 갱신
   ipcMain.on(
@@ -440,7 +458,12 @@ export async function initTerminalWindows(): Promise<void> {
       clearWindowState(`popout:${id}`);
       continue; // 세션이 전부 죽은 창은 되살리지 않는다
     }
-    popouts.set(id, { win: null, sessionIds: ids, visibleIds: [] });
+    popouts.set(id, {
+      win: null,
+      sessionIds: ids,
+      visibleIds: [],
+      alwaysOnTop: rec.alwaysOnTop === true,
+    });
     createPopoutWindow(id);
   }
   persist(); // 죽은 세션·빈 창을 걷어낸 결과로 굳힌다

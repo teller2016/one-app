@@ -569,8 +569,11 @@ contextBridge.exposeInMainWorld("oneApp", {
       // 되돌린 세션이 화면에 안 나타나므로, 창 포커스 + 그 세션으로 이동까지 시킨다
       revealInMain: (sessionId: string) =>
         ipcRenderer.invoke("terminal:windows:reveal-in-main", sessionId),
-      // 팝아웃 부팅 1회 — 배정 세션 + (그룹째 분리 시) 최초 분할 트리
+      // 팝아웃 부팅 1회 — 배정 세션 + (그룹째 분리 시) 최초 분할 트리 + 항상 위 여부
       init: (id: string) => ipcRenderer.invoke("terminal:windows:init", id),
+      // 항상 위 토글 — 팝아웃 헤더 [📌]. 배정 레코드에 실려 재시작 후에도 유지
+      setAlwaysOnTop: (windowId: string, on: boolean) =>
+        ipcRenderer.invoke("terminal:windows:always-on-top", { windowId, on }),
       // 배정 변경 구독 — payload 로 전체 목록 (terminal:sessions 관례). 해제 함수 반환
       onChanged: (cb: (windows: TerminalWindowInfo[]) => void) => {
         const listener = (_e: unknown, windows: TerminalWindowInfo[]) =>

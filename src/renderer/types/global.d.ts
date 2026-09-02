@@ -440,7 +440,11 @@ declare global {
           revealInMain: (sessionId: string) => Promise<{ handled: boolean }>;
           init: (
             id: string,
-          ) => Promise<{ sessionIds: string[]; layout?: string }>;
+          ) => Promise<{ sessionIds: string[]; layout?: string; alwaysOnTop?: boolean }>;
+          setAlwaysOnTop: (
+            windowId: string,
+            on: boolean,
+          ) => Promise<{ ok: boolean; on?: boolean; error?: string }>;
           onChanged: (cb: (windows: TerminalWindowInfo[]) => void) => () => void;
           reportVisible: (windowId: string, ids: string[]) => void;
           drag: (state: TerminalDragState) => void;

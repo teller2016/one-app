@@ -18,6 +18,7 @@ import { useToast, ToastProvider } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { errMsg } from '../../../lib/errMsg';
 import { LAYOUT_STORAGE_KEY } from '../lib/layout';
+import { FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN } from './TerminalView';
 import type { DropSide } from '../lib/layout';
 import {
   buildTabView,
@@ -47,9 +48,11 @@ export async function mountTerminalPopout(
 ): Promise<void> {
   const api = window.oneApp?.terminal?.windows;
   let initialIds: string[] = [];
+  let initialAlwaysOnTop = false;
   try {
     const init = api ? await api.init(windowId) : { sessionIds: [] };
     initialIds = init.sessionIds;
+    initialAlwaysOnTop = init.alwaysOnTop === true;
     if (init.layout) {
       try {
         const tree: unknown = JSON.parse(init.layout);
@@ -66,22 +69,32 @@ export async function mountTerminalPopout(
     // init 실패(창 레코드 소멸 등) — 빈 창으로 뜨고, main 이 곧 닫는다
   }
   createRoot(container).render(
-    <TerminalPopoutApp windowId={windowId} initialIds={initialIds} />
+    <TerminalPopoutApp
+      windowId={windowId}
+      initialIds={initialIds}
+      initialAlwaysOnTop={initialAlwaysOnTop}
+    />
   );
 }
 
 export function TerminalPopoutApp({
   windowId,
   initialIds,
+  initialAlwaysOnTop = false,
 }: {
   windowId: string;
   initialIds: string[];
+  initialAlwaysOnTop?: boolean;
 }) {
   return (
     <ToastProvider>
       <ConfirmProvider>
         <ErrorBoundary label="터미널 팝아웃">
-          <PopoutBody windowId={windowId} initialIds={initialIds} />
+          <PopoutBody
+            windowId={windowId}
+            initialIds={initialIds}
+            initialAlwaysOnTop={initialAlwaysOnTop}
+          />
         </ErrorBoundary>
       </ConfirmProvider>
     </ToastProvider>
@@ -91,9 +104,11 @@ export function TerminalPopoutApp({
 function PopoutBody({
   windowId,
   initialIds,
+  initialAlwaysOnTop,
 }: {
   windowId: string;
   initialIds: string[];
+  initialAlwaysOnTop: boolean;
 }) {
   const toast = useToast();
   const selKey = `win:${windowId}`;
@@ -285,10 +300,28 @@ function PopoutBody({
   const {
     livePanes,
     fontSize,
+    changeFontSize,
     registerPaneHandle,
+    scrollActiveToBottom,
     reclaimFocus,
+    scrolledUp,
     onScrolledChange,
   } = usePaneOrchestration({ activeId, activeGroupIds, activeIdRef, rootRef });
+  // ⚠️ scrolledUp 은 Record 라 참조가 자주 바뀐다 — 헤더 memo 에는 활성 세션의 boolean 만 넣는다
+  const activeScrolledUp = !!activeId && !!scrolledUp[activeId];
+
+  // ── 항상 위 — 한 화면에서 다른 앱을 쓰며 세션을 지켜보는 용도. 정본은 main(배정 레코드) ──
+  const [alwaysOnTop, setAlwaysOnTop] = useState(initialAlwaysOnTop);
+  const toggleAlwaysOnTop = useCallback(() => {
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next); // 낙관 — 실패하면 아래서 되돌린다
+    void window.oneApp?.terminal?.windows?.setAlwaysOnTop?.(windowId, next).then((res) => {
+      if (!res?.ok) {
+        setAlwaysOnTop(!next);
+        toast(res?.error || '창 설정을 바꾸지 못했습니다.', 'fail');
+      }
+    });
+  }, [alwaysOnTop, windowId, toast]);
 
   const closeSession = useCallback(
     async (s: TerminalSessionInfo) => {
@@ -401,7 +434,16 @@ function PopoutBody({
     [peekGroup]
   );
 
-  // 우측 액션 — 변경사항·MO 버튼 대신 레포 라벨 + 되돌리기 (참조는 memo 로 고정)
+  /** 헤더 [Finder] — 활성 세션 기준 */
+  const revealActive = useCallback(() => {
+    const id = activeIdRef.current;
+    if (id) revealSessionCwd(id);
+  }, [revealSessionCwd]);
+
+  // 우측 액션 — 변경사항·MO 버튼 대신 레포 라벨 + 메인 툴바의 축약판(글자 크기·맨 아래로·
+  // Finder) + 항상 위 + 되돌리기. 팝아웃은 탭바가 곧 타이틀바라 **툴바를 한 줄 더 두지
+  // 않고** 이 슬롯에 넣는다(세로 공간 보존). 검색은 ⌘F 로 충분해 버튼을 뺐다.
+  // 참조는 memo 로 고정 — SessionTabs 가 memo 다.
   const rightActions = useMemo(
     () => (
       <>
@@ -411,6 +453,80 @@ function PopoutBody({
             <span className="terminal__popout-loc-text">{locLabel}</span>
           </span>
         )}
+        <span className="terminal__bar-actions">
+          <Tooltip label="글자 작게">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="글자 작게"
+              disabled={fontSize <= FONT_SIZE_MIN}
+              onClick={() => changeFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
+            >
+              <Icon name="minus" size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
+              onClick={() => changeFontSize(FONT_SIZE_DEFAULT)}
+            >
+              <span className="terminal__bar-size">{fontSize}</span>
+            </button>
+          </Tooltip>
+          <Tooltip label="글자 크게">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="글자 크게"
+              disabled={fontSize >= FONT_SIZE_MAX}
+              onClick={() => changeFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
+            >
+              <Icon name="plus" size={14} />
+            </button>
+          </Tooltip>
+        </span>
+        {activeScrolledUp && (
+          <Tooltip label="맨 아래로">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="맨 아래로"
+              onClick={scrollActiveToBottom}
+            >
+              <Icon name="arrow-down-to-line" size={14} />
+            </button>
+          </Tooltip>
+        )}
+        <Tooltip label="세션 위치를 Finder 에서 열기">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Finder 에서 열기"
+            disabled={!activeSession}
+            onClick={revealActive}
+          >
+            <Icon name="folder" size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip
+          label={
+            alwaysOnTop
+              ? '항상 위 켜짐 — 다른 앱 위에도 떠 있습니다. 눌러서 해제'
+              : '항상 위 — 다른 앱을 쓰면서 이 창을 계속 보이게'
+          }
+        >
+          <button
+            type="button"
+            className={`icon-btn${alwaysOnTop ? ' terminal__popout-pin--on' : ''}`}
+            aria-label="항상 위"
+            aria-pressed={alwaysOnTop}
+            onClick={toggleAlwaysOnTop}
+          >
+            <Icon name="pin" size={14} />
+          </button>
+        </Tooltip>
         <Tooltip label="현재 세션을 메인 창으로 되돌리기 (창을 닫으면 전부 되돌아갑니다)">
           <button
             type="button"
@@ -424,7 +540,18 @@ function PopoutBody({
         </Tooltip>
       </>
     ),
-    [locLabel, activeSession, returnActiveFromBar]
+    [
+      locLabel,
+      activeSession,
+      returnActiveFromBar,
+      fontSize,
+      changeFontSize,
+      activeScrolledUp,
+      scrollActiveToBottom,
+      revealActive,
+      alwaysOnTop,
+      toggleAlwaysOnTop,
+    ]
   );
 
   return (
