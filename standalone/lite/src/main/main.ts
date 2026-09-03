@@ -12,6 +12,7 @@ import { registerJiraReportIpc } from '@one/main/features/jira/report';
 import { registerSettingsIpc } from '@one/main/features/settings/ipc';
 import { getThemePref } from '@one/main/features/settings/store';
 import { loadWindowState, trackWindowState } from '@one/main/lib/windowState';
+import { registerUpdateIpc } from './update';
 
 // 실행 파일을 두 번 눌러도 창이 하나만 뜨게 한다
 const gotLock = app.requestSingleInstanceLock();
@@ -21,6 +22,7 @@ if (!gotLock) app.quit();
 registerSettingsIpc(); // settings:get · settings:set · settings:theme:set
 registerApprovalIpc(); // approval:* (야근·휴가·지출결의서·상신함)
 registerJiraReportIpc(); // jira:report:* (프로젝트 목록·조회·저장된 조건)
+registerUpdateIpc(); // update:check — 이 앱만의 채널 (본체엔 없다)
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용) — 본체 main.ts 와 같은 계약
 ipcMain.handle('app:openExternal', async (_e, url: string) => {

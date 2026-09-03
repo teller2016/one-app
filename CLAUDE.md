@@ -39,6 +39,7 @@ src/
 
 standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" (결재 3종 + Jira 티켓 보고) — 본체 코드를 복사하지
                               #    않고 `@one/*` alias 로 직접 import 해 번들한다 (그 README 참고)
+                              #    배포는 **`/release` 스킬**로 (훅이 스킬 밖 배포 명령을 막는다)
 ```
 
 **기능 목록**
@@ -109,5 +110,5 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
-**스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영)
+**스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)
 **로드맵**: `ROADMAP.md`

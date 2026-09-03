@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppSettingsView } from '@one/shared/types';
+import { Banner } from '@one/renderer/components/Banner';
+import { Button } from '@one/renderer/components/Button';
 import { ConfirmProvider } from '@one/renderer/components/ConfirmDialog';
 import { ErrorBoundary } from '@one/renderer/components/ErrorBoundary';
 import { Icon } from '@one/renderer/components/Icon';
@@ -11,6 +13,7 @@ import { ApprovalSection } from '@one/renderer/features/approval';
 // ⚠️ jira 는 index.ts(공개 API)가 아니라 컴포넌트 파일을 직접 가져온다 — index 가 JiraSection 을
 // 함께 내보내고, 그 파일은 터미널 세션·작업 시작 등 이 앱에 없는 채널을 쓰므로 tsc 가 실패한다.
 import { JiraReportPanel } from '@one/renderer/features/jira/components/JiraReportPanel';
+import type { UpdateInfo } from '../shared/update';
 import { SettingsView } from './views/SettingsView';
 
 type Screen = 'approval' | 'report' | 'settings';
@@ -35,6 +38,9 @@ function Shell() {
   const [screen, setScreen] = useState<Screen>('approval');
   // 환경설정에서 돌아갈 화면 — 세그먼트도 이 값을 가리킨다
   const [lastMain, setLastMain] = useState<MainScreen>('approval');
+  // 새 버전 확인 결과 — 실패해도 current(현재 버전)는 들어 있어 환경설정의 버전 표시에 쓴다
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateHidden, setUpdateHidden] = useState(false);
 
   useEffect(() => {
     void window.oneApp.settings.get().then((s) => {
@@ -42,6 +48,12 @@ function Shell() {
       // 계정이 없으면 환경설정부터 (첫 실행)
       if (!s.bizboxId || !s.hasPassword) setScreen('settings');
     });
+    // 새 버전 확인은 시작 후 한 번만 — 실패는 조용히 넘긴다(사내망에서 GitHub 이 막혀도
+    // 앱은 그대로 돌아야 한다). main 이 실패를 값으로 돌려주므로 catch 는 방어용이다.
+    void window.oneApp.update
+      .check()
+      .then(setUpdate)
+      .catch(() => undefined);
   }, []);
 
   const configured = !!settings?.bizboxId && !!settings?.hasPassword;
@@ -90,6 +102,32 @@ function Shell() {
         </Tooltip>
       </header>
 
+      {/* 새 버전 알림 — 받기는 사용자가 릴리스 페이지에서 한다(자동 업데이트 없음) */}
+      {update?.ok && update.hasUpdate && !updateHidden && (
+        <div className="app__update">
+          <Banner variant="info">
+            <div className="app__update-row">
+              <span>
+                새 버전 <b>{update.latest}</b> 이 나왔습니다{' '}
+                <span className="hint">(현재 {update.current})</span>
+              </span>
+              <span className="app__update-actions">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => void window.oneApp.openExternal(update.url)}
+                >
+                  받기
+                </Button>
+                <Button size="sm" onClick={() => setUpdateHidden(true)}>
+                  나중에
+                </Button>
+              </span>
+            </div>
+          </Banner>
+        </div>
+      )}
+
       <main className="app__body">
         {/* 화면마다 격리 — 하나가 죽어도 헤더로 다른 화면에 갈 수 있다 */}
         <ErrorBoundary key={screen} label={LABELS[screen]}>
@@ -108,6 +146,7 @@ function Shell() {
           {screen === 'settings' && settings && (
             <SettingsView
               settings={settings}
+              version={update?.current ?? ''}
               onSaved={(next) => {
                 setSettings(next);
                 setScreen(lastMain);

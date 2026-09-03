@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AppSettingsView, ThemePref } from '@one/shared/types';
+import type { UpdateInfo } from '../../shared/update';
 import { Banner } from '@one/renderer/components/Banner';
 import { Button } from '@one/renderer/components/Button';
 import { Collapsible } from '@one/renderer/components/Collapsible';
@@ -26,10 +27,13 @@ const THEMES: { value: ThemePref; label: string }[] = [
  */
 export function SettingsView({
   settings,
+  version,
   onSaved,
   onCancel,
 }: {
   settings: AppSettingsView;
+  /** 실행 중인 앱 버전 — 셸이 시작할 때 받아둔 값(빈 문자열이면 확인 실패) */
+  version: string;
   onSaved: (next: AppSettingsView) => void;
   onCancel: (() => void) | null;
 }) {
@@ -42,7 +46,21 @@ export function SettingsView({
   const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // 수동 업데이트 확인 — 셸이 시작할 때 이미 한 번 보지만, 여기서 직접 다시 볼 수 있다
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState<UpdateInfo | null>(null);
   const toast = useToast();
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    try {
+      setChecked(await window.oneApp.update.check());
+    } catch (e) {
+      setChecked({ ok: false, current: version, url: '', error: errMsg(e, '확인에 실패했습니다.') });
+    } finally {
+      setChecking(false);
+    }
+  };
 
   // 테마는 [저장] 없이 즉시 적용·저장 (본체 환경설정과 같은 동작)
   const changeTheme = (next: ThemePref) => {
@@ -191,6 +209,39 @@ export function SettingsView({
 
       <Collapsible title="테마" icon={<Icon name="moon" size={14} />}>
         <Segment<ThemePref> options={THEMES} value={theme} onChange={changeTheme} />
+      </Collapsible>
+
+      {/* 자동 업데이트는 없다 — 새 버전이 있으면 릴리스 페이지를 열어 zip 을 덮어쓰면 된다 */}
+      <Collapsible title="버전" icon={<Icon name="info" size={14} />} defaultOpen={false}>
+        <div className="settings-version">
+          <span>
+            현재 버전 <b>{version || '—'}</b>
+          </span>
+          <Button size="sm" onClick={() => void checkUpdate()} loading={checking}>
+            업데이트 확인
+          </Button>
+        </div>
+        {checked && (
+          <p className="hint form-hint">
+            {!checked.ok ? (
+              checked.error
+            ) : checked.hasUpdate ? (
+              <>
+                새 버전 <b>{checked.latest}</b> 이 있습니다 —{' '}
+                <TextLink
+                  small
+                  external
+                  onClick={() => void window.oneApp.openExternal(checked.url)}
+                >
+                  받으러 가기
+                </TextLink>
+                . 받은 zip 으로 기존 앱을 덮어쓰면 되고, 설정은 그대로 유지됩니다.
+              </>
+            ) : (
+              '최신 버전을 쓰고 있습니다.'
+            )}
+          </p>
+        )}
       </Collapsible>
 
       <div className="form-actions">

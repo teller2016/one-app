@@ -35,6 +35,22 @@ typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
 - main 에서 가져오는 본체 모듈은 **electron·node 내장만 쓰는 순수 모듈**이어야 한다
   (터미널·MO 서버처럼 데스크톱 전용 의존이 딸린 기능은 가져오지 않는다).
 
+## 배포는 **`/release` 스킬**로 (GitHub Releases)
+산출물과 **받는 사람용 안내**는 배포 전용 public 리포 **`teller2016/one-app-lite`** 에 둔다(소스는 안 올린다).
+팀원에게 주는 링크는 `.../releases/latest` 하나로 고정이라 다음 배포에도 그대로 유효하다.
+
+- ⚠️ **`npm run release` 를 직접 부르지 말 것** — `require-build-skill.mjs` 훅이 막는다. `/release` 스킬이
+  변경점 정리·버전 판단·승인을 거친 뒤 부른다(public 릴리스는 팀원이 곧바로 받아 가 되돌리기 어렵다).
+- `scripts/release.mjs` — gh 인증 확인 → typecheck → 버전 bump → win·mac 빌드 → **macOS 서명 검증** →
+  `gh release create` → 링크 출력. **커밋·태그는 하지 않는다**(bump 된 `package.json` 은 `/commit` 으로).
+  같은 태그가 있으면 업로드 전에 멈추고, 서명이 빠졌으면 중단한다(`--allow-unsigned` 로만 강행).
+- **앱 안의 새 버전 확인**: `src/main/update.ts`(`update:check`)가 최신 릴리스 태그를 현재 버전과 비교 →
+  셸 배너 + 환경설정 '버전' 그룹. 실패는 조용히 무시한다(사내망에서 GitHub 이 막혀도 앱은 돈다).
+- ⚠️ 리포 주소는 `scripts/release.mjs` 와 `src/main/update.ts` **두 곳의 `REPO` 상수**에 있다 — 바꾸면 함께.
+- ⚠️ **사용법 문서의 정본은 배포 리포의 README** 다. 화면 사용법이 바뀌면 `standalone/lite/README.md` 가 아니라 그쪽을 고친다.
+- ⚠️ 자가서명은 **받는 맥에서 검증되지 않는다** — 목적은 빌드 간 서명 고정(계정 유실 방지)이지 Gatekeeper 통과가 아니다.
+  받는 사람 안내는 `xattr -dr com.apple.quarantine <앱>` 이 정답이다(macOS 15+ 는 우클릭 → 열기도 막힌다).
+
 ## 설정·저장 위치
 `userData` 가 **`OneAppLite`** 다(본체 `One App` 과 별개) — 계정·결재 소속·Jira 토큰·보고 조건이
 따로 저장된다. 저장 코드는 본체와 같은 파일이라 형식도 같다.

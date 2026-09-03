@@ -23,6 +23,8 @@ import type {
   VacationResult,
   VacationStatus,
 } from '@one/shared/types';
+// 이 앱만의 타입 — 본체에는 없는 기능이라 lite 의 shared 에 둔다
+import type { UpdateInfo } from '../../shared/update';
 
 declare global {
   interface Window {
@@ -54,6 +56,9 @@ declare global {
           getPrefs: () => Promise<JiraReportPrefs>;
           savePrefs: (prefs: Partial<JiraReportPrefs>) => Promise<JiraReportPrefs>;
         };
+      };
+      update: {
+        check: () => Promise<UpdateInfo>;
       };
       openExternal: (url: string) => Promise<{ ok: boolean }>;
     };

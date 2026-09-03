@@ -50,6 +50,10 @@ contextBridge.exposeInMainWorld('oneApp', {
         ipcRenderer.invoke('jira:report:prefs:set', prefs),
     },
   },
+  /** 새 버전 확인 — 이 앱만의 채널(본체엔 없다). 실패해도 예외를 던지지 않는다 */
+  update: {
+    check: () => ipcRenderer.invoke('update:check'),
+  },
   /** 기본 브라우저로 링크 열기 */
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
 });

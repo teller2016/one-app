@@ -17,43 +17,48 @@ One App 본체에서 **동료에게 건네줄 수 있는 기능만** 뽑아 Wind
 
 ---
 
-## 받는 사람용 사용 안내 (그대로 전달해도 되는 문구)
+## 배포 (`/release` 스킬)
 
-1. `OneAppLite-win32-x64-2.0.0.zip` 압축을 풀고 폴더 안의 **`OneAppLite.exe`** 실행
-   (폴더째로 옮겨야 실행됩니다 — exe 하나만 빼내면 동작하지 않습니다)
-2. 처음 실행하면 Windows 가 *"Windows의 PC 보호"* 경고를 띄웁니다 → **추가 정보 → 실행**
-   (사내 배포용 미서명 앱이라 나오는 경고입니다)
-3. 첫 화면(환경설정)에서 **사번(ID)·비밀번호**를 저장 (그룹웨어 로그인 계정)
-   - **결재 소속**은 야근 결재 근무자 표의 '소속' 칸과 휴가신청서 제목에 그대로 들어갑니다(예: `FE챕터 플랫폼기술부문`). **비워 두면 야근·휴가 결재를 시작할 수 없습니다** — 기본값은 없습니다
-   - 티켓 보고를 쓰려면 **Jira 주소·이메일·API 토큰**도 저장 (토큰은 Atlassian 계정 설정 → 보안 → API 토큰 만들기)
+산출물과 **받는 사람용 안내**는 배포 전용 public 리포에 둔다 — 소스는 올리지 않는다.
 
-### 결재
+> Claude 로 작업할 때는 **`/release`** 를 쓴다 — 변경점 정리 → 버전 제안 → 승인 → 아래 스크립트 실행 →
+> 결과 확인 → **팀원 공지 문구**까지 만들어 준다. `npm run release` 직접 호출은 훅이 막는다
+> (`.claude/hooks/require-build-skill.mjs` — public 릴리스는 되돌리기 어렵다).
 
-4. 상단 [결재] → 종류 카드를 고르고 폼을 채운 뒤 **[작성 시작]**
-   - 자동화 창이 뜨고 채워지는 것이 보입니다. **끝날 때까지 건드리지 마세요.**
-5. 작성이 끝나면 창이 그대로 남습니다 → **그 창에서 [상신](지출결의서는 첨부 후 [결재상신])을 직접** 누르세요
-   - 앱은 상신하지 않습니다. 완료 화면의 [전자결재 상신함 열기]로 올라간 문서를 확인할 수 있습니다
-
-### 티켓 보고
-
-4. 상단 [티켓 보고] → **프로젝트**를 고르고 **기간**(월 / 직접 / 전체)과 **기준**(갱신일·생성일·해결일)을 정한 뒤 **[조회]**
-   - 조회한 조건은 저장되어 다음에 열 때 자동으로 다시 조회됩니다
-5. 결과 위의 **상태·담당자·레이블·유형** 셀렉트와 검색창으로 걸러내고, 필요하면 체크박스로 원하는 행만 고릅니다
-6. **[N건 복사]** → 붙여넣기. 기본 형식은 `SSB-111 티켓명` 이고, 템플릿 칸에서 바꿀 수 있습니다
-   - 템플릿 칸 옆 **`(i)`** 를 누르면 쓸 수 있는 자리표시자 목록이 펼쳐집니다 — 각 항목에 설명과 첫 티켓의 실제 값이 함께 보이고, 누르면 커서 자리에 삽입됩니다
-   - 자리표시자: `{key}` `{summary}` `{status}` `{type}` `{assignee}` `{reporter}` `{priority}` `{labels}` `{project}` `{parent}` `{parentSummary}` `{url}` `{created}` `{resolved}` `{updated}` · 탭은 `\t`, 줄바꿈은 `\n`
-   - 프리셋: 번호 / 티켓명 / 번호 티켓명 / 번호 티켓명 (상태) / 탭 구분(표 붙이기) / 링크만
-   - 고급: [JQL 직접 입력]을 켜면 조건 대신 입력한 JQL 을 그대로 보냅니다
-
----
-
-## 빌드
+> **배포 리포**: <https://github.com/teller2016/one-app-lite>
+> **팀원에게 주는 링크**: <https://github.com/teller2016/one-app-lite/releases/latest> — 한 번만 공유하면 다음 배포에도 그대로 유효하다.
+> **받는 사람용 사용 안내의 정본은 그 리포의 README** 다(설치·첫 설정·결재·티켓 보고·문제 해결). 사용법이 바뀌면 여기가 아니라 **그쪽을 고친다.**
 
 ```bash
 cd standalone/lite
+npm run release                      # 2.0.0 → 2.0.1 (patch)
+npm run release -- --minor           # 2.0.0 → 2.1.0
+npm run release -- --version=2.5.0   # 직접 지정
+npm run release -- --notes="티켓 보고 필터 버그 수정"
+npm run release -- --dry-run         # 빌드까지만, 업로드 직전에 멈춘다
+npm run release -- --skip-build      # 이미 만든 산출물로 업로드만 (dry-run 다음에 이어서)
+```
+
+스크립트(`scripts/release.mjs`)가 하는 일 — ① `gh` 인증 확인 → ② `npm run typecheck` → ③ 버전 bump → ④ `out/make` 비우고 **Windows·macOS 빌드** → ⑤ 이번 버전 zip 만 골라 `gh release create v<버전>` 으로 업로드 → ⑥ 공유 링크 출력(클립보드 복사).
+
+- **맥 한 대에서 두 플랫폼이 다 나온다** — zip maker 만 쓰므로 Windows 산출물도 크로스 빌드된다.
+- **커밋·태그는 스크립트가 하지 않는다.** 올라간 `package.json` 버전은 `/commit` 으로 따로 커밋한다.
+- 같은 태그가 이미 있으면 **업로드 전에 멈춘다**(받은 사람과 버전이 어긋나는 것을 막는다).
+- 산출물이 한 플랫폼만 나오면 경고만 하고 진행한다 — 그 OS 팀원은 못 받으니 확인할 것.
+
+### 앱 안의 새 버전 확인
+자동 업데이트(Squirrel·서명 인프라)는 두지 않는다. 대신 `src/main/update.ts` 가 **배포 리포의 최신 릴리스 태그**를 조회해(`update:check`) 현재 버전과 비교하고, 새 버전이면 제목바 아래 배너 + [받기]로 릴리스 페이지를 연다. 환경설정 **'버전'** 그룹에서 수동 확인도 된다.
+
+- 조회 실패(사내망에서 GitHub 차단·오프라인)는 **조용히 무시**한다 — 앱 동작을 막지 않는다.
+- ⚠️ 리포 주소는 `scripts/release.mjs` 와 `src/main/update.ts` **두 곳의 `REPO` 상수**에 있다. 바꾸면 함께 바꾼다(올리는 곳과 보는 곳이 같아야 한다).
+- 받는 사람은 zip 을 **덮어쓰기만** 하면 된다 — 설정은 앱 폴더가 아니라 userData 에 있어 유지된다.
+
+### 빌드만 하기
+
+```bash
 npm install
-npm run make:win     # → out/make/zip/win32/x64/OneAppLite-win32-x64-2.0.0.zip
-npm run make:mac     # → out/make/zip/darwin/arm64/OneAppLite-darwin-arm64-2.0.0.zip
+npm run make:win     # → out/make/zip/win32/x64/OneAppLite-win32-x64-<버전>.zip
+npm run make:mac     # → out/make/zip/darwin/arm64/OneAppLite-darwin-arm64-<버전>.zip
 ```
 
 - **본체 리포 안에서 빌드해야 한다** — `@one/*` 가 `../../src` 를 가리키므로 이 폴더만 떼어 내면 빌드가 안 된다. (산출물은 단독으로 돈다)
@@ -62,7 +67,8 @@ npm run make:mac     # → out/make/zip/darwin/arm64/OneAppLite-darwin-arm64-2.0
 - **macOS 는 자가서명 인증서 `One App Sign` 으로 서명**된다(`forge.config.ts` 의 postPackage 훅).
   adhoc 서명이면 리빌드마다 서명이 바뀌어 `safeStorage` 의 키체인 접근이 끊기고 **저장한 계정이 날아간다**.
   인증서가 없는 맥에서는 서명 없이 통과하므로, 그 경우 리빌드 후 계정 재입력이 필요할 수 있다.
-- 맥 산출물을 다른 맥에 전달하면 Gatekeeper 가 막는다 → **우클릭 → 열기**(또는 시스템 설정 → 개인정보 보호 및 보안 → *확인 없이 열기*).
+- ⚠️ **자가서명은 받는 맥에서 검증되지 않는다** — 그 인증서를 그쪽이 모르기 때문이다(계정 유실을 막으려고 **빌드 간 서명을 고정**하는 것이 목적이지, Gatekeeper 를 통과하려는 것이 아니다). 게다가 인터넷에서 받은 zip 에는 quarantine 이 붙어 macOS 15+ 는 '우클릭 → 열기' 우회도 막는다. 받는 사람 안내는 **`xattr -dr com.apple.quarantine /Applications/OneAppLite.app`** 한 줄이 가장 확실하다(배포 리포 README 에 적혀 있다). 없애려면 Apple Developer 계정($99/년)으로 공증(notarize)해야 한다.
+- Windows 도 미서명이라 **SmartScreen 경고**가 매 버전 뜬다(추가 정보 → 실행). 없애려면 OV/EV 코드 서명 인증서가 필요하다 — 사내 소규모 배포에는 권하지 않는다.
 - `npm install` 이 `ETARGET No matching version` 으로 실패하면 npm 캐시 손상이다 → `npm cache clean --force` 후 `rm -f package-lock.json && npm install`(본체 CLAUDE.md 트러블슈팅과 같다).
 
 ## 개발
@@ -89,18 +95,23 @@ npm run icon       # 아이콘 3종 재생성 (본체 아이콘을 바꿨을 때
 ```
 standalone/lite/
 ├── assets/                    icon.png · icon.icns(mac) · icon.ico(win) — 커밋한다
-├── scripts/make-icon.mjs      본체 아이콘의 **색만** 바꿔 위 3개를 만든다 (npm run icon)
+├── scripts/
+│   ├── make-icon.mjs          본체 아이콘의 **색만** 바꿔 위 3개를 만든다 (npm run icon)
+│   └── release.mjs            버전 bump → 양 플랫폼 빌드 → GitHub Releases 업로드 (npm run release)
 ├── forge.config.ts            executableName · 아이콘 · macOS 자가서명 훅 · ZIP maker
 ├── vite.{main,preload,renderer}.config.ts
 │                              `@one` alias(= ../../src) · 렌더러는 react dedupe + fs.allow(리포 루트)
 ├── tsconfig.json              paths { "@one/*": ["../../src/*"] }
 └── src/
-    ├── main/main.ts           창 하나 + 본체 IPC 등록(registerSettingsIpc · registerApprovalIpc · registerJiraReportIpc)
-    ├── preload/preload.ts     window.oneApp — 본체 preload 의 **부분집합** (settings · approval · jira.report · openExternal)
+    ├── shared/update.ts       UpdateInfo — 새 버전 확인 결과 (이 앱만의 타입)
+    ├── main/
+    │   ├── main.ts            창 하나 + 본체 IPC 등록(registerSettingsIpc · registerApprovalIpc · registerJiraReportIpc) + registerUpdateIpc
+    │   └── update.ts          배포 리포의 최신 릴리스 조회 (update:check)
+    ├── preload/preload.ts     window.oneApp — 본체 preload 의 **부분집합** (settings · approval · jira.report · update · openExternal)
     └── renderer/
         ├── renderer.tsx       본체 initTheme + 마운트
-        ├── App.tsx            셸(제목바 세그먼트 [결재 | 티켓 보고] · 환경설정) — 본문은 본체 ApprovalSection · JiraReportPanel
-        ├── views/SettingsView.tsx  이 앱만의 화면 (본체 환경설정의 부분집합, 채널은 본체와 같은 settings:set)
+        ├── App.tsx            셸(제목바 세그먼트 [결재 | 티켓 보고] · 환경설정 · 새 버전 배너) — 본문은 본체 ApprovalSection · JiraReportPanel
+        ├── views/SettingsView.tsx  이 앱만의 화면 (본체 환경설정의 부분집합 + 버전/업데이트 확인, 채널은 본체와 같은 settings:set)
         ├── styles/index.scss  본체 base · approval · jira 를 @use + 셸 스타일(_app.scss)
         └── types/global.d.ts  window.oneApp 의 부분집합 타입 — 아래 '왜 부분집합인가'
 ```

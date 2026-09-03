@@ -58,6 +58,30 @@
     overflow-y: auto;
   }
 
+  // 새 버전 알림 — 제목바와 본문 사이. 배너 자체의 아래 여백(16px)은 셸이 대신 준다
+  &__update {
+    flex-shrink: 0;
+    padding: 12px 20px 0;
+
+    .banner {
+      margin: 0;
+    }
+  }
+
+  &__update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  &__update-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   &__foot {
     flex-shrink: 0;
     padding: 8px 20px 12px;
@@ -78,4 +102,12 @@
   .form-actions {
     margin-top: 4px;
   }
+}
+
+// 버전 그룹 — 현재 버전과 [업데이트 확인] 을 한 줄에
+.settings-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
