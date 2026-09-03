@@ -16,7 +16,10 @@ import {
 
 // 제어 모드 창 — 화면(비디오)이 없으니 입력을 받을 최소 크기면 된다(scrcpy 기본은 256x256).
 // 100 이면 타이틀바 신호등 버튼이 다 보이고, 48 까지는 경고 없이 내려간다(2026-09-01 실측).
-const CONTROL_WINDOW_SIZE = 100;
+const CONTROL_WINDOW_SIZE = 100; // 타이틀바까지 **포함한** 창 한 변
+// ⚠️ scrcpy 의 --window-height 는 타이틀바를 뺀 **콘텐츠 높이**다(실측: 100 을 주면 창은
+//    100x132 가 된다). 창 전체를 정사각형으로 만들려면 타이틀바 높이를 빼서 넘겨야 한다.
+const TITLEBAR_H = 32;
 
 // 모드별 scrcpy 인자 — 바탕화면 런처 앱들과 동일
 const MODE_ARGS: Record<MirrorMode, string[]> = {
@@ -29,7 +32,7 @@ const MODE_ARGS: Record<MirrorMode, string[]> = {
     '--keyboard=uhid',
     '--mouse=uhid',
     `--window-width=${CONTROL_WINDOW_SIZE}`,
-    `--window-height=${CONTROL_WINDOW_SIZE}`,
+    `--window-height=${CONTROL_WINDOW_SIZE - TITLEBAR_H}`,
     // 제목 비우기 — 빈 값이 그대로 먹는다(2026-09-01 실측). 타이틀바 자체는 남겨
     // 창을 마우스로 옮기고 닫을 수 있게 둔다(--window-borderless 를 쓰면 둘 다 막힌다).
     '--window-title=',
