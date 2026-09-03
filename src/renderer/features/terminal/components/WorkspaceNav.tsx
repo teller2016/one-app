@@ -25,7 +25,10 @@ import {
   initials,
   sameSelection,
   tileColor,
+  worktreeIcon,
+  worktreeLabel,
   worktreeName,
+  worktreeRef,
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
 
@@ -373,7 +376,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     return (
                       <Tooltip
                         key={wt.path}
-                        label={`${worktreeName(wt)} · ${wt.branch ?? wt.head ?? ''}${
+                        label={`${worktreeLabel(wt)}${
                           count > 0 ? ` · 세션 ${count}개` : ''
                         }${wtBusy ? ' · 작업 중' : ''}${wtWaiting ? ' · 입력 대기' : ''}`}
                       >
@@ -384,15 +387,17 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             (active ? ' terminal__wt-sq--active' : '')
                           }
                           aria-current={active ? 'true' : undefined}
-                          aria-label={`${ws.name} — ${worktreeName(wt)} 워크트리${
-                            count > 0 ? ` (세션 ${count}개)` : ''
-                          }${wtBusy ? ' · 작업 중' : ''}`}
+                          aria-label={`${ws.name} — ${worktreeName(wt)} ${
+                            wt.plain ? '폴더' : '워크트리'
+                          }${count > 0 ? ` (세션 ${count}개)` : ''}${
+                            wtBusy ? ' · 작업 중' : ''
+                          }`}
                           disabled={wt.missing}
                           onClick={() =>
                             onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
                           }
                         >
-                          <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={15} />
+                          <Icon name={worktreeIcon(wt)} size={15} />
                           {wtBusy && <BusyArc size={24} />}
                           {count > 0 && (
                             <span
@@ -446,6 +451,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
         const isOpen = expanded.includes(ws.id);
         const { count: wsCount, waiting: wsWaiting, busy: wsBusy } = wsAgg(ws);
         const list = worktrees[ws.id];
+        // 일반 폴더 워크스페이스(git 저장소 아님) — main 이 합성한 단일 항목이라 브랜치·워크트리가 없다
+        const plain = list?.[0]?.plain === true;
         return (
           <div
             key={ws.id}
@@ -521,16 +528,19 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     )}
                   </button>
                   <span className="terminal__ws-actions">
-                    <Tooltip label="새 워크트리 — 브랜치를 별도 폴더에 체크아웃">
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`'${ws.name}' 에 새 워크트리`}
-                        onClick={() => onNewWorktree(ws)}
-                      >
-                        <Icon name="plus" size={14} />
-                      </button>
-                    </Tooltip>
+                    {/* 일반 폴더엔 워크트리를 만들 수 없다(git worktree add 가 실패한다) */}
+                    {!plain && (
+                      <Tooltip label="새 워크트리 — 브랜치를 별도 폴더에 체크아웃">
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          aria-label={`'${ws.name}' 에 새 워크트리`}
+                          onClick={() => onNewWorktree(ws)}
+                        >
+                          <Icon name="plus" size={14} />
+                        </button>
+                      </Tooltip>
+                    )}
                     <button
                       type="button"
                       className="icon-btn"
@@ -593,7 +603,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                           onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
                         }
                       >
-                        <Icon name={wt.isMain ? 'laptop' : 'folder-git'} size={14} />
+                        <Icon name={worktreeIcon(wt)} size={14} />
                         <span className="terminal__wt-body">
                           <span className="terminal__wt-name">
                             {worktreeName(wt)}
@@ -601,9 +611,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                               <span className="terminal__ws-count"> ({count})</span>
                             )}
                           </span>
-                          <span className="terminal__wt-branch">
-                            {wt.branch ?? (wt.head ? `detached @ ${wt.head}` : '')}
-                          </span>
+                          <span className="terminal__wt-branch">{worktreeRef(wt) ?? ''}</span>
                         </span>
                         {busy && (
                           <span
@@ -670,7 +678,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
 
       {workspaces.length === 0 && (
         <p className="terminal__list-empty">
-          워크스페이스가 없습니다 — 위 [+] 로 git 저장소를 등록하세요.
+          워크스페이스가 없습니다 — 위 [+] 로 폴더를 등록하세요.
         </p>
       )}
 

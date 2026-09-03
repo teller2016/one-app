@@ -1,7 +1,7 @@
 // 워크스페이스 LNB·프리셋 공용 헬퍼 — 선택 상태 타입·이니셜·색 인덱스·프리셋 스코프.
 // (TerminalSection·WorkspaceNav·SessionTabs·TerminalView 가 함께 쓴다)
 import type { IconName } from '../../../components/Icon';
-import type { TerminalPreset } from '../../../../shared/types';
+import type { TerminalPreset, WorktreeInfo } from '../../../../shared/types';
 import { agentIdFromCommand } from '../../../../shared/types';
 
 /**
@@ -59,8 +59,16 @@ export function tileColor(ws: { name: string; color?: number }): number {
 export {
   agentIdFromCommand,
   presetsForWorkspace,
+  worktreeLabel,
   worktreeName,
+  worktreeRef,
 } from '../../../../shared/types';
+
+/** 워크트리 행 아이콘 — 주 워크트리 laptop · 파생 워크트리 folder-git · 일반 폴더 folder */
+export function worktreeIcon(wt: WorktreeInfo): IconName {
+  if (wt.plain) return 'folder';
+  return wt.isMain ? 'laptop' : 'folder-git';
+}
 
 /** 프리셋 칩 아이콘 — claude 는 ✳(Superset 무드), 나머지는 터미널 글리프 */
 export function presetIcon(p: TerminalPreset): IconName {

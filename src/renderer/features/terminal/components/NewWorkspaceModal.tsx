@@ -1,5 +1,6 @@
-// 새 워크스페이스 모달 — git 저장소 폴더를 골라 터미널 전용 워크스페이스로 등록한다.
-// (프로젝트 레지스트리와 별개 목록 — main 이 저장 전에 git 저장소인지 검증한다)
+// 새 워크스페이스 모달 — 폴더를 골라 터미널 전용 워크스페이스로 등록한다.
+// git 저장소면 워크트리들이 자식으로 붙고, 일반 폴더면 그 폴더 하나가 항목이 된다.
+// (프로젝트 레지스트리와 별개 목록 — main 이 저장 전에 폴더가 존재하는지 검증한다)
 import { useState } from 'react';
 import type { TerminalWorkspace } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
@@ -23,7 +24,7 @@ export function NewWorkspaceModal({
   const [saving, setSaving] = useState(false);
 
   const pick = async () => {
-    const { path } = await window.oneApp.workspaces.pickDir('저장소 루트 폴더 선택');
+    const { path } = await window.oneApp.workspaces.pickDir('워크스페이스 폴더 선택');
     if (!path) return;
     setRepoPath(path);
     // 이름을 손대지 않았으면 폴더명으로 채운다
@@ -48,13 +49,13 @@ export function NewWorkspaceModal({
   return (
     <Modal title="새 워크스페이스" onClose={onClose}>
       <div className="terminal-new">
-        <FormRow label="저장소" column>
+        <FormRow label="폴더" column>
           <div className="terminal-new__pick">
             <Button size="sm" variant="ghost" onClick={() => void pick()}>
               폴더 선택
             </Button>
             <code className="terminal-new__path" title={repoPath}>
-              {repoPath || 'git 저장소 루트 폴더를 선택하세요'}
+              {repoPath || '폴더를 선택하세요 (git 저장소면 워크트리를 함께 관리합니다)'}
             </code>
           </div>
         </FormRow>

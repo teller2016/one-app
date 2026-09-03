@@ -141,6 +141,8 @@ paths:
 - ⚠️ **`renderer.tsx` 의 전역 Files 드래그 가드 지우지 말 것** — 없으면 pane 밖 드롭이 창을 file:// 로 내비게이션시킨다. `defaultPrevented` 인 이벤트는 건드리지 않는다(pane 의 copy 커서 보호).
 
 ## 세션 패널 (좌측)
+- **워크스페이스는 git 저장소가 아니어도 된다**(2026-09-03). 등록 검사는 "존재하는 폴더"만(`store.saveWorkspace`). 일반 폴더는 `git worktree list` 가 실패하면 `parseWorktrees`(workspaces/git.ts)가 **그 폴더 하나를 `plain: true` 항목으로 합성**한다 — 트리·세션 배치(`allPaths`)·알림 위치 라벨·changes 대상 해석·MO 트리가 전부 그 목록만 보므로 다른 곳은 손대지 않았다. 렌더러는 `plain` 이면 [새 워크트리] 버튼을 숨기고 브랜치 자리에 '일반 폴더'를 쓴다 — 참조 텍스트는 **`worktreeRef`/`worktreeLabel`(shared/types.ts, Jira 작업 시작 모달도 공유)**, 아이콘은 `worktreeIcon`(terminal lib). 저장소인지는 **저장하지 않고 조회마다 판정** — 나중에 `git init` 하면 워크트리 모드로 바뀐다. ⚠️ `.git` 이 있는데 git 이 실패하면 일반 폴더로 위장하지 않고 throw(진짜 오류). ⚠️ 저장소 **하위 폴더**를 등록하면 git 이 저장소 루트를 돌려줘 행 경로가 등록 경로와 달라진다(예전부터 같음).
+- ⚠️ 선택 보정 effect(`TerminalSection`)는 폴백 선택이 지금 선택과 같으면 set 하지 않는다 — 첫 워크스페이스의 목록이 `[]`(git 실패·폴더 삭제)면 폴백 `repoPath` 도 무효 판정이라 가드 없이는 무한 루프였다.
 - 드래그 리사이즈, `SIDE_SNAP_W`(140) 미만 = 축소(패널 48px·타일 34px), grip 더블클릭·Enter·Space 토글 — **앱 `Sidebar.tsx` 와 같은 규칙**(그쪽을 고치면 여기도 볼 것). 저장은 localStorage 에 놓는 순간 1회, 폭은 `Math.round`.
 - ⚠️ 접힌 채 드래그가 끝나면 '펼침 폭'을 **드래그 시작 값으로 복원**(안 하면 접었다 펴는 순간 최소폭이 된다).
 - 축소 타일은 이름 이니셜(CJK 1자). ⚠️ 닫기(×) 없음 — 종료는 `⌘⇧W` + 툴팁 안내. 헤더 액션은 감추지 않고 세로 스택.

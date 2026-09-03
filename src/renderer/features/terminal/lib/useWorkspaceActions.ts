@@ -15,7 +15,7 @@ import type {
   TerminalWorkspace,
   WorktreeInfo,
 } from '../../../../shared/types';
-import { worktreeName } from './workspace';
+import { worktreeName, worktreeRef } from './workspace';
 import { errMsg } from '../../../lib/errMsg';
 
 export type WorkspaceActions = {
@@ -58,7 +58,7 @@ export function useWorkspaceActions({
       const ok = await confirm({
         title: '워크트리 제거',
         message: [
-          `'${worktreeName(wt)}'(${wt.branch ?? wt.head ?? '?'}) 워크트리 폴더를 제거합니다.`,
+          `'${worktreeName(wt)}'(${worktreeRef(wt) ?? '?'}) 워크트리 폴더를 제거합니다.`,
           dirty ? '커밋하지 않은 변경이 함께 사라집니다.' : '',
           inUse > 0 ? `이 위치를 쓰는 세션 ${inUse}개의 작업 폴더가 사라집니다.` : '',
           '브랜치는 삭제되지 않습니다.',

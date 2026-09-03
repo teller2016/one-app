@@ -1340,11 +1340,16 @@ export type TerminalServerStatus = {
 
 // ── 터미널 워크스페이스 (터미널 섹션 전용 저장소 목록 — 프로젝트 레지스트리와 별개) ──
 
-/** 터미널 워크스페이스 — LNB 최상위 항목, git 저장소 하나 (비밀 없음, 평문 JSON) */
+/**
+ * 터미널 워크스페이스 — LNB 최상위 항목, 폴더 하나 (비밀 없음, 평문 JSON).
+ * git 저장소면 그 워크트리들이 자식 항목이 되고, 일반 폴더면 그 폴더 하나가 유일한
+ * 항목이다(`WorktreeInfo.plain`). 저장소인지는 저장하지 않고 조회 때마다 git 이 판정한다 —
+ * 나중에 `git init` 해도 목록이 따라간다.
+ */
 export type TerminalWorkspace = {
   id: string;
   name: string; // 표시명 (기본: 폴더명)
-  repoPath: string; // 저장소 루트 절대 경로 (주 워크트리)
+  repoPath: string; // 폴더 절대 경로 (git 저장소면 주 워크트리 루트)
   color?: number; // 타일 색 — 차트 팔레트 인덱스(1..10). 없으면 이름 해시로 자동 배정
 };
 
@@ -1363,6 +1368,9 @@ export type WorktreeInfo = {
   isMain: boolean; // 원본 저장소(주 워크트리) 여부
   locked: boolean;
   missing: boolean; // 디렉터리가 사라진 워크트리 (prunable) — 조작 불가 표시용
+  // git 저장소가 아닌 일반 폴더 워크스페이스 — main 이 합성한 단일 항목(경로 = 워크스페이스 폴더).
+  // 브랜치·워크트리 추가·제거·변경사항이 없고, 세션 배치·위치 라벨·MO 트리는 그대로 동작한다
+  plain?: boolean;
   dirty: boolean; // 미커밋 변경 존재 (untracked 포함)
   additions: number; // 미커밋 +줄 수 합계 (HEAD 대비 — untracked 는 안 잡힘)
   deletions: number;
@@ -1442,6 +1450,23 @@ export function worktreeName(wt: WorktreeInfo): string {
   if (wt.isMain) return 'local';
   const segs = wt.path.split('/').filter(Boolean);
   return segs[segs.length - 1] ?? wt.path;
+}
+
+/**
+ * 워크트리의 참조 표기 — 브랜치명, detached 면 `detached @ 해시`, 일반 폴더 워크스페이스면
+ * '일반 폴더', 아무것도 없으면 undefined. LNB 행의 브랜치 자리·Jira 작업 시작 모달·
+ * 워크트리 제거 확인이 같은 텍스트를 쓴다(예전엔 `branch ?? head ?? ''` 를 각자 조립했다).
+ */
+export function worktreeRef(wt: WorktreeInfo): string | undefined {
+  if (wt.plain) return '일반 폴더';
+  if (wt.branch) return wt.branch;
+  return wt.head ? `detached @ ${wt.head}` : undefined;
+}
+
+/** 위치 한 줄 표기 — "이름 · 참조"(LNB 툴팁·새 세션 모달). 참조가 없으면 이름만 */
+export function worktreeLabel(wt: WorktreeInfo): string {
+  const ref = worktreeRef(wt);
+  return ref ? `${worktreeName(wt)} · ${ref}` : worktreeName(wt);
 }
 
 /** 베이스 브랜치 선택용 목록 — 로컬·원격 구분 (원격은 `origin/…` 그대로) */

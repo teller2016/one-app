@@ -43,7 +43,7 @@ import {
   presetsForWorkspace,
   sameSelection,
   selectionKey,
-  worktreeName,
+  worktreeLabel,
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
 import { MoAccessModal } from './MoAccessModal';
@@ -386,17 +386,20 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     })();
     if (valid) return;
     const first = workspaces[0];
-    if (first) {
-      selectAndSave({
-        kind: 'worktree',
-        wsId: first.id,
-        path: worktrees[first.id]?.[0]?.path ?? first.repoPath,
-      });
-    } else if (otherSessions.length > 0) {
-      selectAndSave({ kind: 'other' });
-    } else if (selection) {
-      selectAndSave(null);
-    }
+    const next: WorkspaceSelection | null = first
+      ? {
+          kind: 'worktree',
+          wsId: first.id,
+          path: worktrees[first.id]?.[0]?.path ?? first.repoPath,
+        }
+      : otherSessions.length > 0
+        ? { kind: 'other' }
+        : null;
+    // ⚠️ 폴백이 지금 선택과 같으면 다시 set 하지 않는다 — 첫 워크스페이스의 목록이 **빈 배열**
+    // (`[]`: git 실패·저장소 폴더 삭제)이면 폴백 `repoPath` 도 위 판정에서 무효라, 이 가드가
+    // 없으면 렌더마다 새 객체로 setSelection 이 돌아 무한 루프에 빠진다(2026-09-03 발견).
+    if (sameSelection(next, selection)) return;
+    selectAndSave(next);
   }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, selection, selectAndSave]);
 
   // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로.
@@ -1103,7 +1106,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
             <span className="terminal__side-title">워크스페이스</span>
           )}
           <div className="terminal__side-actions">
-            <Tooltip label="새 워크스페이스 — git 저장소 등록">
+            <Tooltip label="새 워크스페이스 — 폴더 등록 (git 저장소면 워크트리 관리)">
               <button
                 type="button"
                 className="icon-btn"
@@ -1295,7 +1298,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
                   <EmptyState
                     icon="terminal"
                     message="워크스페이스가 없습니다"
-                    hint="git 저장소를 등록하면 워크트리를 만들고 그 안에서 에이전트 세션을 시작할 수 있습니다."
+                    hint="폴더를 등록하면 그 안에서 에이전트 세션을 시작할 수 있습니다. git 저장소면 워크트리도 만들 수 있습니다."
                   />
                   <Button size="sm" onClick={() => setNewWsOpen(true)}>
                     새 워크스페이스
@@ -1378,9 +1381,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         <NewSessionModal
           cwd={selection.path}
           location={
-            selectedWt
-              ? `${worktreeName(selectedWt)} · ${selectedWt.branch ?? selectedWt.head ?? ''}`
-              : selection.path
+            selectedWt ? worktreeLabel(selectedWt) : selection.path
           }
           onCreated={activateSession}
           onClose={() => setNewSessionOpen(false)}

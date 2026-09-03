@@ -7,7 +7,6 @@ import type {
   WorkspaceSaveInput,
   WorktreeAddInput,
 } from '../../../shared/types';
-import { runGit } from '../../lib/git';
 import { EDITOR_NAME, findEditorApp, openWithApp } from './editor';
 import {
   addWorktree,
@@ -36,18 +35,9 @@ function requireWorkspace(id: string) {
 export function registerWorkspacesIpc() {
   ipcMain.handle('workspaces:list', () => listWorkspaces());
 
-  // 등록 전에 실제 git 저장소인지 확인 — LNB 에 죽은 항목이 쌓이는 것을 막는다
-  ipcMain.handle('workspaces:save', async (_e, input: WorkspaceSaveInput) => {
-    const probe = await runGit(
-      ['rev-parse', '--is-inside-work-tree'],
-      input.repoPath.trim(),
-      10_000
-    );
-    if (probe.code !== 0 || probe.stdout.trim() !== 'true') {
-      throw new Error('git 저장소가 아닙니다 — 저장소 루트 폴더를 선택하세요.');
-    }
-    return saveWorkspace(input);
-  });
+  // 폴더 존재 검사는 store(saveWorkspace)가 한다 — git 저장소가 아니어도 등록된다
+  // (일반 폴더는 git.ts 가 단일 항목으로 합성해 LNB 에 폴더 행 하나로 보인다)
+  ipcMain.handle('workspaces:save', (_e, input: WorkspaceSaveInput) => saveWorkspace(input));
 
   ipcMain.handle('workspaces:delete', (_e, id: string) => deleteWorkspace(id));
 
@@ -58,7 +48,7 @@ export function registerWorkspacesIpc() {
     )
   );
 
-  // 저장소 폴더를 Finder 로 열기 — 경로는 등록된 워크스페이스에서만 해석
+  // 워크스페이스 폴더를 Finder 로 열기 — 경로는 등록된 워크스페이스에서만 해석
   ipcMain.handle('workspaces:reveal', async (_e, id: string) => {
     const err = await shell.openPath(requireWorkspace(id).repoPath);
     return { ok: !err, error: err || undefined };

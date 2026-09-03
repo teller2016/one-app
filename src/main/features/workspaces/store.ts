@@ -3,6 +3,7 @@
 // 프로젝트 레지스트리(projects.json)와는 의도적으로 분리한다(사용자 결정 2026-08-06).
 // 프리셋은 Superset 의 terminal_presets 와 같은 모델(전역 목록 + workspaceIds 스코프).
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
@@ -23,6 +24,15 @@ function normalizePath(p: string): string {
     ? path.join(os.homedir(), trimmed.slice(2))
     : trimmed;
   return path.resolve(expanded).replace(/\/+$/, '');
+}
+
+/** 존재하는 디렉터리인가 — 없거나 파일이면 false */
+function isDirectory(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** 차트 팔레트 인덱스(1..10) 검증 — 벗어나면 undefined(이름 해시 자동 배정) */
@@ -113,12 +123,17 @@ export function saveWorkspace(input: WorkspaceSaveInput): TerminalWorkspace[] {
     // 이름만 바꾸는 저장에서 색이 사라지지 않게 — 미지정이면 기존 값 유지
     color: sanitizeColor(input.color) ?? existing?.color,
   };
-  if (!next.repoPath) throw new Error('저장소 경로는 필수입니다.');
-  // 같은 저장소 중복 등록 방지 — 이름만 바꾸고 싶으면 기존 항목을 수정한다
+  if (!next.repoPath) throw new Error('폴더 경로는 필수입니다.');
+  // 실제 존재하는 폴더만 — LNB 에 죽은 항목이 쌓이는 것을 막는다. git 저장소 여부는
+  // 가리지 않는다(일반 폴더도 워크스페이스 — 조회 때 git.ts 가 단일 항목으로 합성한다)
+  if (!isDirectory(next.repoPath)) {
+    throw new Error('폴더가 없습니다 — 존재하는 폴더를 선택하세요.');
+  }
+  // 같은 폴더 중복 등록 방지 — 이름만 바꾸고 싶으면 기존 항목을 수정한다
   const dup = workspaces.find(
     (w) => w.id !== next.id && normalizePath(w.repoPath) === next.repoPath
   );
-  if (dup) throw new Error(`이미 등록된 저장소입니다: ${dup.name}`);
+  if (dup) throw new Error(`이미 등록된 폴더입니다: ${dup.name}`);
 
   const idx = workspaces.findIndex((w) => w.id === next.id);
   if (idx >= 0) workspaces[idx] = next;

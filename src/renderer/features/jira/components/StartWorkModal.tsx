@@ -26,7 +26,7 @@ import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
 import { useToast } from '../../../components/Toast';
 import { openTerminalSession } from '../../../lib/sectionNav';
-import { worktreeName } from '../../../../shared/types';
+import { worktreeName, worktreeRef } from '../../../../shared/types';
 import { errMsg } from '../../../lib/errMsg';
 
 const SKILL_KEY = 'jira:workSkill'; // 마지막으로 고른 시작 스킬 (localStorage)
@@ -302,9 +302,7 @@ export function StartWorkModal({
                           {on && <Icon name="check" size={12} />}
                         </span>
                         <span className="jira-work__wt-name">{worktreeName(wt)}</span>
-                        <span className="jira-work__wt-branch">
-                          {wt.branch ?? wt.head ?? ''}
-                        </span>
+                        <span className="jira-work__wt-branch">{worktreeRef(wt) ?? ''}</span>
                         {/* 작업 중인 곳에 새 티켓을 얹지 않도록 미커밋 변경량을 보여준다.
                             ⚠️ untracked 만 있으면 증감이 0 이라 '±0' 이 되므로 말로 쓴다 */}
                         {wt.dirty && (

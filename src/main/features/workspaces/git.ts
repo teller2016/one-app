@@ -1,5 +1,8 @@
 // 워크스페이스의 git worktree 조회·생성·제거 + 브랜치 목록.
 // 워크트리 목록의 진실은 항상 git(`worktree list --porcelain`)이다 — 자체 저장 없음.
+// git 저장소가 아닌 **일반 폴더** 워크스페이스는 그 폴더 하나를 유일한 항목으로 합성한다
+// (`plain: true`) — LNB 트리·세션 배치·알림 라벨·변경사항 대상 해석이 전부 이 목록만 보므로
+// 여기서 한 번 처리하면 나머지는 손대지 않아도 된다.
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
@@ -14,12 +17,32 @@ const LIST_TIMEOUT_MS = 10_000;
 const ADD_TIMEOUT_MS = 120_000;
 const REMOVE_TIMEOUT_MS = 30_000;
 
+/**
+ * git 저장소가 아닌 일반 폴더인가 — 폴더는 있고 `.git` 이 없다.
+ * `worktree list` 가 실패한 **뒤에만** 부른다(성공했으면 저장소다 — 하위 폴더도 성공한다).
+ * `.git` 이 있는데 실패했으면 진짜 git 오류(손상·권한)라 일반 폴더로 위장하지 않는다.
+ */
+function isPlainDir(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory() && !fs.existsSync(path.join(p, '.git'));
+  } catch {
+    return false; // 폴더 자체가 없다 — 삭제된 워크스페이스
+  }
+}
+
 /** `git worktree list --porcelain` 파싱 — 첫 항목이 주(main) 워크트리다 */
 async function parseWorktrees(
   repoPath: string
 ): Promise<Omit<WorktreeInfo, 'dirty' | 'additions' | 'deletions'>[]> {
   const r = await run(['worktree', 'list', '--porcelain'], repoPath, LIST_TIMEOUT_MS);
-  if (r.code !== 0) throw new Error(r.stderr || 'git worktree list 실패');
+  if (r.code !== 0) {
+    // 일반 폴더 워크스페이스 — 폴더 자체가 유일한 항목 (경로는 저장된 값 그대로:
+    // 렌더러가 세션 cwd·선택 폴백에 쓰는 repoPath 와 문자열이 같아야 매칭된다)
+    if (isPlainDir(repoPath)) {
+      return [{ path: repoPath, isMain: true, locked: false, missing: false, plain: true }];
+    }
+    throw new Error(r.stderr || 'git worktree list 실패');
+  }
 
   const out: Omit<WorktreeInfo, 'dirty' | 'additions' | 'deletions'>[] = [];
   let cur: (typeof out)[number] | null = null;
@@ -82,6 +105,8 @@ export async function listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
       if (w.missing || !fs.existsSync(w.path)) {
         return { ...w, missing: true, dirty: false, additions: 0, deletions: 0 };
       }
+      // 일반 폴더는 status·diff 가 없다 — 실패할 git 을 두 번 띄우지 않는다
+      if (w.plain) return { ...w, dirty: false, additions: 0, deletions: 0 };
       const [st, num] = await Promise.all([
         run(['status', '--porcelain', '--untracked-files=all'], w.path, LIST_TIMEOUT_MS),
         run(['diff', 'HEAD', '--numstat'], w.path, LIST_TIMEOUT_MS),
