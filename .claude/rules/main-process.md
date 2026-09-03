@@ -12,6 +12,9 @@ paths:
 - **Gitea REST 는 `main/lib/gitea.ts`**(`giteaFetch`·`giteaJson`·`giteaAuthHeaders`) — 인증 헤더와
   실패 문구(연결 실패·인증 실패·404·기타)가 여기 한 곳에 있다. deploy·prs 두 기능이 공유한다.
   상태코드별 문구는 `errors: { auth, notFound, byStatus }`, 실패를 조용히 넘길 조회는 `raw: true`.
+- **JSON 응답 파싱은 `main/lib/http.ts` 의 `readJson(res, label)`** — `res.json()` 을 직접 부르지
+  말 것. ⚠️ 베이스 주소가 잘못되면 서버가 **HTML 을 HTTP 200 으로** 돌려주는데(`res.ok` 로는 안
+  걸린다), 그때 V8 의 `Unexpected token '<' …` 가 사용자 배너에 그대로 새어 나갔다.
 - **Jira 인증 헤더는 `features/jira/jira.ts` 의 `jiraAuth()`** — Basic 헤더를 직접 조립하지 말 것
   (jira·work·nightwatch 세 곳이 각자 만들던 것을 단일화했다).
 - **날짜·시간 문자열은 `shared/date.ts`**(`pad2`·`dayKey`·`todayKey`·`monthKey`·`parseDayKey`·
@@ -60,6 +63,9 @@ paths:
 - **연동 주소(`jiraUrl`·`giteaUrl`)는 `settings/store.ts` 의 `normalizeEndpoint` 로 검증**한다 —
   `http(s)` 외 스킴을 막는다. 그 주소에 **인증 헤더가 실려 나가기** 때문이다. `http:` 자체는
   막지 않지만(사내 Gitea 가 평문 HTTP) 환경설정 화면이 경고 문구를 띄운다.
+- **Jira 주소는 그 위에 `shared/jira-url.ts` 의 `normalizeJiraBase` 로 경로까지 떼어 낸다** —
+  저장할 때만이 아니라 **읽을 때(`getJiraApiConfig`·`getSettingsForRenderer`)도** 통과시켜, 이미
+  잘못 저장된 설정이 재입력 없이 살아나게 한다. 함정은 `features/jira` 규칙 참고.
 - **자동화 창(`lib/browser.ts`)은 그룹웨어 도메인만 앱 창으로 연다**(`isInternalUrl`) — 그 밖의
   주소는 `shell.openExternal` 로 넘긴다. 앱 창에는 주소창이 없어 목적지를 확인할 수 없다.
   ⚠️ 빈 URL·`about:blank` 는 반드시 허용 — 지출결의서 '찾기' 도움창이 빈 창부터 연다.

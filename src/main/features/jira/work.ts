@@ -21,7 +21,7 @@ import type {
   JiraWorkPrepareResult,
   JiraWorkSkill,
 } from '../../../shared/types';
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { mapLimit, shQuote } from '../../lib/util';
 import { jiraAuth } from './jira';
 import { listSessions } from '../terminal/pty';
@@ -372,7 +372,7 @@ export async function prepareJiraWork(
       return { ok: false, error: '이슈를 찾을 수 없습니다 — 키 또는 권한을 확인하세요.' };
     }
     if (!res.ok) return { ok: false, error: `Jira 응답 오류 (HTTP ${res.status})` };
-    issue = (await res.json()) as RawWorkIssue;
+    issue = await readJson<RawWorkIssue>(res, 'Jira');
   } catch (err) {
     return {
       ok: false,

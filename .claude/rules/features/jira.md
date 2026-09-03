@@ -115,3 +115,24 @@ Segment 가 `[내 이슈 | 주간 | 보고]` 3개다. 보고 화면(`JiraReportP
 - 채널은 `ipcMain.handle`(`jira:report:*`) — 폰에 열 이유가 없어 handleShared 가 아니다.
   `registerJiraReportIpc()` 는 `report.ts` 에 있고 `registerJiraIpc()` 가 부른다(단독판은 직접 부른다).
 - 제목 클릭은 `onOpenDetail` 이 있으면 앱 안 상세 패널(본체), 없으면 브라우저(단독판).
+
+## ⚠️ 베이스 주소에 경로가 붙으면 REST 가 HTML 200 을 받는다 (2026-09-03 실측)
+
+환경설정의 Jira 주소에 티켓 주소를 붙여넣으면(`https://x.atlassian.net/browse/ABC-1`) 호출이
+`…/browse/ABC-1/rest/api/3/project/search` 가 되는데, Atlassian 은 이것을 **SPA 라우팅으로 받아
+HTTP 200 + `text/html`** 을 돌려준다(본문이 `<div id="jira-frontend">…`). 그래서
+`Unexpected token '<', "<div id="j"… is not valid JSON` 만 배너에 뜨고 원인을 알 수 없었다
+(One App Lite 2.0.0 Windows 제보). 실측 응답:
+
+| 저장된 베이스 | `/rest/api/3/project/search` |
+|---|---|
+| `https://x.atlassian.net` | 200 · `application/json` |
+| `https://x.atlassian.net/browse/ABC-1` | 200 · `text/html` (`<div id="jira-frontend">`) |
+| `https://x.atlassian.net/jira/your-work` | 200 · `text/html` (`<!doctype html>`) |
+
+방어는 두 겹이다 — 둘 중 하나만 두지 말 것.
+- `shared/jira-url.ts` 의 `normalizeJiraBase` 가 경로를 떼어 낸다(Cloud 는 origin 강제, 설치형은
+  `browse`·`rest`·`secure`·`issues`·`projects`·`plugins` 만 자른다 — ⚠️ `/jira` 서브패스 배포를
+  깨지 않으려고 `/jira` 는 **일부러 남긴다**). vitest 있음.
+- 응답 파싱은 `readJson(res, 'Jira')`(`main/lib/http.ts`) — JSON 이 아니면 주소를 확인하라는
+  문구로 바꿔 던진다. Jira 계열 전 호출(report·jira·activity·work)이 이걸 쓴다.

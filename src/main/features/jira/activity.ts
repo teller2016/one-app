@@ -14,7 +14,7 @@ import type {
 import { isDoneStatus } from '../../../shared/types';
 import { todayKey } from '../../../shared/date';
 import { mapLimit } from '../../lib/util';
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import {
   jiraAuth,
   mapIssue,
@@ -79,7 +79,7 @@ async function fetchMyself(
   try {
     const res = await fetch(`${baseUrl}/rest/api/3/myself`, { headers }, TIMEOUT_MS);
     if (!res.ok) return null;
-    const me = (await res.json()) as Myself;
+    const me = await readJson<Myself>(res, 'Jira');
     myselfCache = { at: Date.now(), me };
     return me;
   } catch {
@@ -264,7 +264,7 @@ async function fetchHistories(
         TIMEOUT_MS,
       );
       if (!res.ok) return null; // 404 = 이 엔드포인트가 없는 구형 서버
-      return (await res.json()) as RawChangelog;
+      return await readJson<RawChangelog>(res, 'Jira');
     } catch {
       return null;
     }

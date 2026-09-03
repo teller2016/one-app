@@ -4,6 +4,7 @@ import type {
   SaveSettingsInput,
   ThemePref,
 } from '../../../shared/types';
+import { normalizeJiraBase } from '../../../shared/jira-url';
 import {
   readUserJson,
   writeUserJson,
@@ -61,7 +62,9 @@ export function getSettingsForRenderer(): AppSettingsView {
     bizboxId: s.bizboxId ?? '',
     hasPassword: !!s.bizboxPasswordEnc,
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
-    jiraUrl: s.jiraUrl ?? '',
+    // 저장된 값에 티켓·보드 경로가 붙어 있으면 여기서 정리해 보여준다 — 화면·API 호출·
+    // 커밋 이슈 링크가 같은 베이스를 쓰게 한다(다음 저장 때 파일에도 정리된 값이 남는다)
+    jiraUrl: normalizeJiraBase(s.jiraUrl ?? ''),
     jiraEmail: s.jiraEmail ?? '',
     hasJiraToken: !!s.jiraTokenEnc,
     giteaUrl: s.giteaUrl ?? '',
@@ -104,7 +107,8 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   }
   // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
   if (typeof input.jiraUrl === 'string') {
-    next.jiraUrl = normalizeEndpoint(input.jiraUrl, 'Jira');
+    // 스킴 검사 → 티켓·보드 경로 제거 (붙여넣은 주소를 그대로 저장하면 REST 가 HTML 을 받는다)
+    next.jiraUrl = normalizeJiraBase(normalizeEndpoint(input.jiraUrl, 'Jira'));
   }
   if (typeof input.jiraEmail === 'string') {
     next.jiraEmail = input.jiraEmail.trim();
@@ -149,7 +153,7 @@ export function getJiraApiConfig(): {
   if (!s.jiraUrl || !s.jiraEmail || !s.jiraTokenEnc) return null;
   const token = decryptSecret(s.jiraTokenEnc);
   if (token == null) return null;
-  return { url: s.jiraUrl.replace(/\/+$/, ''), email: s.jiraEmail, token };
+  return { url: normalizeJiraBase(s.jiraUrl), email: s.jiraEmail, token };
 }
 
 /** 배포 완료 알림이 켜져 있는지 (기본 on) */

@@ -77,3 +77,26 @@ export async function fetchWithTimeout(
   }
   throw lastErr;
 }
+
+/**
+ * JSON 응답 파싱 — **JSON 이 아닌 응답을 사람이 읽을 오류로 바꾼다.**
+ *
+ * ⚠️ 2026-09-03 실측: 환경설정의 Jira 주소에 티켓 경로가 붙어 있으면 Atlassian 이 REST 경로를
+ * SPA 로 받아 **HTML 을 HTTP 200** 으로 돌려준다. 그때 `res.json()` 이 던지는 V8 메시지
+ * (`Unexpected token '<', "<div id="j"… is not valid JSON`)가 그대로 배너에 노출돼 원인을
+ * 짐작할 수 없었다(One App Lite 2.0.0 제보). 상태코드가 200 이라 `res.ok` 검사로는 못 걸린다.
+ */
+export async function readJson<T>(res: Response, label: string): Promise<T> {
+  const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+  if (!/\bjson\b/i.test(type)) {
+    throw new Error(
+      `${label} 가 JSON 대신 ${type || '알 수 없는 형식'} 을 돌려줬습니다 (HTTP ${res.status}) — ` +
+        `환경설정의 ${label} 주소가 사이트 주소인지 확인하세요(티켓·보드 주소를 붙여넣으면 안 됩니다).`,
+    );
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new Error(`${label} 응답을 해석할 수 없습니다 (HTTP ${res.status}) — 잠시 후 다시 시도하세요.`);
+  }
+}

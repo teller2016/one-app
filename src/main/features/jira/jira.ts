@@ -23,7 +23,7 @@ import {
 import { sanitizeHtml } from '../../lib/sanitize';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 // (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 
 /** Jira REST 응답의 이슈 형태 (필요 필드만) */
 export interface RawIssue {
@@ -194,7 +194,7 @@ export async function searchJql(
     if (!res.ok) {
       return { ok: false, issues: [], error: `Jira 응답 오류 (HTTP ${res.status})` };
     }
-    const data = (await res.json()) as { issues?: RawIssue[] };
+    const data = await readJson<{ issues?: RawIssue[] }>(res, 'Jira');
     return { ok: true, issues: data.issues ?? [] };
   } catch (err) {
     const message = (err as Error).message;
@@ -278,9 +278,9 @@ export async function validateAddedTicket(input: string): Promise<JiraValidateRe
       return { ok: false, error: 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.' };
     }
     if (!res.ok) return { ok: false, error: `Jira 응답 오류 (HTTP ${res.status})` };
-    const data = (await res.json()) as RawIssue & {
-      fields: { reporter?: { displayName?: string } };
-    };
+    const data = await readJson<
+      RawIssue & { fields: { reporter?: { displayName?: string } } }
+    >(res, 'Jira');
     return {
       ok: true,
       key,
@@ -443,7 +443,7 @@ export async function fetchIssueDetail(key: string): Promise<JiraDetailResult> {
     if (!res.ok) {
       return { ok: false, error: `Jira 응답 오류 (HTTP ${res.status})` };
     }
-    const data = (await res.json()) as RawDetail;
+    const data = await readJson<RawDetail>(res, 'Jira');
     const rendered = data.renderedFields ?? {};
 
     // 댓글: 작성자는 fields, 렌더된 본문·시각은 renderedFields — id 로 짝을 맞춘다 (없으면 순서)
@@ -513,9 +513,9 @@ export async function getTransitions(key: string): Promise<JiraTransitionsResult
     if (!res.ok) {
       return { ok: false, error: `전환 목록 조회 실패 (HTTP ${res.status})` };
     }
-    const data = (await res.json()) as {
+    const data = await readJson<{
       transitions?: { id: string; name?: string; to?: { name?: string } }[];
-    };
+    }>(res, 'Jira');
     const transitions: JiraTransition[] = (data.transitions ?? []).map((t) => ({
       id: t.id,
       // 사용자에게 의미 있는 건 목적지 상태 이름 (없으면 전환 이름)

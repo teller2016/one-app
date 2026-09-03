@@ -17,7 +17,7 @@ import type {
   JiraReportResult,
 } from '../../../shared/types';
 import { buildReportJql } from '../../../shared/jira-report';
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { jiraAuth, mapIssue, type RawIssue } from './jira';
 import { getReportPrefs, saveReportPrefs } from './store';
 
@@ -112,7 +112,7 @@ async function searchAllLegacy(
     });
     const res = await request(`${baseUrl}/rest/api/3/search?${params}`, headers);
     if (!res.ok) throw new Error(await describeHttpError(res));
-    const data = (await res.json()) as { issues?: RawReportIssue[]; total?: number };
+    const data = await readJson<{ issues?: RawReportIssue[]; total?: number }>(res, 'Jira');
     const page = data.issues ?? [];
     out.push(...page);
     startAt += page.length;
@@ -139,11 +139,11 @@ async function searchAll(
     const res = await request(`${baseUrl}/rest/api/3/search/jql?${params}`, headers);
     if (res.status === 404 && out.length === 0) return searchAllLegacy(baseUrl, headers, jql);
     if (!res.ok) throw new Error(await describeHttpError(res));
-    const data = (await res.json()) as {
+    const data = await readJson<{
       issues?: RawReportIssue[];
       nextPageToken?: string;
       isLast?: boolean;
-    };
+    }>(res, 'Jira');
     const page = data.issues ?? [];
     out.push(...page);
     if (!data.nextPageToken || data.isLast === true || page.length === 0) {
@@ -196,7 +196,7 @@ async function loadProjectsLegacy(
 ): Promise<JiraProjectOption[]> {
   const res = await request(`${baseUrl}/rest/api/3/project`, headers);
   if (!res.ok) throw new Error(await describeHttpError(res));
-  const data = (await res.json()) as { key?: string; name?: string }[];
+  const data = await readJson<{ key?: string; name?: string }[]>(res, 'Jira');
   return (Array.isArray(data) ? data : [])
     .filter((p) => typeof p.key === 'string')
     .map((p) => ({ key: p.key as string, name: p.name ?? (p.key as string) }));
@@ -218,11 +218,11 @@ async function loadProjects(
     const res = await request(`${baseUrl}/rest/api/3/project/search?${params}`, headers);
     if (res.status === 404 && out.length === 0) return loadProjectsLegacy(baseUrl, headers);
     if (!res.ok) throw new Error(await describeHttpError(res));
-    const data = (await res.json()) as {
+    const data = await readJson<{
       values?: { key?: string; name?: string }[];
       isLast?: boolean;
       total?: number;
-    };
+    }>(res, 'Jira');
     const page = data.values ?? [];
     for (const p of page) {
       if (typeof p.key === 'string') out.push({ key: p.key, name: p.name ?? p.key });

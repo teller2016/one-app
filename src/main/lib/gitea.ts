@@ -3,7 +3,7 @@
 // 같은 헤더와 **글자까지 똑같은 에러 문구**를 각자 들고 있었다(문구 하나가 17번 반복).
 //
 // ⚠️ 호출은 `fetchWithTimeout` 경유 — 전역 fetch 는 타임아웃이 없어 소켓 hang 시 IPC 가 안 풀린다.
-import { fetchWithTimeout } from './http';
+import { fetchWithTimeout, readJson } from './http';
 
 /** 토큰이 있을 때만 인증 헤더 — 공개 저장소는 토큰 없이도 읽힌다 */
 export const giteaAuthHeaders = (
@@ -78,5 +78,6 @@ export async function giteaJson<T>(
   opts: GiteaFetchOpts = {},
 ): Promise<T> {
   const res = await giteaFetch(url, token, opts);
-  return (await res.json()) as T;
+  // 주소가 잘못돼 HTML 이 200 으로 오는 경우까지 사람이 읽을 문구로 (main/lib/http.ts 머리말)
+  return readJson<T>(res, 'Gitea');
 }

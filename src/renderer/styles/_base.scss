@@ -1414,8 +1414,11 @@ input.input--bare {
 
   &__icon {
     display: inline-flex;
+    align-items: center;
     flex-shrink: 0;
-    margin-top: 2px;
+    // 아이콘을 **첫 글줄의 세로 중앙**에 맞춘다(본문 line-height 1.5) — 고정 margin 으로
+    // 밀어 두면 글자 크기나 줄 높이가 달라질 때 어긋난다(2026-09-03 사용자 지적)
+    height: calc(var(--fs-body) * 1.5);
   }
 
   &--warning {
