@@ -95,6 +95,7 @@ npm run make:mac     # → out/make/zip/darwin/arm64/OneAppLite-darwin-arm64-<�
 ```bash
 npm start          # 개발 모드 (렌더러만 HMR — main/preload 수정 시 재시작 필요)
 npm run typecheck  # tsc --noEmit — 본체 파일까지 따라가며 검사한다
+npm run reach      # lite 에 실리는 본체 파일·외부 패키지 요약 (-- --files 전체 · -- --hits <경로>... 걸러내기)
 npm run icon       # 아이콘 3종 재생성 (본체 아이콘을 바꿨을 때만)
 ```
 
@@ -116,7 +117,10 @@ standalone/lite/
 ├── assets/                    icon.png · icon.icns(mac) · icon.ico(win) — 커밋한다
 ├── scripts/
 │   ├── make-icon.mjs          본체 아이콘의 **색만** 바꿔 위 3개를 만든다 (npm run icon)
-│   └── release.mjs            버전 bump → 양 플랫폼 빌드 → GitHub Releases 업로드 (npm run release)
+│   ├── release.mjs            버전 bump → 양 플랫폼 빌드 → GitHub Releases 업로드 (npm run release)
+│   ├── reach.mjs              lite 에 **실리는 파일**을 import 그래프에서 뽑는다 (npm run reach · /commit 이 --hits 로 쓴다)
+│   ├── reach.test.ts          그 그래프의 불변식 — 외부 패키지 누출·데스크톱 전용 기능 도달·버전 불일치 (루트 npm test)
+│   └── lib/                   changelog.mjs(Unreleased 파싱) · reach.mjs(그래프 워커)
 ├── forge.config.ts            executableName · 아이콘 · macOS 자가서명 훅 · ZIP maker
 ├── vite.{main,preload,renderer}.config.ts
 │                              `@one` alias(= ../../src) · 렌더러는 react dedupe + fs.allow(리포 루트)
@@ -129,28 +133,38 @@ standalone/lite/
     │   ├── updateInstall.ts   다운로드 → 검증 → 압축 해제 → 헬퍼 실행 → app.quit() (교체 대상 판정 포함)
     │   ├── updateCore.ts      순수 로직 — 버전 비교 · 이 PC 용 zip 고르기 · mac/win 헬퍼 스크립트 본문 (electron 미의존)
     │   └── updateCore.test.ts 위 순수 로직 테스트 — **루트 `npm test`** 가 돌린다(이 폴더 tsc 는 *.test.ts 를 제외)
-    ├── preload/preload.ts     window.oneApp — 본체 preload 의 **부분집합** (settings · approval · jira.report · update · openExternal)
+    ├── preload/preload.ts     window.oneApp — 본체 preload 의 **부분집합**. settings · approval · jira.report 는 본체
+    │                          `preload/bridges/*` 슬라이스를 **조립**(채널 문자열 복제 없음) + 이 앱만의 update · openExternal
     └── renderer/
         ├── renderer.tsx       본체 initTheme + 마운트
         ├── App.tsx            셸(제목바 세그먼트 [결재 | 티켓 보고] · 환경설정 · 새 버전 배너) — 본문은 본체 ApprovalSection · JiraReportPanel
         ├── views/SettingsView.tsx  이 앱만의 화면 (본체 환경설정의 부분집합 + 버전/업데이트 확인, 채널은 본체와 같은 settings:set)
         ├── styles/index.scss  본체 base · approval · jira 를 @use + 셸 스타일(_app.scss)
-        └── types/global.d.ts  window.oneApp 의 부분집합 타입 — 아래 '왜 부분집합인가'
+        └── types/global.d.ts  window.oneApp 의 부분집합 타입 — 공용 브리지는 본체 `XxxBridge` 인터페이스 그대로. 아래 '왜 부분집합인가'
 ```
 
 **본체에서 가져오는 것** — 전부 electron·node 내장 모듈만 쓰는 순수 모듈이다.
 
 | 계층 | 본체 파일 |
 |------|-----------|
-| main | `features/approval/*`(ipc·overtime·vacation·expend·eaBox·gw·keeper·store) · `features/jira/report.ts`(+ jira.ts·store.ts) · `features/settings/{ipc,store}.ts` · `features/groupware/{session,config}.ts` · `lib/{browser,store,http,util,groupware,windowState,devInstance,moIpc,sanitize}.ts` |
+| main | `features/approval/*`(ipc·overtime·vacation·expend·eaBox·gw·keeper·store) · `features/jira/report.ts`(+ jira.ts·store.ts) · `features/settings/{ipc,store}.ts` · `features/groupware/{session,config}.ts` · `lib/{browser,store,http,util,groupware,windowState,devInstance,moIpc,sanitize,broadcast}.ts` |
+| preload | `preload/bridges/{settings,approval,jiraReport}.ts` — `XxxBridge` 인터페이스 + `xxxBridge(ipcRenderer)` 조립 함수 |
 | renderer | `features/approval`(index) · `features/jira/components/JiraReportPanel.tsx` · `components/*` · `lib/{theme,errMsg,useCopy,usePopover,…}` · `styles/{_base,_approval,_jira}.scss` |
 | shared | `types.ts` · `date.ts` · `approval-format.ts` · `jira-report.ts` |
 
-### 왜 preload·global.d.ts 가 부분집합인가
+### 왜 preload·global.d.ts 가 부분집합인가 — 그리고 왜 복제가 아니라 조립인가
 본체 컴포넌트를 import 하면 tsc 가 그 파일까지 검사한다. `window.oneApp` 타입을 이 앱이 실제로 노출하는 채널만으로 선언해 두면, **이 앱에 없는 채널을 부르는 컴포넌트를 들여왔을 때 빌드 전에 걸린다**(런타임에 `undefined` 호출로 터지는 대신). 그래서 본체 `global.d.ts` 를 통째로 가져오지 않는다.
 
-- 같은 이유로 `features/jira` 는 **index 가 아니라 컴포넌트 파일을 직접 import** 한다 — index 가 `JiraSection`(터미널 세션·작업 시작 채널 의존)까지 내보내기 때문이다.
-- 본체에서 결재·보고 컴포넌트가 새 채널을 쓰게 되면 `preload.ts` 와 `global.d.ts` 를 함께 늘린다. 채널 이름·인자·반환 모양은 본체 preload 와 **똑같이** 맞춘다.
+- 본체와 **공용인 채널(환경설정·결재·티켓 보고)은 문자열을 복제하지 않는다.** 본체 `src/preload/bridges/{settings,approval,jiraReport}.ts` 가 `XxxBridge` 인터페이스와 `xxxBridge(ipcRenderer)` 조립 함수를 내보내고, 본체 preload 와 이 앱 preload 가 **둘 다 그것을 조립**한다. `global.d.ts` 도 그 인터페이스를 그대로 쓴다.
+  - 2.1.0 까지는 손 복제였다 — 채널 **이름**이 바뀌면 타입은 `shared/types` 에서 오므로 typecheck 를 통과한 채 팀원 PC 에서 "No handler registered" 로 터지는 구멍이었다(`/release` 의 typecheck 게이트도 못 막는다). 2026-09-03 슬라이스로 정리.
+  - 본체 결재·보고 화면이 새 채널을 쓰게 되면 **그쪽 슬라이스에 추가**한다 — 이 앱은 자동으로 따라오고, preload 구현이 인터페이스로 타입되므로 preload 와 `global.d.ts` 가 어긋날 수도 없다.
+- 이 앱에 **없는** 기능(터미널·출퇴근·메일 …)의 채널은 여전히 여기 없다 — 그래서 `features/jira` 는 **index 가 아니라 컴포넌트 파일을 직접 import** 한다(index 가 `JiraSection`(터미널 세션·작업 시작 채널 의존)까지 내보내기 때문).
+
+### 무엇이 실리는지는 `npm run reach` 로 본다
+`scripts/lib/reach.mjs` 가 세 엔트리에서 import(정적·동적·`export from`·SCSS `@use`)를 끝까지 따라가 **lite 에 실리는 파일**과 **값으로 import 하는 외부 패키지**를 모은다(2026-09-03 기준 본체 81개 파일 · 외부 패키지는 electron·react·react-dom·node 내장 4종).
+
+- `npm run reach` 요약 · `npm run reach -- --files` 전체 목록 · `npm run reach -- --hits <경로>...` 준 경로 중 실리는 것만 — `/commit` 이 변경 파일을 넣어 CHANGELOG·lite typecheck 필요 여부를 판단한다.
+- ⚠️ 본체 파일이 외부 패키지를 import 하면 TS·Vite 모두 **루트 `node_modules` 를 따라 올라가 해석**하므로 이 앱 `package.json` 에 없는 패키지가 **경고 없이** 번들에 들어간다(순수 JS 는 조용히 비대해지고, `node-pty` 같은 네이티브는 빌드가 깨진다). `scripts/reach.test.ts`(루트 `npm test`)가 허용 목록 밖의 값 import · 데스크톱 전용 기능 도달 · 본체와 다른 패키지 버전 지정을 실패로 만든다. 정말 필요한 런타임 의존이 생기면 `dependencies` 와 테스트의 `ALLOWED_BARE` 를 함께 늘린다.
 
 ### ⚠️ 함정 (2026-09-03 재구성 때 확인)
 | 증상 | 원인 | 대응 |

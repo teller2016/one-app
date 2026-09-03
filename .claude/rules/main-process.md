@@ -39,6 +39,10 @@ paths:
 ## IPC 등록
 - 기능 모듈은 `features/<기능>/ipc.ts` 에 핸들러를 작성하고 `main.ts` 에서 `register...Ipc()` 로 호출한다. 로직 파일도 같은 폴더에 둔다.
 - 렌더러↔메인 통신은 preload 에 노출한 `window.oneApp` API로만. `nodeIntegration` 을 켜지 않는다.
+- ⚠️ **단독 배포판(lite)에도 실리는 브리지(환경설정·결재·티켓 보고)는 `src/preload/bridges/*` 슬라이스에 있다** —
+  `XxxBridge` 인터페이스 + `xxxBridge(ipcRenderer)` 조립 함수. 채널 문자열은 그 파일에서만 바꾸고, 그 기능에
+  채널을 더할 때도 슬라이스에 넣는다(본체 preload 와 lite preload 가 함께 조립하므로 한 번에 반영된다).
+  `global.d.ts` 도 그 인터페이스를 참조하므로 preload 구현과 렌더러 타입이 어긋날 수 없다.
 - 공용 타입은 `src/shared/types.ts` 에 두고 3개 컨텍스트에서 import. 추가 시 `src/renderer/types/global.d.ts` 의 `window.oneApp` 타입도 갱신.
 
 ## MO(모바일) 노출 — `handleShared`

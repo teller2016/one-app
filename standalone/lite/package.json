@@ -13,7 +13,8 @@
     "make:mac": "electron-forge make --platform=darwin",
     "release": "node scripts/release.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "reach": "node scripts/reach.mjs"
   },
   "author": {
     "name": "teller2016"

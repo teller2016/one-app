@@ -6,8 +6,6 @@ import type {
   ScheduleRunPayload,
   ScheduleStartConfig,
   ScheduleWorklog,
-  SaveSettingsInput,
-  ThemePref,
   SaveDeployProjectInput,
   DeployStatusEvent,
   SaveVpnSettingsInput,
@@ -21,8 +19,6 @@ import type {
   Project,
   SaveProjectInput,
   ApplinkInput,
-  JiraReportPrefs,
-  JiraReportQuery,
   JiraWorkPrepareInput,
   MirrorMode,
   MailListQuery,
@@ -42,12 +38,12 @@ import type {
   WorktreeAddInput,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
-  ApprovalProgress,
-  ExpendInput,
-  OvertimeSubmitInput,
-  VacationInput,
 } from "../shared/types";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+// lite(standalone/lite)에도 실리는 브리지는 bridges/ 슬라이스로 조립한다 — 채널 문자열은 그쪽 한 곳에만
+import { approvalBridge } from "./bridges/approval";
+import { jiraReportBridge } from "./bridges/jiraReport";
+import { settingsBridge } from "./bridges/settings";
 
 // 고빈도 채널 멀티플렉서 — 세션 pane 수만큼 구독되는 채널(terminal:data 등)에
 // ipcRenderer 리스너를 채널당 1개만 걸고 콜백 Set 으로 fan-out 한다.
@@ -102,16 +98,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       return () => ipcRenderer.removeListener("schedule:done", listener);
     },
   },
-  settings: {
-    // 현재 설정 조회 (비밀번호 값은 오지 않고 설정 여부만)
-    get: () => ipcRenderer.invoke("settings:get"),
-    // 설정 저장 (비밀번호는 암호화되어 저장)
-    set: (input: SaveSettingsInput) =>
-      ipcRenderer.invoke("settings:set", input),
-    // 테마만 즉시 저장 (다음 실행의 창 배경색 결정에 main 이 읽음)
-    setTheme: (theme: ThemePref) =>
-      ipcRenderer.invoke("settings:theme:set", theme),
-  },
+  // 환경설정 — bridges/settings.ts (단독 배포판과 공용)
+  settings: settingsBridge(ipcRenderer),
   deploy: {
     // 프로젝트 목록 조회 (토큰/비밀번호 값은 오지 않음)
     getProjects: () => ipcRenderer.invoke("deploy:projects:get"),
@@ -217,16 +205,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("jira:prepare-work", input),
     // 세션을 띄울 Claude 계정 후보 (Personal/Team — 로그인 이메일 포함)
     workAccounts: () => ipcRenderer.invoke("jira:work-accounts"),
-    // 티켓 보고 — 프로젝트·기간으로 티켓을 모아 복사한다 (단독 배포판도 같은 채널을 쓴다)
-    report: {
-      // 프로젝트 선택지 (force=true 는 새로고침 — 10분 캐시 우회)
-      projects: (force?: boolean) => ipcRenderer.invoke("jira:report:projects", force),
-      search: (query: JiraReportQuery) => ipcRenderer.invoke("jira:report:search", query),
-      // 마지막 선택(템플릿·프로젝트·기간 기준) — userData 에 남긴다
-      getPrefs: () => ipcRenderer.invoke("jira:report:prefs:get"),
-      savePrefs: (prefs: Partial<JiraReportPrefs>) =>
-        ipcRenderer.invoke("jira:report:prefs:set", prefs),
-    },
+    // 티켓 보고 — bridges/jiraReport.ts (단독 배포판과 공용)
+    report: jiraReportBridge(ipcRenderer),
   },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회
@@ -290,32 +270,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     },
   },
   // 결재 — 야근(연장근무내역서) · 지출결의서(개인) · 휴가신청서
-  approval: {
-    // 입력 기본값 조회 (마지막 작성 값)
-    getOvertimeDefaults: () => ipcRenderer.invoke("approval:overtime:defaults"),
-    getExpendDefaults: () => ipcRenderer.invoke("approval:expend:defaults"),
-    getVacationDefaults: () => ipcRenderer.invoke("approval:vacation:defaults"),
-    // 연장근무내역서 작성·상신 (자동화 창 — 수십 초 소요)
-    submitOvertime: (input: OvertimeSubmitInput) =>
-      ipcRenderer.invoke("approval:overtime:submit", input),
-    // 지출결의서 항목 작성 (상신은 사용자가 열린 창에서 직접)
-    runExpend: (input: ExpendInput) =>
-      ipcRenderer.invoke("approval:expend:run", input),
-    // 휴가신청서 작성 + 내역추가 + 결재상신
-    submitVacation: (input: VacationInput) =>
-      ipcRenderer.invoke("approval:vacation:submit", input),
-    // 연차 현황 조회 (총·사용·잔여)
-    vacationStatus: () => ipcRenderer.invoke("approval:vacation:status"),
-    // 전자결재 상신함 창 열기 (작성 창과 별개 — 세션 주입으로 로그인 화면 없음)
-    openEaBox: () => ipcRenderer.invoke("approval:open-ea-box"),
-    // 진행 단계 구독 (양식 열기 → 작성 → 상신). 해제 함수를 반환한다.
-    onProgress: (cb: (progress: ApprovalProgress) => void) => {
-      const listener = (_e: unknown, progress: ApprovalProgress) =>
-        cb(progress);
-      ipcRenderer.on("approval:progress", listener);
-      return () => ipcRenderer.removeListener("approval:progress", listener);
-    },
-  },
+  // 결재(야근·휴가·지출결의서·상신함) — bridges/approval.ts (단독 배포판과 공용)
+  approval: approvalBridge(ipcRenderer),
   weekly: {
     // 개인별 주간 일정 수집 (headless 브라우저 — 수십 초 소요). 0=이번주, -1=지난주 / monWeek: 월~일 기준
     fetch: (weekOffset: number, monWeek?: boolean) =>

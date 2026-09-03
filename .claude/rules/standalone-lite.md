@@ -23,17 +23,33 @@ paths:
 typecheck`** 를 따로 돌린다(그쪽 tsc 는 `@one` 을 따라가 본체 파일까지 함께 검사한다).
 ESLint 는 루트 `npm run lint` 가 함께 본다(`@one/` 미해결 예외 블록이 `eslint.config.mjs` 에 있다).
 
-## ⚠️ `window.oneApp` 은 **부분집합**이다
-`src/preload/preload.ts` 와 `src/renderer/types/global.d.ts` 에 이 앱이 쓰는 채널만 선언해 둔다.
+## ⚠️ `window.oneApp` 은 **부분집합**이다 — 공용 브리지는 본체 `preload/bridges/*` 를 **조립**한다
+`src/preload/preload.ts` 와 `src/renderer/types/global.d.ts` 는 이 앱이 쓰는 채널만 노출·선언한다.
 일부러 부분집합으로 둔 것이다 — 이 앱에 없는 채널을 부르는 본체 컴포넌트를 들여오면 **빌드 전에**
 typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
 
-- 본체 결재·보고 화면이 **새 채널을 쓰게 되면 그 두 파일도 함께 늘린다.** 채널 이름·인자·반환
-  모양은 본체 preload 와 똑같이 맞춘다.
+- 본체와 공용인 환경설정·결재·티켓 보고는 **채널 문자열을 복제하지 않는다** — 본체
+  `src/preload/bridges/{settings,approval,jiraReport}.ts` 가 `XxxBridge` 인터페이스 + `xxxBridge(ipcRenderer)`
+  조립 함수를 내보내고, 본체 preload 와 이 앱 preload 가 **둘 다 그것을 조립**한다. `global.d.ts` 도 그
+  인터페이스를 그대로 쓴다. (2.1.0 까지는 손 복제였다 — 채널 이름이 바뀌면 타입은 `shared/types` 에서
+  오므로 typecheck 는 통과한 채 팀원 PC 에서 "No handler registered" 로 터지는 구멍. 2026-09-03 정리.)
+- 본체 결재·보고 화면이 **새 채널을 쓰게 되면 그쪽 슬라이스에 추가**한다 — 이 앱은 자동으로 따라온다.
+  이 앱에 **없는** 기능의 채널(터미널·출퇴근 등)은 여전히 여기 없으므로 typecheck 가 막는다.
 - `features/jira` 는 **index 가 아니라 컴포넌트 파일을 직접** import 한다 — index 가
   `JiraSection`(터미널 세션·작업 시작 채널 의존)까지 내보내기 때문이다.
 - main 에서 가져오는 본체 모듈은 **electron·node 내장만 쓰는 순수 모듈**이어야 한다
-  (터미널·MO 서버처럼 데스크톱 전용 의존이 딸린 기능은 가져오지 않는다).
+  (터미널·MO 서버처럼 데스크톱 전용 의존이 딸린 기능은 가져오지 않는다). **`npm test` 가 지킨다** — 아래.
+
+## 무엇이 lite 에 실리는지는 `npm run reach` 로 본다 (외우지 말 것)
+`scripts/lib/reach.mjs` 가 세 엔트리에서 import(정적·동적·`export from`·SCSS `@use`)를 끝까지 따라가
+"lite 에 실리는 파일" 과 "값으로 import 하는 외부 패키지" 를 모은다(2026-09-03 기준 본체 81개 파일).
+
+- `npm run reach` 요약 · `-- --files` 전체 목록 · `-- --hits <경로>...` 준 경로 중 실리는 것만(`/commit` 이 쓴다).
+- ⚠️ 본체 파일이 외부 패키지를 import 하면 TS·Vite 모두 **루트 node_modules 를 따라 올라가 해석**하므로
+  이 앱 package.json 에 없는 패키지가 **경고 없이** 번들에 들어간다(순수 JS 는 조용히 비대해지고 node-pty 같은
+  네이티브는 빌드가 깨진다). `scripts/reach.test.ts`(루트 `npm test`)가 허용 목록(electron·react·react-dom·node 내장)
+  밖의 값 import · 데스크톱 전용 기능 도달 · 본체와 다른 패키지 버전 지정을 실패로 만든다.
+- 정말 필요한 런타임 의존이 생기면 lite `package.json` `dependencies` 와 그 테스트의 `ALLOWED_BARE` 를 함께 늘린다.
 
 ## 배포는 **`/release` 스킬**로 (GitHub Releases)
 산출물과 **받는 사람용 안내**는 배포 전용 public 리포 **`teller2016/one-app-lite`** 에 둔다(소스는 안 올린다).

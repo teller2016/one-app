@@ -1,4 +1,7 @@
 // preload 에서 contextBridge 로 노출한 window.oneApp 타입 선언
+import type { ApprovalBridge } from '../../preload/bridges/approval';
+import type { JiraReportBridge } from '../../preload/bridges/jiraReport';
+import type { SettingsBridge } from '../../preload/bridges/settings';
 import type {
   AppToastPayload,
   ScheduleRunPayload,
@@ -9,9 +12,6 @@ import type {
   ScheduleNotionRecordResult,
   ScheduleStartConfig,
   ScheduleWorklog,
-  AppSettingsView,
-  SaveSettingsInput,
-  ThemePref,
   MirrorStatus,
   MirrorMode,
   MirrorActionResult,
@@ -26,10 +26,6 @@ import type {
   JiraWorkAccountInfo,
   JiraWorkPrepareInput,
   JiraWorkPrepareResult,
-  JiraProjectsResult,
-  JiraReportPrefs,
-  JiraReportQuery,
-  JiraReportResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -98,17 +94,6 @@ import type {
   WorktreeAddInput,
   WorktreeActionResult,
   WorktreeInfo,
-  ApprovalProgress,
-  ExpendDefaults,
-  ExpendInput,
-  ExpendResult,
-  OvertimeDefaults,
-  OvertimeSubmitInput,
-  OvertimeSubmitResult,
-  VacationDefaults,
-  VacationInput,
-  VacationResult,
-  VacationStatus,
   TerminalCreateInput,
   TerminalSessionInfo,
   TerminalAttachResult,
@@ -138,11 +123,9 @@ declare global {
         onOutput: (cb: (chunk: ScheduleOutputChunk) => void) => () => void;
         onDone: (cb: (info: ScheduleDoneInfo) => void) => () => void;
       };
-      settings: {
-        get: () => Promise<AppSettingsView>;
-        set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
-        setTheme: (theme: ThemePref) => Promise<AppSettingsView>;
-      };
+      // 단독 배포판과 공용인 브리지는 preload/bridges 의 인터페이스를 그대로 쓴다 —
+      // preload 구현이 그 인터페이스로 타입되므로 여기와 preload 가 어긋날 수 없다
+      settings: SettingsBridge;
       deploy: {
         getProjects: () => Promise<DeployProjectView[]>;
         saveProject: (
@@ -226,13 +209,8 @@ declare global {
           input: JiraWorkPrepareInput,
         ) => Promise<JiraWorkPrepareResult>;
         workAccounts: () => Promise<JiraWorkAccountInfo[]>;
-        /** 티켓 보고 — 프로젝트·기간으로 모아 복사. 단독 배포판도 같은 모양으로 노출한다 */
-        report: {
-          projects: (force?: boolean) => Promise<JiraProjectsResult>;
-          search: (query: JiraReportQuery) => Promise<JiraReportResult>;
-          getPrefs: () => Promise<JiraReportPrefs>;
-          savePrefs: (prefs: Partial<JiraReportPrefs>) => Promise<JiraReportPrefs>;
-        };
+        /** 티켓 보고 — 단독 배포판과 공용 (preload/bridges/jiraReport.ts) */
+        report: JiraReportBridge;
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;
@@ -260,23 +238,7 @@ declare global {
           cb: (action: 'come' | 'leave' | null) => void,
         ) => () => void;
       };
-      approval: {
-        getOvertimeDefaults: () => Promise<OvertimeDefaults>;
-        getExpendDefaults: () => Promise<ExpendDefaults>;
-        getVacationDefaults: () => Promise<VacationDefaults>;
-        submitOvertime: (
-          input: OvertimeSubmitInput,
-        ) => Promise<OvertimeSubmitResult>;
-        runExpend: (input: ExpendInput) => Promise<ExpendResult>;
-        submitVacation: (input: VacationInput) => Promise<VacationResult>;
-        vacationStatus: () => Promise<{
-          ok: boolean;
-          status?: VacationStatus;
-          error?: string;
-        }>;
-        openEaBox: () => Promise<{ ok: boolean; error?: string }>;
-        onProgress: (cb: (progress: ApprovalProgress) => void) => () => void;
-      };
+      approval: ApprovalBridge;
       weekly: {
         fetch: (weekOffset: number, monWeek?: boolean) => Promise<WeeklyFetchResult>;
         onProgress: (cb: (progress: WeeklyProgress) => void) => () => void;
