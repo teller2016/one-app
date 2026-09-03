@@ -15,6 +15,7 @@ import type {
   ThemePref,
   VacationInput,
 } from '@one/shared/types';
+import type { UpdateProgress } from '../shared/update';
 
 contextBridge.exposeInMainWorld('oneApp', {
   settings: {
@@ -50,9 +51,19 @@ contextBridge.exposeInMainWorld('oneApp', {
         ipcRenderer.invoke('jira:report:prefs:set', prefs),
     },
   },
-  /** 새 버전 확인 — 이 앱만의 채널(본체엔 없다). 실패해도 예외를 던지지 않는다 */
+  /** 새 버전 확인·자동 설치 — 이 앱만의 채널(본체엔 없다). 실패는 값으로 온다(예외 X) */
   update: {
     check: () => ipcRenderer.invoke('update:check'),
+    /** 마지막 확인 결과의 zip 을 받아 교체한다 — ok 면 앱이 곧 종료·재시작한다 */
+    install: () => ipcRenderer.invoke('update:install'),
+    /** 자동 교체가 안 될 때 받아 풀어둔 폴더 열기 (반자동 폴백) */
+    openFolder: (folder: string) => ipcRenderer.invoke('update:open-folder', folder),
+    /** 설치 진행 구독 — 해제 함수를 반환한다 */
+    onProgress: (cb: (progress: UpdateProgress) => void) => {
+      const listener = (_e: unknown, progress: UpdateProgress) => cb(progress);
+      ipcRenderer.on('update:progress', listener);
+      return () => ipcRenderer.removeListener('update:progress', listener);
+    },
   },
   /** 기본 브라우저로 링크 열기 */
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),

@@ -24,7 +24,7 @@ import type {
   VacationStatus,
 } from '@one/shared/types';
 // 이 앱만의 타입 — 본체에는 없는 기능이라 lite 의 shared 에 둔다
-import type { UpdateInfo } from '../../shared/update';
+import type { UpdateInfo, UpdateInstallResult, UpdateProgress } from '../../shared/update';
 
 declare global {
   interface Window {
@@ -59,6 +59,9 @@ declare global {
       };
       update: {
         check: () => Promise<UpdateInfo>;
+        install: () => Promise<UpdateInstallResult>;
+        openFolder: (folder: string) => Promise<{ ok: boolean }>;
+        onProgress: (cb: (progress: UpdateProgress) => void) => () => void;
       };
       openExternal: (url: string) => Promise<{ ok: boolean }>;
     };

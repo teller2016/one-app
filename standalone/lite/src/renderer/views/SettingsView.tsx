@@ -27,13 +27,21 @@ const THEMES: { value: ThemePref; label: string }[] = [
  */
 export function SettingsView({
   settings,
-  version,
+  update,
+  onUpdateInfo,
+  onInstall,
+  installing,
   onSaved,
   onCancel,
 }: {
   settings: AppSettingsView;
-  /** 실행 중인 앱 버전 — 셸이 시작할 때 받아둔 값(빈 문자열이면 확인 실패) */
-  version: string;
+  /** 새 버전 확인 결과 — 셸이 시작할 때 받아둔 값. current(현재 버전)는 실패해도 들어 있다 */
+  update: UpdateInfo | null;
+  /** 여기서 다시 확인한 결과를 셸에 돌려준다 — 배너와 같은 상태를 보게 */
+  onUpdateInfo: (info: UpdateInfo) => void;
+  /** 앱 안에서 받아 교체·재시작 (셸이 확인 다이얼로그까지 처리한다) */
+  onInstall: () => void;
+  installing: boolean;
   onSaved: (next: AppSettingsView) => void;
   onCancel: (() => void) | null;
 }) {
@@ -46,19 +54,26 @@ export function SettingsView({
   const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  // 수동 업데이트 확인 — 셸이 시작할 때 이미 한 번 보지만, 여기서 직접 다시 볼 수 있다
+  // 수동 업데이트 확인 — 셸이 시작할 때 이미 한 번 보지만, 여기서 직접 다시 볼 수 있다.
+  // 시작 때의 실패는 조용히 넘기고, 사용자가 직접 눌렀을 때만 실패 사유를 보여준다.
   const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState<UpdateInfo | null>(null);
+  const [manual, setManual] = useState(false);
   const toast = useToast();
 
   const checkUpdate = async () => {
     setChecking(true);
     try {
-      setChecked(await window.oneApp.update.check());
+      onUpdateInfo(await window.oneApp.update.check());
     } catch (e) {
-      setChecked({ ok: false, current: version, url: '', error: errMsg(e, '확인에 실패했습니다.') });
+      onUpdateInfo({
+        ok: false,
+        current: update?.current ?? '',
+        url: '',
+        error: errMsg(e, '확인에 실패했습니다.'),
+      });
     } finally {
       setChecking(false);
+      setManual(true);
     }
   };
 
@@ -211,31 +226,45 @@ export function SettingsView({
         <Segment<ThemePref> options={THEMES} value={theme} onChange={changeTheme} />
       </Collapsible>
 
-      {/* 자동 업데이트는 없다 — 새 버전이 있으면 릴리스 페이지를 열어 zip 을 덮어쓰면 된다 */}
+      {/* 새 버전이 있으면 앱 안에서 받아 교체한다(셸 배너와 같은 동작) — 안 되는 위치면 릴리스 페이지 */}
       <Collapsible title="버전" icon={<Icon name="info" size={14} />} defaultOpen={false}>
         <div className="settings-version">
           <span>
-            현재 버전 <b>{version || '—'}</b>
+            현재 버전 <b>{update?.current || '—'}</b>
           </span>
-          <Button size="sm" onClick={() => void checkUpdate()} loading={checking}>
+          <Button
+            size="sm"
+            onClick={() => void checkUpdate()}
+            loading={checking}
+            disabled={installing}
+          >
             업데이트 확인
           </Button>
         </div>
-        {checked && (
+        {update && (update.ok || manual) && (
           <p className="hint form-hint">
-            {!checked.ok ? (
-              checked.error
-            ) : checked.hasUpdate ? (
+            {!update.ok ? (
+              update.error
+            ) : update.hasUpdate ? (
               <>
-                새 버전 <b>{checked.latest}</b> 이 있습니다 —{' '}
-                <TextLink
-                  small
-                  external
-                  onClick={() => void window.oneApp.openExternal(checked.url)}
-                >
-                  받으러 가기
-                </TextLink>
-                . 받은 zip 으로 기존 앱을 덮어쓰면 되고, 설정은 그대로 유지됩니다.
+                새 버전 <b>{update.latest}</b> 이 있습니다 —{' '}
+                {update.canInstall ? (
+                  <TextLink small onClick={onInstall} disabled={installing}>
+                    {installing ? '설치 중…' : '지금 업데이트'}
+                  </TextLink>
+                ) : (
+                  <>
+                    <TextLink
+                      small
+                      external
+                      onClick={() => void window.oneApp.openExternal(update.url)}
+                    >
+                      받으러 가기
+                    </TextLink>
+                    {update.installBlocked && <> ({update.installBlocked})</>}
+                  </>
+                )}
+                . 설정과 계정은 그대로 유지됩니다.
               </>
             ) : (
               '최신 버전을 쓰고 있습니다.'

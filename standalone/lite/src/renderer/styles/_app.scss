@@ -82,6 +82,32 @@
     flex-shrink: 0;
   }
 
+  // 다운로드 진행 막대 — 배너 글줄 아래 얇게. 채움 폭은 인라인 style 로 온다
+  &__update-bar {
+    height: 4px;
+    margin-top: 8px;
+    border-radius: var(--r-full);
+    background: var(--border);
+    overflow: hidden;
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width var(--dur-2) var(--ease);
+    }
+  }
+
+  // 제목 옆 현재 버전 — 하단 안내줄과 같은 캡션 톤(대문자·자간 변환은 끈다)
+  &__version {
+    @include type-caption;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
   &__foot {
     flex-shrink: 0;
     padding: 8px 20px 12px;

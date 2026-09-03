@@ -7,7 +7,7 @@ import { defineConfig } from 'vitest/config';
 // (렌더러 컴포넌트 테스트를 붙이려면 environment: 'jsdom' 과 관련 의존성이 따로 필요하다)
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'standalone/lite/src/**/*.test.ts'],
     environment: 'node',
   },
 });

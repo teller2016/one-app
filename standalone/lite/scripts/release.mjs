@@ -7,21 +7,32 @@
 //   npm run release -- --minor         2.0.0 → 2.1.0
 //   npm run release -- --major         2.0.0 → 3.0.0
 //   npm run release -- --version=2.5.0 버전 직접 지정
-//   npm run release -- --notes="필터 버그 수정"   릴리스 노트에 들어갈 변경점
+//   npm run release -- --notes="…"     릴리스 노트 맨 위에 덧붙일 문구 (CHANGELOG 항목이 없을 때는 이것만으로 대신)
 //   npm run release -- --dry-run       빌드까지만 하고 업로드 직전에 멈춘다
 //   npm run release -- --skip-build    이미 만든 산출물로 업로드만 (dry-run 다음에 이어서)
 //   npm run release -- --allow-unsigned  macOS 서명 검증 실패를 경고로만 (기본은 중단)
 //
-// ⚠️ 커밋·태그는 이 스크립트가 하지 않는다 — 올라간 package.json 버전은 `/commit` 으로 따로 커밋한다.
+// 릴리스 노트는 **CHANGELOG.md 의 그 버전 항목**이다 — 항목이 없으면 멈춘다(받는 사람에게 무엇이
+// 달라졌는지 말하지 않는 배포를 막는다). 항목 표기([추가]·[변경]·[개선]·[수정]·[주의])가 버전 자리의
+// 근거이므로, 표기보다 낮게 올렸으면 경고한다(판단은 /release 스킬이, 여기는 가드).
+//
+// ⚠️ 커밋·태그는 이 스크립트가 하지 않는다 — 올라간 package.json·CHANGELOG.md 는 `/commit` 으로 따로 커밋한다.
 //    (이 리포는 커밋을 /commit 스킬 경유로만 허용한다)
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  bumpKind,
+  bumpTooSmall,
+  changelogSection,
+  suggestBump,
+} from './lib/changelog.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LITE = path.resolve(HERE, '..');
 const PKG_PATH = path.join(LITE, 'package.json');
+const CHANGELOG_PATH = path.join(LITE, 'CHANGELOG.md');
 const OUT_MAKE = path.join(LITE, 'out', 'make');
 
 /**
@@ -119,6 +130,25 @@ if (!dryRun) {
     );
 }
 
+// ── 2-1. 릴리스 노트 = CHANGELOG 의 이번 버전 항목 ──
+const changelog = fs.existsSync(CHANGELOG_PATH) ? fs.readFileSync(CHANGELOG_PATH, 'utf8') : '';
+const section = changelogSection(changelog, version);
+if (!section && !notes)
+  die(
+    `CHANGELOG.md 에 "## ${version}" 항목이 없습니다 — 받는 사람에게 무엇이 달라졌는지 적고 다시 실행하세요.\n` +
+      '  (형식은 CHANGELOG.md 머리말. 임시로 건너뛰려면 --notes="…" 를 주세요)',
+  );
+if (section) {
+  done(`CHANGELOG ${version} 항목 ${section.split('\n').filter((l) => l.trim()).length}줄`);
+  const kind = bumpKind(current, version);
+  const suggested = suggestBump(section);
+  if (kind && bumpTooSmall(kind, suggested))
+    console.warn(
+      `\x1b[33m⚠ CHANGELOG 표기로는 ${suggested} 를 올려야 하는데 ${kind} 만 올렸습니다 (${current} → ${version}).` +
+        ` 규칙: [주의]→major · [추가]/[변경]→minor · 그 외→patch\x1b[0m`,
+    );
+}
+
 if (version !== current) {
   pkg.version = version;
   fs.writeFileSync(PKG_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
@@ -212,12 +242,13 @@ const winZip = zips.find((z) => z.includes('win32'));
 const macZip = zips.find((z) => z.includes('darwin'));
 const body = [
   notes && `${notes}\n`,
+  section && `${section}\n`,
   '### 받을 파일',
   winZip && `- **Windows** — \`${path.basename(winZip)}\``,
   macZip && `- **Mac (M1 이상)** — \`${path.basename(macZip)}\``,
   '',
-  `설치·사용법은 [README](https://github.com/${REPO}#readme) 를 보세요.`,
-  '기존 앱 위에 덮어써도 **설정은 그대로 유지**됩니다.',
+  `설치·사용법은 [README](https://github.com/${REPO}#readme), 전체 변경 이력은 [CHANGELOG](https://github.com/${REPO}/blob/main/CHANGELOG.md) 를 보세요.`,
+  '쓰던 분은 앱 상단의 **[지금 업데이트]** 로 받으면 됩니다 — 설정과 계정은 그대로 유지됩니다.',
 ]
   .filter(Boolean)
   .join('\n');
@@ -255,6 +286,39 @@ try {
   die('릴리스 업로드 실패 — 위 출력을 확인하세요. (산출물은 out/make 에 그대로 있습니다)');
 }
 
+// ── 7. CHANGELOG.md 를 배포 리포에도 올린다 (팀원이 전체 이력을 볼 수 있게) — 실패해도 배포는 끝났다
+if (changelog) {
+  try {
+    let sha;
+    try {
+      sha = execFileSync('gh', ['api', `repos/${REPO}/contents/CHANGELOG.md`, '--jq', '.sha'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      sha = undefined; // 아직 없는 파일 — 새로 만든다
+    }
+    execFileSync(
+      'gh',
+      [
+        'api',
+        '--method',
+        'PUT',
+        `repos/${REPO}/contents/CHANGELOG.md`,
+        '-f',
+        `message=docs: 변경 이력 ${tag}`,
+        '-f',
+        `content=${Buffer.from(changelog, 'utf8').toString('base64')}`,
+        ...(sha ? ['-f', `sha=${sha}`] : []),
+      ],
+      { stdio: 'ignore' },
+    );
+    done('CHANGELOG.md 를 배포 리포에 올렸습니다');
+  } catch {
+    console.warn('\x1b[33m⚠ CHANGELOG.md 업로드 실패 — 릴리스는 올라갔습니다. 나중에 수동으로 올리세요.\x1b[0m');
+  }
+}
+
 const url = `https://github.com/${REPO}/releases/latest`;
 try {
   execSync('pbcopy', { input: url }); // 공지에 바로 붙여넣을 수 있게
@@ -264,7 +328,6 @@ try {
 
 console.log(`\n\x1b[32m✓ 배포 완료 — ${tag}\x1b[0m`);
 console.log(`  팀원 공유 링크 (클립보드에 복사됨): \x1b[1m${url}\x1b[0m`);
-if (version !== current)
-  console.log(
-    `  package.json 이 ${version} 로 바뀌었습니다 — \x1b[1m/commit\x1b[0m 으로 커밋하세요.`,
-  );
+console.log(
+  `  package.json(${version})·CHANGELOG.md 를 \x1b[1m/commit\x1b[0m 으로 커밋하세요.`,
+);

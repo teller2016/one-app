@@ -39,19 +39,38 @@ npm run release -- --dry-run         # 빌드까지만, 업로드 직전에 멈�
 npm run release -- --skip-build      # 이미 만든 산출물로 업로드만 (dry-run 다음에 이어서)
 ```
 
-스크립트(`scripts/release.mjs`)가 하는 일 — ① `gh` 인증 확인 → ② `npm run typecheck` → ③ 버전 bump → ④ `out/make` 비우고 **Windows·macOS 빌드** → ⑤ 이번 버전 zip 만 골라 `gh release create v<버전>` 으로 업로드 → ⑥ 공유 링크 출력(클립보드 복사).
+스크립트(`scripts/release.mjs`)가 하는 일 — ① `gh` 인증 확인 → ② `npm run typecheck` → ③ 버전 bump → ④ **`CHANGELOG.md` 에서 그 버전 항목을 릴리스 노트로** 읽기(없으면 중단 — `--notes` 로 대신 줄 수 있다) → ⑤ `out/make` 비우고 **Windows·macOS 빌드** → ⑥ macOS 서명 검증 → ⑦ 이번 버전 zip 만 골라 `gh release create v<버전>` 으로 업로드 + `CHANGELOG.md` 를 배포 리포에 올림 → ⑧ 공유 링크 출력(클립보드 복사).
+
+**버전 자리는 `CHANGELOG.md` 항목 표기로 정한다**(`[주의]` → a · `[추가]`/`[변경]` → b · `[개선]`/`[수정]` → c — 규칙 표는 그 파일 머리말). `/release` 가 판단하고, 스크립트는 표기보다 낮게 올렸으면 경고한다.
 
 - **맥 한 대에서 두 플랫폼이 다 나온다** — zip maker 만 쓰므로 Windows 산출물도 크로스 빌드된다.
 - **커밋·태그는 스크립트가 하지 않는다.** 올라간 `package.json` 버전은 `/commit` 으로 따로 커밋한다.
 - 같은 태그가 이미 있으면 **업로드 전에 멈춘다**(받은 사람과 버전이 어긋나는 것을 막는다).
 - 산출물이 한 플랫폼만 나오면 경고만 하고 진행한다 — 그 OS 팀원은 못 받으니 확인할 것.
 
-### 앱 안의 새 버전 확인
-자동 업데이트(Squirrel·서명 인프라)는 두지 않는다. 대신 `src/main/update.ts` 가 **배포 리포의 최신 릴리스 태그**를 조회해(`update:check`) 현재 버전과 비교하고, 새 버전이면 제목바 아래 배너 + [받기]로 릴리스 페이지를 연다. 환경설정 **'버전'** 그룹에서 수동 확인도 된다.
+### 앱 안의 새 버전 확인 + 자동 설치 (2.0.1 부터)
+`src/main/update.ts` 가 **배포 리포의 최신 릴리스**를 조회해(`update:check`) 현재 버전과 비교하고, 새 버전이면 제목바 아래 배너를 띄운다. **[지금 업데이트]** 를 누르면 앱이 zip 을 받아 검증·압축 해제하고, 헬퍼 스크립트에 교체를 맡긴 뒤 종료 → 헬퍼가 바꿔 끼우고 다시 띄운다(`updateInstall.ts` · `updateCore.ts`). 환경설정 **'버전'** 그룹에서 수동 확인·설치도 된다.
 
+**Squirrel(electron autoUpdater)을 쓰지 않는 이유** — macOS 는 Apple Developer ID 서명이 필수고 Windows 는 `Setup.exe` 설치본이 필요한데(맥에서 빌드 불가), 우리는 자가서명 + zip 이다. 대신 직접 구현했고, 그 덕에 **앱이 받은 파일에는 검역 표시(quarantine · Zone.Identifier)가 붙지 않아** 업데이트에서는 Mac 의 `xattr`·Windows SmartScreen 안내가 필요 없다.
+
+```
+배너 [지금 업데이트] → 확인 다이얼로그
+  → 다운로드(진행률, 60초 무응답이면 중단) → 크기·sha256 검증(GitHub asset digest)
+  → 압축 해제 (mac: ditto -xk · win: tar, 없으면 Expand-Archive) → 앱 찾기
+  → 헬퍼 스크립트 기록·실행 (mac: /bin/sh · win: PowerShell -ExecutionPolicy Bypass)
+  → app.quit()  ┈┈ 여기까지의 실패는 전부 배너에 안내 + [받은 폴더 열기]/[릴리스 페이지] 폴백
+헬퍼: 앱 종료 대기 → 옛 앱을 .bak 으로 → 새 앱 이동 → 재실행 → .bak·스테이지 삭제
+      실패하면 .bak 원복 후 원래 앱 재실행. 로그: <temp>/OneAppLite-update.log
+```
+
+- **자동 설치가 막히는 경우**(`installBlocked` → [받기]로 릴리스 페이지): 이 PC 용 zip 이 없음(Intel 맥) · 개발 인스턴스 · macOS App Translocation(다운로드 폴더에서 바로 실행) · Windows 에서 exe 가 앱 폴더 구조(`resources/app.asar`) 안에 없거나 바탕화면·홈 폴더 자체인 경우 · 앱이 있는 폴더에 쓰기 불가.
+- Windows 헬퍼는 **이 맥에서 실행해 볼 수 없다.** 백업 이름 바꾸기 재시도(백신 잠금) · 드라이브가 다르면 복사 후 삭제 · 한글 경로는 인자 대신 스크립트 본문에 박고 UTF-8 BOM 으로 저장(PowerShell 5.1) — 이 가정들은 `updateCore.test.ts` 가 지킨다. 그룹 정책이 스크립트를 막는 PC 는 **앱을 끄기 전에** 프로브 스크립트로 확인해 폴백으로 빠진다.
 - 조회 실패(사내망에서 GitHub 차단·오프라인)는 **조용히 무시**한다 — 앱 동작을 막지 않는다.
 - ⚠️ 리포 주소는 `scripts/release.mjs` 와 `src/main/update.ts` **두 곳의 `REPO` 상수**에 있다. 바꾸면 함께 바꾼다(올리는 곳과 보는 곳이 같아야 한다).
-- 받는 사람은 zip 을 **덮어쓰기만** 하면 된다 — 설정은 앱 폴더가 아니라 userData 에 있어 유지된다.
+- ⚠️ zip 이름 `OneAppLite-<platform>-<arch>-<버전>.zip` 은 `pickAsset()` 이 이 PC 용 파일을 고르는 근거다 — forge maker-zip 기본 이름이며 바꾸지 않는다.
+- **테스트 훅**: `ONE_APP_LITE_FORCE_UPDATE_TAG=v2.0.0` 을 주고 띄우면 그 태그를 새 버전으로 취급한다(버전 비교 무시). 패키징 앱으로 교체 흐름을 실제로 돌려볼 때 쓴다:
+  `ONE_APP_LITE_FORCE_UPDATE_TAG=v2.0.0 out/OneAppLite-darwin-arm64/OneAppLite.app/Contents/MacOS/OneAppLite`
+  (개발 인스턴스에서는 다운로드·압축 해제까지만 하고 "교체하지 않습니다" 로 멈춘다 — 교체할 번들이 없다. ⚠️ 패키징 앱과 dev 는 userData 가 같아 **단일 인스턴스 락이 겹친다** — 둘을 동시에 띄우지 말 것.)
 
 ### 빌드만 하기
 
@@ -103,10 +122,13 @@ standalone/lite/
 │                              `@one` alias(= ../../src) · 렌더러는 react dedupe + fs.allow(리포 루트)
 ├── tsconfig.json              paths { "@one/*": ["../../src/*"] }
 └── src/
-    ├── shared/update.ts       UpdateInfo — 새 버전 확인 결과 (이 앱만의 타입)
+    ├── shared/update.ts       UpdateInfo · UpdateProgress · UpdateInstallResult — 새 버전 확인·설치 (이 앱만의 타입)
     ├── main/
     │   ├── main.ts            창 하나 + 본체 IPC 등록(registerSettingsIpc · registerApprovalIpc · registerJiraReportIpc) + registerUpdateIpc
-    │   └── update.ts          배포 리포의 최신 릴리스 조회 (update:check)
+    │   ├── update.ts          최신 릴리스 조회(update:check) · 설치 진입(update:install) · 폴백 폴더 열기(update:open-folder)
+    │   ├── updateInstall.ts   다운로드 → 검증 → 압축 해제 → 헬퍼 실행 → app.quit() (교체 대상 판정 포함)
+    │   ├── updateCore.ts      순수 로직 — 버전 비교 · 이 PC 용 zip 고르기 · mac/win 헬퍼 스크립트 본문 (electron 미의존)
+    │   └── updateCore.test.ts 위 순수 로직 테스트 — **루트 `npm test`** 가 돌린다(이 폴더 tsc 는 *.test.ts 를 제외)
     ├── preload/preload.ts     window.oneApp — 본체 preload 의 **부분집합** (settings · approval · jira.report · update · openExternal)
     └── renderer/
         ├── renderer.tsx       본체 initTheme + 마운트

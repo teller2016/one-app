@@ -41,11 +41,19 @@ typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
 
 - ⚠️ **`npm run release` 를 직접 부르지 말 것** — `require-build-skill.mjs` 훅이 막는다. `/release` 스킬이
   변경점 정리·버전 판단·승인을 거친 뒤 부른다(public 릴리스는 팀원이 곧바로 받아 가 되돌리기 어렵다).
-- `scripts/release.mjs` — gh 인증 확인 → typecheck → 버전 bump → win·mac 빌드 → **macOS 서명 검증** →
-  `gh release create` → 링크 출력. **커밋·태그는 하지 않는다**(bump 된 `package.json` 은 `/commit` 으로).
-  같은 태그가 있으면 업로드 전에 멈추고, 서명이 빠졌으면 중단한다(`--allow-unsigned` 로만 강행).
-- **앱 안의 새 버전 확인**: `src/main/update.ts`(`update:check`)가 최신 릴리스 태그를 현재 버전과 비교 →
-  셸 배너 + 환경설정 '버전' 그룹. 실패는 조용히 무시한다(사내망에서 GitHub 이 막혀도 앱은 돈다).
+- `scripts/release.mjs` — gh 인증 확인 → typecheck → 버전 bump → **`CHANGELOG.md` 의 그 버전 항목을 릴리스 노트로** →
+  win·mac 빌드 → **macOS 서명 검증** → `gh release create` + CHANGELOG 업로드 → 링크 출력.
+  **커밋·태그는 하지 않는다**(`package.json`·`CHANGELOG.md` 는 `/commit` 으로). 같은 태그가 있으면 업로드 전에 멈추고,
+  서명이 빠졌으면 중단한다(`--allow-unsigned` 로만 강행). CHANGELOG 항목이 없으면 중단한다(`--notes` 로만 대체).
+- **버전 자리 = CHANGELOG 표기**: `[주의]` → major · `[추가]`/`[변경]` → minor · `[개선]`/`[수정]` → patch.
+  `/release` 가 항목을 먼저 쓰고 그 표기로 버전을 정한다(사용자 승인 후). 받는 사람 말로 쓴다 — 구현어·파일명 금지.
+- **앱 안의 새 버전 확인 + 자동 설치(2.0.1~)**: `update.ts`(`update:check`)가 최신 릴리스를 현재 버전과 비교 →
+  셸 배너 [지금 업데이트] → `updateInstall.ts` 가 zip 을 받아 검증·압축 해제 → 헬퍼 스크립트(`updateCore.ts`)가
+  앱 종료 후 교체·재실행. Squirrel 은 못 쓴다(mac Developer ID 서명·win Setup.exe 필요). 상세 흐름·차단 조건은 README.
+  - 종료 **전** 실패는 값으로 돌려 배너가 폴백([받은 폴더 열기]·[릴리스 페이지])을 안내하고, 종료 **후** 실패는 헬퍼가 `.bak` 을 원복한다.
+  - ⚠️ **Windows 헬퍼는 이 맥에서 실행할 수 없다** — 순서·안전장치는 `updateCore.test.ts`(루트 `npm test`)가 유일한 방어선이다. 헬퍼 스크립트를 고치면 테스트도 같이.
+  - 테스트 훅 `ONE_APP_LITE_FORCE_UPDATE_TAG=v2.0.0` 으로 그 태그를 새 버전으로 취급해 흐름을 돌려볼 수 있다(README). dev 는 교체 직전에 멈춘다.
+  - 조회 실패는 조용히 무시한다(사내망에서 GitHub 이 막혀도 앱은 돈다).
 - ⚠️ 리포 주소는 `scripts/release.mjs` 와 `src/main/update.ts` **두 곳의 `REPO` 상수**에 있다 — 바꾸면 함께.
 - ⚠️ **사용법 문서의 정본은 배포 리포의 README** 다. 화면 사용법이 바뀌면 `standalone/lite/README.md` 가 아니라 그쪽을 고친다.
 - ⚠️ 자가서명은 **받는 맥에서 검증되지 않는다** — 목적은 빌드 간 서명 고정(계정 유실 방지)이지 Gatekeeper 통과가 아니다.

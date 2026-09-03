@@ -20,5 +20,7 @@
     "outDir": "dist",
     "resolveJsonModule": true
   },
-  "include": ["src", "forge.config.ts", "vite.*.config.ts", "forge.env.d.ts"]
+  "include": ["src", "forge.config.ts", "vite.*.config.ts", "forge.env.d.ts"],
+  // 단위 테스트는 루트 vitest 가 돌린다(vitest 가 이 폴더에 없어 tsc 가 import 를 못 푼다)
+  "exclude": ["src/**/*.test.ts"]
 }
