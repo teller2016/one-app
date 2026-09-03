@@ -26,6 +26,10 @@ import type {
   JiraWorkAccountInfo,
   JiraWorkPrepareInput,
   JiraWorkPrepareResult,
+  JiraProjectsResult,
+  JiraReportPrefs,
+  JiraReportQuery,
+  JiraReportResult,
   DeployProjectView,
   SaveDeployProjectInput,
   DeployStatus,
@@ -222,6 +226,13 @@ declare global {
           input: JiraWorkPrepareInput,
         ) => Promise<JiraWorkPrepareResult>;
         workAccounts: () => Promise<JiraWorkAccountInfo[]>;
+        /** 티켓 보고 — 프로젝트·기간으로 모아 복사. 단독 배포판도 같은 모양으로 노출한다 */
+        report: {
+          projects: (force?: boolean) => Promise<JiraProjectsResult>;
+          search: (query: JiraReportQuery) => Promise<JiraReportResult>;
+          getPrefs: () => Promise<JiraReportPrefs>;
+          savePrefs: (prefs: Partial<JiraReportPrefs>) => Promise<JiraReportPrefs>;
+        };
       };
       mirror: {
         getStatus: () => Promise<MirrorStatus>;

@@ -1,0 +1,6 @@
+// 스타일 진입점 — 본체의 토큰·공용 클래스와 결재·Jira 기능 스타일을 그대로 쓰고, 이 앱은 셸만 더한다.
+// (복사본을 두지 않는다 — 본체 `_base.scss` 를 고치면 다음 빌드에 그대로 실린다)
+@use '../../../../../src/renderer/styles/base';
+@use '../../../../../src/renderer/styles/approval';
+@use '../../../../../src/renderer/styles/jira';
+@use './app';

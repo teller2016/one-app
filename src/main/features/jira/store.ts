@@ -2,7 +2,7 @@
 // 주소(또는 키)로 끌어와 내 목록에 함께 띄운다. 비밀이 없어 평문 JSON.
 //
 // **키만 저장한다** — 제목·상태는 매 조회 때 Jira 에서 받으므로 여기 두면 곧 낡는다.
-import type { JiraAddedTicket } from '../../../shared/types';
+import type { JiraAddedTicket, JiraReportPrefs } from '../../../shared/types';
 import { readUserJson, writeUserJson } from '../../lib/store';
 
 const FILE = 'jira.json';
@@ -11,9 +11,48 @@ const MAX_ADDED = 50;
 
 interface StoredJira {
   added?: JiraAddedTicket[];
+  /** 티켓 보고 화면의 마지막 선택 (템플릿·프로젝트·기간 기준) — 달마다 같은 조건을 쓴다 */
+  report?: Partial<JiraReportPrefs>;
 }
 
 const read = (): StoredJira => readUserJson<StoredJira>(FILE, {});
+
+// ── 티켓 보고 선택 ──
+
+const DEFAULT_REPORT_PREFS: JiraReportPrefs = {
+  template: '{key} {summary}',
+  projectKeys: [],
+  dateField: 'updated',
+  periodMode: 'month',
+};
+
+/** 저장본이 깨졌거나 예전 형식이어도 화면이 죽지 않게 필드별로 걸러 합친다 */
+export function getReportPrefs(): JiraReportPrefs {
+  const r = read().report ?? {};
+  return {
+    template:
+      typeof r.template === 'string' && r.template.trim()
+        ? r.template
+        : DEFAULT_REPORT_PREFS.template,
+    projectKeys: Array.isArray(r.projectKeys)
+      ? r.projectKeys.filter((k): k is string => typeof k === 'string')
+      : DEFAULT_REPORT_PREFS.projectKeys,
+    dateField:
+      r.dateField === 'created' || r.dateField === 'resolved' || r.dateField === 'updated'
+        ? r.dateField
+        : DEFAULT_REPORT_PREFS.dateField,
+    periodMode:
+      r.periodMode === 'range' || r.periodMode === 'all' || r.periodMode === 'month'
+        ? r.periodMode
+        : DEFAULT_REPORT_PREFS.periodMode,
+  };
+}
+
+/** 일부만 넘겨도 된다 — 나머지는 저장본 유지 */
+export function saveReportPrefs(patch: Partial<JiraReportPrefs>): JiraReportPrefs {
+  writeUserJson(FILE, { ...read(), report: { ...getReportPrefs(), ...patch } });
+  return getReportPrefs();
+}
 
 /**
  * 입력에서 이슈 키를 뽑는다 — 키 직접 입력·이슈 주소·보드 주소 모두 받는다.

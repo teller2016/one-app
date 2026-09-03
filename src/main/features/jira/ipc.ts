@@ -14,6 +14,7 @@ import {
   transitionIssue,
   validateAddedTicket,
 } from './jira';
+import { registerJiraReportIpc } from './report';
 import { listWorkAccounts, prepareJiraWork } from './work';
 
 /**
@@ -21,6 +22,9 @@ import { listWorkAccounts, prepareJiraWork } from './work';
  * 전부 `handleShared` — 데스크톱과 MO(폰)가 같은 핸들러를 쓴다 (순수 REST 호출이라 폰에서도 안전).
  */
 export function registerJiraIpc() {
+  // 티켓 보고(프로젝트·기간 조회·복사) — 단독 배포판이 같은 함수를 직접 부르므로 따로 둔다
+  registerJiraReportIpc();
+
   // force=true 는 수동 새로고침·전환 직후 — TTL 캐시를 우회한다
   handleShared('jira:list', (force?: boolean) => fetchMyIssues(force === true));
   // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)

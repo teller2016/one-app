@@ -166,6 +166,10 @@
   --sidebar-w: 220px;
   // 상단 타이틀바(프로스트 탑바) 높이 — .main·.sidebar 상단 패딩이 이 값을 따른다
   --titlebar-h: 44px;
+  // 폼 라벨 열 — `.form-row` 의 라벨 최소폭과 라벨↔입력 간격.
+  // `.form-hint` 가 입력칸 아래로 들여쓸 때 이 값을 더해 쓴다(매직넘버 금지).
+  --form-label-w: 72px;
+  --form-gap: 12px;
   // macOS 신호등(hiddenInset) 예약 폭 — 탑바 컨트롤은 이 오른쪽부터 시작한다.
   // 신호등 3개(x 20 부터 ~72)에 여백을 더한 값으로, 사이드바를 접어도 침범하지 않는다.
   --titlebar-safe: 84px;
@@ -622,7 +626,7 @@ body {
 .form-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--form-gap);
   margin-bottom: 14px;
 
   &--col {
@@ -634,7 +638,7 @@ body {
   &__label {
     @include type-body;
     color: var(--text-2);
-    min-width: 72px; // 라벨 열 정렬용 최소폭
+    min-width: var(--form-label-w); // 라벨 열 정렬용 최소폭
 
     code {
       color: var(--text);
@@ -658,6 +662,17 @@ body {
   align-items: center;
   gap: 10px;
   margin-top: 16px;
+}
+
+/// 입력칸에 딸린 설명 — `.form-row` **바로 아래**에 두고 `.hint` 와 함께 쓴다.
+/// 라벨 열만큼 들여써서 어느 입력의 설명인지 눈에 보이게 하고, 위로 붙여 그 입력과 묶는다.
+///
+/// ⚠️ 그룹 첫머리 설명(`.settings__group-desc`)과 섞지 말 것 — 그쪽은 위 여백이 0 이라
+/// 입력 아래에 쓰면 입력에 딱 달라붙고, 다음 행과의 간격도 사라진다(2026-09-03 사용자 지적).
+.form-hint {
+  // 위 .form-row 의 margin-bottom(14px)을 일부 상쇄해 설명이 그 입력에 붙어 보이게 한다
+  margin: -8px 0 14px;
+  padding-left: calc(var(--form-label-w) + var(--form-gap));
 }
 
 .input {

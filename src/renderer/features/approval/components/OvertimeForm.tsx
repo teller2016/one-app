@@ -11,6 +11,7 @@ import { errMsg } from '../../../lib/errMsg';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import { defaultEndTime, hoursTotal, today } from '../lib/calc';
+import { NO_DEPT_HINT, useApprovalDept } from '../lib/useApprovalDept';
 import type { OvertimeSubmitResult } from '../../../../shared/types';
 
 /**
@@ -35,6 +36,8 @@ export function OvertimeForm({
   const [step, setStep] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState<OvertimeSubmitResult | null>(null);
+  // 근무자 표의 소속 칸 — 비어 있으면 main 이 작성을 막으므로 미리 알린다
+  const dept = useApprovalDept();
 
   // 마지막 작성 내용 불러오기 + 진행 단계 구독
   useEffect(() => {
@@ -93,6 +96,7 @@ export function OvertimeForm({
   return (
     <div className="approval-form">
       {error && <Banner variant="danger">{error}</Banner>}
+      {!dept && <Banner variant="warning">{NO_DEPT_HINT}</Banner>}
 
       <FormRow label="연장근무일">
         <DatePicker value={date} onChange={setDate} disabled={busy} />

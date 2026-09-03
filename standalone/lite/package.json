@@ -1,0 +1,37 @@
+{
+  "name": "one-app-lite",
+  "productName": "OneAppLite",
+  "version": "2.0.0",
+  "description": "결재 도우미(야근·휴가·지출결의서) + Jira 티켓 보고 — One App 단독 배포판 (Windows·macOS)",
+  "main": ".vite/build/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "make:win": "electron-forge make --platform=win32 --arch=x64",
+    "make:mac": "electron-forge make --platform=darwin",
+    "icon": "node scripts/make-icon.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": {
+    "name": "teller2016"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "@electron-forge/plugin-vite": "^7.11.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^4.7.0",
+    "electron": "43.4.1",
+    "sass-embedded": "^1.102.0",
+    "typescript": "^5.6.3",
+    "vite": "^7.3.6"
+  }
+}

@@ -84,6 +84,11 @@ export type AppSettingsView = {
   hasGiteaToken: boolean; // Gitea 토큰 저장 여부 (비공개 저장소용, 선택)
   notionRootUrl: string; // 노션 투입시간 루트 페이지 URL (일정 노션 기록용, 빈 값이면 비활성)
   hasNotionToken: boolean; // 노션 개인 액세스 토큰 저장 여부
+  /**
+   * 결재 근무자 표의 '소속' 칸 문구 (예: 플랫폼서비스사업부문 FE). 빈 값이면 앱 기본값.
+   * 단독 배포판(standalone/lite)을 다른 챕터 동료가 쓸 때 바꿔야 하는 값이다.
+   */
+  approvalDept: string;
   theme: ThemePref; // 테마 (기본 system)
   /**
    * 키체인(safeStorage) 암호화가 가능한가 — false 면 위 비밀들이 **평문 base64** 로 저장된다.
@@ -95,6 +100,7 @@ export type AppSettingsView = {
 export type SaveSettingsInput = {
   bizboxId: string;
   password?: string; // 빈 값이면 기존 비밀번호 유지
+  approvalDept?: string; // 미지정이면 기존 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   jiraEmail?: string; // 미지정이면 기존 유지
@@ -255,6 +261,64 @@ export type JiraActivityResult = {
   error?: string;
   /** 일부 조회 갈래만 실패했을 때 안내 (본 목록은 유효 — 부분 성공) */
   warnings?: string[];
+};
+
+// ── Jira 티켓 보고 (프로젝트·기간으로 모아 한 번에 복사) ──
+
+/** 기간을 어느 날짜 필드로 자를지 — 생성일 · 해결일 · 갱신일 */
+export type JiraReportDateField = "created" | "resolved" | "updated";
+
+/** 기간 지정 방식 — 월 하나 · 시작~끝 직접 · 기간 없음 */
+export type JiraReportPeriod =
+  | { mode: "month"; month: string } // "YYYY-MM"
+  | { mode: "range"; start: string; end: string } // "YYYY-MM-DD", 양끝 포함
+  | { mode: "all" };
+
+/** 조회 조건 — main 이 JQL 로 바꿔 검색한다 (`shared/jira-report.ts` 의 buildReportJql) */
+export type JiraReportQuery = {
+  projectKeys: string[];
+  period: JiraReportPeriod;
+  dateField: JiraReportDateField;
+  /** 고급 — 값이 있으면 위 조건을 무시하고 이 JQL 을 그대로 보낸다 */
+  jql?: string;
+};
+
+/** 보고 목록의 티켓 한 줄 — 내 이슈 목록 형태 + 담당자·레이블·날짜 */
+export type JiraReportIssue = JiraIssue & {
+  assignee: string | null; // 표시명 (미배정이면 null)
+  reporter: string | null;
+  labels: string[];
+  createdAt: string; // ISO
+  resolvedAt: string | null; // ISO (미해결이면 null)
+};
+
+export type JiraReportResult = {
+  ok: boolean;
+  configured: boolean; // 주소·이메일·토큰이 모두 설정됐는지
+  issues?: JiraReportIssue[];
+  jql?: string; // 실제로 보낸 JQL (화면 확인·복사용)
+  /** 조회 상한에 걸려 뒤가 잘렸다 — 기간을 좁히라고 안내한다 */
+  truncated?: boolean;
+  error?: string;
+};
+
+/** 프로젝트 선택지 — 키·이름만 */
+export type JiraProjectOption = { key: string; name: string };
+
+export type JiraProjectsResult = {
+  ok: boolean;
+  configured: boolean;
+  projects?: JiraProjectOption[];
+  error?: string;
+};
+
+/** 보고 화면의 저장되는 선택 — 달마다 같은 조건을 쓰므로 userData 에 남긴다 */
+export type JiraReportPrefs = {
+  /** 복사 한 줄 템플릿 — `{key}` `{summary}` 같은 자리표시자 (`\t` `\n` 이스케이프 허용) */
+  template: string;
+  projectKeys: string[];
+  dateField: JiraReportDateField;
+  periodMode: JiraReportPeriod["mode"];
 };
 
 // ── Jira 작업 시작 (티켓 맥락을 femc 세션으로 넘기기) ──
@@ -941,9 +1005,7 @@ export type VacationStatus = {
   used: string; // 사용일수
   rest: string; // 잔여연차
   progress: string; // 결재 진행 연차
-  name: string; // 신청자 이름
-  chapter: string; // 챕터 (예: FE)
-  division: string; // 부문 (예: 플랫폼서비스사업부문)
+  name: string; // 신청자 이름 (소속은 환경설정 '결재 소속' 에서 온다)
 };
 
 // 출퇴근 리마인더 — 요일별로 출근/퇴근 알림 시각을 따로 설정

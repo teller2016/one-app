@@ -161,7 +161,7 @@ Apple 계열 룩앤필 — 파치먼트 캔버스, 흰 카드, **액션 블루 �
 | [`DESIGN.md`](DESIGN.md) | 디자인 시스템 (토큰 정본은 `_base.scss`) |
 | [`ROADMAP.md`](ROADMAP.md) | 구현 완료 목록과 남은 로드맵 |
 | [`.claude/rules/`](.claude/rules) | 기능별 상세 규칙·함정·실측 기록 |
-| [`standalone/overtime/`](standalone/overtime) | 동료 배포용 단독 앱 (야근 결재·지출결의서) |
+| [`standalone/lite/`](standalone/lite) | 동료 배포용 단독 앱 One App Lite (결재 3종 + Jira 티켓 보고 — 본체 코드를 직접 import) |
 
 ---
 

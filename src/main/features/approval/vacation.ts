@@ -17,9 +17,10 @@ import {
   waitInPage,
   type Page,
 } from '../../lib/browser';
-import { VACATION_CONFIG, WORKER_DEPT } from './config';
+import { VACATION_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+import { getWorkerDept } from './store';
 import { sleep } from '../../lib/util';
 // 표기 규칙은 렌더러 폼과 공유한다 (문자열이 어긋나면 미리보기와 실제 제목이 달라진다)
 import {
@@ -39,15 +40,11 @@ let running = false;
 /** 연차 현황 조회 동시 실행 방지 — 겹치면 뒤 openPage 가 앞 조회의 파티션 쿠키를 비운다 */
 let statusRunning = false;
 
-/** 제목에 쓰는 부문 문구 — 근무자 소속("플랫폼서비스사업부문 FE")의 앞부분 */
-const WORKER_DIVISION = WORKER_DEPT.split(/\s+/)[0];
 
-/** 신청자 표시("[(주)포비즈코리아/FE] 정수범") → 이름·챕터 */
-export function parseApplicant(text: string): { name: string; chapter: string } {
+/** 신청자 표시("[(주)포비즈코리아/FE] 정수범") → 이름. 소속은 환경설정 '결재 소속'에서 온다 */
+export function parseApplicant(text: string): { name: string } {
   const m = text.match(/\[([^\]]*)\]\s*(.+)$/);
-  if (!m) return { name: text.trim(), chapter: '' };
-  const chapter = (m[1].split('/').pop() ?? '').trim();
-  return { name: m[2].trim(), chapter };
+  return { name: (m ? m[2] : text).trim() };
 }
 
 /**
@@ -102,7 +99,7 @@ async function readApplicant(page: Page): Promise<string> {
 /** 연차 현황 읽기 (총·사용·잔여·결재중) */
 async function readStatus(
   page: Page,
-): Promise<Omit<VacationStatus, 'name' | 'chapter' | 'division'>> {
+): Promise<Omit<VacationStatus, 'name'>> {
   const sel = VACATION_CONFIG.selectors;
   return evalInPage(
     page,
@@ -621,6 +618,7 @@ export async function runVacationDraft(
       formatVacationTitle({
         attDivName: input.attDivName,
         name,
+        dept: getWorkerDept(), // 환경설정 '결재 소속' 그대로
         fromDate: input.fromDate,
         toDate: input.toDate,
         useStartTime: input.useStartTime,
@@ -738,8 +736,8 @@ export async function fetchVacationStatus(): Promise<VacationStatus> {
     await gotoAsUser(page, VACATION_CONFIG.formUrl);
     await waitFormReady(page);
     const status = await readStatus(page);
-    const { name, chapter } = parseApplicant(await readApplicant(page));
-    return { ...status, name, chapter, division: WORKER_DIVISION };
+    const { name } = parseApplicant(await readApplicant(page));
+    return { ...status, name };
   } finally {
     statusRunning = false;
     closePage(page);

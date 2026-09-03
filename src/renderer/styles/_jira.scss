@@ -854,3 +854,314 @@
     color: var(--text);
   }
 }
+
+// ===== 티켓 보고 — 프로젝트·기간 조회 → 필터 → 템플릿 복사 (JiraReportPanel) =====
+// 단독 배포판(standalone/lite)도 이 파일을 그대로 @use 한다 — 셸 전용 규칙을 여기 섞지 말 것.
+.jira-report {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  // 조회 조건 카드 — 프로젝트·기간·기준·[조회] 한 줄 + JQL 미리보기 줄
+  &__query {
+    @include card-surface;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+
+    &--sub {
+      gap: 8px 12px;
+    }
+  }
+
+  // 라벨 + 컨트롤 묶음
+  &__field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+
+    // 프로젝트 셀렉트는 남는 폭을 차지한다 (이름이 길다)
+    &--grow {
+      flex: 1 1 260px;
+
+      .picker {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+  }
+
+  &__label {
+    @include type-caption;
+    flex-shrink: 0;
+  }
+
+  // 월 스테퍼 — [◀] 2026년 8월 [▶]
+  &__month {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  &__month-label {
+    min-width: 96px;
+    text-align: center;
+    @include type-body;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 기간 직접 — 시작 ~ 끝
+  &__range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__tilde {
+    color: var(--text-3);
+  }
+
+  &__run {
+    margin-left: auto;
+  }
+
+  // JQL 미리보기 — 실제로 보낼 문자열을 그대로 보여준다 (길면 잘라 두고 title 로 전문)
+  &__jql {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+    @include type-small;
+    color: var(--text-3);
+
+    code {
+      font-family: var(--font-mono);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &--warn {
+      color: var(--warning);
+    }
+  }
+
+  // 결과 필터 줄 — 상태·담당자·레이블·유형 MultiSelect + 검색 ······ 정렬 · 개수
+  &__tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  &__search {
+    width: 180px;
+    flex: none;
+  }
+
+  &__tools-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+
+  &__count {
+    @include type-small;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  // 복사 줄 — [프리셋] [템플릿 입력] (i) ······ [N건 복사]
+  &__copybar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__preset {
+    flex: none;
+    width: 200px;
+  }
+
+  &__template {
+    flex: 1;
+    min-width: 160px;
+    font-family: var(--font-mono);
+  }
+
+  // 자리표시자 목록 토글 — 켜져 있으면 액센트로 눌린 상태를 드러낸다
+  &__help--on {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  // 펼친 자리표시자 목록 — 칩을 누르면 템플릿에 삽입된다
+  &__vars {
+    @include card-surface;
+    padding: 10px 12px 12px;
+  }
+
+  &__vars-hint {
+    margin: 0 0 8px;
+    @include type-small;
+    color: var(--text-3);
+
+    code {
+      font-family: var(--font-mono);
+      color: var(--text-2);
+    }
+  }
+
+  &__vars-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  // 자리표시자 칩 — [{key}] 티켓 번호 · 예시값
+  &__var {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    max-width: 100%;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    background: var(--surface-1);
+    color: var(--text);
+    font-family: inherit;
+    cursor: pointer;
+    transition:
+      border-color var(--dur-1) var(--ease),
+      background var(--dur-1) var(--ease);
+    @include focus-ring;
+
+    &:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      @include type-small;
+      color: var(--accent);
+    }
+  }
+
+  &__var-label {
+    @include type-small;
+    color: var(--text-2);
+  }
+
+  // 첫 티켓의 실제 값 — 무엇이 찍히는지 바로 보이게 (길면 자른다)
+  &__var-sample {
+    @include type-caption;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-3);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 템플릿이 실제로 어떻게 찍히는지 — 첫 줄만
+  &__preview {
+    margin: -4px 0 0;
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 결과 표 — 카드 안에 grid 행 (열: 체크 · 번호 · 제목 · 유형 · 상태 · 담당자 · 날짜)
+  &__table {
+    @include card-surface;
+    overflow: hidden;
+  }
+
+  &__trow {
+    display: grid;
+    grid-template-columns: 28px 100px minmax(200px, 1fr) 84px 112px 96px 92px;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    color: var(--text);
+
+    + .jira-report__trow {
+      border-top: 1px solid var(--border);
+    }
+
+    &--head {
+      @include type-caption;
+      background: var(--surface-2);
+    }
+
+    // 선택된 행 — 액센트 소프트 틴트
+    &--on {
+      background: var(--accent-soft);
+    }
+  }
+
+  &__cell {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &--check {
+      display: inline-flex;
+
+      .checkbox {
+        gap: 0;
+      }
+    }
+
+    // 제목 + 레이블 칩
+    &--title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .jira__title {
+        flex: 0 1 auto;
+      }
+    }
+
+    &--dim {
+      @include type-small;
+      color: var(--text-2);
+    }
+
+    &--date {
+      @include type-small;
+      color: var(--text-3);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  // 레이블 칩 — 정보형 작은 필
+  &__chip {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border-radius: var(--r-full);
+    background: var(--overlay-track);
+    @include type-caption;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-2);
+  }
+}

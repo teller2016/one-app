@@ -44,6 +44,7 @@ export function SettingsSection() {
   const [bizboxId, setBizboxId] = useState('');
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
+  const [approvalDept, setApprovalDept] = useState('');
   const [notifyDeploy, setNotifyDeploy] = useState(true);
   const [autostart, setAutostart] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
@@ -85,6 +86,7 @@ export function SettingsSection() {
       .then((s) => {
         setBizboxId(s.bizboxId);
         setHasPassword(s.hasPassword);
+        setApprovalDept(s.approvalDept);
         setNotifyDeploy(s.notifyDeploy);
         setJiraUrl(s.jiraUrl);
         setJiraEmail(s.jiraEmail);
@@ -194,6 +196,7 @@ export function SettingsSection() {
         const res = await window.oneApp.settings.set({
           bizboxId,
           password,
+          approvalDept,
           notifyDeploy,
           jiraUrl,
           jiraEmail,
@@ -311,9 +314,24 @@ export function SettingsSection() {
           />
         </FormRow>
 
-        <p className="note">
-          비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
-          (평문 저장 아님)
+        {/* 입력칸에 딸린 설명은 공용 `.form-hint` — 라벨 열만큼 들여써 그 입력과 묶인다 */}
+        <p className="hint form-hint">
+          비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다. (평문 저장 아님)
+        </p>
+
+        <FormRow label="결재 소속">
+          <Input
+            type="text"
+            value={approvalDept}
+            onChange={(e) => setApprovalDept(e.target.value)}
+            placeholder="예: FE챕터 플랫폼기술부문"
+            disabled={loading}
+          />
+        </FormRow>
+        <p className="hint form-hint">
+          야근 결재 근무자 표의 &apos;소속&apos; 칸과 휴가신청서 제목에 <b>그대로</b>{' '}
+          들어갑니다(제목에서는 공백이 밑줄로 바뀝니다). 비워 두면 야근·휴가 결재를 시작할 수
+          없습니다.
         </p>
       </Collapsible>
 
@@ -405,7 +423,7 @@ export function SettingsSection() {
             type="text"
             value={jiraUrl}
             onChange={(e) => setJiraUrl(e.target.value)}
-            placeholder="예: https://myteam.atlassian.net"
+            placeholder="예: https://forbizkorea.atlassian.net"
             disabled={loading}
           />
         </FormRow>

@@ -59,6 +59,11 @@ npm start -- -- --remote-debugging-port=9333 > <스크래치패드>/dev.log 2>&1
 pkill -f "electron-forge start"; pkill -f "one-app/node_modules/electron/dist"
 lsof -nP -iTCP:9333 -sTCP:LISTEN     # ← 반드시 비어 있어야 한다
 ```
+⚠️ **단독 배포판(`standalone/lite`)이 함께 떠 있으면 패턴이 겹친다** — 경로가
+`coding/one-app/standalone/lite/node_modules/...` 라서 위 패턴에 걸려 같이 죽는다. 본체만 내릴 때는
+`pkill -f "coding/one-app/node_modules/electron/dist"`(중간 경로까지 포함), 단독판만 내릴 때는
+`pkill -f "standalone/lite/node_modules/electron/dist"` 를 쓴다. 단독판 디버깅 포트는 9334 로 띄운다.
+
 `electron-forge start` 만 죽이면 **Electron 자식이 고아로 살아남아 디버깅 포트를 쥐고 있다.** 그러면 새로 띄운 인스턴스가 포트를 못 잡고 `puppeteer.connect` 가 **옛 코드를 돌던 앱에 조용히 붙어**, main 수정이 반영 안 된 결과를 보고 "고쳐도 안 고쳐진다"고 오진하게 된다.
 `node_modules/electron/dist` 패턴으로 죽여야 `/Applications/One App.app`(사용자 설치본)은 안 건드린다.
 

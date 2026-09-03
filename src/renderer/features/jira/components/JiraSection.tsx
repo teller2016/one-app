@@ -25,6 +25,7 @@ import { useCopy } from '../../../lib/useCopy';
 import { isDone, statusBadgeVariant } from '../lib/issue';
 import { AddTicketModal } from './AddTicketModal';
 import { JiraDetailPanel } from './JiraDetailPanel';
+import { JiraReportPanel } from './JiraReportPanel';
 import { StartWorkModal } from './StartWorkModal';
 import { WeekActivityPanel } from './WeekActivityPanel';
 
@@ -32,10 +33,11 @@ import { WeekActivityPanel } from './WeekActivityPanel';
 const KEY_RE = /^[A-Z][A-Z0-9]*-\d+/;
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
-const VIEW_KEY = 'jira:view'; // 마지막 선택 화면 (내 이슈 / 주간)
+const VIEW_KEY = 'jira:view'; // 마지막 선택 화면 (내 이슈 / 주간 / 보고)
 
-/** 섹션이 보여줄 화면 — 내게 할당된 목록 vs 한 주 동안 내가 손댄 티켓 */
-type View = 'mine' | 'week';
+/** 섹션이 보여줄 화면 — 내게 할당된 목록 · 한 주 동안 내가 손댄 티켓 · 프로젝트별 보고 목록 */
+type View = 'mine' | 'week' | 'report';
+const isView = (v: string | null): v is View => v === 'mine' || v === 'week' || v === 'report';
 
 /**
  * 타입 이름 → 표시 정보 (커스텀 타입 대응을 위해 키워드로 판별).
@@ -272,9 +274,10 @@ const IssueRow = memo(function IssueRow({
 
 /** Jira 내 이슈 — 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹. */
 export function JiraSection() {
-  const [view, setView] = useState<View>(() =>
-    localStorage.getItem(VIEW_KEY) === 'week' ? 'week' : 'mine',
-  );
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem(VIEW_KEY);
+    return isView(saved) ? saved : 'mine';
+  });
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -528,10 +531,12 @@ export function JiraSection() {
           sub={
             view === 'week'
               ? '한 주 동안 내가 손댄 티켓입니다. 상태 전환·담당·작업시간 기록을 기준으로 모읍니다.'
-              : '내게 할당된 미해결 이슈입니다. 제목을 클릭하면 여기서 바로 볼 수 있어요.'
+              : view === 'report'
+                ? '프로젝트·기간으로 티켓을 모아 보고용 목록을 만듭니다. 필터한 뒤 원하는 형식으로 복사하세요.'
+                : '내게 할당된 미해결 이슈입니다. 제목을 클릭하면 여기서 바로 볼 수 있어요.'
           }
         />
-        {/* 티켓 추가·새로고침은 내 이슈 화면 전용 — 주간 화면은 자체 툴바를 갖는다 */}
+        {/* 티켓 추가·새로고침은 내 이슈 화면 전용 — 주간·보고 화면은 자체 툴바를 갖는다 */}
         {view === 'mine' && (
           <div className="jira__head-actions">
             {/* 담당으로 안 날아온 티켓을 주소로 끌어온다 */}
@@ -549,12 +554,13 @@ export function JiraSection() {
         )}
       </div>
 
-      {/* 화면 전환 — 내게 할당된 목록 vs 한 주 동안 내가 손댄 티켓 */}
+      {/* 화면 전환 — 내게 할당된 목록 · 한 주 동안 내가 손댄 티켓 · 프로젝트별 보고 */}
       <div className="jira__views">
         <Segment<View>
           options={[
             { value: 'mine', label: '내 이슈' },
             { value: 'week', label: '주간' },
+            { value: 'report', label: '보고' },
           ]}
           value={view}
           onChange={changeView}
@@ -562,6 +568,7 @@ export function JiraSection() {
       </div>
 
       {view === 'week' && <WeekActivityPanel onOpenDetail={openDetail} />}
+      {view === 'report' && <JiraReportPanel onOpenDetail={openDetail} />}
 
       {view === 'mine' && !configured && (
         <Banner variant="info">
@@ -590,8 +597,8 @@ export function JiraSection() {
         </div>
       )}
 
-      {/* 내 이슈 목록 — 주간 화면에서는 그리지 않는다(위의 WeekActivityPanel 이 본문) */}
-      {view === 'week' ? null : loading && issues.length === 0 ? (
+      {/* 내 이슈 목록 — 주간·보고 화면에서는 그리지 않는다(위의 패널이 본문) */}
+      {view !== 'mine' ? null : loading && issues.length === 0 ? (
         <p className="hint">불러오는 중...</p>
       ) : visible.length === 0 && configured && !error ? (
         <EmptyState icon="check" message="미해결 이슈가 없습니다. 깔끔하네요!" />

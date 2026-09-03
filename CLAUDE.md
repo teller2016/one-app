@@ -37,8 +37,8 @@ src/
 ├── mobile-app/               # 📱 MO 앱 셸 (Vite 엔트리 mobile_app_window, 렌더러 재사용)
 └── shared/                   # 🔗 프로세스 공용 — types.ts · terminal-protocol.ts · mo-protocol.ts
 
-standalone/overtime/          # 📦 동료 배포용 단독 앱 (야근 결재·지출결의서) — 본체 approval 의 복사본.
-                              #    셀렉터·판정 로직을 고치면 이쪽도 함께 봐야 한다 (그 README 참고)
+standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" (결재 3종 + Jira 티켓 보고) — 본체 코드를 복사하지
+                              #    않고 `@one/*` alias 로 직접 import 해 번들한다 (그 README 참고)
 ```
 
 **기능 목록**
@@ -56,6 +56,10 @@ standalone/overtime/          # 📦 동료 배포용 단독 앱 (야근 결재�
 - **⚠️ 그룹웨어 접근은 공용 세션(`main/features/groupware/session.ts`)을 쓸 것** — 같은 계정 동시 로그인은 서버가 거부한다.
 - **⚠️ 보존할 데이터를 localStorage 에 저장하지 말 것** — 강제 종료 시 flush 안 됨(2026-07-29 실측). IPC 로 userData JSON 에 저장한다.
 - **⚠️ 개발 인스턴스(`npm start`)와 빌드 앱은 동시에 띄우는 것이 기본** — **설정(userData)은 공유**하고 포트·tmux 소켓·창 상태만 가른다(`main/lib/devInstance.ts`). `app.setName`/`setPath('userData')` 로 프로필을 가르면 **safeStorage 키체인이 달라져 저장된 계정이 전부 날아간다.** 상세는 `.claude/rules/build-packaging.md`.
+- **⚠️ 단독 배포판(`standalone/lite`)이 본체 코드를 그대로 import 한다** — 결재·Jira 보고·환경설정
+  저장·공용 컴포넌트를 고치면 그쪽도 함께 검사한다: `cd standalone/lite && npm run typecheck`
+  (**루트 `npx tsc --noEmit` 은 standalone 을 보지 않는다**). 새 `window.oneApp` 채널을 쓰게 되면
+  그쪽 `preload.ts`·`types/global.d.ts`(부분집합)도 늘려야 한다. 상세는 `.claude/rules/standalone-lite.md`.
 - **⚠️ "테스트해봐" 는 개발 인스턴스(`npm start`)에서 확인하라는 뜻이다** — 렌더러 변경은 HMR 로 바로 보이고, main/preload 변경은 `npm start` 를 재실행한다. **빌드(`/build`·`npm run package`·`npm run make`)는 사용자가 명시적으로 요청했을 때만** 한다(빌드는 `/Applications` 설치본을 교체하며, 서명이 빠지면 저장된 계정이 날아간다).
 
 ## 컨벤션
@@ -85,6 +89,7 @@ standalone/overtime/          # 📦 동료 배포용 단독 앱 (야근 결재�
 | 파일 | 적용 경로 | 내용 |
 |------|-----------|------|
 | `main-process.md` | `src/main/**` · `src/preload/**` · `src/shared/**` | 공통 유틸·IPC 등록·`handleShared`(MO 화이트리스트) |
+| `standalone-lite.md` | `standalone/**` | 단독 배포판 — `@one` alias·preload 부분집합·아이콘·pkill 패턴 |
 | `renderer-ui.md` | `src/renderer/**` · `src/mobile-app/**` (ts·tsx) | 공용 컴포넌트 목록·피커 팝오버·공통 훅 |
 | `styles.md` | `**/*.scss` · `DESIGN.md` | SCSS 작성법·공통 클래스·비브런시 셸·폰 스타일 |
 | `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |

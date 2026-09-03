@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    // `@one/*` = One App 본체 소스. tsc 가 import 를 따라 본체 파일까지 함께 검사한다 —
+    // 본체 컴포넌트가 이 앱의 window.oneApp(부분집합)에 없는 채널을 부르면 여기서 걸린다.
+    "paths": {
+      "@one/*": ["../../src/*"]
+    },
+    "outDir": "dist",
+    "resolveJsonModule": true
+  },
+  "include": ["src", "forge.config.ts", "vite.*.config.ts", "forge.env.d.ts"]
+}

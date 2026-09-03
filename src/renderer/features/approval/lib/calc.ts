@@ -16,6 +16,8 @@ import {
 
 export {
   APPLICANT_PLACEHOLDER,
+  DEPT_PLACEHOLDER,
+  hasTitlePlaceholder,
   isSubstituteKind,
   isTimedKind,
   titleTag,

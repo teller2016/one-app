@@ -23,6 +23,7 @@ interface StoredSettings {
   giteaTokenEnc?: string; // safeStorage 로 암호화된 Gitea 토큰 (선택)
   notionRootUrl?: string; // 노션 투입시간 루트 페이지 URL (일정 노션 기록)
   notionTokenEnc?: string; // safeStorage 로 암호화된 노션 개인 액세스 토큰
+  approvalDept?: string; // 결재 근무자 표의 '소속' 문구 (빈 값이면 approval/config 의 기본값)
   theme?: ThemePref; // 테마 (기본 system) — 창 배경색 결정에 main 도 읽음
 }
 
@@ -45,6 +46,7 @@ export function getSettingsForRenderer(): AppSettingsView {
     hasGiteaToken: !!s.giteaTokenEnc,
     notionRootUrl: s.notionRootUrl ?? '',
     hasNotionToken: !!s.notionTokenEnc,
+    approvalDept: s.approvalDept ?? '',
     theme: s.theme ?? 'system',
     secureStorage: isSecureStorageAvailable(),
   };
@@ -69,6 +71,10 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   // 비밀번호는 입력이 있을 때만 갱신 (빈 값이면 기존 유지)
   if (input.password && input.password.length > 0) {
     next.bizboxPasswordEnc = encryptSecret(input.password);
+  }
+  // 결재 소속은 명시적으로 넘어온 경우만 갱신 — 빈 문자열은 '기본값으로 되돌림'
+  if (typeof input.approvalDept === 'string') {
+    next.approvalDept = input.approvalDept.trim();
   }
   // 알림 토글은 명시적으로 넘어온 경우만 갱신
   if (typeof input.notifyDeploy === 'boolean') {
@@ -145,4 +151,12 @@ export function getCredentials(): { id: string; password: string } | null {
   const password = decryptSecret(s.bizboxPasswordEnc);
   if (password == null) return null;
   return { id: s.bizboxId, password };
+}
+
+/**
+ * 결재 근무자 표의 '소속' 문구 설정값 — 비어 있으면 빈 문자열(호출부가 기본값으로 대체한다).
+ * 단독 배포판을 다른 챕터 동료가 쓸 때 바꾸는 값이라 approval/store 의 `getWorkerDept` 가 읽는다.
+ */
+export function getApprovalDeptSetting(): string {
+  return (readStored().approvalDept ?? '').trim();
 }

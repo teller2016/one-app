@@ -34,8 +34,18 @@ export const KIND_DAY_FACTOR: Record<string, number> = {
   시차_2시간: 0.25,
 };
 
-/** 신청자 정보를 아직 모를 때 제목 미리보기에 넣는 자리표시 */
+/** 신청자 이름을 아직 모를 때 제목 미리보기에 넣는 자리표시 */
 export const APPLICANT_PLACEHOLDER = "성명";
+
+/** 소속(챕터·부문)을 아직 모를 때 제목 미리보기에 넣는 자리표시 */
+export const DEPT_PLACEHOLDER = "소속";
+
+/**
+ * 제목에 자리표시가 남아 있는가 — 남아 있으면 사용자가 고친 것으로 치지 않고 main 이 다시 만든다.
+ * (자리표시가 그대로 상신되면 곤란하다)
+ */
+export const hasTitlePlaceholder = (title: string): boolean =>
+  title.includes(APPLICANT_PLACEHOLDER) || title.includes(DEPT_PLACEHOLDER);
 
 /** 제목 앞 태그 — 표기 표준: 시차_1시간·시차_2시간 → 시차, 오전·오후반차 → 반차 */
 export const titleTag = (attDivName: string) =>
@@ -60,21 +70,40 @@ const shortDayText = (d: string) => {
 };
 
 /**
- * 휴가신청서 제목 — 회사의 '휴가 신청서 작성 표기 표준'.
- * 제목에 성명·사용 날짜를 적고, 시차·반차는 정확한 시간대를, 대체휴가는 휴일근무일을 명시한다.
+ * 소속 문구 — 환경설정 '결재 소속' 값을 **그대로** 쓰고 공백만 밑줄로 바꾼다.
+ * (`FE챕터 플랫폼기술부문` → `FE챕터_플랫폼기술부문`). 비어 있으면 자리표시.
+ *
+ * ⚠️ 값을 쪼개 조립하지 말 것 — 예전엔 그룹웨어에서 읽은 챕터 + 설정값의 첫 단어를
+ * 이어 붙였는데, 사용자가 설정에 `FE챕터 플랫폼기술부문` 을 넣자 챕터가 두 번 들어가
+ * `정수범_FE챕터_FE챕터` 가 됐다(2026-09-03 사용자 신고). 소속은 설정 한 곳에서만 온다.
+ */
+const deptText = (dept?: string): string => {
+  const d = (dept ?? "").trim().replace(/\s+/g, "_");
+  return d || DEPT_PLACEHOLDER;
+};
+
+/**
+ * 휴가신청서 제목 — `[종류] 성명_소속 (날짜·시간)` (2026-09-03 사용자 지정 형식).
+ * 이름과 소속을 밑줄로 잇고, 괄호에 사용 날짜를 넣는다. 시차·반차는 정확한 시간대를,
+ * 대체휴가는 근거 휴일근무일을 괄호 안에 함께 명시한다.
  * ```
- * [연차]     정수범_8월 12일            (여러 날이면 8월 12일~8월 13일)
- * [반차]     정수범_8월 12일 (09:00~14:00)
- * [대체휴가] 정수범_8월 12일 (휴일근무일: 08/09)
+ * [연차]     정수범_FE챕터_플랫폼기술부문 (9월 1일)
+ * [연차]     정수범_FE챕터_플랫폼기술부문 (9월 1일~9월 2일)
+ * [반차]     정수범_FE챕터_플랫폼기술부문 (9월 1일 09:00~14:00)
+ * [시차]     정수범_FE챕터_플랫폼기술부문 (9월 1일 09:00~10:00)
+ * [대체휴가] 정수범_FE챕터_플랫폼기술부문 (9월 1일, 휴일근무일: 08/09)
  * ```
- * 신청자 이름은 그룹웨어 화면에서만 알 수 있다 — 모를 때(렌더러 미리보기)는 자리표시를 넣어
- * 형태만 보여주고, 실제 제목은 main 이 이름을 읽어 다시 만든다.
+ * 이름은 그룹웨어 화면에서만 알 수 있고 소속은 환경설정의 '결재 소속'에서 온다 —
+ * 이름을 모를 때(조회 전 미리보기)는 자리표시를 넣어 형태만 보여주고, 실제 제목은
+ * main 이 이름을 읽어 다시 만든다.
  */
 export function vacationTitle(opts: {
   attDivName: string;
   fromDate: string;
   toDate: string;
   name?: string;
+  /** 소속 문구 — 환경설정 '결재 소속' 값 그대로 (예: `FE챕터 플랫폼기술부문`) */
+  dept?: string;
   useStartTime?: string;
   useEndTime?: string;
   holidayWorkDate?: string;
@@ -85,9 +114,10 @@ export function vacationTitle(opts: {
       : `${dayText(opts.fromDate)}~${dayText(opts.toDate)}`;
   const extra =
     isTimedKind(opts.attDivName) && opts.useStartTime && opts.useEndTime
-      ? ` (${opts.useStartTime}~${opts.useEndTime})`
+      ? ` ${opts.useStartTime}~${opts.useEndTime}`
       : isSubstituteKind(opts.attDivName) && opts.holidayWorkDate
-        ? ` (휴일근무일: ${shortDayText(opts.holidayWorkDate)})`
+        ? `, 휴일근무일: ${shortDayText(opts.holidayWorkDate)}`
         : "";
-  return `[${titleTag(opts.attDivName)}] ${opts.name || APPLICANT_PLACEHOLDER}_${period}${extra}`;
+  const who = `${opts.name || APPLICANT_PLACEHOLDER}_${deptText(opts.dept)}`;
+  return `[${titleTag(opts.attDivName)}] ${who} (${period}${extra})`;
 }

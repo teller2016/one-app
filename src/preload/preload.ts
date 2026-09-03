@@ -21,6 +21,8 @@ import type {
   Project,
   SaveProjectInput,
   ApplinkInput,
+  JiraReportPrefs,
+  JiraReportQuery,
   JiraWorkPrepareInput,
   MirrorMode,
   MailListQuery,
@@ -215,6 +217,16 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("jira:prepare-work", input),
     // 세션을 띄울 Claude 계정 후보 (Personal/Team — 로그인 이메일 포함)
     workAccounts: () => ipcRenderer.invoke("jira:work-accounts"),
+    // 티켓 보고 — 프로젝트·기간으로 티켓을 모아 복사한다 (단독 배포판도 같은 채널을 쓴다)
+    report: {
+      // 프로젝트 선택지 (force=true 는 새로고침 — 10분 캐시 우회)
+      projects: (force?: boolean) => ipcRenderer.invoke("jira:report:projects", force),
+      search: (query: JiraReportQuery) => ipcRenderer.invoke("jira:report:search", query),
+      // 마지막 선택(템플릿·프로젝트·기간 기준) — userData 에 남긴다
+      getPrefs: () => ipcRenderer.invoke("jira:report:prefs:get"),
+      savePrefs: (prefs: Partial<JiraReportPrefs>) =>
+        ipcRenderer.invoke("jira:report:prefs:set", prefs),
+    },
   },
   mirror: {
     // scrcpy 설치·실행 여부 + USB 기기 조회

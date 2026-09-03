@@ -44,4 +44,14 @@ export default defineConfig(
       globals: { ...globals.browser, ...globals.node },
     },
   },
+
+  // ── 단독 배포판(standalone/lite) — 본체 소스를 `@one/*` alias(tsconfig paths·vite alias)로
+  // 가져온다. import 플러그인의 node resolver 는 alias 를 모르므로 그 접두어만 미해결 검사에서 뺀다
+  // (실제 해석은 그쪽 `npm run typecheck` 가 보장한다). 나머지 규칙은 위 블록 그대로.
+  {
+    files: ['standalone/**/*.ts', 'standalone/**/*.tsx'],
+    rules: {
+      'import/no-unresolved': ['error', { ignore: ['^@one/'] }],
+    },
+  },
 );

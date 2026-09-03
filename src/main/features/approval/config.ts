@@ -13,9 +13,6 @@ export const GW_CONFIG = {
   loginUrlMark: 'egovLoginUsr',
 };
 
-/** 근무자 표·기안부서의 '소속' 칸 문구 (기안부서 select 값 "FE" 대신 전체 소속 표기) */
-export const WORKER_DEPT = '플랫폼서비스사업부문 FE';
-
 /**
  * 전자결재 상신함 — 결재 작성을 마친 뒤 "내가 올린 문서" 를 확인하러 가는 링크.
  * 작성과 달리 자동화하지 않고, 세션만 붙여 창을 그대로 사용자에게 넘긴다.

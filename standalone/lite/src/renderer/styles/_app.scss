@@ -1,0 +1,81 @@
+// 단독 앱 셸 — 제목바(제목·화면 전환·환경설정) · 본문 · 하단 안내 · 환경설정 화면
+// 결재 폼·티켓 보고 스타일은 본체 `_approval.scss`·`_jira.scss` 를 그대로 쓴다.
+@use '../../../../../src/renderer/styles/base' as *;
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  // 본체는 비브런시 재질 위에 .content 만 칠하지만, 이 앱은 창 전체가 콘텐츠라 셸이 그라운드를 칠한다
+  background: var(--bg);
+  color: var(--text);
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  &__head-icon {
+    display: inline-flex;
+    color: var(--accent);
+  }
+
+  &__title {
+    margin: 0;
+    @include type-title;
+    white-space: nowrap;
+  }
+
+  &__nav {
+    margin-left: 8px;
+  }
+
+  &__gap {
+    flex: 1;
+  }
+
+  // 환경설정 버튼 — 그 화면에 있는 동안 눌린 상태를 드러낸다.
+  // (세그먼트는 환경설정일 때 아무것도 선택하지 않으므로, 현재 위치를 알리는 표시가 여기뿐이다)
+  // ⚠️ 크기는 공용 `.icon-btn--bordered` 가 정한다 — 여기서 덮지 말 것.
+  &__gear--on {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+
+    &:hover:not(:disabled) {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+  }
+
+  &__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  &__foot {
+    flex-shrink: 0;
+    padding: 8px 20px 12px;
+    border-top: 1px solid var(--border);
+    @include type-caption;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-3);
+  }
+}
+
+// 환경설정 화면 — 여백은 공통 .section, 여기서는 그룹 간격만
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .form-actions {
+    margin-top: 4px;
+  }
+}

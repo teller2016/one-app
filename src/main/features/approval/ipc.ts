@@ -6,6 +6,7 @@ import {
   getExpendDefaults,
   getOvertimeDefaults,
   getVacationDefaults,
+  getWorkerDept,
   saveExpendDefaults,
   saveOvertimeDefaults,
   saveVacationDefaults,
@@ -38,6 +39,9 @@ const progressSender = (sender: Electron.WebContents) => (step: string) => {
 };
 
 const NO_ACCOUNT = '비즈박스 계정이 없습니다. [환경설정]에서 ID·비밀번호를 저장하세요.';
+// 소속은 근무자 표·제목에 그대로 들어가는 값이라 기본값을 두지 않는다(사용자 결정) —
+// 비어 있으면 빈 칸으로 상신되는 대신 여기서 막는다.
+const NO_DEPT = '결재 소속이 없습니다. [환경설정] → 비즈박스 계정에서 결재 소속을 저장하세요.';
 
 /** 결재(야근·지출결의서·휴가신청서) IPC 핸들러 등록 */
 export function registerApprovalIpc() {
@@ -56,6 +60,7 @@ export function registerApprovalIpc() {
     'approval:overtime:submit',
     async (e, input: OvertimeSubmitInput): Promise<OvertimeSubmitResult> => {
       if (!getCredentials()) return { ok: false, error: NO_ACCOUNT };
+      if (!getWorkerDept()) return { ok: false, error: NO_DEPT };
       // 업무내용은 시도 시점에 바로 저장 — 실패해도 다음 입력에서 재사용할 수 있게
       saveOvertimeDefaults({
         target: input.target,
@@ -95,6 +100,7 @@ export function registerApprovalIpc() {
     'approval:vacation:submit',
     async (e, input: VacationInput): Promise<VacationResult> => {
       if (!getCredentials()) return { ok: false, error: NO_ACCOUNT };
+      if (!getWorkerDept()) return { ok: false, error: NO_DEPT };
       // 비상연락망·인수인계는 매번 같으니 시도 시점에 저장해 다음 입력에 채운다
       saveVacationDefaults({
         emergencyContact: input.emergencyContact,

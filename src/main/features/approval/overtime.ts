@@ -8,9 +8,10 @@ import {
   waitInPage,
   type Page,
 } from '../../lib/browser';
-import { OVERTIME_CONFIG, WORKER_DEPT } from './config';
+import { OVERTIME_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+import { getWorkerDept } from './store';
 // 시간합계 문구는 렌더러 폼과 공유한다 (미리보기와 실제 입력이 같아야 한다)
 import { formatHoursTotal } from '../../../shared/approval-format';
 import { pad2 } from '../../../shared/date';
@@ -124,7 +125,8 @@ async function fillForm(
 ) {
   const sel = OVERTIME_CONFIG.selectors;
   const workerRow: WorkerRow = {
-    dept: WORKER_DEPT,
+    // 환경설정의 '결재 소속' — 단독 배포판을 쓰는 다른 챕터 동료는 여기서 바꾼다
+    dept: getWorkerDept(),
     name: drafterName,
     date: input.date,
     time: `${input.startTime} ~ ${input.endTime}`,

@@ -8,6 +8,7 @@ import { Select } from '../../../components/Select';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
 import { errMsg } from '../../../lib/errMsg';
+import { NO_DEPT_HINT, useApprovalDept } from '../lib/useApprovalDept';
 import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import { Icon } from '../../../components/Icon';
@@ -15,9 +16,11 @@ import { Tooltip } from '../../../components/Tooltip';
 import {
   APPLICANT_PLACEHOLDER,
   ATT_DIV_NAMES,
+  DEPT_PLACEHOLDER,
   DOC_REASONS,
   defaultTimeRange,
   expectedDayCount,
+  hasTitlePlaceholder,
   isSingleDayKind,
   isSubstituteKind,
   isTimedKind,
@@ -65,6 +68,8 @@ export function VacationForm() {
   const [done, setDone] = useState<VacationResult | null>(null);
   const [status, setStatus] = useState<VacationStatus | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  // 제목의 소속 — 환경설정 값이 유일한 출처다(그룹웨어에서 조립하지 않는다)
+  const dept = useApprovalDept();
 
   // 지난 입력(비상연락망·인수인계) 불러오기 + 진행 단계 구독
   useEffect(() => {
@@ -100,6 +105,7 @@ export function VacationForm() {
         fromDate,
         toDate: singleDay ? fromDate : toDate,
         name: status?.name,
+        dept,
         useStartTime: timed ? useStartTime : undefined,
         useEndTime: timed ? useEndTime : undefined,
         holidayWorkDate: substitute ? holidayWorkDate : undefined,
@@ -110,6 +116,7 @@ export function VacationForm() {
       toDate,
       singleDay,
       status,
+      dept,
       timed,
       useStartTime,
       useEndTime,
@@ -164,9 +171,9 @@ export function VacationForm() {
         useStartTime: timed ? useStartTime : undefined,
         useEndTime: timed ? useEndTime : undefined,
         holidayWorkDate: substitute ? holidayWorkDate : undefined,
-        // 사용자가 직접 고친 제목만 보낸다 — 비우면 main 이 신청자 이름까지 넣어 만든다.
-        // 자리표시가 남아 있으면 고치다 만 것이므로 main 에 맡긴다(그대로 올라가면 곤란하다).
-        title: titleEdited && !title.includes(APPLICANT_PLACEHOLDER) ? title.trim() : '',
+        // 사용자가 직접 고친 제목만 보낸다 — 비우면 main 이 이름·소속까지 넣어 만든다.
+        // 자리표시(성명·소속)가 남아 있으면 고치다 만 것이므로 main 에 맡긴다(그대로 올라가면 곤란하다).
+        title: titleEdited && !hasTitlePlaceholder(title) ? title.trim() : '',
         remark: remark.trim(),
         reason,
         reasonEtc: reasonEtc.trim(),
@@ -214,6 +221,7 @@ export function VacationForm() {
   return (
     <div className="approval-form">
       {error && <Banner variant="danger">{error}</Banner>}
+      {!dept && <Banner variant="warning">{NO_DEPT_HINT}</Banner>}
 
       <div className="vacation-status">
         {status ? (
@@ -320,7 +328,7 @@ export function VacationForm() {
               ? '직접 입력한 제목으로 상신합니다.'
               : status
                 ? '이대로 상신합니다. 고치면 그 제목을 씁니다.'
-                : `${APPLICANT_PLACEHOLDER} 자리는 상신할 때 채워집니다. [조회]로 미리 볼 수 있습니다.`}
+                : `${APPLICANT_PLACEHOLDER}·${DEPT_PLACEHOLDER} 자리는 상신할 때 채워집니다. [조회]로 미리 볼 수 있습니다.`}
           </p>
         </div>
       </FormRow>

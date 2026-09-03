@@ -11,6 +11,11 @@ description: One App 을 빌드해 /Applications 의 설치본을 교체하고 �
 ⚠️ **재시작은 확인 없이 자동으로 한다** — 실행 중인 빌드 앱이 있으면 묻지 말고 종료하고,
 교체 후 바로 다시 띄운다. 이 절차에서 사용자에게 묻는 경우는 **빌드 실패·서명 검증 실패뿐**이다.
 
+ℹ️ **단독 배포판(One App Lite)은 이 스킬의 대상이 아니다** — 별도 프로젝트라 자기 폴더
+(`standalone/lite`)에서 빌드하고 `/Applications` 에 설치하지 않는다. 동료에게 건네는 zip 이
+`out/make/zip/...` 에 떨어질 뿐이다. 절차·함정은 `.claude/rules/standalone-lite.md` 와 그 폴더
+README 를 볼 것.
+
 ## 인자
 | 인자 | 동작 |
 |------|------|

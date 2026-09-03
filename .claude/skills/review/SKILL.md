@@ -65,7 +65,7 @@ handleShared 로 등록        → 폰(MO)에 열리는 채널이다. 노출해�
 broadcast 이벤트           → 모든 수신처(창이 여러 개다: 메인·팝아웃 터미널·MO)
 renderer/components/* 수정  → 그 컴포넌트를 쓰는 모든 화면 ← 파급이 가장 크다
 styles/_base.scss · 공통 클래스 → 앱 전체 + mobile-app 셸
-approval 셀렉터·판정 로직   → standalone/overtime/ 복사본도 함께 고쳐야 한다
+approval·jira 보고·설정 스토어 → standalone/lite 가 같은 파일을 import 한다. 새 window.oneApp 채널을 쓰면 그쪽 preload·global.d.ts 도 늘려야 한다(typecheck 로 확인)
 renderer/features/* 재사용  → mobile-app 이 렌더러를 재사용한다. 폰 화면에서도 성립하는가
 ```
 - 상태를 여러 창이 공유하는 기능이면, **한 창에서 바꾼 값이 다른 창에 반영되는가**를 함께 본다.
