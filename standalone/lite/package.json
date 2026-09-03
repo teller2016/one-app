@@ -1,7 +1,7 @@
 {
   "name": "one-app-lite",
   "productName": "OneAppLite",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "결재 도우미(야근·휴가·지출결의서) + Jira 티켓 보고 — One App 단독 배포판 (Windows·macOS)",
   "main": ".vite/build/main.js",
   "private": true,
