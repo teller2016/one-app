@@ -174,6 +174,13 @@ Error sending from webFrameMain: Render frame was disposed before WebFrameMain c
 ⚠️ **스크린샷은 축소되어 표시된다** — 2560px 원본이 2000px 로 보이면 좌표에 1.28 을 곱해야 실제 값이다. 환산을 잊으면 **정상 레이아웃을 "오른쪽이 안 그려졌다"고 오판한다**(2026-09-01 실제로 그럴 뻔했다). 넓은 창의 오른쪽 빈 영역은 렌더 실패가 아니라 **다크 테마 배경 여백**이다.
 레이아웃이 의심되면 눈이 아니라 수치로 확인한다 — `.main` 의 `getBoundingClientRect()` 가 `left + width === innerWidth` 면 정상이다.
 
+### macOS 시스템 노이즈 (2026-09-03 추가)
+```
+Electron[<pid>:...] error messaging the mach port for IMKCFRunLoopWakeUpReliable
+```
+macOS 입력기(InputMethodKit)가 찍는 것으로 **앱 코드와 무관**하다. 창이 포커스를 주고받을 때
+나오며, `error` 라는 낱말 때문에 grep 에 걸린다. 이슈로 세지 말 것.
+
 ### 확인된 기준값
 - 사이드바 섹션 **11개**: 터미널 / Jira / Nightwatch / PR / 배포 / 프로젝트 / 딥링크 / 결재 / 일정 등록 / 주간보고 / 환경설정
 - 전 섹션 순회 시 `.err-box` 0건 · 콘솔 에러 0건 이 정상

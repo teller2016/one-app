@@ -271,12 +271,12 @@ export function SettingsSection() {
         sub="계정 · 알림 · 출퇴근 리마인더를 관리합니다."
       />
 
-      {/* 키체인을 못 쓰는 상태 — 아래에 입력하는 비밀번호·토큰이 보호되지 않는다.
+      {/* 키체인을 못 쓰는 상태 — 비밀 값 저장이 거부된다(평문으로 떨어뜨리지 않는다).
           서명이 깨졌거나 키체인이 잠긴 경우다(정상 환경에선 이 배너가 뜨지 않는다) */}
       {!secureStorage && (
         <Banner variant="danger">
-          OS 키체인을 쓸 수 없어 <strong>비밀번호·API 토큰이 암호화되지 않고</strong> 저장됩니다
-          — 앱 서명이 깨졌거나 키체인이 잠겨 있을 수 있습니다. 앱을 다시 설치하거나 키체인 잠금을
+          OS 키체인을 쓸 수 없어 <strong>비밀번호·API 토큰을 저장할 수 없습니다</strong> — 앱
+          서명이 깨졌거나 키체인이 잠겨 있을 수 있습니다. 앱을 다시 설치하거나 키체인 잠금을
           해제한 뒤 비밀 값을 다시 저장하세요.
         </Banner>
       )}
@@ -427,6 +427,13 @@ export function SettingsSection() {
             disabled={loading}
           />
         </FormRow>
+        {/* http 는 막지 않지만(온프렘 서버가 있을 수 있다) 토큰이 평문으로 나간다는 것은 알린다 */}
+        {/^http:\/\//i.test(jiraUrl.trim()) && (
+          <p className="hint form-hint">
+            ⚠️ <b>http</b> 주소입니다 — Jira 인증 정보(이메일·API 토큰)가 <b>암호화 없이</b>{' '}
+            전송됩니다. 가능하면 https 주소를 쓰세요.
+          </p>
+        )}
         <FormRow label="Jira 이메일">
           <Input
             type="text"

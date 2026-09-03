@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { DatePicker } from '../../../components/DatePicker';
@@ -16,7 +16,6 @@ import { Tooltip } from '../../../components/Tooltip';
 import {
   APPLICANT_PLACEHOLDER,
   ATT_DIV_NAMES,
-  DEPT_PLACEHOLDER,
   DOC_REASONS,
   defaultTimeRange,
   expectedDayCount,
@@ -68,6 +67,9 @@ export function VacationForm() {
   const [done, setDone] = useState<VacationResult | null>(null);
   const [status, setStatus] = useState<VacationStatus | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  // 연차 현황 조회 실패 문구 — 작성 실패용 `error`(danger 배너)와 분리한다.
+  // 자동 조회가 실패해도 작성은 막지 않으므로 경고 배너로 띄우지 않는다.
+  const [statusError, setStatusError] = useState('');
   // 제목의 소속 — 환경설정 값이 유일한 출처다(그룹웨어에서 조립하지 않는다)
   const dept = useApprovalDept();
 
@@ -143,19 +145,32 @@ export function VacationForm() {
     reasonOk &&
     !!emergencyContact.trim();
 
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     setStatusBusy(true);
+    setStatusError('');
     // invoke 거부(핸들러 미등록 등)도 잡는다 — finally 가 없으면 busy 가 영영 남아 폼이 잠긴다
     try {
       const res = await window.oneApp.approval.vacationStatus();
       if (res.ok && res.status) setStatus(res.status);
-      else setError(res.error ?? '연차 현황을 불러오지 못했습니다.');
+      // 계정 미설정·네트워크 실패 모두 main 이 사람이 읽을 문구를 준다 — 그대로 보여준다
+      else setStatusError(res.error ?? '연차 현황을 불러오지 못했습니다.');
     } catch (err) {
-      setError(errMsg(err, '연차 현황을 불러오지 못했습니다.'));
+      setStatusError(errMsg(err, '연차 현황을 불러오지 못했습니다.'));
     } finally {
       setStatusBusy(false);
     }
-  };
+  }, []);
+
+  /**
+   * 폼에 들어오면 한 번 자동 조회 — 잔여연차와 **제목의 이름**을 미리 채운다.
+   * (이름은 그룹웨어 양식에서만 읽을 수 있어 예전엔 [조회] 를 눌러야 했다)
+   *
+   * ⚠️ 실패해도 작성을 막지 않는다. 계정이 없으면 main 이 그룹웨어에 접속하지 않고
+   * 곧바로 안내 문구를 돌려주므로(`approval/ipc.ts` 의 계정 검사) 헛된 로그인 시도가 없다.
+   */
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
 
   const run = async () => {
     setBusy(true);
@@ -235,18 +250,22 @@ export function VacationForm() {
           </>
         ) : (
           <span className="vacation-status__sub">
-            연차 현황은 그룹웨어에서 조회합니다
+            {statusBusy
+              ? '연차 현황을 불러오는 중…'
+              : statusError || '연차 현황을 불러오지 못했습니다.'}
           </span>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void loadStatus()}
-          disabled={statusBusy || busy}
-          loading={statusBusy}
-        >
-          {status ? '새로고침' : '조회'}
-        </Button>
+        {/* 진입할 때 자동으로 조회하므로 평상시엔 버튼이 없다 — 실패했을 때만 다시 시도 */}
+        {!status && !statusBusy && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void loadStatus()}
+            disabled={busy}
+          >
+            다시 시도
+          </Button>
+        )}
       </div>
 
       <FormRow label="근태구분">
@@ -328,7 +347,7 @@ export function VacationForm() {
               ? '직접 입력한 제목으로 상신합니다.'
               : status
                 ? '이대로 상신합니다. 고치면 그 제목을 씁니다.'
-                : `${APPLICANT_PLACEHOLDER}·${DEPT_PLACEHOLDER} 자리는 상신할 때 채워집니다. [조회]로 미리 볼 수 있습니다.`}
+                : `${APPLICANT_PLACEHOLDER} 자리는 상신할 때 채워집니다 — 이름은 그룹웨어에서만 읽을 수 있습니다(소속은 환경설정의 '결재 소속').`}
           </p>
         </div>
       </FormRow>

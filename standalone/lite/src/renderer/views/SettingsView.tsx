@@ -96,8 +96,10 @@ export function SettingsView({
         </Banner>
       )}
       {!settings.secureStorage && (
-        <Banner variant="warning">
-          이 PC 에서는 OS 보안 저장소를 쓸 수 없어 비밀번호·토큰이 평문으로 저장됩니다.
+        <Banner variant="danger">
+          이 PC 에서는 OS 보안 저장소(키체인)를 쓸 수 없어 <b>비밀번호·토큰을 저장할 수
+          없습니다</b> — 평문으로 남기지 않기 위해 저장을 막습니다. 키체인 잠금을 해제하거나
+          앱을 다시 설치한 뒤 시도하세요.
         </Banner>
       )}
       {error && <Banner variant="danger">{error}</Banner>}
@@ -146,6 +148,13 @@ export function SettingsView({
             disabled={saving}
           />
         </FormRow>
+        {/* http 는 막지 않지만(온프렘 서버가 있을 수 있다) 토큰이 평문으로 나간다는 것은 알린다 */}
+        {/^http:\/\//i.test(jiraUrl.trim()) && (
+          <p className="hint form-hint">
+            ⚠️ <b>http</b> 주소입니다 — 이메일·API 토큰이 <b>암호화 없이</b> 전송됩니다. 가능하면
+            https 주소를 쓰세요.
+          </p>
+        )}
         <FormRow label="이메일">
           <Input
             value={jiraEmail}

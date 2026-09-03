@@ -32,6 +32,28 @@ const readStored = (): StoredSettings =>
 
 const writeStored = (s: StoredSettings) => writeUserJson('settings.json', s);
 
+/**
+ * 연동 주소 정리 — 앞뒤 공백·끝 슬래시를 떼고 **스킴을 검사한다**.
+ *
+ * ⚠️ 여기서 막지 않으면 오타난 주소나 `javascript:`·`file:` 같은 값이 그대로 저장되고,
+ * Jira·Gitea 호출이 그 주소에 **인증 헤더(이메일:토큰)** 를 실어 보낸다. 빈 문자열은
+ * '연동 해제' 라 그대로 통과시킨다. `http:` 는 막지 않는다 — 사내 Gitea 가 평문 HTTP 다.
+ */
+function normalizeEndpoint(raw: string, label: string): string {
+  const url = raw.trim().replace(/\/+$/, '');
+  if (!url) return '';
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`${label} 주소 형식이 올바르지 않습니다 — http(s):// 로 시작하는 주소를 입력하세요.`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`${label} 주소는 http(s) 만 쓸 수 있습니다 (입력한 형식: ${parsed.protocol}).`);
+  }
+  return url;
+}
+
 /** 렌더러에 보낼 안전한 형태 — 비밀번호 값은 보내지 않고 "설정됨" 여부만 */
 export function getSettingsForRenderer(): AppSettingsView {
   const s = readStored();
@@ -82,7 +104,7 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   }
   // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
   if (typeof input.jiraUrl === 'string') {
-    next.jiraUrl = input.jiraUrl.trim().replace(/\/+$/, '');
+    next.jiraUrl = normalizeEndpoint(input.jiraUrl, 'Jira');
   }
   if (typeof input.jiraEmail === 'string') {
     next.jiraEmail = input.jiraEmail.trim();
@@ -92,7 +114,7 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
     next.jiraTokenEnc = encryptSecret(input.jiraToken);
   }
   if (typeof input.giteaUrl === 'string') {
-    next.giteaUrl = input.giteaUrl.trim().replace(/\/+$/, '');
+    next.giteaUrl = normalizeEndpoint(input.giteaUrl, 'Gitea');
   }
   // Gitea 토큰은 입력이 있을 때만 갱신 (빈 값이면 기존 유지)
   if (input.giteaToken && input.giteaToken.length > 0) {

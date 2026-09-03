@@ -21,13 +21,13 @@ const KINDS: {
     kind: 'overtime',
     icon: 'clock',
     title: '야근 결재',
-    desc: '연장근무내역서를 작성해 바로 상신합니다. 결재선은 본인.',
+    desc: '연장근무내역서를 채워 둡니다. 확인 후 [상신]은 직접.',
   },
   {
     kind: 'vacation',
     icon: 'calendar',
     title: '휴가신청서',
-    desc: '연차·반차·시차를 신청합니다. 내역추가 후 결재상신까지.',
+    desc: '연차·반차·시차 — 전자결재 창까지 준비합니다. [상신]은 직접.',
   },
   {
     kind: 'expend',

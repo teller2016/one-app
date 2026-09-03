@@ -49,6 +49,16 @@ paths:
 
 ## 비밀 정보
 - 비밀번호·토큰은 `safeStorage` 로 암호화해 userData 에만 저장. 코드·리포에 하드코딩 금지. `.env`/`settings.json`(계정) 커밋 금지.
+- ⚠️ **`encryptSecret` 은 키체인을 못 쓰면 throw 한다** — 평문 base64 폴백을 없앴다(2026-09-03 보안 검토).
+  환경을 통제할 수 없는 단독 배포판에서 그룹웨어 비밀번호가 평문으로 쌓이는 것을 막기 위함이다.
+  호출부는 저장 실패를 사용자에게 알려야 한다(환경설정은 `secureStorage` 배너 + 토스트로 처리 중).
+  복호화(`decryptSecret`)의 평문 폴백은 예전 저장본 호환용으로 남겨 둔다.
+- **연동 주소(`jiraUrl`·`giteaUrl`)는 `settings/store.ts` 의 `normalizeEndpoint` 로 검증**한다 —
+  `http(s)` 외 스킴을 막는다. 그 주소에 **인증 헤더가 실려 나가기** 때문이다. `http:` 자체는
+  막지 않지만(사내 Gitea 가 평문 HTTP) 환경설정 화면이 경고 문구를 띄운다.
+- **자동화 창(`lib/browser.ts`)은 그룹웨어 도메인만 앱 창으로 연다**(`isInternalUrl`) — 그 밖의
+  주소는 `shell.openExternal` 로 넘긴다. 앱 창에는 주소창이 없어 목적지를 확인할 수 없다.
+  ⚠️ 빈 URL·`about:blank` 는 반드시 허용 — 지출결의서 '찾기' 도움창이 빈 창부터 연다.
 
 ## 프로젝트 경로·저장소 정보
 - 자체 저장하지 말고 **프로젝트 레지스트리**를 참조한다 — `features/projects/store.ts` 의 조회 헬퍼(`getProject`·`findProjectByPath`·`findProjectByRepo`·`findProjectsByJiraKey`·`remoteOwnerRepo`)를 직접 import. 원격 주소의 owner/repo 파싱은 `shared/types.ts` 의 `ownerRepoFromUrl`(main·렌더러 공용).

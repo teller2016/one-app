@@ -92,38 +92,41 @@ export function writeUserJson(filename: string, value: unknown): void {
 }
 
 /**
- * 키체인 암호화를 쓸 수 있는가 — 못 쓰면 비밀이 **평문 base64 로** 저장된다.
+ * 키체인 암호화를 쓸 수 있는가.
  *
  * 정상 환경(서명된 앱 + 로그인된 키체인)에서는 항상 true 다. false 가 되는 경우는
- * 서명이 깨졌거나 키체인이 잠긴 상태 — 이때 조용히 폴백하면 사용자는 비밀번호·API 토큰이
- * userData JSON 에 사실상 평문으로 쌓이는 걸 **모른 채** 계속 쓰게 된다.
- * 그래서 여기서 경고를 남기고, 환경설정 화면에도 배너로 알린다(`AppSettingsView.secureStorage`).
+ * 서명이 깨졌거나 키체인이 잠긴 상태 — 그때는 `encryptSecret` 이 **저장을 거부한다**.
+ * 환경설정 화면이 이 값으로 배너를 띄운다(`AppSettingsView.secureStorage`).
  */
 export function isSecureStorageAvailable(): boolean {
   return safeStorage.isEncryptionAvailable();
 }
 
-// 프로세스당 한 번만 경고한다 (저장할 때마다 찍으면 로그가 의미를 잃는다)
-let warnedInsecure = false;
-function warnInsecureOnce(): void {
-  if (warnedInsecure) return;
-  warnedInsecure = true;
-  console.warn(
-    '[store] ⚠️ safeStorage 를 쓸 수 없어 비밀 값을 평문 base64 로 저장합니다. ' +
-      '앱 서명이 깨졌거나 키체인이 잠겼을 수 있습니다 — 저장된 계정·토큰이 보호되지 않습니다.',
-  );
-}
-
-/** 비밀 값을 safeStorage 로 암호화해 base64 로 (키체인 불가 환경은 평문 base64 폴백) */
+/**
+ * 비밀 값을 safeStorage 로 암호화해 base64 로.
+ *
+ * ⚠️ 키체인을 못 쓰면 **평문으로 저장하지 않고 throw 한다**(2026-09-03). 예전에는 평문
+ * base64 로 조용히 폴백했는데, 그러면 앱이 화면·README 로 약속한 "이 PC 에만 암호화 저장"이
+ * 깨진 채로 그룹웨어 비밀번호가 userData JSON 에 쌓인다 — 특히 환경을 통제할 수 없는
+ * 단독 배포판(One App Lite)을 받은 동료 PC 에서 위험하다. 저장이 실패하면 사용자가 즉시
+ * 알고 조치(키체인 잠금 해제·재로그인·재서명)할 수 있다.
+ *
+ * 복호화(`decryptSecret`)의 평문 폴백은 남겨 둔다 — 예전에 평문으로 저장된 값을 계속 읽어야 한다.
+ */
 export function encryptSecret(plain: string): string {
   if (!safeStorage.isEncryptionAvailable()) {
-    warnInsecureOnce();
-    return Buffer.from(plain, 'utf8').toString('base64');
+    throw new Error(
+      'OS 보안 저장소(키체인)를 쓸 수 없어 비밀번호·토큰을 저장하지 않았습니다 — ' +
+        '키체인이 잠겼거나 앱 서명이 바뀌었을 수 있습니다. 잠금을 풀고 다시 시도하세요.',
+    );
   }
   return safeStorage.encryptString(plain).toString('base64');
 }
 
-/** encryptSecret 역방향 — 복호화 실패(키체인 변경 등) 시 null */
+/**
+ * encryptSecret 역방향 — 복호화 실패(키체인 변경 등) 시 null.
+ * 키체인을 못 쓰는 상태에서는 예전 평문 base64 저장본만 읽힌다.
+ */
 export function decryptSecret(enc: string): string | null {
   try {
     const buf = Buffer.from(enc, 'base64');

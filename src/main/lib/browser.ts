@@ -10,6 +10,7 @@
 import {
   BrowserWindow,
   session,
+  shell,
   webFrameMain,
   type WebContents,
 } from 'electron';
@@ -83,6 +84,37 @@ export type Page = {
   released?: boolean;
 };
 
+/** 앱 창으로 열어도 되는 호스트 — 그룹웨어(비즈박스) 자신과 그 서브도메인 */
+const INTERNAL_HOST_RE = /(^|\.)forbiz\.co\.kr$/i;
+
+/**
+ * 이 주소를 **앱 창**으로 열어도 되는가.
+ *
+ * ⚠️ 앱 창에는 주소창이 없다 — 그룹웨어 문서 안의 외부 링크나 변조된 페이지가 앱 창으로
+ * 열리면 사용자가 목적지를 확인할 방법이 없다(피싱 표면). 그룹웨어 자신만 앱 창으로 열고
+ * 나머지는 기본 브라우저로 넘긴다.
+ *
+ * ⚠️ **빈 URL·about:blank 는 반드시 허용해야 한다** — 지출결의서의 '찾기' 도움창은
+ * `window.open('')` 로 빈 창을 먼저 만들고 POST 폼으로 내용을 채운다(waitForPopup 주석 참고).
+ * 여기서 막으면 그 흐름이 통째로 깨진다.
+ */
+function isInternalUrl(url: string): boolean {
+  if (!url || url === 'about:blank') return true;
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol !== 'https:' && protocol !== 'http:') return false;
+    return INTERNAL_HOST_RE.test(hostname);
+  } catch {
+    return false; // 파싱 안 되는 주소는 앱 창으로 열지 않는다
+  }
+}
+
+/** 앱 창으로 열지 않을 주소 — http(s) 면 기본 브라우저로 넘기고 창은 거절한다 */
+function denyToBrowser(url: string): { action: 'deny' } {
+  if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  return { action: 'deny' };
+}
+
 /**
  * 사용자에게 넘긴 뒤 이어지는 창들에 **창 열기 규칙만** 물려준다 (내용은 건드리지 않는다).
  *
@@ -92,7 +124,11 @@ export type Page = {
  * 새 창이 opener 와 함께 파괴돼 화면이 사라진다. 그래서 체인 전체에 true 를 물려준다.
  */
 function attachOpenerChain(wc: WebContents) {
-  wc.setWindowOpenHandler(() => ({ action: 'allow', outlivesOpener: true }));
+  wc.setWindowOpenHandler(({ url }) =>
+    isInternalUrl(url)
+      ? { action: 'allow', outlivesOpener: true }
+      : denyToBrowser(url),
+  );
   // 이탈 가드(beforeunload)가 걸린 화면은 Electron 에서 확인창도 없이 닫기가 취소된다
   // → 이 처리가 없으면 사용자가 창을 닫을 수 없다
   wc.on('will-prevent-unload', (event) => event.preventDefault());
@@ -103,9 +139,11 @@ function attachOpenerChain(wc: WebContents) {
 function attachGuards(page: Page, allowPopups: boolean, show: boolean) {
   const { wc } = page;
 
-  wc.setWindowOpenHandler(() => {
+  wc.setWindowOpenHandler(({ url }) => {
     // 지출결의서의 '찾기' 도움창은 window.open + POST 폼 전송이라 팝업을 허용해야 동작한다
     if (!allowPopups) return { action: 'deny' };
+    // 그룹웨어 밖 주소는 주소창 없는 앱 창 대신 기본 브라우저로 넘긴다 (isInternalUrl 주석 참고)
+    if (!isInternalUrl(url)) return denyToBrowser(url);
     // 사용자에게 넘긴 뒤 열리는 창(결재선·참조 지정 등)은 손대지 않는다.
     // 크기를 강제하거나 대화상자를 끄면 그 화면이 잘리거나 흐름이 끊긴다.
     //
