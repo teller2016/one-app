@@ -16,6 +16,10 @@
  * ⚠️ 읽기 전용 확인(codesign -dv·--verify, defaults read)은 막지 않는다 —
  *    빌드 결과를 검증하는 정상 경로다.
  *
+ * ⚠️ **판정은 "실행되는 조각의 첫 단어"로 한다** — 명령 문자열에 패턴이 들어 있다고 막지 않는다.
+ *    그렇게 했더니 릴리스 스크립트를 `grep` 하거나 커밋 메시지에 명령을 적기만 해도 차단됐다
+ *    (2026-09-03 실측 2건). `stripQuoted` → `segments` → `HARMLESS_SEGMENT` 순으로 걸러낸다.
+ *
  * 판정 방식은 `require-commit-skill.mjs` 와 같다(transcript 의 현재 턴 조회).
  * **한쪽 판정 로직을 고치면 다른 쪽도 함께 볼 것.**
  *
@@ -24,6 +28,7 @@
  */
 
 import fs from 'node:fs';
+import { activeSegments, harmlessMatcher, stripQuoted } from './lib/command.mjs';
 
 /** 빌드 명령 — 산출물을 만드는 것만. `npm test`·`npm start` 는 대상이 아니다 */
 const BUILD_COMMANDS = [
@@ -38,10 +43,11 @@ const RELEASE_COMMANDS = [
 ];
 
 /**
- * 읽기 전용 검사는 막지 않는다 — `node --check scripts/release.mjs`(문법 검사)는 배포가 아니다.
- * (codesign 의 `-dv`·`--verify` 를 막지 않는 것과 같은 원칙)
+ * 검사 대상이 아닌 조각 — 읽기 전용 도구(공용 목록)에 이 가드만의 두 가지를 더한다.
+ *  - `git` : 커밋·로그·diff 어느 것도 산출물을 만들지 않는다 (커밋 가드가 따로 본다)
+ *  - `node --check` : 문법 검사일 뿐 실행이 아니다 (codesign `-dv` 를 막지 않는 것과 같은 원칙)
  */
-const READ_ONLY = /\bnode\s+(?:--check|-c)\b/;
+const HARMLESS_SEGMENT = harmlessMatcher(['git', 'node\\s+(?:--check|-c)']);
 
 /**
  * 설치본 교체 — `/Applications/One App.app` 을 **바꾸는** 동사만 본다.
@@ -151,10 +157,20 @@ function main() {
   if (!command) return;
   if (/\bSKIP_BUILD_GUARD=1\b/.test(command)) return; // 수동 탈출구
 
-  const wantsRelease =
-    !READ_ONLY.test(command) && RELEASE_COMMANDS.some((re) => re.test(command));
-  const wantsBuild = BUILD_COMMANDS.some((re) => re.test(command));
-  const wantsReplace = APP_MUTATE.test(command);
+  // 실제로 실행되는 조각만 남긴다 — 읽기 전용 도구와 git 은 뺀다
+  const active = activeSegments(command, HARMLESS_SEGMENT);
+  if (!active.length) return;
+
+  // 빌드·배포는 **실행되는 명령**만 본다 — 따옴표 안에 적힌 것은 인자일 뿐이다
+  const execTarget = active.map(stripQuoted).join('\n');
+  // ⚠️ 설치본 교체는 경로 인자를 봐야 하므로 따옴표를 **지우지 않는다**
+  //    (`/Applications/One App.app` 은 공백 때문에 늘 따옴표로 감싼다 — 지우면 검사가 통째로 뚫린다).
+  //    동사(rm·mv·cp·ditto…)로 이미 한정돼 있어 문자열 오탐 위험은 낮다.
+  const pathTarget = active.join('\n');
+
+  const wantsRelease = RELEASE_COMMANDS.some((re) => re.test(execTarget));
+  const wantsBuild = BUILD_COMMANDS.some((re) => re.test(execTarget));
+  const wantsReplace = APP_MUTATE.test(pathTarget);
   if (!wantsBuild && !wantsRelease && !wantsReplace) return;
 
   if (!input.transcript_path || !fs.existsSync(input.transcript_path)) return; // 판정 불가 → 통과

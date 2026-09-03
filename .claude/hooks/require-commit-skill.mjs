@@ -14,6 +14,7 @@
  */
 
 import fs from 'node:fs';
+import { activeSegments, harmlessMatcher } from './lib/command.mjs';
 
 /** git 전역 플래그 중 뒤에 값 토큰을 하나 더 받는 것들 */
 const VALUE_FLAGS = new Set([
@@ -32,11 +33,19 @@ const PUSH_SUBCOMMANDS = new Set(['push']);
 /** 사용자 발화에서 "푸시해라" 의도로 볼 표현 */
 const PUSH_INTENT = /푸시|푸쉬|push/i;
 
-/** 셸 명령에서 실행되는 git 서브커맨드들을 뽑아낸다. */
+/**
+ * 셸 명령에서 실행되는 git 서브커맨드들을 뽑아낸다.
+ *
+ * ⚠️ 조각 분리·따옴표·heredoc 처리는 **`lib/command.mjs` 공용 전처리**에 맡긴다 —
+ *    직접 `split` 하면 heredoc 안에 적은 `git commit` 이나 커밋 메시지 속 문자열을
+ *    실행되는 명령으로 오인한다(2026-09-03 실측).
+ * ⚠️ 무해 목록에 `git` 을 넣지 않는다 — 여기서는 git 이 검사 대상이다.
+ */
+const HARMLESS_SEGMENT = harmlessMatcher();
+
 function gitSubcommands(command) {
   const found = [];
-  // ; && || | & 개행 으로 명령 조각 분리
-  for (const segment of String(command).split(/\|\||&&|[;\n|&]/)) {
+  for (const segment of activeSegments(command, HARMLESS_SEGMENT)) {
     const tokens = segment.trim().split(/\s+/).filter(Boolean);
     for (let i = 0; i < tokens.length; i++) {
       const bare = tokens[i].replace(/^['"]|['"]$/g, '');
