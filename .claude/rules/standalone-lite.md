@@ -41,12 +41,13 @@ typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
 
 - ⚠️ **`npm run release` 를 직접 부르지 말 것** — `require-build-skill.mjs` 훅이 막는다. `/release` 스킬이
   변경점 정리·버전 판단·승인을 거친 뒤 부른다(public 릴리스는 팀원이 곧바로 받아 가 되돌리기 어렵다).
-- `scripts/release.mjs` — gh 인증 확인 → typecheck → 버전 bump → **`CHANGELOG.md` 의 그 버전 항목을 릴리스 노트로** →
+- `scripts/release.mjs` — gh 인증 확인 → typecheck → 버전 결정·bump → **`CHANGELOG.md` 의 `## Unreleased` 를 그 버전으로 찍어 릴리스 노트로** →
   win·mac 빌드 → **macOS 서명 검증** → `gh release create` + CHANGELOG 업로드 → 링크 출력.
   **커밋·태그는 하지 않는다**(`package.json`·`CHANGELOG.md` 는 `/commit` 으로). 같은 태그가 있으면 업로드 전에 멈추고,
-  서명이 빠졌으면 중단한다(`--allow-unsigned` 로만 강행). CHANGELOG 항목이 없으면 중단한다(`--notes` 로만 대체).
-- **버전 자리 = CHANGELOG 표기**: `[주의]` → major · `[추가]`/`[변경]` → minor · `[개선]`/`[수정]` → patch.
-  `/release` 가 항목을 먼저 쓰고 그 표기로 버전을 정한다(사용자 승인 후). 받는 사람 말로 쓴다 — 구현어·파일명 금지.
+  서명이 빠졌으면 중단한다(`--allow-unsigned` 로만 강행). Unreleased 가 비어 있으면 중단한다(`--notes` 로만 대체).
+- **CHANGELOG 는 커밋할 때 쓴다** — lite 에 실리는 코드를 건드린 커밋은 `## Unreleased` 에 받는 사람 말로 한 줄(`/commit` 절차 4).
+  `/release` 는 그 절을 `## x.y.z — 날짜` 로 **찍기만** 한다. **버전 자리 = 표기**: `[주의]` → major · `[추가]`/`[변경]` → minor ·
+  `[개선]`/`[수정]` → patch — 자리 인자가 없으면 스크립트가 표기대로 올린다. 구현어·파일명 금지.
 - **앱 안의 새 버전 확인 + 자동 설치(2.0.1~)**: `update.ts`(`update:check`)가 최신 릴리스를 현재 버전과 비교 →
   셸 배너 [지금 업데이트] → `updateInstall.ts` 가 zip 을 받아 검증·압축 해제 → 헬퍼 스크립트(`updateCore.ts`)가
   앱 종료 후 교체·재실행. Squirrel 은 못 쓴다(mac Developer ID 서명·win Setup.exe 필요). 상세 흐름·차단 조건은 README.

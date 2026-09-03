@@ -3,18 +3,19 @@
 // 팀원에게 주는 링크는 항상 `.../releases/latest` 하나이므로, 한 번 공유하면 다음 배포에도 그대로 유효하다.
 //
 // 실행:
-//   npm run release                    2.0.0 → 2.0.1 (patch)
-//   npm run release -- --minor         2.0.0 → 2.1.0
-//   npm run release -- --major         2.0.0 → 3.0.0
+//   npm run release                    자리는 CHANGELOG `## Unreleased` 의 표기로 정한다
+//                                      ([주의]→a · [추가]/[변경]→b · [개선]/[수정]→c)
+//   npm run release -- --minor         자리 강제 (--major · --patch 도) — 표기보다 낮으면 경고
 //   npm run release -- --version=2.5.0 버전 직접 지정
 //   npm run release -- --notes="…"     릴리스 노트 맨 위에 덧붙일 문구 (CHANGELOG 항목이 없을 때는 이것만으로 대신)
 //   npm run release -- --dry-run       빌드까지만 하고 업로드 직전에 멈춘다
 //   npm run release -- --skip-build    이미 만든 산출물로 업로드만 (dry-run 다음에 이어서)
 //   npm run release -- --allow-unsigned  macOS 서명 검증 실패를 경고로만 (기본은 중단)
 //
-// 릴리스 노트는 **CHANGELOG.md 의 그 버전 항목**이다 — 항목이 없으면 멈춘다(받는 사람에게 무엇이
-// 달라졌는지 말하지 않는 배포를 막는다). 항목 표기([추가]·[변경]·[개선]·[수정]·[주의])가 버전 자리의
-// 근거이므로, 표기보다 낮게 올렸으면 경고한다(판단은 /release 스킬이, 여기는 가드).
+// 릴리스 노트는 **CHANGELOG.md 의 `## Unreleased` 절**이다 — 변경을 만든 커밋이 적어 둔 것을, 여기서
+// `## x.y.z — 날짜` 로 찍어 올린다. 비어 있으면 멈춘다(받는 사람에게 무엇이 달라졌는지 말하지 않는 배포를
+// 막는다). 항목 표기([추가]·[변경]·[개선]·[수정]·[주의])가 버전 자리의 근거다 — `--version`/`--minor` 등을
+// 안 주면 **표기대로 올리고**, 줬는데 표기보다 낮으면 경고한다(판단은 /release 스킬이, 여기는 가드).
 //
 // ⚠️ 커밋·태그는 이 스크립트가 하지 않는다 — 올라간 package.json·CHANGELOG.md 는 `/commit` 으로 따로 커밋한다.
 //    (이 리포는 커밋을 /commit 스킬 경유로만 허용한다)
@@ -23,10 +24,15 @@ import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
+  applyBump,
   bumpKind,
   bumpTooSmall,
   changelogSection,
+  stampUnreleased,
   suggestBump,
+  todayStamp,
+  unreleasedSection,
+  withoutEmptyUnreleased,
 } from './lib/changelog.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -98,22 +104,25 @@ const current = pkg.version;
 
 /** semver 한 칸 올리기 — 프리릴리스·빌드 메타데이터는 쓰지 않는다(사내 배포라 x.y.z 로 충분) */
 const bump = (version, kind) => {
-  const [major, minor, patch] = version.split('.').map(Number);
-  if ([major, minor, patch].some((n) => !Number.isInteger(n)))
+  if (!/^\d+\.\d+\.\d+$/.test(version))
     die(`package.json 의 version 형식이 x.y.z 가 아닙니다: ${version}`);
-  if (kind === 'major') return `${major + 1}.0.0`;
-  if (kind === 'minor') return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
+  return applyBump(version, kind);
 };
 
 const explicit = valueOf('version');
 if (explicit && !/^\d+\.\d+\.\d+$/.test(explicit))
   die(`--version 은 x.y.z 형식이어야 합니다: ${explicit}`);
 
+// 릴리스 노트 후보 — 이미 이번 버전 절이 있으면(재시도·skip-build) 그것, 아니면 Unreleased
+let changelog = fs.existsSync(CHANGELOG_PATH) ? fs.readFileSync(CHANGELOG_PATH, 'utf8') : '';
+const pending = unreleasedSection(changelog);
+
+const forcedKind = has('--major') ? 'major' : has('--minor') ? 'minor' : has('--patch') ? 'patch' : undefined;
 const version = skipBuild
   ? current // 이미 그 버전으로 빌드된 산출물을 올리는 경우다
   : (explicit ??
-    bump(current, has('--major') ? 'major' : has('--minor') ? 'minor' : 'patch'));
+    // 자리를 안 정해 줬으면 Unreleased 의 표기로 정한다 — 항목이 없으면 patch(어차피 아래에서 멈춘다)
+    bump(current, forcedKind ?? (pending ? suggestBump(pending) : 'patch')));
 const tag = `v${version}`;
 
 // 이미 올라간 버전을 덮어쓰면 받은 사람과 버전이 어긋난다 — 먼저 막는다.
@@ -130,16 +139,27 @@ if (!dryRun) {
     );
 }
 
-// ── 2-1. 릴리스 노트 = CHANGELOG 의 이번 버전 항목 ──
-const changelog = fs.existsSync(CHANGELOG_PATH) ? fs.readFileSync(CHANGELOG_PATH, 'utf8') : '';
-const section = changelogSection(changelog, version);
+// ── 2-1. 릴리스 노트 = CHANGELOG 의 Unreleased → 이번 버전으로 찍기 ──
+// 재시도(--skip-build)나 손으로 미리 찍어 둔 경우엔 이번 버전 절이 이미 있다 — 그러면 그것을 쓴다.
+let section = changelogSection(changelog, version);
+if (!section && pending) {
+  const stamped = stampUnreleased(changelog, version, todayStamp());
+  if (dryRun) {
+    log(`dry-run: CHANGELOG 의 Unreleased 를 "## ${version}" 으로 찍을 예정 (파일은 그대로 둔다)`);
+  } else {
+    fs.writeFileSync(CHANGELOG_PATH, stamped);
+    changelog = stamped;
+    done(`CHANGELOG: Unreleased → ${version} (${todayStamp()})`);
+  }
+  section = pending;
+}
 if (!section && !notes)
   die(
-    `CHANGELOG.md 에 "## ${version}" 항목이 없습니다 — 받는 사람에게 무엇이 달라졌는지 적고 다시 실행하세요.\n` +
+    'CHANGELOG.md 의 "## Unreleased" 가 비어 있습니다 — 받는 사람에게 무엇이 달라졌는지 적고 다시 실행하세요.\n' +
       '  (형식은 CHANGELOG.md 머리말. 임시로 건너뛰려면 --notes="…" 를 주세요)',
   );
 if (section) {
-  done(`CHANGELOG ${version} 항목 ${section.split('\n').filter((l) => l.trim()).length}줄`);
+  done(`릴리스 노트 ${section.split('\n').filter((l) => l.trim()).length}줄`);
   const kind = bumpKind(current, version);
   const suggested = suggestBump(section);
   if (kind && bumpTooSmall(kind, suggested))
@@ -308,7 +328,8 @@ if (changelog) {
         '-f',
         `message=docs: 변경 이력 ${tag}`,
         '-f',
-        `content=${Buffer.from(changelog, 'utf8').toString('base64')}`,
+        // 빈 Unreleased 헤더는 빼고 올린다 — 읽는 사람에겐 배포된 버전만 의미가 있다
+        `content=${Buffer.from(withoutEmptyUnreleased(changelog), 'utf8').toString('base64')}`,
         ...(sha ? ['-f', `sha=${sha}`] : []),
       ],
       { stdio: 'ignore' },

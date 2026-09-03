@@ -45,9 +45,11 @@ node -p "require('./standalone/lite/package.json').version"
 - 릴리스가 없으면 **첫 배포**다(현재 버전을 그대로 올린다 — bump 하지 않는다: `--version=<현재>`).
 - 있으면 그 태그·시각을 기준으로 다음 단계의 변경점을 모은다.
 
-### 2. CHANGELOG 항목 초안 + 버전 결정
-`standalone/lite/CHANGELOG.md` 맨 위에 **이미 다음 버전 항목이 적혀 있으면**(`latestVersion` > 배포된 태그) 그것을 쓴다.
-없으면 마지막 릴리스 이후 커밋에서 초안을 만든다(사용자가 따옴표로 힌트를 줬으면 반영).
+### 2. CHANGELOG `Unreleased` 확인 + 버전 결정
+이번 배포의 내용은 `standalone/lite/CHANGELOG.md` 의 **`## Unreleased` 절**이다 — 변경을 만든 커밋이 적어 두었어야 한다(`/commit` 절차).
+- **채워져 있으면** 그 항목들을 보여주고, 마지막 릴리스 이후 커밋과 대조해 빠진 것이 없는지 본다.
+- **비어 있으면** 마지막 릴리스 이후 커밋에서 초안을 만들어 확인받고 Unreleased 에 채운다(사용자가 따옴표로 힌트를 줬으면 반영).
+  정말 바뀐 게 없으면 배포할 이유가 없다 — 그렇게 말한다.
 ```bash
 git log --since="<마지막 릴리스 시각>" --oneline
 ```
@@ -72,7 +74,8 @@ git log --since="<마지막 릴리스 시각>" --oneline
 
 **버전 자리는 표기가 정한다** — `[주의]` 가 있으면 **a**(major) · `[추가]`/`[변경]` 이 있으면 **b**(minor) ·
 `[개선]`/`[수정]` 만이면 **c**(patch). 사용자가 `--minor` 등으로 강제했는데 표기와 다르면 이유를 말하고 사용자 뜻을 따른다.
-스크립트도 표기보다 낮게 올렸으면 경고한다.
+스크립트는 자리 인자가 없으면 **Unreleased 표기대로 스스로 올리고**, 줬는데 표기보다 낮으면 경고한다.
+배포 때 `## Unreleased` 를 `## x.y.z — 날짜` 로 찍고 빈 Unreleased 를 위에 새로 두는 것도 **스크립트가 한다** — 손으로 찍지 않는다.
 
 ### 3. 사전 점검
 ```bash
@@ -88,15 +91,16 @@ cd standalone/lite && npm run typecheck
 - **CHANGELOG 항목** 초안(그대로 릴리스 노트가 된다)
 - 산출물: `OneAppLite-win32-x64-<버전>.zip` · `OneAppLite-darwin-arm64-<버전>.zip`
 
-승인되면 `CHANGELOG.md` 맨 위(머리말 `---` 아래)에 절을 쓴다 — 형식 `## <버전> — <YYYY-MM-DD>` + 불릿.
+승인되면 바로 실행한다 — Unreleased 가 채워져 있어야 하고, 버전 찍기는 스크립트가 한다.
 
 ### 5. 실행
 ```bash
-cd standalone/lite && npm run release -- --version=<버전>
+cd standalone/lite && npm run release            # 자리는 Unreleased 표기대로
+cd standalone/lite && npm run release -- --minor # 사용자가 자리를 달리 정했을 때만 (--major · --patch · --version=x.y.z)
 ```
-스크립트가 순서대로: gh 인증 → typecheck → 버전 bump → **CHANGELOG 의 그 버전 항목을 릴리스 노트로**(없으면 중단) →
+스크립트가 순서대로: gh 인증 → typecheck → 버전 결정·bump → **`## Unreleased` 를 `## <버전> — 날짜` 로 찍어 릴리스 노트로**(비어 있으면 중단) →
 `out/make` 비우고 win·mac 빌드 → **macOS 서명 검증** → 이번 버전 zip 수집 → `gh release create v<버전>` →
-`CHANGELOG.md` 를 배포 리포에 업로드 → 링크 출력(클립보드 복사).
+`CHANGELOG.md` 를 배포 리포에 업로드(빈 Unreleased 헤더는 빼고) → 링크 출력(클립보드 복사).
 
 빌드에 몇 분 걸린다. 실패하면:
 | 증상 | 대응 |

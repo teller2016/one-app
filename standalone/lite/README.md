@@ -39,9 +39,9 @@ npm run release -- --dry-run         # 빌드까지만, 업로드 직전에 멈�
 npm run release -- --skip-build      # 이미 만든 산출물로 업로드만 (dry-run 다음에 이어서)
 ```
 
-스크립트(`scripts/release.mjs`)가 하는 일 — ① `gh` 인증 확인 → ② `npm run typecheck` → ③ 버전 bump → ④ **`CHANGELOG.md` 에서 그 버전 항목을 릴리스 노트로** 읽기(없으면 중단 — `--notes` 로 대신 줄 수 있다) → ⑤ `out/make` 비우고 **Windows·macOS 빌드** → ⑥ macOS 서명 검증 → ⑦ 이번 버전 zip 만 골라 `gh release create v<버전>` 으로 업로드 + `CHANGELOG.md` 를 배포 리포에 올림 → ⑧ 공유 링크 출력(클립보드 복사).
+스크립트(`scripts/release.mjs`)가 하는 일 — ① `gh` 인증 확인 → ② `npm run typecheck` → ③ 버전 결정·bump → ④ **`CHANGELOG.md` 의 `## Unreleased` 를 `## <버전> — 날짜` 로 찍어 릴리스 노트로**(비어 있으면 중단 — `--notes` 로 대신 줄 수 있다) → ⑤ `out/make` 비우고 **Windows·macOS 빌드** → ⑥ macOS 서명 검증 → ⑦ 이번 버전 zip 만 골라 `gh release create v<버전>` 으로 업로드 + `CHANGELOG.md` 를 배포 리포에 올림(빈 Unreleased 헤더는 빼고) → ⑧ 공유 링크 출력(클립보드 복사).
 
-**버전 자리는 `CHANGELOG.md` 항목 표기로 정한다**(`[주의]` → a · `[추가]`/`[변경]` → b · `[개선]`/`[수정]` → c — 규칙 표는 그 파일 머리말). `/release` 가 판단하고, 스크립트는 표기보다 낮게 올렸으면 경고한다.
+**CHANGELOG 는 커밋할 때 쓴다** — lite 에 실리는 코드를 고친 커밋은 `CHANGELOG.md` 의 `## Unreleased` 에 받는 사람 말로 한 줄을 넣는다(`/commit` 이 챙긴다). 배포 때 스크립트가 그 절을 버전으로 찍으므로 배포 시점에 기억을 더듬지 않는다. **버전 자리는 항목 표기로 정한다**(`[주의]` → a · `[추가]`/`[변경]` → b · `[개선]`/`[수정]` → c — 규칙 표는 그 파일 머리말) — 자리 인자를 안 주면 스크립트가 표기대로 올리고, 줬는데 표기보다 낮으면 경고한다.
 
 - **맥 한 대에서 두 플랫폼이 다 나온다** — zip maker 만 쓰므로 Windows 산출물도 크로스 빌드된다.
 - **커밋·태그는 스크립트가 하지 않는다.** 올라간 `package.json` 버전은 `/commit` 으로 따로 커밋한다.
