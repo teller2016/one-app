@@ -14,10 +14,26 @@ import {
   type MirrorStatus,
 } from '../../../shared/types';
 
+// 제어 모드 창 — 화면(비디오)이 없으니 입력을 받을 최소 크기면 된다(scrcpy 기본은 256x256).
+// 100 이면 타이틀바 신호등 버튼이 다 보이고, 48 까지는 경고 없이 내려간다(2026-09-01 실측).
+const CONTROL_WINDOW_SIZE = 100;
+
 // 모드별 scrcpy 인자 — 바탕화면 런처 앱들과 동일
 const MODE_ARGS: Record<MirrorMode, string[]> = {
   mirror: ['-d', '--turn-screen-off'], // Mirror USB.app
-  control: ['-d', '--no-video', '--no-audio', '--keyboard=uhid', '--mouse=uhid'], // Control USB.app
+  control: [
+    // Control USB.app
+    '-d',
+    '--no-video',
+    '--no-audio',
+    '--keyboard=uhid',
+    '--mouse=uhid',
+    `--window-width=${CONTROL_WINDOW_SIZE}`,
+    `--window-height=${CONTROL_WINDOW_SIZE}`,
+    // 제목 비우기 — 빈 값이 그대로 먹는다(2026-09-01 실측). 타이틀바 자체는 남겨
+    // 창을 마우스로 옮기고 닫을 수 있게 둔다(--window-borderless 를 쓰면 둘 다 막힌다).
+    '--window-title=',
+  ],
 };
 
 // scrcpy 는 화면이 없는 control 모드에서도 키·마우스 입력을 받으려고 창을 띄우고,
