@@ -22,7 +22,7 @@ type MainScreen = Exclude<Screen, 'settings'>;
 
 const FOOTS: Record<Screen, string> = {
   approval: '그룹웨어 결재를 대신 작성합니다 — 결재(승인)는 직접, 계정은 이 PC 에만 암호화 저장됩니다.',
-  report: 'Jira 티켓을 프로젝트·기간으로 모아 보고용 목록을 복사합니다 — Jira 계정은 환경설정에서.',
+  report: 'Jira 티켓을 프로젝트·기간·레이블로 모아 보고용 목록을 복사합니다 — Jira 계정은 환경설정에서.',
   settings: '사번·비밀번호·API 토큰은 이 PC 에만 암호화(OS 보안 저장소)해 저장됩니다.',
 };
 
@@ -275,7 +275,7 @@ function Shell() {
               <SectionHeader
                 icon={<Icon name="clipboard-list" size={18} />}
                 title="티켓 보고"
-                sub="프로젝트·기간으로 티켓을 모아 보고용 목록을 만듭니다. 필터한 뒤 원하는 형식으로 복사하세요."
+                sub="프로젝트·기간·레이블로 티켓을 모아 보고용 목록을 만듭니다. 필터한 뒤 원하는 형식으로 복사하세요."
               />
               <JiraReportPanel />
             </div>

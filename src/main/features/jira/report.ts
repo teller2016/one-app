@@ -1,4 +1,4 @@
-// Jira 티켓 보고 — 프로젝트·기간으로 티켓을 모아 한 번에 복사할 목록을 만든다.
+// Jira 티켓 보고 — 프로젝트·기간·레이블로 티켓을 모아 한 번에 복사할 목록을 만든다.
 //
 // 필터는 두 층이다. **서버(JQL)** 는 프로젝트·기간만 자르고, 상태·담당자·레이블·유형은
 // **렌더러가 받은 결과 안에서 걸러낸다**(facet). 그래야 선택지가 실제 결과에 있는 값만 보이고,
@@ -9,6 +9,7 @@
 // 여기서 electron 외의 데스크톱 전용 의존(파일 경로·터미널 등)을 끌어오지 말 것.
 import { ipcMain } from 'electron';
 import type {
+  JiraLabelsResult,
   JiraProjectOption,
   JiraProjectsResult,
   JiraReportIssue,
@@ -16,7 +17,7 @@ import type {
   JiraReportQuery,
   JiraReportResult,
 } from '../../../shared/types';
-import { buildReportJql } from '../../../shared/jira-report';
+import { buildReportJql, normalizeProjectKeys } from '../../../shared/jira-report';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { jiraAuth, mapIssue, type RawIssue } from './jira';
 import { getReportPrefs, saveReportPrefs } from './store';
@@ -96,23 +97,24 @@ function mapReportIssue(it: RawReportIssue, baseUrl: string): JiraReportIssue {
 /**
  * 구형 `search` 페이징 — startAt/total. 신형 엔드포인트가 404 인 서버(Server/DC 계열)용.
  */
-async function searchAllLegacy(
+async function searchAllLegacy<T = RawReportIssue>(
   baseUrl: string,
   headers: Record<string, string>,
   jql: string,
-): Promise<{ issues: RawReportIssue[]; truncated: boolean }> {
-  const out: RawReportIssue[] = [];
+  fields: string = FIELDS,
+): Promise<{ issues: T[]; truncated: boolean }> {
+  const out: T[] = [];
   let startAt = 0;
   for (;;) {
     const params = new URLSearchParams({
       jql,
       startAt: String(startAt),
       maxResults: String(PAGE_SIZE),
-      fields: FIELDS,
+      fields,
     });
     const res = await request(`${baseUrl}/rest/api/3/search?${params}`, headers);
     if (!res.ok) throw new Error(await describeHttpError(res));
-    const data = await readJson<{ issues?: RawReportIssue[]; total?: number }>(res, 'Jira');
+    const data = await readJson<{ issues?: T[]; total?: number }>(res, 'Jira');
     const page = data.issues ?? [];
     out.push(...page);
     startAt += page.length;
@@ -126,21 +128,24 @@ async function searchAllLegacy(
  * JQL 로 전부 받기 — 신형 `search/jql`(nextPageToken 페이징) 우선, 404 면 구형으로 폴백.
  * ⚠️ 신형은 `total` 을 주지 않는다 — 끝 판정은 isLast / nextPageToken 부재로만 한다.
  */
-async function searchAll(
+async function searchAll<T = RawReportIssue>(
   baseUrl: string,
   headers: Record<string, string>,
   jql: string,
-): Promise<{ issues: RawReportIssue[]; truncated: boolean }> {
-  const out: RawReportIssue[] = [];
+  fields: string = FIELDS,
+): Promise<{ issues: T[]; truncated: boolean }> {
+  const out: T[] = [];
   let token: string | undefined;
   for (;;) {
-    const params = new URLSearchParams({ jql, maxResults: String(PAGE_SIZE), fields: FIELDS });
+    const params = new URLSearchParams({ jql, maxResults: String(PAGE_SIZE), fields });
     if (token) params.set('nextPageToken', token);
     const res = await request(`${baseUrl}/rest/api/3/search/jql?${params}`, headers);
-    if (res.status === 404 && out.length === 0) return searchAllLegacy(baseUrl, headers, jql);
+    if (res.status === 404 && out.length === 0) {
+      return searchAllLegacy<T>(baseUrl, headers, jql, fields);
+    }
     if (!res.ok) throw new Error(await describeHttpError(res));
     const data = await readJson<{
-      issues?: RawReportIssue[];
+      issues?: T[];
       nextPageToken?: string;
       isLast?: boolean;
     }>(res, 'Jira');
@@ -257,12 +262,158 @@ export async function fetchProjects(force = false): Promise<JiraProjectsResult> 
   }
 }
 
+// ── 레이블 목록 (조회 조건) ──
+
+/** 한 페이지 — `label` 엔드포인트의 최대값 */
+const LABEL_PAGE = 1000;
+/** 전체 상한 — 이보다 많은 레이블은 선택지로 보여줄 양이 아니다(검색으로 좁히게 한다) */
+const LABEL_MAX = 5000;
+const LABELS_TTL_MS = 10 * 60_000;
+
+/** 캐시 — 프로젝트 조합별로 따로 담는다(키 없는 '' 는 인스턴스 전체) */
+const labelsCache = new Map<string, { at: number; list: string[] }>();
+
+/**
+ * 레이블 이름에서 날짜를 읽는다 — `26/09/17_운영배포` → `2026-09-17`, `26/09` → `2026-09-01`.
+ * 이 팀의 배포 레이블이 날짜로 시작하므로, **이름만으로 최신순**을 만들 수 있다.
+ */
+function labelDateKey(label: string): string | null {
+  const m = /^(\d{2})\/(\d{2})(?:\/(\d{2}))?/.exec(label);
+  if (!m) return null;
+  return `20${m[1]}-${m[2]}-${m[3] ?? '01'}`;
+}
+
+/**
+ * 최신 순 정렬 — **요청받은 순서**(2026-09-04): 이름이 날짜면 그 날짜로, 아니면 그 레이블이 붙은
+ * 티켓의 최신 생성일로 내림차순. 둘 다 없으면 이름 역순으로 뒤에 붙인다.
+ */
+function sortLabelsNewestFirst(labels: string[], latestOf?: Map<string, string>): string[] {
+  const keyOf = (l: string) => labelDateKey(l) ?? latestOf?.get(l)?.slice(0, 10) ?? '';
+  return [...labels].sort((a, b) => {
+    const ka = keyOf(a);
+    const kb = keyOf(b);
+    if (ka !== kb) return ka < kb ? 1 : -1; // 최신 먼저 (빈 키는 맨 뒤)
+    return b.localeCompare(a, 'ko', { numeric: true });
+  });
+}
+
+/**
+ * 인스턴스 전체 레이블 — `GET /rest/api/3/label` 을 끝까지 페이징한다(프로젝트 미선택용).
+ *
+ * ⚠️ **자동완성(`jql/autocompletedata/suggestions`)으로는 안 된다** — 접두 하나에 **15개만**
+ *    돌려주고(2026-09-03 실측) 파라미터로 늘릴 수 없다. 화면에서 `09` 처럼 **가운데 토막**으로
+ *    찾으려면 목록 전체가 있어야 한다.
+ * ⚠️ 이 엔드포인트가 없는 서버(Server/DC 구버전)면 404 다 — 빈 목록으로 돌려주고 화면은
+ *    'JQL 직접 입력' 으로 넘어가게 한다(조회 자체를 막지 않는다).
+ */
+async function loadAllLabels(
+  baseUrl: string,
+  headers: Record<string, string>,
+): Promise<{ list: string[]; truncated: boolean }> {
+  const out: string[] = [];
+  let startAt = 0;
+  for (;;) {
+    const params = new URLSearchParams({
+      startAt: String(startAt),
+      maxResults: String(LABEL_PAGE),
+    });
+    const res = await request(`${baseUrl}/rest/api/3/label?${params}`, headers);
+    if (res.status === 404) return { list: out, truncated: false };
+    if (!res.ok) throw new Error(await describeHttpError(res));
+    const data = await readJson<{ values?: string[]; isLast?: boolean; total?: number }>(
+      res,
+      'Jira',
+    );
+    const page = (data.values ?? [])
+      .filter((v): v is string => typeof v === 'string')
+      .map((v) => v.trim())
+      .filter(Boolean);
+    out.push(...page);
+    startAt += page.length;
+    if (out.length >= LABEL_MAX) return { list: [...new Set(out)], truncated: true };
+    const done =
+      data.isLast === true ||
+      page.length === 0 ||
+      (typeof data.total === 'number' && startAt >= data.total);
+    if (done) return { list: [...new Set(out)], truncated: false };
+  }
+}
+
+/**
+ * **그 프로젝트에서 실제로 쓰는 레이블만** — 이슈를 훑어 모은다(2026-09-04 요청).
+ *
+ * Jira 의 `label` 엔드포인트는 인스턴스 전역이라 프로젝트로 좁힐 수 없고, `labels` 는
+ * 프로젝트 스코프가 있는 필드가 아니다. 그래서 `labels IS NOT EMPTY` 로 이슈를 받아 집계한다 —
+ * **필드를 `labels,created` 둘로 줄여** 응답을 가볍게 하고, 덤으로 각 레이블의 **최신 생성일**을
+ * 얻어 이름이 날짜가 아닌 레이블도 최신순으로 세울 수 있다.
+ */
+async function loadProjectLabels(
+  baseUrl: string,
+  headers: Record<string, string>,
+  keys: string[],
+): Promise<{ list: string[]; truncated: boolean }> {
+  const jql = `project IN (${keys.join(', ')}) AND labels IS NOT EMPTY ORDER BY created DESC`;
+  const { issues, truncated } = await searchAll<{
+    fields?: { labels?: string[]; created?: string };
+  }>(baseUrl, headers, jql, 'labels,created');
+
+  const latest = new Map<string, string>();
+  for (const it of issues) {
+    const created = it.fields?.created ?? '';
+    for (const raw of it.fields?.labels ?? []) {
+      const l = typeof raw === 'string' ? raw.trim() : '';
+      if (!l) continue;
+      const cur = latest.get(l);
+      if (cur === undefined || created > cur) latest.set(l, created);
+    }
+  }
+  return { list: sortLabelsNewestFirst([...latest.keys()], latest), truncated };
+}
+
+/**
+ * 레이블 선택지 — 프로젝트를 고른 상태면 **그 프로젝트가 쓰는 레이블만**, 아니면 인스턴스 전체.
+ * 10분 캐시(프로젝트 조합별), force 는 새로고침 버튼. 순서는 최신 우선이라 화면은 그대로 쓴다.
+ */
+export async function fetchLabels(
+  projectKeys: string[] = [],
+  force = false,
+): Promise<JiraLabelsResult> {
+  const auth = jiraAuth();
+  if (!auth) return { ok: false, configured: false, error: NOT_CONFIGURED };
+  const keys = normalizeProjectKeys(projectKeys);
+  const cacheKey = keys.join(',');
+  const hit = labelsCache.get(cacheKey);
+  if (!force && hit && Date.now() - hit.at < LABELS_TTL_MS) {
+    return { ok: true, configured: true, labels: hit.list };
+  }
+  try {
+    const { list, truncated } =
+      keys.length > 0
+        ? await loadProjectLabels(auth.url, auth.headers, keys)
+        : await loadAllLabels(auth.url, auth.headers).then((r) => ({
+            list: sortLabelsNewestFirst(r.list),
+            truncated: r.truncated,
+          }));
+    labelsCache.set(cacheKey, { at: Date.now(), list });
+    return { ok: true, configured: true, labels: list, truncated };
+  } catch (err) {
+    return {
+      ok: false,
+      configured: true,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 /**
  * 보고 IPC 등록 — 본체는 `registerJiraIpc()` 안에서, 단독 배포판은 main.ts 에서 직접 부른다.
  * 폰(MO)에 열 이유가 없어 handleShared 가 아니라 ipcMain.handle 이다.
  */
 export function registerJiraReportIpc(): void {
   ipcMain.handle('jira:report:projects', (_e, force?: boolean) => fetchProjects(force === true));
+  ipcMain.handle('jira:report:labels', (_e, projectKeys?: string[], force?: boolean) =>
+    fetchLabels(Array.isArray(projectKeys) ? projectKeys : [], force === true),
+  );
   ipcMain.handle('jira:report:search', (_e, query: JiraReportQuery) => searchReport(query));
   ipcMain.handle('jira:report:prefs:get', () => getReportPrefs());
   ipcMain.handle('jira:report:prefs:set', (_e, prefs: Partial<JiraReportPrefs>) =>

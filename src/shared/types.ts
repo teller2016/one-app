@@ -279,8 +279,25 @@ export type JiraReportQuery = {
   projectKeys: string[];
   period: JiraReportPeriod;
   dateField: JiraReportDateField;
+  /**
+   * 서버(JQL)에서 자를 레이블 — 비어 있으면 조건에 넣지 않는다.
+   *
+   * 날짜 축과 **무관하게** 좁히는 축이다. 배포일 레이블(`26/10/15`)은 8월에 만든 티켓에도
+   * 붙으므로 기간으로는 잡히지 않는다(그래서 전체 조회 후 화면에서 거르는 수밖에 없었다).
+   */
+  labels?: string[];
   /** 고급 — 값이 있으면 위 조건을 무시하고 이 JQL 을 그대로 보낸다 */
   jql?: string;
+};
+
+/** 레이블 선택지 — 인스턴스의 전 레이블 목록 (화면에서 검색해 고른다) */
+export type JiraLabelsResult = {
+  ok: boolean;
+  configured: boolean;
+  labels?: string[];
+  /** 상한(5000개)에 걸려 뒤가 잘렸다 — 검색으로 좁혀야 한다 */
+  truncated?: boolean;
+  error?: string;
 };
 
 /** 보고 목록의 티켓 한 줄 — 내 이슈 목록 형태 + 담당자·레이블·날짜 */

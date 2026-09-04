@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportJql, normalizeProjectKeys } from "./jira-report";
+import { buildReportJql, normalizeLabels, normalizeProjectKeys } from "./jira-report";
 
 describe("normalizeProjectKeys", () => {
   it("대문자로 맞추고 중복·빈 값·형식 위반을 버린다", () => {
@@ -77,4 +77,77 @@ describe("buildReportJql", () => {
       }),
     ).toBe('labels = "release" ORDER BY key');
   });
+
+  it("레이블은 날짜 축과 별도로 AND 로 붙는다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: ["SSB"],
+        period: { mode: "all" },
+        dateField: "updated",
+        labels: ["26/10/15", "26/10/22"],
+      }),
+    ).toBe(
+      'project IN (SSB) AND labels IN ("26/10/15", "26/10/22") ORDER BY created ASC',
+    );
+  });
+
+  it("레이블만 있어도 조회할 수 있다 (프로젝트를 넘나드는 축)", () => {
+    expect(
+      buildReportJql({
+        projectKeys: [],
+        period: { mode: "all" },
+        dateField: "updated",
+        labels: ["26/10/15"],
+      }),
+    ).toBe('labels IN ("26/10/15") ORDER BY created ASC');
+  });
+
+  it("레이블과 기간을 함께 주면 둘 다 적용한다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: ["SSB"],
+        period: { mode: "month", month: "2026-10" },
+        dateField: "created",
+        labels: ["26/10/15"],
+      }),
+    ).toBe(
+      'project IN (SSB) AND labels IN ("26/10/15") AND created >= "2026-10-01" AND created < "2026-11-01" ORDER BY created ASC',
+    );
+  });
+
+  it("프로젝트도 레이블도 없으면 던진다", () => {
+    expect(() =>
+      buildReportJql({
+        projectKeys: [],
+        period: { mode: "all" },
+        dateField: "updated",
+        labels: ["  "],
+      }),
+    ).toThrow("레이블");
+  });
+
+  it("레이블의 따옴표는 이스케이프한다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: [],
+        period: { mode: "all" },
+        dateField: "updated",
+        labels: ['a"b'],
+      }),
+    ).toBe('labels IN ("a\\"b") ORDER BY created ASC');
+  });
 });
+
+describe("normalizeLabels", () => {
+  it("공백을 떼고 빈 값·중복을 버린다", () => {
+    expect(normalizeLabels([" 26/10/15 ", "26/10/15", "", "  ", "26/11/03"])).toEqual([
+      "26/10/15",
+      "26/11/03",
+    ]);
+  });
+
+  it("undefined 는 빈 목록", () => {
+    expect(normalizeLabels(undefined)).toEqual([]);
+  });
+});
+

@@ -905,6 +905,54 @@
     flex-shrink: 0;
   }
 
+  // 레이블 선택 — 트리거는 좁게 두고(고른 개수만 보인다) 목록은 팝오버가 넓게 띄운다
+  &__labels {
+    flex: 0 0 156px;
+    min-width: 0;
+  }
+
+  // 고른 레이블 칩 — 조회 줄 아래. 많이 고르면 세 줄쯤에서 스크롤한다
+  &__label-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 96px;
+    overflow-y: auto;
+  }
+
+  // 공용 .chip 위에 얹는 표기 — 날짜형 이름이 세로로 줄 맞아 읽히게 등폭
+  &__label-chip {
+    padding: 3px 6px 3px 9px;
+    gap: 4px;
+    border-radius: var(--r-full);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+
+    // ✕ 는 평소 흐리게 — 칩을 가리켰을 때만 또렷해진다(칩 자체가 '빼기' 버튼이다)
+    svg {
+      opacity: 0.45;
+      transition: opacity var(--dur-1) var(--ease);
+    }
+
+    &:hover {
+      color: var(--text);
+      border-color: var(--danger);
+
+      svg {
+        opacity: 1;
+        color: var(--danger);
+      }
+    }
+  }
+
+  &__label-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+  }
+
   // 월 스테퍼 — [◀] 2026년 8월 [▶]
   &__month {
     display: flex;

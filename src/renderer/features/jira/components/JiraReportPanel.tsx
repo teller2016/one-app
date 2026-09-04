@@ -42,12 +42,13 @@ import {
 type PeriodMode = JiraReportPeriod['mode'];
 
 /** 결과 정렬 — 서버 정렬(생성순)과 무관하게 화면에서 다시 정렬한다 */
-type SortKey = 'created' | 'updated' | 'key' | 'status' | 'assignee';
+type SortKey = 'created' | 'updated' | 'key' | 'status' | 'assignee' | 'label';
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: 'created', label: '생성순' },
   { value: 'updated', label: '최근 갱신' },
   { value: 'key', label: '번호순' },
+  { value: 'label', label: '레이블별' },
   { value: 'status', label: '상태별' },
   { value: 'assignee', label: '담당자별' },
 ];
@@ -60,6 +61,13 @@ const keyNumber = (key: string): number => Number(key.split('-').pop() ?? 0);
 const compareKey = (a: JiraReportIssue, b: JiraReportIssue) =>
   a.projectKey.localeCompare(b.projectKey) || keyNumber(a.key) - keyNumber(b.key);
 
+/**
+ * 티켓의 대표 레이블 — '레이블별' 정렬의 묶음 기준.
+ * 티켓에 레이블이 여러 개면 **이름이 가장 큰 것**(= 배포일 레이블에서는 최신)을 쓴다.
+ */
+const topLabel = (it: JiraReportIssue): string =>
+  it.labels.length === 0 ? '' : [...it.labels].sort((a, b) => compareName(b, a))[0];
+
 const SORT_CMP: Record<SortKey, (a: JiraReportIssue, b: JiraReportIssue) => number> = {
   created: (a, b) => a.createdAt.localeCompare(b.createdAt) || compareKey(a, b),
   updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt) || compareKey(a, b),
@@ -68,6 +76,13 @@ const SORT_CMP: Record<SortKey, (a: JiraReportIssue, b: JiraReportIssue) => numb
   // 미배정은 맨 뒤로
   assignee: (a, b) =>
     (a.assignee ?? '￿').localeCompare(b.assignee ?? '￿') || compareKey(a, b),
+  // 최신 레이블부터 묶는다(보고서를 쓰는 순서) — 레이블 없는 티켓은 맨 뒤
+  label: (a, b) => {
+    const la = topLabel(a);
+    const lb = topLabel(b);
+    if (la !== lb) return !la ? 1 : !lb ? -1 : compareName(lb, la);
+    return compareKey(a, b);
+  },
 };
 
 /** "2026-08" → "2026년 8월" */
@@ -91,25 +106,17 @@ const dateOf = (it: JiraReportIssue, field: JiraReportDateField): string =>
 const compareName = (a: string, b: string): number =>
   a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b, 'ko', { numeric: true });
 
-/**
- * 결과 안에서 값별 개수를 세어 MultiSelect 옵션으로.
- * 정렬은 기본 '많이 나온 값부터'. 레이블은 **이름순** — 레이블이 배포일(26/09/03 같은 날짜)이라
- * 시간순으로 읽혀야 하기 때문(2026-09-03 사용자 요청). Jira 는 레이블 생성 시각을 주지 않으므로
- * 이름순이 곧 시간순이 되게 날짜형 이름을 전제한다.
- */
+/** 결과 안에서 값별 개수를 세어 MultiSelect 옵션으로 — 많이 나온 값부터 */
 function facetOptions(
   issues: JiraReportIssue[],
   pick: (it: JiraReportIssue) => string[],
-  order: 'count' | 'name' = 'count',
 ): { value: string; label: string }[] {
   const counts = new Map<string, number>();
   for (const it of issues) {
     for (const v of pick(it)) counts.set(v, (counts.get(v) ?? 0) + 1);
   }
   return [...counts.entries()]
-    .sort((a, b) =>
-      order === 'name' ? compareName(a[0], b[0]) : b[1] - a[1] || compareName(a[0], b[0]),
-    )
+    .sort((a, b) => b[1] - a[1] || compareName(a[0], b[0]))
     .map(([value, n]) => ({ value, label: `${value} (${n})` }));
 }
 
@@ -118,10 +125,12 @@ const passes = (selected: string[] | undefined, values: string[]): boolean =>
   !selected || values.some((v) => selected.includes(v));
 
 /**
- * 티켓 보고 — 프로젝트·기간으로 티켓을 모아 필터하고, 템플릿대로 한 번에 복사한다.
+ * 티켓 보고 — 프로젝트·기간·레이블로 티켓을 모아 필터하고, 템플릿대로 한 번에 복사한다.
  *
- * 서버(JQL)는 프로젝트·기간만 자르고 상태·담당자·레이블·유형은 받은 결과 안에서 거른다(facet).
- * 선택지가 실제 결과에 있는 값만 보이고, 후보를 따로 조회하는 API 에 기대지 않는다.
+ * 서버(JQL)는 프로젝트·기간·**레이블**을 자르고, 상태·담당자·유형은 받은 결과 안에서 거른다(facet).
+ * 레이블이 서버 조건인 이유 — 배포 레이블(`26/10/15_운영배포`)은 8월에 만든 티켓에도 붙어서
+ * 날짜 축으로는 잡히지 않는다(기간을 걸면 통째로 빠진다). 선택지는 인스턴스의 **전 레이블**이고
+ * 검색창에서 `09` 처럼 토막으로 찾는다.
  * `onOpenDetail` 을 주면 제목 클릭이 앱 안 상세 패널을 열고, 없으면(단독 배포판) 브라우저로 연다.
  */
 export function JiraReportPanel({
@@ -141,6 +150,12 @@ export function JiraReportPanel({
   const [rangeEnd, setRangeEnd] = useState(() => monthEndDayKey(thisMonthKey()));
   const [advanced, setAdvanced] = useState(false);
   const [customJql, setCustomJql] = useState('');
+  // 서버 조건으로 보낼 레이블 + 선택지(인스턴스의 전 레이블 — 팝오버 검색창에서 좁힌다)
+  const [labels, setLabels] = useState<string[]>([]);
+  const [labelOptions, setLabelOptions] = useState<string[]>([]);
+  const [labelLoading, setLabelLoading] = useState(false);
+  const [labelError, setLabelError] = useState('');
+  const [labelTruncated, setLabelTruncated] = useState(false);
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   // 자리표시자 목록 펼침 — (i) 버튼. 목록에서 누르면 템플릿 커서 자리에 삽입된다
   const [helpOpen, setHelpOpen] = useState(false);
@@ -164,7 +179,6 @@ export function JiraReportPanel({
   // ── 화면 필터(facet)·정렬·선택 ──
   const [fStatus, setFStatus] = useState<string[] | undefined>(undefined);
   const [fAssignee, setFAssignee] = useState<string[] | undefined>(undefined);
-  const [fLabel, setFLabel] = useState<string[] | undefined>(undefined);
   const [fType, setFType] = useState<string[] | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('created');
@@ -213,6 +227,74 @@ export function JiraReportPanel({
     void loadProjects();
   }, [loadProjects]);
 
+  // ── 레이블 선택지 — 고른 프로젝트가 쓰는 레이블(10분 캐시, 최신순). 검색은 팝오버 안에서 ──
+  const loadLabels = useCallback(
+    async (force = false) => {
+      setLabelLoading(true);
+      try {
+        const res = await window.oneApp.jira.report.labels(projectKeys, force);
+        setLabelOptions(res.labels ?? []);
+        setLabelTruncated(res.truncated === true);
+        setLabelError(res.ok ? '' : (res.error ?? '레이블 목록을 불러오지 못했습니다.'));
+      } catch (e) {
+        setLabelError(errMsg(e, '레이블 목록을 불러오지 못했습니다.'));
+      } finally {
+        setLabelLoading(false);
+      }
+    },
+    [projectKeys],
+  );
+
+  // 프로젝트가 바뀌면 그 프로젝트의 레이블로 갈아 끼운다 (고른 레이블은 그대로 둔다 —
+  // 프로젝트를 넘나드는 배포 레이블이라 지우면 조건이 조용히 바뀐다)
+  useEffect(() => {
+    void loadLabels();
+  }, [loadLabels]);
+
+  /**
+   * 고른 레이블을 **선택지 순서(= 최신 우선)** 로 맞춘다 — 고른 순서대로 두면 칩·JQL·복사 결과가
+   * 뒤죽박죽 읽힌다. 선택지에 없는 값(다른 프로젝트 레이블)은 뒤에 이름 역순으로 붙인다.
+   */
+  const orderLabels = useCallback(
+    (list: string[]) => {
+      const order = new Map(labelOptions.map((v, i) => [v, i] as const));
+      const at = (v: string) => order.get(v) ?? Number.MAX_SAFE_INTEGER;
+      const sorted = [...list].sort((a, b) => at(a) - at(b) || compareName(b, a));
+      // 순서가 그대로면 기존 배열을 준다 (불필요한 리렌더 방지)
+      return sorted.every((v, i) => v === list[i]) ? list : sorted;
+    },
+    [labelOptions],
+  );
+
+  /**
+   * 담긴 레이블을 갈아 끼운다 — **처음 담는 순간 기간 제한을 끈다.**
+   * 배포일 레이블은 날짜 축과 무관해서, 기간이 걸려 있으면 그 달에 갱신되지 않은 티켓이
+   * 통째로 빠진다(이 조건을 서버로 올린 이유 그 자체다). 사용자가 다시 기간을 켜면 존중한다.
+   */
+  const changeLabels = useCallback(
+    (next: string[]) => {
+      if (labels.length === 0 && next.length > 0) setPeriodMode('all');
+      setLabels(orderLabels(next));
+    },
+    [labels, orderLabels],
+  );
+
+  // 선택지가 갈리면(프로젝트 변경·새로고침) 고른 것도 그 순서에 다시 맞춘다
+  useEffect(() => {
+    setLabels((cur) => orderLabels(cur));
+  }, [orderLabels]);
+
+  /**
+   * 선택지 = 받은 목록 ∪ 이미 고른 것 — 프로젝트를 바꿔 목록이 갈려도 고른 것을 해제할 수 있어야
+   * 한다. **순서는 main 이 준 최신순 그대로** 두고(이름이 날짜면 그 날짜, 아니면 최신 티켓 기준),
+   * 목록에 없는 선택만 뒤에 붙인다.
+   */
+  const labelChoices = useMemo(() => {
+    const all = [...labelOptions];
+    for (const v of labels) if (!all.includes(v)) all.push(v);
+    return all.map((v) => ({ value: v, label: v }));
+  }, [labelOptions, labels]);
+
   // ── 조건 → JQL 미리보기 (main 과 같은 함수) ──
   const period = useMemo<JiraReportPeriod>(
     () =>
@@ -228,9 +310,10 @@ export function JiraReportPanel({
       projectKeys,
       period,
       dateField,
+      labels,
       jql: advanced ? customJql : undefined,
     }),
-    [projectKeys, period, dateField, advanced, customJql],
+    [projectKeys, period, dateField, labels, advanced, customJql],
   );
   const preview = useMemo(() => {
     try {
@@ -279,7 +362,6 @@ export function JiraReportPanel({
     () => ({
       status: facetOptions(issues, (it) => [it.status]),
       assignee: facetOptions(issues, (it) => [it.assignee ?? NONE]),
-      label: facetOptions(issues, (it) => (it.labels.length ? it.labels : [NONE]), 'name'),
       type: facetOptions(issues, (it) => [it.issueType]),
     }),
     [issues],
@@ -291,12 +373,11 @@ export function JiraReportPanel({
       (it) =>
         passes(fStatus, [it.status]) &&
         passes(fAssignee, [it.assignee ?? NONE]) &&
-        passes(fLabel, it.labels.length ? it.labels : [NONE]) &&
         passes(fType, [it.issueType]) &&
         (!q || it.key.toLowerCase().includes(q) || it.summary.toLowerCase().includes(q)),
     );
     return list.sort(SORT_CMP[sort]);
-  }, [issues, fStatus, fAssignee, fLabel, fType, search, sort]);
+  }, [issues, fStatus, fAssignee, fType, search, sort]);
 
   const filtered = visible.length !== issues.length;
 
@@ -413,6 +494,50 @@ export function JiraReportPanel({
             </Tooltip>
           </div>
 
+          {/* 레이블 — facet 이 아니라 **서버 조건**이다. 팝오버 검색창에서 `09` 처럼 찾는다 */}
+          <div className="jira-report__field">
+            <span className="jira-report__label">레이블</span>
+            <MultiSelect
+              className="jira-report__labels"
+              options={labelChoices}
+              values={labels}
+              onChange={(v) => changeLabels(v ?? [])}
+              emptyLabel={
+                labelLoading
+                  ? '불러오는 중...'
+                  : labelChoices.length
+                    ? '선택 안 함'
+                    : '레이블 없음'
+              }
+              countLabel={(n) => `${n}개 선택`}
+              searchable
+              searchPlaceholder="레이블 검색 (예: 09)"
+              limit={200}
+              disabled={advanced || labelChoices.length === 0}
+              aria-label="레이블"
+            />
+            <Tooltip label="레이블 목록 새로고침">
+              <RefreshButton
+                size={13}
+                spinning={labelLoading}
+                onClick={() => void loadLabels(true)}
+              />
+            </Tooltip>
+            {labels.length > 0 && (
+              <Tooltip label="고른 레이블 비우기">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="고른 레이블 비우기"
+                  disabled={advanced}
+                  onClick={() => changeLabels([])}
+                >
+                  <Icon name="x" size={13} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+
           <div className="jira-report__field">
             <span className="jira-report__label">기간</span>
             <Segment<PeriodMode>
@@ -486,6 +611,25 @@ export function JiraReportPanel({
           </div>
         </div>
 
+        {/* 고른 레이블 — 조건에 무엇이 걸렸는지 한눈에 보이게. 누르면 그 하나만 뺀다 */}
+        {labels.length > 0 && (
+          <div className="jira-report__label-chips">
+            {labels.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className="chip jira-report__label-chip"
+                disabled={advanced}
+                aria-label={`${v} 빼기`}
+                onClick={() => changeLabels(labels.filter((x) => x !== v))}
+              >
+                <span className="jira-report__label-chip-name">{v}</span>
+                <Icon name="x" size={11} />
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="jira-report__row jira-report__row--sub">
           <Checkbox
             label="JQL 직접 입력"
@@ -514,6 +658,11 @@ export function JiraReportPanel({
           {!advanced && preview.error && (
             <span className="jira-report__jql jira-report__jql--warn">{preview.error}</span>
           )}
+          {!advanced && labels.length > 0 && periodMode !== 'all' && (
+            <span className="jira-report__jql jira-report__jql--warn">
+              기간도 함께 걸려 있습니다 — 그 기간에 갱신되지 않은 티켓은 빠집니다.
+            </span>
+          )}
         </div>
 
         {advanced && (
@@ -529,6 +678,12 @@ export function JiraReportPanel({
       </div>
 
       {projectsError && <Banner variant="warning">{projectsError}</Banner>}
+      {labelError && <Banner variant="warning">{labelError}</Banner>}
+      {labelTruncated && (
+        <Banner variant="warning">
+          레이블이 많아 앞 {labelOptions.length}개만 받았습니다 — 검색으로 좁혀 고르세요.
+        </Banner>
+      )}
       {error && <Banner variant="danger">{error}</Banner>}
       {truncated && (
         <Banner variant="warning">
@@ -556,15 +711,6 @@ export function JiraReportPanel({
             countLabel={(n) => `담당자 ${n}명`}
             small
             aria-label="담당자 필터"
-          />
-          <MultiSelect
-            options={facets.label}
-            values={fLabel}
-            onChange={setFLabel}
-            allLabel="레이블 전체"
-            countLabel={(n) => `레이블 ${n}개`}
-            small
-            aria-label="레이블 필터"
           />
           <MultiSelect
             options={facets.type}

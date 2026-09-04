@@ -513,6 +513,9 @@ body {
   justify-content: center;
   gap: 7px;
   padding: 8px 16px;
+  // 좁은 flex 줄에서 버튼이 압축되면 글자가 세로로 쪼개진다(2026-09-04 실측) — 줄을 넘기게 둔다
+  flex-shrink: 0;
+  white-space: nowrap;
   border-radius: var(--r-full); // 필 캡슐 — 애플의 "필=액션" 문법
   border: 1px solid transparent;
   font-size: var(--fs-body);

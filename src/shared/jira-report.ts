@@ -18,6 +18,24 @@ export const REPORT_DATE_FIELDS: { value: JiraReportDateField; label: string }[]
   { value: "resolved", label: "해결일" },
 ];
 
+/** 한 번에 보낼 레이블 상한 — JQL 이 지나치게 길어지는 것을 막는 방어값 */
+const LABEL_MAX = 200;
+
+/** JQL 문자열 리터럴 — 역슬래시·따옴표를 이스케이프한다 */
+const jqlString = (v: string): string =>
+  `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+/** 레이블 정리 — 공백 제거·빈 값·중복 제거 (Jira 레이블에는 공백이 없다) */
+export function normalizeLabels(labels: string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of labels ?? []) {
+    const v = String(raw ?? "").trim();
+    if (v && !out.includes(v)) out.push(v);
+    if (out.length >= LABEL_MAX) break;
+  }
+  return out;
+}
+
 /** 프로젝트 키 정리 — 대문자·형식 검증·중복 제거. 형식이 어긋난 값은 조용히 버린다 */
 export function normalizeProjectKeys(keys: string[]): string[] {
   const out: string[] = [];
@@ -60,16 +78,25 @@ function periodClause(
 /**
  * 조회 조건 → JQL.
  * - 고급 JQL 이 있으면 그대로 보낸다(앞뒤 공백만 정리).
- * - 아니면 `project IN (…) AND <기간>` 으로 조립한다. 프로젝트가 없으면 throw —
- *   전 프로젝트 조회는 상한에 바로 걸려 보고용으로 의미가 없다.
+ * - 아니면 `project IN (…) AND labels IN (…) AND <기간>` 으로 조립한다.
+ * - **프로젝트나 레이블 중 하나는 있어야 한다** — 조건 없는 전 프로젝트 조회는 상한에 바로
+ *   걸려 보고용으로 의미가 없다. 반대로 레이블이 있으면 그 자체로 충분히 좁으므로 프로젝트
+ *   없이도 허용한다(운영배포 레이블처럼 여러 프로젝트에 걸친 축을 그대로 뽑을 수 있다).
  * - ORDER BY 는 페이징 안정성용이다. 화면 정렬은 렌더러가 따로 한다.
  */
 export function buildReportJql(q: JiraReportQuery): string {
   const custom = (q.jql ?? "").trim();
   if (custom) return custom;
   const keys = normalizeProjectKeys(q.projectKeys);
-  if (keys.length === 0) throw new Error("프로젝트를 하나 이상 고르세요.");
-  const clauses = [`project IN (${keys.join(", ")})`];
+  const labels = normalizeLabels(q.labels);
+  if (keys.length === 0 && labels.length === 0) {
+    throw new Error("프로젝트나 레이블을 하나 이상 고르세요.");
+  }
+  const clauses: string[] = [];
+  if (keys.length > 0) clauses.push(`project IN (${keys.join(", ")})`);
+  if (labels.length > 0) {
+    clauses.push(`labels IN (${labels.map(jqlString).join(", ")})`);
+  }
   const period = periodClause(q.period, q.dateField);
   if (period) clauses.push(period);
   return `${clauses.join(" AND ")} ORDER BY created ASC`;

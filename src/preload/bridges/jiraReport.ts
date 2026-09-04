@@ -3,6 +3,7 @@
 // 채널 이름은 여기 한 곳에만 둔다 — 이유는 settings.ts 머리말.
 import type { IpcRenderer } from 'electron';
 import type {
+  JiraLabelsResult,
   JiraProjectsResult,
   JiraReportPrefs,
   JiraReportQuery,
@@ -12,6 +13,11 @@ import type {
 export interface JiraReportBridge {
   /** 프로젝트 선택지 (force=true 는 새로고침 — 10분 캐시 우회) */
   projects: (force?: boolean) => Promise<JiraProjectsResult>;
+  /**
+   * 레이블 선택지 — 프로젝트를 주면 **그 프로젝트가 쓰는 레이블만**(비우면 인스턴스 전체).
+   * 최신 순으로 정렬돼 온다. force=true 는 새로고침(10분 캐시 우회).
+   */
+  labels: (projectKeys: string[], force?: boolean) => Promise<JiraLabelsResult>;
   search: (query: JiraReportQuery) => Promise<JiraReportResult>;
   /** 마지막 선택(템플릿·프로젝트·기간 기준) — userData 에 남긴다 */
   getPrefs: () => Promise<JiraReportPrefs>;
@@ -20,6 +26,7 @@ export interface JiraReportBridge {
 
 export const jiraReportBridge = (ipcRenderer: IpcRenderer): JiraReportBridge => ({
   projects: (force) => ipcRenderer.invoke('jira:report:projects', force),
+  labels: (projectKeys, force) => ipcRenderer.invoke('jira:report:labels', projectKeys, force),
   search: (query) => ipcRenderer.invoke('jira:report:search', query),
   getPrefs: () => ipcRenderer.invoke('jira:report:prefs:get'),
   savePrefs: (prefs) => ipcRenderer.invoke('jira:report:prefs:set', prefs),
