@@ -511,7 +511,7 @@ export function JiraReportPanel({
               }
               countLabel={(n) => `${n}개 선택`}
               searchable
-              searchPlaceholder="레이블 검색 (예: 09)"
+              searchPlaceholder="레이블 검색"
               limit={200}
               disabled={advanced || labelChoices.length === 0}
               aria-label="레이블"
