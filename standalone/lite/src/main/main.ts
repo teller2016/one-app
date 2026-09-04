@@ -40,11 +40,15 @@ const WINDOW_MIN = { width: 720, height: 560 };
 let mainWindow: BrowserWindow | null = null;
 
 /**
- * 개발 인스턴스용 아이콘 경로 — 패키징한 앱은 번들의 `.icns`/`.ico` 를 쓰지만,
- * `npm start` 로 띄운 개발 인스턴스는 앱 번들이 없어 **Electron 기본 아이콘**이 뜬다.
+ * 개발 인스턴스용 아이콘 — 패키징한 앱은 번들의 `.icns`/`.ico` 를 쓰지만, `npm start` 로 띄운
+ * 개발 인스턴스는 앱 번들이 없어 **Electron 기본 아이콘**이 뜬다.
+ *
+ * 본체와 같은 이유로 **'DEV' 밴드를 합성한 아이콘**(`assets/icon-dev.png` — `npm run icon:dev`,
+ * 생성은 본체 `scripts/make-dev-icon.mjs` 공용)을 쓴다. 빌드한 OneAppLite 와 나란히 띄우므로
+ * Dock·작업표시줄에서 구분되어야 한다.
  * (`__dirname` = `.vite/build` 이므로 두 단계 위가 이 프로젝트 루트다)
  */
-const DEV_ICON = path.join(__dirname, '../../assets/icon.png');
+const DEV_ICON = path.join(__dirname, '../../assets/icon-dev.png');
 
 const createWindow = () => {
   // 저장된 테마를 네이티브에도 반영 — 다이얼로그·렌더러의 prefers-color-scheme 이 따라간다

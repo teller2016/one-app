@@ -6,14 +6,27 @@
 // PNG 디코드·인코드는 `scripts/lib/png.mjs`(단독판 아이콘 생성과 공용)가 맡는다.
 //
 // 실행: npm run icon:dev  (아이콘 원본을 바꿨을 때만 다시 돌리면 된다)
+//
+// 단독 배포판(standalone/lite)도 **이 스크립트를 그대로 쓴다** — 색만 다른 같은 아이콘이라
+// 밴드 합성 로직을 복제할 이유가 없다. 경로는 인자로 받는다:
+//   node ../../scripts/make-dev-icon.mjs --src assets/icon.png --out assets/icon-dev.png
+// (인자를 주지 않으면 본체 assets 를 쓴다 — 기존 `npm run icon:dev` 그대로)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePng, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'assets', 'icon.png');
-const OUT = path.join(ROOT, 'assets', 'icon-dev.png');
+
+/** `--src`/`--out` 인자 (없으면 본체 assets). 상대경로는 **부른 곳** 기준으로 푼다 */
+function argPath(flag, fallback) {
+  const i = process.argv.indexOf(flag);
+  const v = i >= 0 ? process.argv[i + 1] : undefined;
+  return v ? path.resolve(process.cwd(), v) : fallback;
+}
+
+const SRC = argPath('--src', path.join(ROOT, 'assets', 'icon.png'));
+const OUT = argPath('--out', path.join(ROOT, 'assets', 'icon-dev.png'));
 
 // ── 글자 그리기 ───────────────────────────────────────────────────────────
 // 비트맵 폰트 대신 선분·타원호까지의 거리로 그린다 — 정수배 확대에서 생기는
@@ -168,7 +181,7 @@ function main() {
   fs.writeFileSync(OUT, encodePng({ width, height, px }));
    
   console.log(
-    `[icon] ${path.relative(ROOT, OUT)} 생성 — 본체 y=${top}..${bottom}, 밴드 y=${bandTop}..${bandBottom}`
+    `[icon] ${path.relative(process.cwd(), OUT)} 생성 — 본체 y=${top}..${bottom}, 밴드 y=${bandTop}..${bandBottom}`
   );
 }
 

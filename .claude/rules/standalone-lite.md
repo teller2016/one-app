@@ -89,7 +89,10 @@ typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
 본체 `assets/icon.png` 의 **색만 바꿔** 쓴다(`npm run icon` — 그린). PNG 코덱은 본체
 `scripts/lib/png.mjs` 공용이고, `.icns`·`.ico` 는 `sips`·`iconutil` + 직접 조립으로 만든다.
 ⚠️ hue 만 돌리면 초록·노랑이 형광색처럼 뜬다 — **원본과 같은 휘도**를 유지한다(README 참고).
-개발 인스턴스는 앱 번들이 없어 `main.ts` 가 `app.dock.setIcon` 으로 직접 올린다.
+개발 인스턴스는 앱 번들이 없어 `main.ts` 가 `app.dock.setIcon` 으로 직접 올리는데, 그때 쓰는 것은
+**'DEV' 밴드를 합성한 `assets/icon-dev.png`**(`npm run icon:dev`)다 — 빌드한 OneAppLite 와 나란히
+띄우므로 Dock 에서 구분되어야 한다. 밴드 합성은 본체 `scripts/make-dev-icon.mjs` 를 **경로 인자로
+재사용**한다(`--src`/`--out`) — 색만 다른 같은 아이콘이라 로직을 복제하지 않는다.
 
 ## ⚠️ 개발 인스턴스를 죽일 때 pkill 패턴이 겹친다
 경로가 `coding/one-app/standalone/lite/node_modules/...` 라서 본체용 패턴에 함께 걸린다.

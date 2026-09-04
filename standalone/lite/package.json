@@ -13,6 +13,7 @@
     "make:mac": "electron-forge make --platform=darwin",
     "release": "node scripts/release.mjs",
     "icon": "node scripts/make-icon.mjs",
+    "icon:dev": "node ../../scripts/make-dev-icon.mjs --src assets/icon.png --out assets/icon-dev.png",
     "typecheck": "tsc --noEmit",
     "reach": "node scripts/reach.mjs"
   },
