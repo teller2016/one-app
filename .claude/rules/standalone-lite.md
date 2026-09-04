@@ -102,3 +102,10 @@ pkill -f "standalone/lite/node_modules/electron/dist"
 ```
 `pkill -f "one-app/node_modules/electron/dist"` 처럼 쓰면 **둘 다 죽는다.** 본체와 단독판을
 나란히 띄워 비교하는 것이 기본 사용법이므로(포트·userData 가 갈린다) 패턴을 정확히 줄 것.
+
+⚠️ **죽일 때만이 아니라 "떠 있는지 볼 때"도 같은 함정**이다 — 바탕화면 런처
+`원앱 개발실행.command` 가 `pgrep -f "electron-forge start"` 로 중복 실행을 막고 있었는데,
+그 패턴에 **lite 의 forge 까지 걸려** lite 를 켜 둔 동안 본체가 "이미 실행 중" 으로 조용히
+종료됐다(2026-09-04 사용자 제보). 지금은 경로로 본체만 특정한다:
+`pgrep -f "coding/one-app/node_modules/.bin/electron-forge"`
+(lite 는 `coding/one-app/standalone/lite/node_modules/...` 라 걸리지 않는다)
