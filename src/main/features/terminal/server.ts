@@ -132,7 +132,8 @@ function isSameOrigin(req: http.IncomingMessage): boolean {
  */
 function hasValidQueryToken(url: URL): boolean {
   const q = url.searchParams.get('token');
-  return !!q && timingEqual(q, getOrCreateToken());
+  const token = getOrCreateToken(); // null(복호화 실패)이면 아무 값도 통과하지 않는다
+  return !!q && token !== null && timingEqual(q, token);
 }
 
 function isAuthed(req: http.IncomingMessage): boolean {
@@ -141,7 +142,8 @@ function isAuthed(req: http.IncomingMessage): boolean {
   const m = (req.headers.cookie ?? '').match(
     new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`)
   );
-  return !!m && timingEqual(decodeURIComponent(m[1]), getOrCreateToken());
+  const token = getOrCreateToken();
+  return !!m && token !== null && timingEqual(decodeURIComponent(m[1]), token);
 }
 
 // ── 정적 서빙 (prod: asar 안 mobile_window 빌드 / dev: Vite dev 서버 프록시) ──
@@ -370,6 +372,14 @@ export async function startServer(): Promise<TerminalServerStatus> {
   if (server) return getServerStatus();
   lastError = '';
 
+  // 저장된 접속 토큰을 복호화하지 못하면(키체인 프롬프트 취소·잠김) 시작하지 않는다 — 폰이 인증할 수
+  // 없고, 예전처럼 재발급하면 폰의 접속 URL·쿠키가 조용히 무효화된다(store.ts getOrCreateToken)
+  if (getOrCreateToken() === null) {
+    lastError = 'MO 접속 토큰을 복호화할 수 없습니다 — 키체인 접근을 허용한 뒤 다시 시작하세요.';
+    emit();
+    return getServerStatus();
+  }
+
   // Tailscale 인증서가 있으면 HTTPS — 그래야 폰에서 설치형 PWA(주소창 없음)가 되고
   // secure context 로 클립보드·wss 가 정상 동작한다. 없으면 기존처럼 HTTP.
   const tls = await ensureTls();
@@ -404,12 +414,13 @@ export async function startServer(): Promise<TerminalServerStatus> {
       return;
     }
     const extraHeaders: Record<string, string> = { ...SECURITY_HEADERS };
-    if (hasValidQueryToken(url)) {
+    const token = getOrCreateToken();
+    if (token !== null && hasValidQueryToken(url)) {
       // 첫 진입(토큰 쿼리)을 쿠키로 승격 — 이후엔 토큰 없는 주소(북마크·홈 화면 아이콘)로도 인증
       // ⚠️ `Secure` 는 TLS 로 떴을 때만 붙인다 — 평문 폴백에서 붙이면 브라우저가 쿠키를 아예
       //    저장하지 않아 폰에서 매번 QR 을 다시 찍어야 한다.
       extraHeaders['Set-Cookie'] =
-        `${COOKIE_NAME}=${encodeURIComponent(getOrCreateToken())}; HttpOnly; SameSite=Lax; ` +
+        `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; ` +
         `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}${tls ? '; Secure' : ''}`;
     }
     // 엔트리 분기 — `/terminal*` 은 터미널 페이지, 그 외는 폰 앱 셸.
@@ -621,6 +632,7 @@ export async function stopServer(): Promise<void> {
  */
 function accessUrls(pagePath = '/'): string[] {
   const token = getOrCreateToken();
+  if (token === null) return []; // 복호화 실패 — 안내할 주소가 없다
   const port = getPort();
   if (tlsDomain) {
     return [`https://${tlsDomain}:${port}${pagePath}?token=${token}`];

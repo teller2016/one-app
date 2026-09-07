@@ -91,6 +91,41 @@ export function writeUserJson(filename: string, value: unknown): void {
   });
 }
 
+// ── 키체인 첫 접근(워밍업) ─────────────────────────────
+// macOS 는 safeStorage 가 키체인 항목 `One App Safe Storage` 를 처음 읽을 때 프롬프트(허용·로그인
+// 비밀번호)를 띄울 수 있다 — 접근 목록이 **빌드별 cdhash** 에 묶여 있어 재빌드 뒤 첫 실행마다 뜬다
+// (2026-09-07 실측: 해시 60개 누적, 자가서명이라 구조적). 그 호출은 **동기**라 프롬프트가 닫힐 때까지
+// main 스레드가 멈춘다. 창이 그려지기 전(ready 시점)에 멈추면 빈 창만 남아 먹통으로 보였다.
+// 그래서 첫 접근을 메인 창이 그려진 뒤·앱이 앞에 있을 때 한 곳에서 1회 치르고(Chromium 이 키를 프로세스
+// 수명 동안 캐시해 이후 복호화는 프롬프트 없이 즉시), 기동 경로의 소비자는 whenSecretsReady 를 기다린다.
+let secretsReady: Promise<void> | null = null;
+let resolveSecretsReady: (() => void) | null = null;
+/** 워밍업이 어떤 이유로든 안 불리면(창 없는 기동 등) 기동 경로가 영영 막히지 않게 하는 상한 */
+const SECRETS_READY_FALLBACK_MS = 15_000;
+
+/** 키체인 워밍업이 끝날 때까지 기다린다 (기동 경로에서 decryptSecret 을 부르기 전에) */
+export function whenSecretsReady(): Promise<void> {
+  if (!secretsReady) {
+    secretsReady = new Promise<void>((resolve) => {
+      resolveSecretsReady = resolve;
+      setTimeout(resolve, SECRETS_READY_FALLBACK_MS);
+    });
+  }
+  return secretsReady;
+}
+
+/** 키체인 첫 접근을 지금 치른다 — main.ts 가 메인 창 did-finish-load 뒤 앱을 앞으로 가져온 다음 부른다 */
+export function warmUpSecrets(): void {
+  try {
+    // 암호화만 해도 키를 읽는다 — 저장된 비밀이 없어도 프롬프트를 여기서 소화한다
+    if (safeStorage.isEncryptionAvailable()) safeStorage.encryptString('warm-up');
+  } catch {
+    // 실패해도 진행 — 실제 복호화가 각자 null 로 처리한다
+  }
+  if (!secretsReady) secretsReady = Promise.resolve();
+  else resolveSecretsReady?.();
+}
+
 /**
  * 키체인 암호화를 쓸 수 있는가.
  *

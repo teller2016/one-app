@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { whenSecretsReady } from '../../lib/store';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -227,6 +228,9 @@ export function registerTerminalIpc() {
   // 사용자가 접속 모달에서 손으로 켜야 하므로, 올라올 시간을 주며 몇 번 더 시도한다.
   if (getServerEnabled()) {
     void app.whenReady().then(async () => {
+      // 토큰 복호화가 이 앱의 **첫 키체인 접근**이 되면 창이 그려지기 전에 프롬프트로 main 이 멈춘다 —
+      // 메인 창이 그려진 뒤 워밍업(lib/store.ts)이 끝나길 기다린다
+      await whenSecretsReady();
       for (const wait of [0, 3_000, 8_000, 20_000]) {
         if (wait) await sleep(wait);
         const status = await startServer();

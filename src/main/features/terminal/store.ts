@@ -55,13 +55,14 @@ export function setNotifyLevel(level: TerminalNotifyLevel): void {
   });
 }
 
-/** 저장된 토큰 반환 — 없거나 복호화 실패(키체인 변경)면 새로 발급 */
-export function getOrCreateToken(): string {
+/**
+ * 저장된 토큰 반환 — 없으면 새로 발급.
+ * ⚠️ 저장돼 있는데 **복호화만 실패**(키체인 프롬프트 취소·잠김)하면 null 이다. 예전엔 이때도 재발급했는데,
+ * 그러면 폰의 접속 URL·쿠키가 사용자 모르게 전부 무효화됐다(2026-09-07). 호출부는 인증 거부·시작 거부로 처리한다.
+ */
+export function getOrCreateToken(): string | null {
   const store = read();
-  if (store.tokenEnc) {
-    const token = decryptSecret(store.tokenEnc);
-    if (token) return token;
-  }
+  if (store.tokenEnc) return decryptSecret(store.tokenEnc);
   return regenerateToken();
 }
 

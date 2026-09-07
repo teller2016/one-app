@@ -32,6 +32,7 @@ import { registerWeeklyIpc } from "./features/weekly/ipc";
 import { registerWorkspacesIpc } from "./features/workspaces/ipc";
 import { IS_DEV_INSTANCE } from "./lib/devInstance";
 import { initDockBadge } from "./lib/dockBadge";
+import { warmUpSecrets } from "./lib/store";
 import {
   loadWindowState,
   trackWindowState,
@@ -133,6 +134,25 @@ const createWindow = () => {
   // ⚠️ 메인 창 전용 — 터미널 팝아웃(features/terminal/windows.ts)에서 호출하면
   // 토스트·app:navigate 가 그쪽 창으로 넘어간다
   setNotifyWindow(mainWindow);
+
+  // 키체인 첫 접근(재빌드 뒤 첫 실행엔 프롬프트가 뜬다)은 **화면이 그려진 뒤, 앱이 앞에 있을 때** 1회 —
+  // ready 시점에 MO 서버 자동 시작이 먼저 복호화를 부르면 빈 창인 채로 main 이 멈춰 먹통으로 보였다
+  // (2026-09-07). 사유·기다리는 쪽은 lib/store.ts 의 warmUpSecrets/whenSecretsReady.
+  mainWindow.webContents.once("did-finish-load", () => {
+    if (mainWindow.isDestroyed()) return;
+    app.focus({ steal: true }); // 프롬프트가 다른 앱 뒤에 숨지 않게
+    warmUpSecrets();
+  });
+  // 렌더러가 죽으면 빈 창이 영영 남는다 — 정상 종료가 아니면 다시 로드한다
+  mainWindow.webContents.on("render-process-gone", (_e, details) => {
+    console.error("[main] 렌더러 종료:", details.reason, details.exitCode);
+    if (details.reason !== "clean-exit" && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload();
+    }
+  });
+  mainWindow.webContents.on("unresponsive", () => {
+    console.warn("[main] 렌더러 무응답");
+  });
 
   // 개발 인스턴스의 "— DEV" 제목을 지킨다 — 페이지가 로드되면 index.html 의
   // <title>One App</title> 이 창 제목을 덮어써서 ⌘탭 목록에서 구분이 사라진다
