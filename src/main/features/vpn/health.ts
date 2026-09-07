@@ -156,7 +156,14 @@ export async function interfaceLabel(iface: string): Promise<string> {
   return hardwarePorts?.get(iface) ?? iface;
 }
 
-/** VPN 서버 포트에 TCP 가 닿는가 — 서버 우회 경로(물리)를 타므로 물리 네트워크 생존 확인이다. 접속만 하고 바로 끊는다 */
+/**
+ * VPN 서버 포트에 TCP 가 닿는가 — 서버 우회 경로(물리)를 타므로 물리 네트워크 생존 확인이다. 접속만 하고 바로 끊는다.
+ *
+ * ⚠️ "**새** 기본 인터페이스 쪽 길로" 닿는지는 이 방법으로 볼 수 없다(2026-09-07 실측). macOS 는 소켓을 인터페이스에
+ * 묶어도(`localAddress` 바인딩·`nc -b`·`ping -b` = IP_BOUND_IF) 목적지의 더 구체적인 경로(서버 /32 → 옛 인터페이스,
+ * `0/1` → utun)가 다른 인터페이스에 있으면 그 인터페이스의 기본 경로로 폴백하지 않고 **즉시 EHOSTUNREACH** 다
+ * (기본 인터페이스는 스코프된 default 경로가 없다). 경로 옮기기 전 게이트로 쓰려다 항상 "안 닿음"이 되어 되돌렸다.
+ */
 export function isServerReachable(server: VpnServer, timeoutMs = REACH_TIMEOUT_MS): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect({ host: server.ip, port: server.port });

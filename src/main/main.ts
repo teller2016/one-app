@@ -135,12 +135,12 @@ const createWindow = () => {
   // 토스트·app:navigate 가 그쪽 창으로 넘어간다
   setNotifyWindow(mainWindow);
 
-  // 키체인 첫 접근(재빌드 뒤 첫 실행엔 프롬프트가 뜬다)은 **화면이 그려진 뒤, 앱이 앞에 있을 때** 1회 —
-  // ready 시점에 MO 서버 자동 시작이 먼저 복호화를 부르면 빈 창인 채로 main 이 멈춰 먹통으로 보였다
-  // (2026-09-07). 사유·기다리는 쪽은 lib/store.ts 의 warmUpSecrets/whenSecretsReady.
+  // 키체인 첫 접근(재빌드 뒤 첫 실행엔 프롬프트가 뜬다)은 **화면이 그려진 뒤** 1회 — ready 시점에 MO 서버
+  // 자동 시작이 먼저 복호화를 부르면 빈 창인 채로 main 이 멈춰 먹통으로 보였다(2026-09-07). 앱을 앞으로
+  // 가져오는 것은 lib/store.ts 의 첫 접근 게이트가 경로 무관하게 처리한다(위젯 IPC 가 먼저 와도 된다).
+  // 사유·기다리는 쪽은 lib/store.ts 의 warmUpSecrets/whenSecretsReady.
   mainWindow.webContents.once("did-finish-load", () => {
     if (mainWindow.isDestroyed()) return;
-    app.focus({ steal: true }); // 프롬프트가 다른 앱 뒤에 숨지 않게
     warmUpSecrets();
   });
   // 렌더러가 죽으면 빈 창이 영영 남는다 — 정상 종료가 아니면 다시 로드한다

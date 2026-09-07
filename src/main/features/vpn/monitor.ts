@@ -46,6 +46,10 @@ let probing = false;
 let followedFor: string | null = null;
 let lastAutoReconnectAt = 0; // 자동 SIGHUP 쿨다운 기준
 const inCooldown = () => Date.now() - lastAutoReconnectAt < MIN_AUTO_RECONNECT_GAP_MS;
+// 프로브·도달 확인은 합쳐 십수 초 걸린다 — 그 사이 OpenVPN 이 스스로 RECONNECTING 으로 갔으면(proto tcp 소켓 리셋 등,
+// 상태는 connecting) 우리가 끼어들 일이 아니다. await 뒤마다 확인해 옛 터널의 판정으로 토스트·SIGHUP 을 내지 않는다.
+// 끼어들면 reconnectVpn 이 "연결된 상태에서만" 으로 throw 해 헛된 실패 알럿이 떴다(2026-09-07 리뷰)
+const stillConnected = () => getVpnStatus().state === 'connected';
 
 /** 상태 구독을 걸고, 이미 연결돼 있으면(앱 재시작 후 재접속) 바로 감시를 시작한다 */
 export function startVpnHealthMonitor() {
@@ -87,6 +91,7 @@ async function runProbe() {
   try {
     const routes = await inspectRoutes(getVpnServer()?.ip ?? null);
     const result = await probeTunnel(routes);
+    if (!stillConnected()) return; // 프로브 사이 데몬이 스스로 재연결에 들어갔다 — 이 결과는 옛 터널 것
     const judged = judgeProbe(result, failures);
     failures = judged.failures;
     if (judged.verdict === 'alive') {
@@ -117,7 +122,11 @@ async function followDefaultInterface(routes: RouteView) {
   if (inCooldown()) return; // followedFor 를 남기지 않아 다음 프로브에서 다시 시도한다
   followedFor = fingerprint;
   if (!getVpnCredentials()?.totpSecret) return;
+  // ⚠️ 여기엔 사망 복구 같은 도달 게이트가 없다 — "새 인터페이스 쪽 길로 서버에 닿는가"는 root 없이 검사할 수 없다
+  // (health.ts isServerReachable 주석의 실측). 새 기본 네트워크가 서버에 못 닿는 격리 랜이면 SIGHUP 뒤 재시도
+  // 소진으로 데몬을 잃는 위험이 남는다 — 알고 감수한다(살아 있는 터널을 그대로 두면 인터넷은 옛 길로 계속 된다)
   const label = await interfaceLabel(routes.defaultIface!);
+  if (!stillConnected()) return;
   sendToast({
     title: 'VPN 경로 변경',
     message: `기본 네트워크가 ${label} 로 바뀌어 터널을 옮깁니다.`,
@@ -140,9 +149,14 @@ async function followDefaultInterface(routes: RouteView) {
   }
 }
 
-/** 재연결 실패 알림 — 그 사이 사용자가 [연결 해제]로 데몬을 끝냈으면(SIGTERM → disconnected) 실패가 아니다 */
+/**
+ * 재연결 실패 알림 — 그 사이 사용자가 [연결 해제]로 데몬을 끝냈거나(SIGTERM → disconnected) OpenVPN 이 스스로
+ * 재연결에 들어갔으면(connecting) 우리 실패가 아니다. 우리 SIGHUP 의 실패는 waitForConnected 가 error·disconnected
+ * 로 만든 뒤 reject 하므로 connecting 으로 여기 오는 경우는 그 자체 RECONNECTING 뿐이다 — 결과는 상태 리스너가 받는다
+ */
 async function reportReconnectFailure(title: string, err: unknown) {
-  if (getVpnStatus().state === 'disconnected') return;
+  const { state } = getVpnStatus();
+  if (state === 'disconnected' || state === 'connecting') return;
   await notify({ title, body: `${(err as Error).message}\nVPN 위젯에서 다시 연결하세요.` });
 }
 
@@ -155,6 +169,7 @@ async function onTunnelDead(result: Exclude<ProbeResult, 'ok'>, routes: RouteVie
   const server = getVpnServer();
   const reachable =
     result === 'unreachable' && server?.port ? await isServerReachable(server) : null;
+  if (!stillConnected()) return; // 도달 확인 사이 데몬이 스스로 재연결에 들어갔다
   if (reconnectDecision(result, routes, reachable) === 'wait') {
     if (!wasStale) {
       sendToast({

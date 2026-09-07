@@ -103,6 +103,17 @@ let resolveSecretsReady: (() => void) | null = null;
 /** 워밍업이 어떤 이유로든 안 불리면(창 없는 기동 등) 기동 경로가 영영 막히지 않게 하는 상한 */
 const SECRETS_READY_FALLBACK_MS = 15_000;
 
+// 첫 접근 게이트 — 프로세스에서 safeStorage 를 처음 건드리는 호출 **직전에** 앱을 앞으로 가져온다(프롬프트가
+// 다른 앱 뒤에 숨지 않게). 워밍업(did-finish-load)에만 붙였더니 사이드바 위젯(출퇴근·메일)이 마운트하며 보내는
+// 첫 IPC 가 먼저 도착할 수 있었다 — React 이펙트와 load 이벤트의 도착 순서는 보장되지 않는다(2026-09-07 리뷰).
+// 어떤 경로(워밍업·IPC·트레이)로 오든 여기서 1회 처리하므로 호출부는 순서를 신경 쓰지 않는다.
+let firstAccessDone = false;
+function beforeSecretAccess(): void {
+  if (firstAccessDone) return;
+  firstAccessDone = true;
+  if (app.isReady()) app.focus({ steal: true });
+}
+
 /** 키체인 워밍업이 끝날 때까지 기다린다 (기동 경로에서 decryptSecret 을 부르기 전에) */
 export function whenSecretsReady(): Promise<void> {
   if (!secretsReady) {
@@ -114,8 +125,9 @@ export function whenSecretsReady(): Promise<void> {
   return secretsReady;
 }
 
-/** 키체인 첫 접근을 지금 치른다 — main.ts 가 메인 창 did-finish-load 뒤 앱을 앞으로 가져온 다음 부른다 */
+/** 키체인 첫 접근을 지금 치른다 — main.ts 가 메인 창 did-finish-load 에서 부른다(앞으로 가져오기는 게이트가 한다) */
 export function warmUpSecrets(): void {
+  beforeSecretAccess();
   try {
     // 암호화만 해도 키를 읽는다 — 저장된 비밀이 없어도 프롬프트를 여기서 소화한다
     if (safeStorage.isEncryptionAvailable()) safeStorage.encryptString('warm-up');
@@ -134,6 +146,7 @@ export function warmUpSecrets(): void {
  * 환경설정 화면이 이 값으로 배너를 띄운다(`AppSettingsView.secureStorage`).
  */
 export function isSecureStorageAvailable(): boolean {
+  beforeSecretAccess();
   return safeStorage.isEncryptionAvailable();
 }
 
@@ -146,9 +159,10 @@ export function isSecureStorageAvailable(): boolean {
  * 단독 배포판(One App Lite)을 받은 동료 PC 에서 위험하다. 저장이 실패하면 사용자가 즉시
  * 알고 조치(키체인 잠금 해제·재로그인·재서명)할 수 있다.
  *
- * 복호화(`decryptSecret`)의 평문 폴백은 남겨 둔다 — 예전에 평문으로 저장된 값을 계속 읽어야 한다.
+ * 복호화(`decryptSecret`)는 **평문 base64 로 저장된 옛 값만** 폴백으로 읽는다(암호문은 null).
  */
 export function encryptSecret(plain: string): string {
+  beforeSecretAccess();
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error(
       'OS 보안 저장소(키체인)를 쓸 수 없어 비밀번호·토큰을 저장하지 않았습니다 — ' +
@@ -158,16 +172,24 @@ export function encryptSecret(plain: string): string {
   return safeStorage.encryptString(plain).toString('base64');
 }
 
+/** safeStorage(Chromium OSCrypt) 암호문의 버전 프리픽스 — macOS 'v10', Linux 'v10'/'v11' */
+const ENCRYPTED_PREFIX = /^v1[01]/;
+
 /**
- * encryptSecret 역방향 — 복호화 실패(키체인 변경 등) 시 null.
- * 키체인을 못 쓰는 상태에서는 예전 평문 base64 저장본만 읽힌다.
+ * encryptSecret 역방향 — 복호화 실패(키체인 변경·프롬프트 취소·잠김) 시 null.
+ *
+ * ⚠️ 키체인을 못 쓰는 상태(`isEncryptionAvailable() === false` — 프롬프트를 취소하면 Chromium 이 키를 null 로
+ * 캐시해 프로세스 내내 이렇다)에서 **암호문은 null** 이어야 한다. 예전엔 여기서도 utf8 폴백을 타서 암호문
+ * 바이트가 **쓰레기 문자열(비-null)** 로 반환됐고, 호출부의 `=== null` 가드가 전부 통과해 그 값이 MO 토큰·
+ * 비밀번호로 쓰였다(2026-09-07 리뷰 — 폰 접속 URL 이 쓰레기 토큰으로 발급되는 경로). 평문 base64 로 저장된
+ * 옛 값(암호화 도입 전)만 그대로 읽는다.
  */
 export function decryptSecret(enc: string): string | null {
+  beforeSecretAccess();
   try {
     const buf = Buffer.from(enc, 'base64');
-    return safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(buf)
-      : buf.toString('utf8');
+    if (safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(buf);
+    return ENCRYPTED_PREFIX.test(buf.subarray(0, 3).toString('latin1')) ? null : buf.toString('utf8');
   } catch {
     return null;
   }

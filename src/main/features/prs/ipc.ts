@@ -32,9 +32,11 @@ import type {
 // 목록 캐시 — 섹션을 오갈 때마다 리뷰 N+1 을 포함한 전체 재조회가 돌던 것을 막는다.
 // 수동 새로고침(force)·PR 생성·머지는 캐시를 버린다.
 const LIST_TTL_MS = 60_000;
-// url = 조회한 Gitea 주소 — 환경설정에서 서버를 바꾸면 옛 서버 목록이 60초 남지 않게 함께 본다
+// url = 조회한 Gitea 주소 — 환경설정에서 서버를 바꾸면 옛 서버 목록이 60초 남지 않게 함께 본다.
+// ⚠️ 스탬프는 **조회를 시작할 때 읽은 주소**다 — 조회가 끝난 뒤 다시 읽으면 조회 중 주소를 바꿨을 때
+// 옛 서버 결과에 새 주소가 찍혀 히트한다(2026-09-07 리뷰). in-flight 합류도 같은 주소일 때만.
 let listCache: { at: number; full: boolean; url: string; result: PrListResult } | null = null;
-let listInflight: { full: boolean; p: Promise<PrListResult> } | null = null;
+let listInflight: { full: boolean; url: string; p: Promise<PrListResult> } | null = null;
 // 무효화 세대 — 무효화 이전에 시작된 조회가 늦게 돌아와 stale 목록을 다시 캐시하는 것을 막는다
 let listGen = 0;
 
@@ -61,9 +63,10 @@ const isValidRepo = (repo: unknown): repo is string =>
 const isValidNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 0;
 const BAD_NUMBER = 'PR 번호가 올바르지 않습니다.';
 
-/** 열린 PR 목록 실조회 — light 면 보강(리뷰 N+1 · 브랜치)을 건너뛴다 */
-async function fetchPrList(light: boolean): Promise<PrListResult> {
-  const gitea = getGiteaConfig();
+type GiteaConfig = NonNullable<ReturnType<typeof getGiteaConfig>>;
+
+/** 열린 PR 목록 실조회 — light 면 보강(리뷰 N+1 · 브랜치)을 건너뛴다. 설정은 호출부가 진입 시점에 읽어 넘긴다 */
+async function fetchPrList(light: boolean, gitea: GiteaConfig | null): Promise<PrListResult> {
   if (!gitea) return { ok: true, configured: false };
   try {
     const prs = await fetchOpenPrs(gitea.url, gitea.token);
@@ -101,38 +104,31 @@ export function registerPrsIpc() {
     'prs:fetch',
     async (opts?: { light?: boolean; force?: boolean }): Promise<PrListResult> => {
       const light = opts?.light === true;
+      // 설정은 진입에서 한 번 읽어 조회·캐시 스탬프·in-flight 비교에 같은 값을 쓴다(요청당 토큰 복호화도 1회)
+      const gitea = getGiteaConfig();
+      const url = gitea?.url ?? '';
       if (opts?.force === true) {
         invalidatePrList();
       } else {
         // light 요청은 보강된 캐시도 그대로 쓴다 — 더 풍부한 결과라 손해가 없다
         const hit = listCache;
-        if (
-          hit &&
-          Date.now() - hit.at < LIST_TTL_MS &&
-          (hit.full || light) &&
-          hit.url === (getGiteaConfig()?.url ?? '')
-        ) {
+        if (hit && Date.now() - hit.at < LIST_TTL_MS && (hit.full || light) && hit.url === url) {
           return hit.result;
         }
-        // 같은 조회가 이미 떠 있으면 붙는다 (2단계 로딩과 폴링이 겹칠 때 중복 방지)
+        // 같은 주소의 같은 조회가 이미 떠 있으면 붙는다 (2단계 로딩과 폴링이 겹칠 때 중복 방지)
         const cur = listInflight;
-        if (cur && (cur.full || light)) return cur.p;
+        if (cur && (cur.full || light) && cur.url === url) return cur.p;
       }
 
       const gen = listGen;
-      const p = fetchPrList(light).then((r) => {
+      const p = fetchPrList(light, gitea).then((r) => {
         // 성공한 조회만 캐시한다 — 실패를 캐시하면 1분간 에러 화면이 굳는다.
         // 조회 중 무효화(생성·머지)가 지나갔으면 stale 결과라 캐시에 앉히지 않는다.
         if (gen === listGen && r.ok && r.configured)
-          listCache = {
-            at: Date.now(),
-            full: !light,
-            url: getGiteaConfig()?.url ?? '',
-            result: r,
-          };
+          listCache = { at: Date.now(), full: !light, url, result: r };
         return r;
       });
-      listInflight = { full: !light, p };
+      listInflight = { full: !light, url, p };
       void p.finally(() => {
         if (listInflight?.p === p) listInflight = null;
       });

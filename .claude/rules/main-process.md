@@ -57,7 +57,7 @@ paths:
 ## 비밀 정보
 - 비밀번호·토큰은 `safeStorage` 로 암호화해 userData 에만 저장. 코드·리포에 하드코딩 금지. `.env`/`settings.json`(계정) 커밋 금지.
 - ⚠️ **앱 기동 경로(`app.on('ready')`·`whenReady`)에서 `decryptSecret`/`safeStorage` 를 바로 부르지 말 것** — 이 앱의 첫 키체인 접근은 재빌드 뒤 프롬프트를 띄우며 **동기로 main 을 멈춘다**. 창이 그려진 뒤 main.ts 가 `warmUpSecrets()` 로 1회 치르므로, 기동 경로 소비자는 `whenSecretsReady()` 를 기다린 뒤 부른다(2026-09-07 — MO 서버 자동 시작이 빈 창 먹통을 만들었다). 상세는 `build-packaging` 규칙.
-- ⚠️ **`encryptSecret` 은 키체인을 못 쓰면 throw 한다** — 평문 base64 폴백을 없앴다(2026-09-03 보안 검토).
+- ⚠️ **`encryptSecret` 은 키체인을 못 쓰면 throw 한다** — 평문 base64 폴백을 없앴다(2026-09-03 보안 검토). **`decryptSecret` 은 키체인을 못 쓰면 암호문(`v10` 프리픽스)에 null** 을 준다 — 예전엔 utf8 폴백을 타 쓰레기 문자열(비-null)이 토큰·비밀번호로 쓰였다(2026-09-07). 평문 base64 옛 값만 폴백으로 읽는다. 호출부는 null 을 "저장된 값이 있는데 지금 못 읽음" 으로 다룰 것(재발급·초기화 금지).
   환경을 통제할 수 없는 단독 배포판에서 그룹웨어 비밀번호가 평문으로 쌓이는 것을 막기 위함이다.
   호출부는 저장 실패를 사용자에게 알려야 한다(환경설정은 `secureStorage` 배너 + 토스트로 처리 중).
   복호화(`decryptSecret`)의 평문 폴백은 예전 저장본 호환용으로 남겨 둔다.
