@@ -9,6 +9,7 @@ import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
+import { errMsg } from '../../../lib/errMsg';
 
 /** 사이드바 하단 미러링 위젯 — scrcpy 로 USB 폰 화면을 미러링한다. */
 export function MirrorWidget() {
@@ -27,20 +28,31 @@ export function MirrorWidget() {
     return window.oneApp.mirror.onChanged(() => void refresh());
   }, []);
 
+  // invoke 자체가 거부돼도(핸들러 예외 등) busy 가 풀리게 finally 로 닫는다
   const start = async (mode: MirrorMode) => {
     setBusy(true);
     setError('');
-    const res = await window.oneApp.mirror.start(mode);
-    if (!res.ok) setError(res.error ?? 'scrcpy 실행에 실패했습니다.');
-    await refresh();
-    setBusy(false);
+    try {
+      const res = await window.oneApp.mirror.start(mode);
+      if (!res.ok) setError(res.error ?? 'scrcpy 실행에 실패했습니다.');
+      await refresh();
+    } catch (err) {
+      setError(errMsg(err, 'scrcpy 실행에 실패했습니다.'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const stop = async () => {
     setBusy(true);
     setError('');
-    await window.oneApp.mirror.stop();
-    setBusy(false);
+    try {
+      await window.oneApp.mirror.stop();
+    } catch (err) {
+      setError(errMsg(err, '미러링을 끝내지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const running = status?.running ?? null;

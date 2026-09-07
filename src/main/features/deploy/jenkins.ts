@@ -9,8 +9,13 @@ import type {
   DeployRunningBuild,
 } from '../../../shared/types';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { sleep } from '../../lib/util';
+
+// 응답 JSON 파싱 — 주소가 프록시·SSO 로그인 페이지를 가리키면 HTML 이 HTTP 200 으로 오는데,
+// 본문을 그대로 파싱하면 V8 의 `Unexpected token '<'` 가 화면에 새어 나간다(Jira 에서 실제 제보된 부류)
+const JSON_HINT = '프로젝트 편집의 젠킨스 주소가 서버 루트 주소(예: https://jenkins.example.com)인지 확인하세요.';
+const json = <T>(res: Response) => readJson<T>(res, '젠킨스', JSON_HINT);
 
 export type JenkinsAuth = {
   baseUrl: string; // 예: https://jenkins.example.com (끝 슬래시 없음)
@@ -38,10 +43,10 @@ async function fetchCrumbHeaders(
       headers: { Authorization: authHeader(a) },
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as {
+    const data = await json<{
       crumbRequestField: string;
       crumb: string;
-    };
+    }>(res);
     const headers: Record<string, string> = {
       [data.crumbRequestField]: data.crumb,
     };
@@ -126,7 +131,7 @@ export async function fetchLastStatus(
     if (res.status === 404) return { state: 'idle' }; // 빌드 이력 없음 or 잡 없음
     if (res.status === 401) return { state: 'error', error: '인증 실패' };
     if (!res.ok) return { state: 'error', error: `HTTP ${res.status}` };
-    const b = (await res.json()) as {
+    const b = await json<{
       number: number;
       url?: string;
       building: boolean;
@@ -134,7 +139,7 @@ export async function fetchLastStatus(
       timestamp?: number;
       duration?: number;
       estimatedDuration?: number;
-    };
+    }>(res);
     const buildUrl = `${jobUrl(a, jobPath)}/${b.number}/`;
     if (b.building)
       return {
@@ -260,7 +265,7 @@ export async function fetchBuildDetail(
     if (res.status === 401)
       throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
     if (!res.ok) throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
-    return (await res.json()) as RawBuild;
+    return json<RawBuild>(res);
   };
 
   let b = await get(`${base}?tree=${encodeURIComponent(DETAIL_TREE)}`);
@@ -375,10 +380,10 @@ export async function watchBuild(
       if (queueUrl) {
         const res = await fetch(`${queueUrl}/api/json`, { headers });
         if (res.ok) {
-          const item = (await res.json()) as {
+          const item = await json<{
             cancelled?: boolean;
             executable?: { number: number };
-          };
+          }>(res);
           if (item.cancelled) {
             onStatus({ state: 'failure', result: 'CANCELLED' });
             return;
@@ -392,7 +397,7 @@ export async function watchBuild(
         headers,
       });
       if (last.ok) {
-        const b = (await last.json()) as { number: number; building: boolean };
+        const b = await json<{ number: number; building: boolean }>(last);
         if (b.building) buildNumber = b.number;
       }
     } catch {
@@ -414,12 +419,12 @@ export async function watchBuild(
     try {
       const res = await fetch(`${buildUrl}api/json`, { headers });
       if (!res.ok) continue;
-      const b = (await res.json()) as {
+      const b = await json<{
         building: boolean;
         result: string | null;
         timestamp?: number;
         estimatedDuration?: number;
-      };
+      }>(res);
       if (b.building && !metaPushed && b.timestamp) {
         metaPushed = true;
         onStatus({
@@ -473,7 +478,7 @@ export async function fetchBuildHistory(
   if (res.status === 404) throw new Error(`잡을 찾을 수 없습니다: ${jobPath}`);
   if (!res.ok) throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
 
-  const data = (await res.json()) as {
+  const data = await json<{
     builds?: {
       number: number;
       building?: boolean;
@@ -482,7 +487,7 @@ export async function fetchBuildHistory(
       duration?: number;
       actions?: ({ causes?: { shortDescription?: string; userName?: string }[] } | null)[];
     }[];
-  };
+  }>(res);
   return (data.builds ?? []).map((b) => {
     const cause = (b.actions ?? [])
       .filter(Boolean)
@@ -610,14 +615,18 @@ export type QueueEntry = {
 /** 젠킨스 대기열 조회 — 다른 빌드에 밀려 대기 중인 항목 파악 */
 export async function fetchQueue(a: JenkinsAuth): Promise<QueueEntry[]> {
   const tree = 'items[id,why,stuck,inQueueSince,task[name,url]]';
-  const res = await fetch(
-    `${a.baseUrl}/queue/api/json?tree=${encodeURIComponent(tree)}`,
-    { headers: { Authorization: authHeader(a) } },
-  );
+  let res: Response;
+  try {
+    res = await fetch(`${a.baseUrl}/queue/api/json?tree=${encodeURIComponent(tree)}`, {
+      headers: { Authorization: authHeader(a) },
+    });
+  } catch {
+    throw new Error('젠킨스에 연결할 수 없습니다.');
+  }
   if (res.status === 401)
     throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
   if (!res.ok) throw new Error(`대기열 조회 실패 (HTTP ${res.status})`);
-  const data = (await res.json()) as {
+  const data = await json<{
     items?: {
       id: number;
       why?: string | null;
@@ -625,7 +634,7 @@ export async function fetchQueue(a: JenkinsAuth): Promise<QueueEntry[]> {
       inQueueSince?: number;
       task?: { name?: string; url?: string };
     }[];
-  };
+  }>(res);
   return (data.items ?? []).map((it) => ({
     id: it.id,
     name: it.task?.name ?? '(이름 없음)',
@@ -643,10 +652,15 @@ export async function fetchRunningBuilds(
   const exec =
     'currentExecutable[number,url,fullDisplayName,timestamp,estimatedDuration]';
   const tree = `computer[displayName,executors[${exec}],oneOffExecutors[${exec}]]`;
-  const res = await fetch(
-    `${a.baseUrl}/computer/api/json?tree=${encodeURIComponent(tree)}`,
-    { headers: { Authorization: authHeader(a) } },
-  );
+  let res: Response;
+  try {
+    res = await fetch(`${a.baseUrl}/computer/api/json?tree=${encodeURIComponent(tree)}`, {
+      headers: { Authorization: authHeader(a) },
+    });
+  } catch {
+    // 다른 조회처럼 사람이 읽을 문구로 — 안 감싸면 undici 의 'fetch failed' 가 현황 팝업에 그대로 뜬다
+    throw new Error('젠킨스에 연결할 수 없습니다.');
+  }
   if (res.status === 401)
     throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
   if (!res.ok) throw new Error(`실행 현황 조회 실패 (HTTP ${res.status})`);
@@ -658,13 +672,13 @@ export async function fetchRunningBuilds(
     timestamp?: number;
     estimatedDuration?: number;
   } | null;
-  const data = (await res.json()) as {
+  const data = await json<{
     computer?: {
       displayName?: string;
       executors?: { currentExecutable?: RawExec }[];
       oneOffExecutors?: { currentExecutable?: RawExec }[];
     }[];
-  };
+  }>(res);
 
   // 파이프라인 잡은 flyweight(oneOffExecutor)와 노드 실행자에 동시에 잡히므로
   // 빌드 URL(jobKey+번호) 기준으로 중복 제거한다.

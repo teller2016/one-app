@@ -19,7 +19,7 @@ import type {
 } from '../../../shared/types';
 import { buildReportJql, normalizeProjectKeys } from '../../../shared/jira-report';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
-import { jiraAuth, mapIssue, type RawIssue } from './jira';
+import { describeJiraHttpError, jiraAuth, mapIssue, type RawIssue } from './jira';
 import { getReportPrefs, saveReportPrefs } from './store';
 
 const TIMEOUT_MS = 15_000;
@@ -47,22 +47,9 @@ type RawReportIssue = RawIssue & {
 
 const NOT_CONFIGURED = '환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하세요.';
 
-/** 상태코드 → 사용자 문구. 400 은 본문의 errorMessages(JQL 오류 위치)를 함께 보여준다 */
-async function describeHttpError(res: Response): Promise<string> {
-  if (res.status === 401 || res.status === 403) {
-    return 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.';
-  }
-  if (res.status === 400) {
-    const detail = await res
-      .json()
-      .then((b: { errorMessages?: string[] }) => (b.errorMessages ?? []).join(' '))
-      .catch((): string => '');
-    return detail
-      ? `Jira 가 조회 조건을 거절했습니다 — ${detail}`
-      : 'Jira 가 조회 조건을 거절했습니다 (HTTP 400) — JQL 을 확인하세요.';
-  }
-  return `Jira 응답 오류 (HTTP ${res.status})`;
-}
+/** 상태코드 → 사용자 문구 — 공용 `describeJiraHttpError` 에 조회 문맥만 얹는다 */
+const describeHttpError = (res: Response) =>
+  describeJiraHttpError(res, '조회 조건', 'JQL 을 확인하세요.');
 
 /** 네트워크 예외 → 사용자 문구 (타임아웃 문장은 fetchWithTimeout 이 이미 만들어 준다) */
 function describeConnError(err: unknown): string {

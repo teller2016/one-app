@@ -37,12 +37,19 @@ export async function createDeeplink(
     throw new Error('API 키가 유효하지 않습니다 — 저장된 키를 확인하세요.');
   if (!res.ok) throw new Error(`딥링크 생성 실패 (HTTP ${res.status})`);
 
-  const json = (await res.json()) as {
+  type CreateResponse = {
     url?: string;
     deep_link_url?: string;
     short_code?: string;
     deeplink_idx?: string;
   };
+  let json: CreateResponse;
+  try {
+    json = (await res.json()) as CreateResponse;
+  } catch {
+    // 점검 페이지 등 HTML 이 200 으로 오면 V8 파싱 메시지가 아니라 읽을 수 있는 문구로
+    throw new Error('applink.kr 응답을 해석할 수 없습니다 — 잠시 후 다시 시도하세요.');
+  }
   const url = json.url ?? json.deep_link_url;
   if (!url) throw new Error('응답에 딥링크 URL 이 없습니다.');
   return { url, shortCode: json.short_code ?? json.deeplink_idx };

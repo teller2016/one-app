@@ -12,6 +12,13 @@ import type {
 import { mainBranchRank } from '../../../shared/types';
 // 인증 헤더·연결 실패·인증 실패 문구는 공용 클라이언트가 담당한다 (deploy 기능과 공유)
 import { giteaFetch, giteaJson } from '../../lib/gitea';
+import { mapLimit } from '../../lib/util';
+
+/** PR 별 리뷰 조회(N+1) 동시성 — 50개를 한꺼번에 쏘면 Gitea 가 잠깐 버벅인다 */
+const REVIEW_CONCURRENCY = 6;
+
+/** 저장소 단위 캐시 키 — 환경설정에서 Gitea 주소를 바꾸면 옛 서버 결과가 섞이지 않게 주소를 포함한다 */
+const cacheKey = (giteaUrl: string, repo: string) => `${giteaUrl}|${repo}`;
 
 type GiteaIssue = {
   number?: number;
@@ -142,8 +149,7 @@ export async function enrichApprovals(
   token: string | null,
   prs: PrItem[],
 ): Promise<PrItem[]> {
-  return Promise.all(
-    prs.map(async (pr) => {
+  return mapLimit(prs, REVIEW_CONCURRENCY, async (pr) => {
       try {
         const res = await giteaFetch(
           `${giteaUrl}/api/v1/repos/${pr.repo}/pulls/${pr.number}/reviews`,
@@ -169,8 +175,7 @@ export async function enrichApprovals(
       } catch {
         return pr;
       }
-    }),
-  );
+  });
 }
 
 // ── 빠른 PR (생성·머지) ──────────────────────────────────────
@@ -236,7 +241,7 @@ async function fetchDefaultBranch(
   token: string | null,
   repo: string,
 ): Promise<string | undefined> {
-  const hit = defaultBranchCache.get(repo);
+  const hit = defaultBranchCache.get(cacheKey(giteaUrl, repo));
   if (hit && Date.now() - hit.at < DEFAULT_BRANCH_TTL) return hit.value;
   try {
     const res = await giteaFetch(`${giteaUrl}/api/v1/repos/${repo}`, token, {
@@ -245,7 +250,7 @@ async function fetchDefaultBranch(
     if (!res.ok) return undefined;
     const data = (await res.json()) as { default_branch?: string };
     const value = data.default_branch;
-    if (value) defaultBranchCache.set(repo, { value, at: Date.now() });
+    if (value) defaultBranchCache.set(cacheKey(giteaUrl, repo), { value, at: Date.now() });
     return value;
   } catch {
     return undefined;
@@ -308,7 +313,7 @@ export async function fetchBaseCandidates(
   token: string | null,
   repo: string,
 ): Promise<BaseCandidates> {
-  const hit = baseCandidateCache.get(repo);
+  const hit = baseCandidateCache.get(cacheKey(giteaUrl, repo));
   if (hit && Date.now() - hit.at < BASE_CANDIDATE_TTL) return hit.value;
 
   const [page, defaultBranch] = await Promise.all([
@@ -341,7 +346,7 @@ export async function fetchBaseCandidates(
   for (const b of probed) if (b) add(b);
 
   const value: BaseCandidates = { branches: [...found.values()], defaultBranch };
-  baseCandidateCache.set(repo, { value, at: Date.now() });
+  baseCandidateCache.set(cacheKey(giteaUrl, repo), { value, at: Date.now() });
   return value;
 }
 
@@ -355,7 +360,7 @@ export async function fetchAllBranchNames(
   token: string | null,
   repo: string,
 ): Promise<string[]> {
-  const hit = allBranchCache.get(repo);
+  const hit = allBranchCache.get(cacheKey(giteaUrl, repo));
   if (hit && Date.now() - hit.at < BASE_CANDIDATE_TTL) return hit.value;
 
   const data = await giteaJson<{ ref?: string }[]>(
@@ -369,7 +374,7 @@ export async function fetchAllBranchNames(
   const names = (Array.isArray(data) ? data : []).flatMap((r) =>
     r.ref?.startsWith('refs/heads/') ? [r.ref.slice('refs/heads/'.length)] : [],
   );
-  allBranchCache.set(repo, { value: names, at: Date.now() });
+  allBranchCache.set(cacheKey(giteaUrl, repo), { value: names, at: Date.now() });
   return names;
 }
 

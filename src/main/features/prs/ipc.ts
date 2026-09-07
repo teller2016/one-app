@@ -32,7 +32,8 @@ import type {
 // 목록 캐시 — 섹션을 오갈 때마다 리뷰 N+1 을 포함한 전체 재조회가 돌던 것을 막는다.
 // 수동 새로고침(force)·PR 생성·머지는 캐시를 버린다.
 const LIST_TTL_MS = 60_000;
-let listCache: { at: number; full: boolean; result: PrListResult } | null = null;
+// url = 조회한 Gitea 주소 — 환경설정에서 서버를 바꾸면 옛 서버 목록이 60초 남지 않게 함께 본다
+let listCache: { at: number; full: boolean; url: string; result: PrListResult } | null = null;
 let listInflight: { full: boolean; p: Promise<PrListResult> } | null = null;
 // 무효화 세대 — 무효화 이전에 시작된 조회가 늦게 돌아와 stale 목록을 다시 캐시하는 것을 막는다
 let listGen = 0;
@@ -56,6 +57,9 @@ const BAD_REPO = '저장소 이름이 올바르지 않습니다.';
 // (API 경로에 그대로 들어가는 값 — '..' 같은 세그먼트로 다른 엔드포인트를 때릴 수 없게)
 const isValidRepo = (repo: unknown): repo is string =>
   typeof repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes('..');
+// PR 번호도 경로에 들어간다 — 폰에서 문자열이 오면 `/pulls/<n>/merge` 를 다른 경로로 비틀 수 있다
+const isValidNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 0;
+const BAD_NUMBER = 'PR 번호가 올바르지 않습니다.';
 
 /** 열린 PR 목록 실조회 — light 면 보강(리뷰 N+1 · 브랜치)을 건너뛴다 */
 async function fetchPrList(light: boolean): Promise<PrListResult> {
@@ -102,7 +106,12 @@ export function registerPrsIpc() {
       } else {
         // light 요청은 보강된 캐시도 그대로 쓴다 — 더 풍부한 결과라 손해가 없다
         const hit = listCache;
-        if (hit && Date.now() - hit.at < LIST_TTL_MS && (hit.full || light)) {
+        if (
+          hit &&
+          Date.now() - hit.at < LIST_TTL_MS &&
+          (hit.full || light) &&
+          hit.url === (getGiteaConfig()?.url ?? '')
+        ) {
           return hit.result;
         }
         // 같은 조회가 이미 떠 있으면 붙는다 (2단계 로딩과 폴링이 겹칠 때 중복 방지)
@@ -115,7 +124,12 @@ export function registerPrsIpc() {
         // 성공한 조회만 캐시한다 — 실패를 캐시하면 1분간 에러 화면이 굳는다.
         // 조회 중 무효화(생성·머지)가 지나갔으면 stale 결과라 캐시에 앉히지 않는다.
         if (gen === listGen && r.ok && r.configured)
-          listCache = { at: Date.now(), full: !light, result: r };
+          listCache = {
+            at: Date.now(),
+            full: !light,
+            url: getGiteaConfig()?.url ?? '',
+            result: r,
+          };
         return r;
       });
       listInflight = { full: !light, p };
@@ -223,6 +237,7 @@ export function registerPrsIpc() {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
+      if (!isValidNumber(number)) return { ok: false, error: BAD_NUMBER };
       try {
         const info = await fetchMergeInfo(gitea.url, gitea.token, repo, number);
         return { ok: true, ...info };
@@ -261,6 +276,7 @@ export function registerPrsIpc() {
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!gitea.token) return { ok: false, error: NO_TOKEN };
       if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
+      if (!isValidNumber(number)) return { ok: false, error: BAD_NUMBER };
       try {
         await mergePr(gitea.url, gitea.token, repo, number, method);
         invalidatePrList(); // 머지된 PR 이 목록에 남아 있지 않게

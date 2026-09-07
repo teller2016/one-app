@@ -130,6 +130,31 @@ export function jiraAuth(): {
   };
 }
 
+/**
+ * 상태코드 → 사용자 문구. 400 은 본문의 errorMessages·errors(JQL 오류 위치·필수 필드 등)를 함께
+ * 보여준다 — 'HTTP 400' 만으로는 왜 거절됐는지 알 수 없다. 티켓 보고(report.ts)와 상태 전환이 공유한다.
+ */
+export async function describeJiraHttpError(
+  res: Response,
+  what = '요청',
+  hint?: string,
+): Promise<string> {
+  if (res.status === 401 || res.status === 403) {
+    return 'Jira 인증 실패 — 이메일과 API 토큰을 확인하세요.';
+  }
+  if (res.status === 400) {
+    const detail = await res
+      .json()
+      .then((b: { errorMessages?: string[]; errors?: Record<string, string> }) =>
+        [...(b.errorMessages ?? []), ...Object.values(b.errors ?? {})].join(' '),
+      )
+      .catch((): string => '');
+    if (detail) return `Jira 가 ${what}을 거절했습니다 — ${detail}`;
+    return `Jira 가 ${what}을 거절했습니다 (HTTP 400)${hint ? ` — ${hint}` : ''}`;
+  }
+  return `Jira 응답 오류 (HTTP ${res.status})`;
+}
+
 /** REST 응답 이슈 → 앱 타입. pinned 는 직접 추가한 티켓 표시 */
 export function mapIssue(it: RawIssue, baseUrl: string, pinned: boolean): JiraIssue {
   const catKey = it.fields.status?.statusCategory?.key;
@@ -511,7 +536,7 @@ export async function getTransitions(key: string): Promise<JiraTransitionsResult
   try {
     const res = await fetch(req.url, { headers: req.headers });
     if (!res.ok) {
-      return { ok: false, error: `전환 목록 조회 실패 (HTTP ${res.status})` };
+      return { ok: false, error: await describeJiraHttpError(res, '전환 목록 조회') };
     }
     const data = await readJson<{
       transitions?: { id: string; name?: string; to?: { name?: string } }[];
@@ -590,7 +615,8 @@ export async function transitionIssue(
       body: JSON.stringify({ transition: { id: transitionId } }),
     });
     if (!res.ok) {
-      return { ok: false, error: `전환 실패 (HTTP ${res.status})` };
+      // 400 이면 Jira 가 사유를 준다(필수 필드·권한 등) — 'HTTP 400' 만 보이던 것을 사유까지 보여준다
+      return { ok: false, error: await describeJiraHttpError(res, '상태 전환') };
     }
     invalidateListCache(); // 상태가 바뀌었으니 캐시된 목록은 낡았다
     return { ok: true };

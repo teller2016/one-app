@@ -229,16 +229,29 @@ function htmlToMarkdown(
     .trim();
 }
 
+/** 첨부 URL 이 Jira 와 같은 출처인가 — 인증 헤더를 다른 호스트로 보내지 않는다(jira.ts 이미지 인라인과 같은 원칙) */
+function isSameOrigin(url: string, origin: string | null): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(url, origin).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 /** 첨부 다운로드 — 이미지 우선, 상한까지. 반환값은 attachment id → 저장한 파일명 */
 async function downloadAttachments(
   attachments: RawAttachment[],
   dir: string,
   authHeader: string,
+  origin: string | null,
 ): Promise<Map<string, string>> {
   const saved = new Map<string, string>();
   // 이미지가 먼저 잘리지 않게 앞으로 — 화면 문제 티켓의 핵심 근거가 스크린샷이다
   const targets = [...attachments]
-    .filter((a) => a.content && (a.size ?? 0) <= ATTACHMENT_MAX_BYTES)
+    .filter(
+      (a) => a.content && isSameOrigin(a.content, origin) && (a.size ?? 0) <= ATTACHMENT_MAX_BYTES,
+    )
     .sort((a, b) => {
       const ai = a.mimeType?.startsWith('image/') ? 0 : 1;
       const bi = b.mimeType?.startsWith('image/') ? 0 : 1;
@@ -391,7 +404,13 @@ export async function prepareJiraWork(
   }
 
   const attachments = issue.fields.attachment ?? [];
-  const savedById = await downloadAttachments(attachments, attachmentsDir, authHeader);
+  let origin: string | null = null;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    /* 주소가 이상하면 첨부는 건너뛴다 — 본문만으로도 작업은 시작된다 */
+  }
+  const savedById = await downloadAttachments(attachments, attachmentsDir, authHeader, origin);
 
   // 본문 HTML 의 이미지 src → 내려받은 파일. Jira 는 첨부 id 를 URL 에 담아 렌더한다
   // (`/rest/api/3/attachment/thumbnail/10234`, `/secure/attachment/10234/name.png`).
@@ -399,7 +418,13 @@ export async function prepareJiraWork(
     const byId = /attachment\/(?:thumbnail\/|content\/)?(\d+)/.exec(src)?.[1];
     if (byId && savedById.has(byId)) return savedById.get(byId) ?? null;
     // id 를 못 읽으면 파일명으로 한 번 더 맞춰 본다
-    const tail = decodeURIComponent(src.split('?')[0].split('/').pop() ?? '');
+    const rawTail = src.split('?')[0].split('/').pop() ?? '';
+    let tail = rawTail;
+    try {
+      tail = decodeURIComponent(rawTail);
+    } catch {
+      /* 잘못된 % 시퀀스 — 원문으로 비교한다 (던지면 티켓 준비 전체가 'URI malformed' 로 죽는다) */
+    }
     for (const name of savedById.values()) if (name === tail) return name;
     return null;
   };

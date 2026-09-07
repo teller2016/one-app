@@ -15,7 +15,7 @@ import type {
 } from "../../../shared/types";
 import { fetchMyIssues, jiraAuth } from "../jira/jira";
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch } from "../../lib/http";
+import { fetchWithTimeout as fetch, readJson } from "../../lib/http";
 import { getProject } from "../projects/store";
 import { getJiraApiConfig } from "../settings/store";
 import {
@@ -118,7 +118,7 @@ async function jiraFetch(apiPath: string): Promise<Record<string, unknown>> {
   const response = await fetch(`${url}${apiPath}`, { headers });
   if (!response.ok)
     throw new Error(`Jira ${apiPath} -> HTTP ${response.status}`);
-  return (await response.json()) as Record<string, unknown>;
+  return readJson<Record<string, unknown>>(response, "Jira");
 }
 
 async function jiraDownload(url: string, dest: string): Promise<void> {

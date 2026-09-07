@@ -386,19 +386,18 @@ export function registerDeployIpc() {
       let notified = false;
 
       const push = (status: DeployStatus) => {
+        const isFinal =
+          status.state === 'success' || status.state === 'failure' || status.state === 'error';
+        // 끝났으면 캐시된 상태도 낡았다 — 안 버리면 30초 안에 섹션을 다시 열 때 진입 조회가
+        // 'building' 캐시를 돌려줘 이벤트로 받은 완료 상태를 덮는다(2026-09-07 검토)
+        if (isFinal) invalidateDeployStatus(projectId);
         // 상태 이벤트를 전 클라이언트에 전달 — 창이 없으면 no-op 이고, MO(폰)도 받는다.
         // (예전에는 event.sender 로 호출한 렌더러에만 보냈는데, 그러면 WS 클라이언트에는
         //  sender 가 없어 폰이 배포 진행을 볼 수 없다. 창은 하나뿐이라 동작은 동일하다.)
         const evt: DeployStatusEvent = { projectId, targetId, status };
         broadcast('deploy:status', evt);
         // 완료(성공/실패/오류) 시 알림(알럿) — 대상당 한 번만
-        if (
-          !notified &&
-          (status.state === 'success' ||
-            status.state === 'failure' ||
-            status.state === 'error') &&
-          isDeployNotifyEnabled()
-        ) {
+        if (!notified && isFinal && isDeployNotifyEnabled()) {
           notified = true;
           // ⚠️ 배포는 **알럿(notify)** 으로 알린다 — 토스트로 바꿔 봤더니 눈에 안 띄어
           // 되돌렸다(2026-08-14 사용자 요청). 배포 결과는 놓치면 안 되는 알림이라

@@ -86,12 +86,16 @@ export async function fetchWithTimeout(
  * (`Unexpected token '<', "<div id="j"… is not valid JSON`)가 그대로 배너에 노출돼 원인을
  * 짐작할 수 없었다(One App Lite 2.0.0 제보). 상태코드가 200 이라 `res.ok` 검사로는 못 걸린다.
  */
-export async function readJson<T>(res: Response, label: string): Promise<T> {
+export async function readJson<T>(
+  res: Response,
+  label: string,
+  // 주소를 어디서 고치는지 — 기본은 Jira·Gitea 처럼 환경설정 연동 주소인 경우의 안내
+  hint = `환경설정의 ${label} 주소가 사이트 주소인지 확인하세요(티켓·보드 주소를 붙여넣으면 안 됩니다).`,
+): Promise<T> {
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
   if (!/\bjson\b/i.test(type)) {
     throw new Error(
-      `${label} 가 JSON 대신 ${type || '알 수 없는 형식'} 을 돌려줬습니다 (HTTP ${res.status}) — ` +
-        `환경설정의 ${label} 주소가 사이트 주소인지 확인하세요(티켓·보드 주소를 붙여넣으면 안 됩니다).`,
+      `${label} 가 JSON 대신 ${type || '알 수 없는 형식'} 을 돌려줬습니다 (HTTP ${res.status}) — ${hint}`,
     );
   }
   try {
