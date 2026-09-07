@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { VpnStatus } from '../../../shared/types';
+import type { VpnServer } from './health';
 import { sleep } from '../../lib/util';
 import {
   findOpenvpnBinary,
@@ -33,6 +34,13 @@ let manualOtpOnce: string | null = null; // 수동 입력 OTP (1회용)
 let lastSentCode: string | null = null; // 직전에 보낸 TOTP (재시도 시 재사용 방지)
 let intentionalExit = false; // 사용자가 해제를 눌러 종료 중인지
 let lastDropReason: string | null = null; // RECONNECTING 상태의 실패 사유 (에러 메시지용)
+let server: VpnServer | null = null; // CONNECTED 라인의 원격 서버 — 생존 프로브의 경로 점검·도달 확인용 (monitor.ts)
+
+/**
+ * 재연결 대기 한도 — 접속 15초×재시도 2회 + 인증 + TOTP 창 대기가 60초에 근접한다. 이 시간이
+ * 지나면 waitForConnected 가 SIGTERM 으로 데몬을 끝내므로 백그라운드 재연결은 여유를 더 둔다.
+ */
+const RECONNECT_TIMEOUT_MS = 90_000;
 
 // openvpn 실패 사유 코드 → 한국어 메시지
 const DROP_REASONS: Record<string, string> = {
@@ -61,6 +69,16 @@ export function getVpnStatus(): VpnStatus {
 export function onVpnStatus(listener: StatusListener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+export function getVpnServer(): VpnServer | null {
+  return server;
+}
+
+/** 연결됨 상태의 '응답 없음' 표시 토글 — 감시(monitor.ts)가 판정한다. 값이 같으면 알리지 않는다 */
+export function setVpnStale(stale: boolean) {
+  if (status.state !== 'connected' || !!status.stale === stale) return;
+  setStatus({ ...status, stale: stale || undefined });
 }
 
 function setStatus(next: VpnStatus) {
@@ -143,6 +161,8 @@ function parseStateLine(payload: string) {
   if (state === 'CONNECTED') {
     if (parts[2] === 'SUCCESS') {
       manualOtpOnce = null; // 연결 성공 — 1회용 OTP 소모
+      // time,CONNECTED,SUCCESS,터널IP,서버IP,서버포트,… — 포트가 비면 이전 값을 유지한다
+      if (parts[4]) server = { ip: parts[4], port: Number(parts[5]) || server?.port || 0 };
       setStatus({
         state: 'connected',
         vpnIp: parts[3] || undefined,
@@ -375,6 +395,26 @@ export async function connectVpn(ovpnPath: string, manualOtp?: string): Promise<
     }
     throw err;
   }
+}
+
+/**
+ * 재연결 — 데몬에 SIGHUP 을 보내 터널·경로를 **지금의** 기본 인터페이스 기준으로 다시 세운다.
+ * 데몬이 이미 root 라 관리자 인증이 다시 필요 없고, 재인증(PASSWORD 질의)은 평소처럼 응답한다.
+ * SIGUSR1 이 아닌 SIGHUP 인 이유: persist-tun 재시작(SIGUSR1)은 옛 인터페이스로 고정된
+ * 서버 우회 경로를 보존해 전환 뒤에도 루프가 남는다. SIGHUP 은 경로를 지우고 다시 만든다.
+ */
+export async function reconnectVpn(manualOtp?: string): Promise<void> {
+  if (!socket || status.state !== 'connected') {
+    throw new Error('연결된 상태에서만 재연결할 수 있습니다.');
+  }
+  authAttempts = 0;
+  lastSentCode = null;
+  lastDropReason = null;
+  manualOtpOnce = manualOtp?.trim() || null;
+  intentionalExit = false;
+  setStatus({ state: 'connecting', detail: '재연결 중 — 네트워크 경로 재설정' });
+  send('signal SIGHUP');
+  await waitForConnected(RECONNECT_TIMEOUT_MS);
 }
 
 /** 연결 해제 — management 로 SIGTERM 을 보내고 종료를 기다린다 */

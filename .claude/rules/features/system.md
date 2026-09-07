@@ -55,6 +55,16 @@ paths:
 
 **앱을 종료해도 VPN 데몬은 유지**되고, 재시작 시 `userData/vpn/session.json` 으로 management 에 재접속해 상태 복원. openvpn 로그는 `userData/vpn/openvpn.log`(root 소유).
 
+**터널 생존 감시(`monitor.ts` + 순수 규칙 `health.ts`, 2026-09-07)** — OpenVPN 은 인터페이스 전환(와이파이↔유선)을 감지하지 못한다. 연결 시점의 기본 인터페이스로 고정한 서버 우회 경로(`<서버IP>/32 → 그때의 게이트웨이`)가 전환 뒤 사라지면 서버 주소가 full-tunnel 경로(`0/1`·`128.0/1` → utun)에 삼켜져 **터널이 자기 자신을 타는 루프**가 되고, `proto tcp` 소켓은 조용히 멈춘다. 서버가 push 하는 `ping-restart 3600` 탓에 최대 1시간 "연결됨"이 유지된다(Claude API 포함 전부 블랙홀). 그래서 connected 동안 앱이 직접 본다:
+- **트리거**: `os.networkInterfaces()` 지문(utun·loopback 제외 IPv4) 5초 폴링 → 바뀌면 3초 뒤 점검. `route -n monitor` 이벤트 스트림도 실측했지만 `RTM_MISS` 잡음·자식 프로세스 관리 때문에 쓰지 않았다.
+- **프로브**(30초 주기 + 트리거 시): `/sbin/route -n get <서버IP>` 의 interface 가 `utun*` 이면 **루프 확정(즉시 사망)**, 아니면 `https://www.gstatic.com/generate_204` HEAD 5초 — 연속 2회 실패면 사망. 서버 IP 는 `STATE … CONNECTED` 라인 5번째 필드.
+- **반응**: `VpnStatus.stale` → 위젯 점 fail + "응답 없음 · 재연결 필요" + [재연결]. 토스트는 `dedupeKey: 'vpn-health'` 한 장(응답 없음 → 재연결됨 이 같은 자리에서 바뀜, 자리를 비운 사이 일어난 일이라 sticky). 시크릿이 있으면 **`signal SIGHUP` 자동 재연결** — root 데몬이 살아 있어 관리자 인증이 다시 필요 없고 재인증은 기존 PASSWORD 핸들러가 TOTP 로 응답. 시크릿이 없거나 재연결이 실패하면 알럿(`notify`).
+- **경로 추종**: 프로브가 살아 있다고 해도 `route -n get default`(VPN 이 켜져 있어도 **물리** 기본 인터페이스를 준다 — 실측) 와 서버 경로의 인터페이스가 다르면(유선을 꽂았는데 터널은 와이파이 en0 에 남음) 같은 SIGHUP 으로 새 인터페이스로 옮긴다(`isDetoured`, 시크릿 있을 때만). 알림 문구의 인터페이스는 `networksetup -listallhardwareports` 로 사람이 읽는 이름(USB 10/100/1000 LAN)으로 바꾼다. 재시도 가드 `followedFor` 는 **지문이 바뀔 때마다 해제**한다 — 지문 값으로 막으면 뽑았다 다시 꽂을 때 처음과 같은 지문이라 두 번째부터 옮기지 않는다(2026-09-07 실측 버그).
+- ⚠️ **SIGUSR1 이 아니라 SIGHUP** — persist-tun 재시작(SIGUSR1)은 옛 인터페이스로 고정된 서버 우회 경로를 보존해 전환 뒤에도 루프가 남는다. SIGHUP 은 경로를 지우고 지금 기본 인터페이스 기준으로 다시 만든다.
+- ⚠️ **재연결 게이트(`reconnectDecision`) — 성공할 수 있을 때만 SIGHUP 을 보낸다.** 실패하면 `--connect-retry-max 2` 소진으로 데몬이 죽어 나중에 관리자 인증부터 다시 해야 하고, 그건 손대지 않았을 때(TCP 재전송·ping-restart 로 자가 회복)보다 나쁘다. 물리 기본 경로(`route get default`)가 없으면 대기 · `unreachable` 사망은 **서버 `IP:포트`(STATE 5·6번째 필드)에 TCP 가 3초 안에 닿는지** 확인해 안 닿으면 대기(라우터 재부팅·캡티브 포털·잠자기 복귀 직후) · 루프 사망은 서버 경로가 터널이라 도달 검사를 못 쓰니 물리 기본 경로만 본다. 대기 중엔 stale 표시만 하고 주기 프로브가 복구를 기다린다. 자동 SIGHUP 은 **60초 쿨다운**(접촉 불량 대비), 재연결 대기 한도는 **90초**(60초는 접속 15초×2+인증에 근접). 재연결 중 사용자가 [연결 해제]를 누르면(`disconnected`) 실패 알럿을 내지 않는다.
+- ⚠️ 서버 설정(`ping-restart`·`proto tcp`)은 우리가 못 바꾼다. `--ping`/`--ping-restart` CLI 인자로 OpenVPN 자체 keepalive 를 짧게 두는 방법은 위 SIGUSR1 경로 보존 문제 때문에 보류.
+- ⚠️ **개발 인스턴스와 설치본은 `userData/vpn/session.json` 을 공유**해 같은 management 소켓에 붙으려 한다. OpenVPN 은 **클라이언트를 하나만 받고 나머지 접속은 TCP 백로그에 조용히 세워 둔다**(2026-09-07 실측: 두 번째 앱은 비밀번호·`state` 를 보내고도 읽히지 않아 `disconnected` 로 보이다가, 첫 클라이언트가 끊기는 순간 이어받아 갑자기 `connected` 가 된다). 그래서 **설치본이 떠 있으면 dev 로 VPN 검증이 불가**하다. 설치본을 끄고 검증하되 — ⚠️ **Claude 세션이 설치본의 터미널 안에서 돌고 있으면 설치본을 끄지 말 것**(사용자 화면이 사라진다. tmux 세션은 남아 사용자가 앱을 다시 열게 되고, 그 사이 상태를 오판한다). 그땐 `/build` 로 설치본에 실어 라우팅 테이블(`route -n get <서버IP>`)로 검증한다.
+
 ## 폰 미러링
 `renderer/features/mirror` + `main/features/mirror`
 

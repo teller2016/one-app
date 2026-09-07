@@ -233,6 +233,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 연결 — 진행/완료 상태는 onStatus 로도 전달됨. manualOtp 없으면 시크릿으로 자동 생성
     connect: (manualOtp?: string) =>
       ipcRenderer.invoke("vpn:connect", manualOtp),
+    // 재연결 — 관리자 인증 없이 데몬 재시작. 시크릿이 없으면 manualOtp 필요
+    reconnect: (manualOtp?: string) =>
+      ipcRenderer.invoke("vpn:reconnect", manualOtp),
     // 연결 해제
     disconnect: () => ipcRenderer.invoke("vpn:disconnect"),
     // 현재 상태 조회

@@ -11,7 +11,8 @@ import { StatusDot } from '../../../components/StatusDot';
 export function VpnWidget() {
   const [settings, setSettings] = useState<VpnSettingsView | null>(null);
   const [status, setStatus] = useState<VpnStatus>({ state: 'disconnected' });
-  const [busy, setBusy] = useState(false);
+  // 어느 버튼이 진행 중인지 — 연결됨 상태엔 [재연결]·[연결 해제] 두 버튼이 나란히 있다
+  const [busy, setBusy] = useState<'connect' | 'reconnect' | 'disconnect' | null>(null);
   const [error, setError] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [otp, setOtp] = useState('');
@@ -37,20 +38,30 @@ export function VpnWidget() {
   }, []);
 
   const connect = async () => {
-    setBusy(true);
+    setBusy('connect');
     setError('');
     const res = await window.oneApp.vpn.connect(otp.trim() || undefined);
     if (!res.ok) setError(res.error ?? '연결에 실패했습니다.');
     else setOtp('');
-    setBusy(false);
+    setBusy(null);
+  };
+
+  // 관리자 인증 없이 터널을 다시 세운다 — 네트워크 전환 뒤 '응답 없음' 복구용
+  const reconnect = async () => {
+    setBusy('reconnect');
+    setError('');
+    const res = await window.oneApp.vpn.reconnect(otp.trim() || undefined);
+    if (!res.ok) setError(res.error ?? '재연결에 실패했습니다.');
+    else setOtp('');
+    setBusy(null);
   };
 
   const disconnect = async () => {
-    setBusy(true);
+    setBusy('disconnect');
     setError('');
     const res = await window.oneApp.vpn.disconnect();
     if (!res.ok) setError(res.error ?? '해제에 실패했습니다.');
-    setBusy(false);
+    setBusy(null);
   };
 
   const saveConfig = async () => {
@@ -95,10 +106,14 @@ export function VpnWidget() {
   };
 
   const st = status.state;
+  // 연결됨인데 터널이 응답하지 않는다(네트워크 전환 뒤) — 감시가 판정, 재연결로 복구
+  const stale = st === 'connected' && !!status.stale;
   // 상태 점 — error 는 'fail'(danger 점)로 disconnected(idle)와 시각 구분 (DESIGN.md)
   const dotStatus: 'ok' | 'busy' | 'fail' | 'idle' =
     st === 'connected'
-      ? 'ok'
+      ? stale
+        ? 'fail'
+        : 'ok'
       : st === 'connecting'
         ? 'busy'
         : st === 'error'
@@ -106,7 +121,9 @@ export function VpnWidget() {
           : 'idle';
   const statusText =
     st === 'connected'
-      ? `연결됨${status.vpnIp ? ` · ${status.vpnIp}` : ''}`
+      ? stale
+        ? '응답 없음 · 재연결 필요'
+        : `연결됨${status.vpnIp ? ` · ${status.vpnIp}` : ''}`
       : st === 'connecting'
         ? (status.detail ?? '연결 중')
         : st === 'error'
@@ -144,20 +161,33 @@ export function VpnWidget() {
         {!showConfig && (
           <div className="sbw__buttons">
             {st === 'connected' ? (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={disconnect}
-                loading={busy}
-              >
-                연결 해제
-              </Button>
+              <>
+                {/* 응답 없음이면 재연결이 주 동작 — 평소엔 조용한 ghost */}
+                <Button
+                  variant={stale ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={reconnect}
+                  loading={busy === 'reconnect'}
+                  disabled={busy === 'disconnect'}
+                >
+                  재연결
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={disconnect}
+                  loading={busy === 'disconnect'}
+                  disabled={busy === 'reconnect'}
+                >
+                  연결 해제
+                </Button>
+              </>
             ) : (
               <Button
                 variant="primary"
                 size="sm"
                 onClick={connect}
-                loading={busy || st === 'connecting'}
+                loading={busy === 'connect' || st === 'connecting'}
               >
                 VPN 연결
               </Button>
@@ -196,8 +226,9 @@ export function VpnWidget() {
           </div>
         )}
 
+        {/* 시크릿이 없으면 연결·재연결 모두 OTP 를 손으로 넣는다 */}
         {!showConfig &&
-          st !== 'connected' &&
+          (st !== 'connected' || stale) &&
           settings &&
           !settings.hasTotpSecret && (
             <div className="sbw__sub">

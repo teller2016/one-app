@@ -223,6 +223,7 @@ declare global {
         saveSettings: (input: SaveVpnSettingsInput) => Promise<VpnSaveResult>;
         pickOvpn: () => Promise<{ path?: string }>;
         connect: (manualOtp?: string) => Promise<VpnActionResult>;
+        reconnect: (manualOtp?: string) => Promise<VpnActionResult>;
         disconnect: () => Promise<VpnActionResult>;
         getStatus: () => Promise<VpnStatus>;
         onStatus: (cb: (status: VpnStatus) => void) => () => void;

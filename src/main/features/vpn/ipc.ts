@@ -7,11 +7,13 @@ import type {
   VpnSettingsView,
   VpnStatus,
 } from '../../../shared/types';
+import { startVpnHealthMonitor } from './monitor';
 import {
   connectVpn,
   disconnectVpn,
   getVpnStatus,
   onVpnStatus,
+  reconnectVpn,
   tryReattachVpn,
 } from './openvpn';
 import { getVpnCredentials, getVpnSettingsForRenderer, saveVpnSettings } from './store';
@@ -57,6 +59,20 @@ export function registerVpnIpc() {
     }
   });
 
+  // 재연결 — 관리자 인증 없이 데몬 재시작(SIGHUP). 네트워크 전환 뒤 죽은 터널 복구용
+  ipcMain.handle('vpn:reconnect', async (_e, manualOtp?: string): Promise<VpnActionResult> => {
+    const cred = getVpnCredentials();
+    if (!cred?.totpSecret && !manualOtp) {
+      return { ok: false, error: 'OTP를 입력하거나 설정에서 시크릿 키를 저장하세요.' };
+    }
+    try {
+      await reconnectVpn(manualOtp);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  });
+
   ipcMain.handle('vpn:disconnect', async (): Promise<VpnActionResult> => {
     try {
       await disconnectVpn();
@@ -68,6 +84,8 @@ export function registerVpnIpc() {
 
   // 상태 변화를 모든 창에 push
   onVpnStatus((status) => broadcast('vpn:status', status));
+  // 연결 중엔 터널 생존을 감시한다 (네트워크 전환 뒤 죽은 터널 → 알림·자동 재연결)
+  startVpnHealthMonitor();
 
   // 앱 재시작 시 살아있는 VPN 데몬에 재접속해 상태 복원
   void app.whenReady().then(() => {

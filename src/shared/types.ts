@@ -791,6 +791,8 @@ export type VpnStatus = {
   vpnIp?: string; // 터널 IP (연결됨일 때)
   since?: number; // 연결 시각 (epoch ms)
   error?: string;
+  /** connected 인데 터널이 응답하지 않는다(네트워크 전환 뒤 루프·블랙홀) — 재연결이 필요하다 */
+  stale?: boolean;
 };
 
 /** 렌더러에 보내는 VPN 설정 — 시크릿 값은 포함하지 않음 */
