@@ -12,7 +12,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { VpnStatus } from '../../../shared/types';
 import type { VpnServer } from './health';
-import { sleep } from '../../lib/util';
+import { shQuote, sleep } from '../../lib/util';
 import {
   findOpenvpnBinary,
   logPath,
@@ -32,7 +32,12 @@ const listeners = new Set<StatusListener>();
 let authAttempts = 0; // 이번 연결에서 PASSWORD 질의에 응답한 횟수
 let manualOtpOnce: string | null = null; // 수동 입력 OTP (1회용)
 let lastSentCode: string | null = null; // 직전에 보낸 TOTP (재시도 시 재사용 방지)
-let intentionalExit = false; // 사용자가 해제를 눌러 종료 중인지
+// 사용자가 해제를 눌러 종료 중인지 — 소켓 close 핸들러가 최종 상태(disconnected vs error)를 정할 때 1회 소비하고 곧바로 false 로 되돌린다
+let intentionalExit = false;
+// 마지막 disconnected 가 사용자의 [연결 해제]였는지 — 위와 달리 다음 연결·재연결 시작까지 남는다.
+// 감시(monitor.ts)가 재연결 실패를 사후에 판정할 때 쓴다: close 핸들러의 setStatus 가 리스너를 동기로 부르고
+// 실패 reject 는 microtask 뒤에 오므로 그 시점엔 intentionalExit 가 이미 false 라 구분할 수 없다
+let userDisconnected = false;
 let lastDropReason: string | null = null; // RECONNECTING 상태의 실패 사유 (에러 메시지용)
 let server: VpnServer | null = null; // CONNECTED 라인의 원격 서버 — 생존 프로브의 경로 점검·도달 확인용 (monitor.ts)
 
@@ -75,6 +80,14 @@ export function getVpnServer(): VpnServer | null {
   return server;
 }
 
+/**
+ * 지금의 disconnected 가 사용자의 [연결 해제] 때문인가 — 데몬이 사유 없이 죽어도(외부 kill·크래시) 같은
+ * disconnected 가 되므로, 감시가 재연결 실패 알럿을 생략할지 판단할 때 상태만으로는 구분할 수 없다
+ */
+export function wasDisconnectedByUser(): boolean {
+  return userDisconnected;
+}
+
 /** 연결됨 상태의 '응답 없음' 표시 토글 — 감시(monitor.ts)가 판정한다. 값이 같으면 알리지 않는다 */
 export function setVpnStale(stale: boolean) {
   if (status.state !== 'connected' || !!status.stale === stale) return;
@@ -92,9 +105,6 @@ function send(cmd: string) {
 
 /** management 인자용 이스케이프 — 큰따옴표 문자열 안에서 \ 와 " 처리 */
 const mgmtEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-
-/** 셸 인자용 single-quote 감싸기 */
-const shellQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 // ── management 라인 처리 ─────────────────────────────
 
@@ -288,24 +298,24 @@ function findFreePort(): Promise<number> {
 /** osascript 관리자 인증으로 openvpn 을 root 데몬으로 실행 */
 function launchAsRoot(bin: string, ovpnPath: string, port: number): Promise<void> {
   const cmd = [
-    shellQuote(bin),
-    '--config', shellQuote(ovpnPath),
+    shQuote(bin),
+    '--config', shQuote(ovpnPath),
     // ⚠️ 이 프로세스는 **root** 다. 설정 파일이 `script-security 2` + `up`/`route-up` 을
     // 담고 있으면 그 스크립트가 root 로 실행되므로, 기본값(1 = 내장 실행파일만)을 다시 못박는다.
     // **`--config` 뒤에 와야 한다** — 앞에 두면 설정 파일이 이 값을 덮어써 무효다(2026-08-26
     // openvpn 2.7.4 실측: 뒤 → "'--script-security 2' or higher is required", 앞 → 무효).
     // 0 이 아니라 1 인 이유: 0 은 ifconfig·route 호출까지 막아 연결 자체가 되지 않는다.
     '--script-security', '1',
-    '--cd', shellQuote(path.dirname(ovpnPath)), // ca 등 상대 경로 파일 기준
+    '--cd', shQuote(path.dirname(ovpnPath)), // ca 등 상대 경로 파일 기준
     '--daemon', 'one-app-vpn',
-    '--management', '127.0.0.1', String(port), shellQuote(mgmtPwPath()),
+    '--management', '127.0.0.1', String(port), shQuote(mgmtPwPath()),
     '--management-hold',
     '--management-query-passwords',
     '--auth-retry', 'interact',
     '--connect-timeout', '15',
     '--connect-retry-max', '2',
-    '--log', shellQuote(logPath()),
-    '--writepid', shellQuote(pidPath()),
+    '--log', shQuote(logPath()),
+    '--writepid', shQuote(pidPath()),
   ].join(' ');
   // AppleScript 문자열 이스케이프 (\ 와 ")
   const escaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -377,6 +387,7 @@ export async function connectVpn(ovpnPath: string, manualOtp?: string): Promise<
   lastDropReason = null;
   manualOtpOnce = manualOtp?.trim() || null;
   intentionalExit = false;
+  userDisconnected = false;
 
   const port = await findFreePort();
   const mgmtPw = crypto.randomBytes(24).toString('hex');
@@ -412,6 +423,7 @@ export async function reconnectVpn(manualOtp?: string): Promise<void> {
   lastDropReason = null;
   manualOtpOnce = manualOtp?.trim() || null;
   intentionalExit = false;
+  userDisconnected = false;
   setStatus({ state: 'connecting', detail: '재연결 중 — 네트워크 경로 재설정' });
   send('signal SIGHUP');
   await waitForConnected(RECONNECT_TIMEOUT_MS);
@@ -419,6 +431,7 @@ export async function reconnectVpn(manualOtp?: string): Promise<void> {
 
 /** 연결 해제 — management 로 SIGTERM 을 보내고 종료를 기다린다 */
 export async function disconnectVpn(): Promise<void> {
+  userDisconnected = true; // 소켓이 없어도 사용자의 뜻으로 disconnected 가 된 것
   if (!socket) {
     setStatus({ state: 'disconnected' });
     return;

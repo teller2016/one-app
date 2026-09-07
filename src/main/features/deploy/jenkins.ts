@@ -9,13 +9,15 @@ import type {
   DeployRunningBuild,
 } from '../../../shared/types';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
 import { sleep } from '../../lib/util';
 
 // 응답 JSON 파싱 — 주소가 프록시·SSO 로그인 페이지를 가리키면 HTML 이 HTTP 200 으로 오는데,
 // 본문을 그대로 파싱하면 V8 의 `Unexpected token '<'` 가 화면에 새어 나간다(Jira 에서 실제 제보된 부류)
 const JSON_HINT = '프로젝트 편집의 젠킨스 주소가 서버 루트 주소(예: https://jenkins.example.com)인지 확인하세요.';
 const json = <T>(res: Response) => readJson<T>(res, '젠킨스', JSON_HINT);
+// fetch 예외 → 사용자 문구. 타임아웃 문장·JSON_HINT 를 '연결할 수 없습니다' 로 덮어쓰지 않는다
+const connError = (err: unknown) => new Error(describeFetchError(err, '젠킨스'));
 
 export type JenkinsAuth = {
   baseUrl: string; // 예: https://jenkins.example.com (끝 슬래시 없음)
@@ -161,8 +163,8 @@ export async function fetchLastStatus(
       finishedAt:
         b.timestamp != null ? b.timestamp + (b.duration ?? 0) : undefined,
     };
-  } catch {
-    return { state: 'error', error: '젠킨스에 연결할 수 없습니다.' };
+  } catch (err) {
+    return { state: 'error', error: describeFetchError(err, '젠킨스') };
   }
 }
 
@@ -258,8 +260,8 @@ export async function fetchBuildDetail(
     let res: Response;
     try {
       res = await fetch(url, { headers: { Authorization: authHeader(a) } });
-    } catch {
-      throw new Error('젠킨스에 연결할 수 없습니다.');
+    } catch (err) {
+      throw connError(err);
     }
     if (res.status === 404) throw new Error('빌드 이력이 없습니다.');
     if (res.status === 401)
@@ -470,8 +472,8 @@ export async function fetchBuildHistory(
       `${jobUrl(a, jobPath)}/api/json?tree=${encodeURIComponent(HISTORY_TREE)}`,
       { headers: { Authorization: authHeader(a) } },
     );
-  } catch {
-    throw new Error('젠킨스에 연결할 수 없습니다.');
+  } catch (err) {
+    throw connError(err);
   }
   if (res.status === 401)
     throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
@@ -520,8 +522,8 @@ export async function fetchConsoleTail(
   let probe: Response;
   try {
     probe = await fetch(`${base}?start=2000000000`, { headers });
-  } catch {
-    throw new Error('젠킨스에 연결할 수 없습니다.');
+  } catch (err) {
+    throw connError(err);
   }
   if (probe.status === 404) throw new Error('해당 빌드의 로그가 없습니다.');
   if (probe.status === 401)
@@ -561,8 +563,8 @@ export async function stopBuild(
         res = await doPost();
       }
     }
-  } catch {
-    throw new Error('젠킨스에 연결할 수 없습니다.');
+  } catch (err) {
+    throw connError(err);
   }
 
   // 성공 시 잡 페이지로 302 리다이렉트되는 것이 일반적 (fetch 가 따라가면 res.ok)
@@ -620,8 +622,8 @@ export async function fetchQueue(a: JenkinsAuth): Promise<QueueEntry[]> {
     res = await fetch(`${a.baseUrl}/queue/api/json?tree=${encodeURIComponent(tree)}`, {
       headers: { Authorization: authHeader(a) },
     });
-  } catch {
-    throw new Error('젠킨스에 연결할 수 없습니다.');
+  } catch (err) {
+    throw connError(err);
   }
   if (res.status === 401)
     throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');
@@ -657,9 +659,9 @@ export async function fetchRunningBuilds(
     res = await fetch(`${a.baseUrl}/computer/api/json?tree=${encodeURIComponent(tree)}`, {
       headers: { Authorization: authHeader(a) },
     });
-  } catch {
-    // 다른 조회처럼 사람이 읽을 문구로 — 안 감싸면 undici 의 'fetch failed' 가 현황 팝업에 그대로 뜬다
-    throw new Error('젠킨스에 연결할 수 없습니다.');
+  } catch (err) {
+    // 사람이 읽을 문구로 — 안 감싸면 undici 의 'fetch failed' 만 현황 팝업에 뜬다
+    throw connError(err);
   }
   if (res.status === 401)
     throw new Error('인증 실패 — 아이디/API 토큰을 확인하세요.');

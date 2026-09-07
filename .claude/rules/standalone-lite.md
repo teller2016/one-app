@@ -84,6 +84,10 @@ typecheck 가 잡는다(런타임에 `undefined` 호출로 터지는 대신).
   항목 이름이 그 값에서 나온다. 바꾸면 받는 사람의 저장된 계정이 전부 사라진다(2.0 에서 한 번
   바꿨고 그때 계정 재입력을 안내했다).
 - macOS 는 자가서명 `One App Sign` 으로 서명한다 — adhoc 이면 리빌드마다 계정이 날아간다.
+- ⚠️ **lite 에는 키체인 워밍업(`warmUpSecrets`)·`whenSecretsReady` 가 없다**(2026-09-07) — 본체 `main-process`
+  규칙의 "기동 경로 소비자는 `whenSecretsReady()` 를 기다릴 것" 을 여기서 그대로 따르면 워밍업이 안 불려
+  **15초 폴백까지 기다린다**. 지금은 `src/main/main.ts` 기동 경로에 복호화 소비자가 없어 문제없다(복호화는
+  전부 IPC 요청 시점). 기동 경로에 복호화 소비자를 넣게 되면 그때 `warmUpSecrets()`(창 `did-finish-load`)를 함께 넣을 것.
 
 ## 아이콘
 본체 `assets/icon.png` 의 **색만 바꿔** 쓴다(`npm run icon` — 그린). PNG 코덱은 본체

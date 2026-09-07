@@ -18,7 +18,7 @@ import type {
   JiraReportResult,
 } from '../../../shared/types';
 import { buildReportJql, normalizeProjectKeys } from '../../../shared/jira-report';
-import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
 import { describeJiraHttpError, jiraAuth, mapIssue, type RawIssue } from './jira';
 import { getReportPrefs, saveReportPrefs } from './store';
 
@@ -49,22 +49,14 @@ const NOT_CONFIGURED = '환경설정 → 연동에서 Jira 주소·이메일·AP
 
 /** 상태코드 → 사용자 문구 — 공용 `describeJiraHttpError` 에 조회 문맥만 얹는다 */
 const describeHttpError = (res: Response) =>
-  describeJiraHttpError(res, '조회 조건', 'JQL 을 확인하세요.');
+  describeJiraHttpError(res, '조회', 'JQL 을 확인하세요.');
 
-/** 네트워크 예외 → 사용자 문구 (타임아웃 문장은 fetchWithTimeout 이 이미 만들어 준다) */
-function describeConnError(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.includes('시간 초과')
-    ? `Jira 응답이 없습니다 — ${message}`
-    : `Jira 에 연결할 수 없습니다 — ${message}`;
-}
-
-/** fetch 의 네트워크 예외를 사람이 읽을 Error 로 바꿔 던진다 */
+/** fetch 의 네트워크 예외를 사람이 읽을 Error 로 바꿔 던진다 (문구는 공용 `describeFetchError`) */
 async function request(url: string, headers: Record<string, string>): Promise<Response> {
   try {
     return await fetch(url, { headers }, TIMEOUT_MS);
   } catch (err) {
-    throw new Error(describeConnError(err));
+    throw new Error(describeFetchError(err, 'Jira'));
   }
 }
 

@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEAD_AFTER_FAILURES,
+  MIN_AUTO_RECONNECT_GAP_MS,
+  inReconnectCooldown,
   interfaceFingerprint,
   isDetoured,
   isTunnelInterface,
@@ -134,5 +136,30 @@ describe('judgeProbe', () => {
   it('한 번 실패 뒤 응답이 오면 누적이 초기화된다 (순간 끊김은 사망이 아니다)', () => {
     const suspect = judgeProbe('unreachable', 0);
     expect(judgeProbe('ok', suspect.failures)).toEqual({ verdict: 'alive', failures: 0 });
+  });
+});
+
+describe('inReconnectCooldown', () => {
+  const t0 = 1_700_000_000_000; // 임의의 epoch ms
+  const gap = MIN_AUTO_RECONNECT_GAP_MS;
+
+  it('아직 자동 재연결을 한 번도 안 했으면(0) 쿨다운이 아니다 — now 가 작아도', () => {
+    expect(inReconnectCooldown(0, t0)).toBe(false);
+    expect(inReconnectCooldown(0, 1_000)).toBe(false);
+  });
+
+  it('간격이 1ms 라도 모자라면 쿨다운', () => {
+    expect(inReconnectCooldown(t0, t0 + gap - 1)).toBe(true);
+    expect(inReconnectCooldown(t0, t0)).toBe(true);
+  });
+
+  it('간격을 정확히 채우면 쿨다운이 풀린다', () => {
+    expect(inReconnectCooldown(t0, t0 + gap)).toBe(false);
+    expect(inReconnectCooldown(t0, t0 + gap + 1)).toBe(false);
+  });
+
+  it('gap 을 직접 주면 그 값을 기준으로 본다', () => {
+    expect(inReconnectCooldown(t0, t0 + 999, 1_000)).toBe(true);
+    expect(inReconnectCooldown(t0, t0 + 1_000, 1_000)).toBe(false);
   });
 });

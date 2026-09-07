@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { broadcast } from '../../lib/broadcast';
 import { handleShared } from '../../lib/moIpc';
+import { isPositiveInt } from '../../lib/util';
 import {
   listProjects,
   saveProject,
@@ -39,6 +40,9 @@ import type {
   DeployRunningBuild,
   DeployQueueItem,
 } from '../../../shared/types';
+
+// handleShared 채널의 빌드 번호는 젠킨스 URL 경로에 그대로 들어간다 — 폰에서 온 값은 양의 정수만 받는다
+const BAD_BUILD_NUMBER = '빌드 번호가 올바르지 않습니다.';
 
 /** projectId·targetId 로 젠킨스 인증·잡 경로를 찾는다 (없으면 사용자용 오류 메시지) */
 function resolveTarget(
@@ -194,6 +198,9 @@ export function registerDeployIpc() {
       targetId: string,
       buildNumber?: number,
     ): Promise<DeployBuildDetailResult> => {
+      // 폰(MO)에서도 부르는 채널 — 번호가 URL 경로에 들어가므로 비어 있지 않으면 양의 정수만 받는다
+      if (buildNumber != null && !isPositiveInt(buildNumber))
+        return { ok: false, error: BAD_BUILD_NUMBER };
       const cred = getProjectCredentials(projectId);
       if (!cred) return { ok: false, error: '젠킨스 계정 정보가 없습니다.' };
       const target = cred.targets.find((t) => t.id === targetId);
@@ -238,6 +245,7 @@ export function registerDeployIpc() {
       targetId: string,
       buildNumber: number,
     ): Promise<DeployLogResult> => {
+      if (!isPositiveInt(buildNumber)) return { ok: false, error: BAD_BUILD_NUMBER };
       const r = resolveTarget(projectId, targetId);
       if ('error' in r) return { ok: false, error: r.error };
       try {
@@ -340,6 +348,7 @@ export function registerDeployIpc() {
       targetId: string,
       buildNumber: number,
     ): Promise<DeployStopResult> => {
+      if (!isPositiveInt(buildNumber)) return { ok: false, error: BAD_BUILD_NUMBER };
       const r = resolveTarget(projectId, targetId);
       if ('error' in r) return { ok: false, error: r.error };
       try {

@@ -150,31 +150,31 @@ export async function enrichApprovals(
   prs: PrItem[],
 ): Promise<PrItem[]> {
   return mapLimit(prs, REVIEW_CONCURRENCY, async (pr) => {
-      try {
-        const res = await giteaFetch(
-          `${giteaUrl}/api/v1/repos/${pr.repo}/pulls/${pr.number}/reviews`,
-          token,
-          { raw: true },
-        );
-        if (!res.ok) return pr;
-        const reviews = (await res.json()) as GiteaReview[];
-        // 리뷰어별 최신 리뷰 상태만 집계 (봇/무명 리뷰 제외)
-        const latest = new Map<string, { state: string; at: number }>();
-        for (const rv of Array.isArray(reviews) ? reviews : []) {
-          const who = rv.user?.login;
-          const state = rv.state ?? '';
-          if (!who || state === 'COMMENT') continue;
-          const at = rv.submitted_at ? Date.parse(rv.submitted_at) : 0;
-          const cur = latest.get(who);
-          if (!cur || at >= cur.at) latest.set(who, { state, at });
-        }
-        const approvals = [...latest.values()].filter(
-          (v) => v.state === 'APPROVED',
-        ).length;
-        return { ...pr, approvals };
-      } catch {
-        return pr;
+    try {
+      const res = await giteaFetch(
+        `${giteaUrl}/api/v1/repos/${pr.repo}/pulls/${pr.number}/reviews`,
+        token,
+        { raw: true },
+      );
+      if (!res.ok) return pr;
+      const reviews = (await res.json()) as GiteaReview[];
+      // 리뷰어별 최신 리뷰 상태만 집계 (봇/무명 리뷰 제외)
+      const latest = new Map<string, { state: string; at: number }>();
+      for (const rv of Array.isArray(reviews) ? reviews : []) {
+        const who = rv.user?.login;
+        const state = rv.state ?? '';
+        if (!who || state === 'COMMENT') continue;
+        const at = rv.submitted_at ? Date.parse(rv.submitted_at) : 0;
+        const cur = latest.get(who);
+        if (!cur || at >= cur.at) latest.set(who, { state, at });
       }
+      const approvals = [...latest.values()].filter(
+        (v) => v.state === 'APPROVED',
+      ).length;
+      return { ...pr, approvals };
+    } catch {
+      return pr;
+    }
   });
 }
 

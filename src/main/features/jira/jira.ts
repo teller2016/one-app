@@ -23,7 +23,7 @@ import {
 import { sanitizeHtml } from '../../lib/sanitize';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 // (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
-import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
 
 /** Jira REST 응답의 이슈 형태 (필요 필드만) */
 export interface RawIssue {
@@ -133,10 +133,12 @@ export function jiraAuth(): {
 /**
  * 상태코드 → 사용자 문구. 400 은 본문의 errorMessages·errors(JQL 오류 위치·필수 필드 등)를 함께
  * 보여준다 — 'HTTP 400' 만으로는 왜 거절됐는지 알 수 없다. 티켓 보고(report.ts)와 상태 전환이 공유한다.
+ * `what` 은 무슨 요청인지 명사형('상태 전환'·'조회') — 뒤에 '요청을' 이 붙어 조사가 갈리지 않는다
+ * (예전 `${what}을` 은 '조회을' 처럼 받침 없는 말에서 틀렸다).
  */
 export async function describeJiraHttpError(
   res: Response,
-  what = '요청',
+  what = '',
   hint?: string,
 ): Promise<string> {
   if (res.status === 401 || res.status === 403) {
@@ -149,8 +151,9 @@ export async function describeJiraHttpError(
         [...(b.errorMessages ?? []), ...Object.values(b.errors ?? {})].join(' '),
       )
       .catch((): string => '');
-    if (detail) return `Jira 가 ${what}을 거절했습니다 — ${detail}`;
-    return `Jira 가 ${what}을 거절했습니다 (HTTP 400)${hint ? ` — ${hint}` : ''}`;
+    const target = what ? `${what} 요청` : '요청';
+    if (detail) return `Jira 가 ${target}을 거절했습니다 — ${detail}`;
+    return `Jira 가 ${target}을 거절했습니다 (HTTP 400)${hint ? ` — ${hint}` : ''}`;
   }
   return `Jira 응답 오류 (HTTP ${res.status})`;
 }
@@ -222,15 +225,8 @@ export async function searchJql(
     const data = await readJson<{ issues?: RawIssue[] }>(res, 'Jira');
     return { ok: true, issues: data.issues ?? [] };
   } catch (err) {
-    const message = (err as Error).message;
-    return {
-      ok: false,
-      issues: [],
-      // 타임아웃 메시지는 fetchWithTimeout 이 이미 사람이 읽을 문장으로 바꿔 던진다
-      error: message.includes('시간 초과')
-        ? `Jira 응답이 없습니다 — ${message}`
-        : `Jira 에 연결할 수 없습니다 — ${message}`,
-    };
+    // 타임아웃·readJson 안내 문구는 공용 헬퍼가 살려 준다
+    return { ok: false, issues: [], error: describeFetchError(err, 'Jira') };
   }
 }
 

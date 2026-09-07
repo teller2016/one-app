@@ -18,11 +18,14 @@ import { decodePng, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** `--src`/`--out` 인자 (없으면 본체 assets). 상대경로는 **부른 곳** 기준으로 푼다 */
+/**
+ * `--src`/`--out` 인자 (없으면 본체 assets). 상대경로는 **부른 곳** 기준으로 푼다.
+ * 플래그 뒤에 값이 빠져 다음 플래그가 오면(`--src --out x.png`) 그것을 경로로 삼지 않고 기본값으로 간다.
+ */
 function argPath(flag, fallback) {
   const i = process.argv.indexOf(flag);
   const v = i >= 0 ? process.argv[i + 1] : undefined;
-  return v ? path.resolve(process.cwd(), v) : fallback;
+  return v && !v.startsWith('--') ? path.resolve(process.cwd(), v) : fallback;
 }
 
 const SRC = argPath('--src', path.join(ROOT, 'assets', 'icon.png'));

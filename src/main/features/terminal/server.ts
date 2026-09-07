@@ -129,20 +129,23 @@ function isSameOrigin(req: http.IncomingMessage): boolean {
  * 공개 경로(manifest·아이콘)에 아무 값이나 붙이면
  *   `GET /manifest.webmanifest?token=WRONG` → 진짜 토큰 쿠키 발급 → `GET /` 200 → `/term` attach
  * 로 **토큰을 모른 채 셸에 닿는 인증 우회**가 됐다(2026-08-26 실측 확인 후 수정).
+ *
+ * `token` 은 호출자가 **요청당 1회** 읽은 `getOrCreateToken()` 결과다 — 매 호출이 stat·JSON.parse·AES
+ * 복호화라 여기서 다시 읽지 않는다(예전엔 요청 1건에 최대 4회 읽었다, 2026-09-07 리뷰).
+ * null(복호화 실패)이면 아무 값도 통과하지 않는다.
  */
-function hasValidQueryToken(url: URL): boolean {
+function hasValidQueryToken(url: URL, token: string | null): boolean {
   const q = url.searchParams.get('token');
-  const token = getOrCreateToken(); // null(복호화 실패)이면 아무 값도 통과하지 않는다
   return !!q && token !== null && timingEqual(q, token);
 }
 
-function isAuthed(req: http.IncomingMessage): boolean {
+/** 쿼리 토큰 또는 쿠키로 인증됐는가 — `token` 은 hasValidQueryToken 과 같은 요청당 1회 값 */
+function isAuthed(req: http.IncomingMessage, token: string | null): boolean {
   const url = new URL(req.url ?? '/', 'http://local');
-  if (hasValidQueryToken(url)) return true;
+  if (hasValidQueryToken(url, token)) return true;
   const m = (req.headers.cookie ?? '').match(
     new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`)
   );
-  const token = getOrCreateToken();
   return !!m && token !== null && timingEqual(decodeURIComponent(m[1]), token);
 }
 
@@ -405,7 +408,8 @@ export async function startServer(): Promise<TerminalServerStatus> {
 
   const handler: http.RequestListener = (req, res) => {
     const url = new URL(req.url ?? '/', 'http://local');
-    if (!isPublicPath(url.pathname) && !isAuthed(req)) {
+    const token = getOrCreateToken(); // 요청당 1회 — 인증 판정·쿠키 승격이 함께 쓴다
+    if (!isPublicPath(url.pathname) && !isAuthed(req, token)) {
       res.writeHead(403, {
         'Content-Type': 'text/plain; charset=utf-8',
         ...SECURITY_HEADERS,
@@ -414,8 +418,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
       return;
     }
     const extraHeaders: Record<string, string> = { ...SECURITY_HEADERS };
-    const token = getOrCreateToken();
-    if (token !== null && hasValidQueryToken(url)) {
+    if (token !== null && hasValidQueryToken(url, token)) {
       // 첫 진입(토큰 쿼리)을 쿠키로 승격 — 이후엔 토큰 없는 주소(북마크·홈 화면 아이콘)로도 인증
       // ⚠️ `Secure` 는 TLS 로 떴을 때만 붙인다 — 평문 폴백에서 붙이면 브라우저가 쿠키를 아예
       //    저장하지 않아 폰에서 매번 QR 을 다시 찍어야 한다.
@@ -485,7 +488,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
     const url = new URL(req.url ?? '/', 'http://local');
     const target =
       url.pathname === WS_PATH ? wsServer : url.pathname === RPC_PATH ? rpcServer : null;
-    if (!target || !isSameOrigin(req) || !isAuthed(req)) {
+    if (!target || !isSameOrigin(req) || !isAuthed(req, getOrCreateToken())) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
       return;

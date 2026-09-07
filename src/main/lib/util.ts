@@ -21,6 +21,13 @@ export const localDateKey = (d: Date) =>
 export const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
+ * 양의 정수인가 — `handleShared` 채널의 번호 인자(PR 번호·빌드 번호) 검증용.
+ * 폰(MO)에서 문자열이 올 수 있고 그 값이 REST 경로에 그대로 들어가므로(`/pulls/<n>/merge`·
+ * `/<n>/stop`) 경로를 비틀 수 없게 타입과 범위를 함께 본다.
+ */
+export const isPositiveInt = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 0;
+
+/**
  * 동시 실행 수를 제한한 map — 결과 순서는 입력 순서를 따른다.
  * 첨부·이미지처럼 하나가 수 MB~수십 MB 인 요청을 Promise.all 로 한꺼번에 띄우면
  * 메모리 피크가 (개수 × 크기) 로 튀고 V8 고수위가 RSS 에 남는다 — 2~3개씩 흘린다.

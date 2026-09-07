@@ -226,22 +226,20 @@ export function VpnWidget() {
           </div>
         )}
 
-        {/* 시크릿이 없으면 연결·재연결 모두 OTP 를 손으로 넣는다 */}
-        {!showConfig &&
-          (st !== 'connected' || stale) &&
-          settings &&
-          !settings.hasTotpSecret && (
-            <div className="sbw__sub">
-              <Input
-                small
-                placeholder="Google OTP 6자리"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-              />
-            </div>
-          )}
+        {/* 시크릿이 없으면 연결·재연결 모두 OTP 를 손으로 넣는다 — 정상 연결 중에도 [재연결]이 항상 있으니 칸도 항상 둔다
+            (connected 에서 숨기면 재연결을 눌러도 "OTP를 입력하거나…" 오류만 떴다) */}
+        {!showConfig && settings && !settings.hasTotpSecret && (
+          <div className="sbw__sub">
+            <Input
+              small
+              placeholder={st === 'connected' && !stale ? 'Google OTP 6자리 (재연결 시)' : 'Google OTP 6자리'}
+              inputMode="numeric"
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+            />
+          </div>
+        )}
 
         {errorMsg && <p className="sbw__error">{errorMsg}</p>}
       </div>

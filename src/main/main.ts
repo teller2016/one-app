@@ -86,6 +86,16 @@ ipcMain.handle("app:autostart:set", (_e, enabled: boolean) => {
   return { enabled: app.getLoginItemSettings().openAtLogin };
 });
 
+/**
+ * 렌더러가 죽었을 때 자동으로 다시 로드하는 횟수 상한(창 하나 기준).
+ * 로드마다 결정적으로 죽는 원인(GPU 프로세스 이상·OOM 등)이면 무조건 reload 가 무한 리로드
+ * 루프가 되므로 이 횟수를 넘기면 리로드하지 않고 기록만 남긴다.
+ * "루프"는 **짧은 간격의 연속 크래시**다 — 마지막 크래시에서 RENDERER_CRASH_LOOP_WINDOW_MS 이상 지났으면
+ * 산발적 크래시로 보고 카운터를 0 으로 되돌린다(며칠 쓰다 3번 죽었다고 자동 복구가 영영 꺼지지 않게).
+ */
+const RENDERER_AUTO_RELOAD_MAX = 3;
+const RENDERER_CRASH_LOOP_WINDOW_MS = 60_000;
+
 const createWindow = () => {
   // 저장된 테마 설정을 네이티브에도 반영 — 비브런시 재질·신호등·다이얼로그가 앱 테마를 따르고,
   // 렌더러의 prefers-color-scheme(theme.ts 의 system 해석)도 이 값을 따라간다
@@ -143,12 +153,24 @@ const createWindow = () => {
     if (mainWindow.isDestroyed()) return;
     warmUpSecrets();
   });
-  // 렌더러가 죽으면 빈 창이 영영 남는다 — 정상 종료가 아니면 다시 로드한다
+  // 렌더러가 죽으면 빈 창이 영영 남는다 — 정상 종료가 아니면 다시 로드한다.
+  // 카운터는 **이 창의 것**이다(createWindow 클로저) — 창을 닫고 다시 만들면(activate) 0 부터 센다.
+  let rendererAutoReloads = 0;
+  let lastRendererGoneAt = 0;
   mainWindow.webContents.on("render-process-gone", (_e, details) => {
     console.error("[main] 렌더러 종료:", details.reason, details.exitCode);
-    if (details.reason !== "clean-exit" && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.reload();
+    if (details.reason === "clean-exit" || mainWindow.isDestroyed()) return;
+    const now = Date.now();
+    if (now - lastRendererGoneAt > RENDERER_CRASH_LOOP_WINDOW_MS) rendererAutoReloads = 0;
+    lastRendererGoneAt = now;
+    if (rendererAutoReloads >= RENDERER_AUTO_RELOAD_MAX) {
+      console.error(
+        `[main] 렌더러가 ${rendererAutoReloads}회 연속 죽어 자동 리로드를 멈춘다 — 로드마다 죽는 원인(GPU·OOM)이면 리로드가 루프가 된다`
+      );
+      return;
     }
+    rendererAutoReloads += 1;
+    mainWindow.webContents.reload();
   });
   mainWindow.webContents.on("unresponsive", () => {
     console.warn("[main] 렌더러 무응답");

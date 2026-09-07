@@ -97,6 +97,7 @@ npm start          # 개발 모드 (렌더러만 HMR — main/preload 수정 시
 npm run typecheck  # tsc --noEmit — 본체 파일까지 따라가며 검사한다
 npm run reach      # lite 에 실리는 본체 파일·외부 패키지 요약 (-- --files 전체 · -- --hits <경로>... 걸러내기)
 npm run icon       # 아이콘 3종 재생성 (본체 아이콘을 바꿨을 때만)
+npm run icon:dev   # 개발 인스턴스용 DEV 밴드 아이콘(icon-dev.png) 재생성 — 본체 scripts/make-dev-icon.mjs 재사용
 ```
 
 본체 `npm start` 와 동시에 띄워도 된다(포트가 다르다). 단, **설정 파일은 본체와 공유하지 않는다** — 앱 이름이 달라 `userData` 가 `One App` 이 아닌 `OneAppLite` 다. 개발 인스턴스와 패키징 앱은 같은 `OneAppLite` userData 를 쓴다.
@@ -114,7 +115,7 @@ npm run icon       # 아이콘 3종 재생성 (본체 아이콘을 바꿨을 때
 
 ```
 standalone/lite/
-├── assets/                    icon.png · icon.icns(mac) · icon.ico(win) — 커밋한다
+├── assets/                    icon.png · icon.icns(mac) · icon.ico(win) · icon-dev.png(개발 인스턴스) — 커밋한다
 ├── scripts/
 │   ├── make-icon.mjs          본체 아이콘의 **색만** 바꿔 위 3개를 만든다 (npm run icon)
 │   ├── release.mjs            버전 bump → 양 플랫폼 빌드 → GitHub Releases 업로드 (npm run release)

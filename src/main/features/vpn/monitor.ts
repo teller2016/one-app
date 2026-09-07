@@ -3,14 +3,16 @@
 // (데몬이 root 로 살아 있어 관리자 인증이 다시 필요 없다). 살아 있어도 기본 인터페이스가
 // 바뀌어 터널이 옛 인터페이스(와이파이)에 남았으면 새 인터페이스(유선)로 옮긴다.
 // 판정 규칙·프로브는 health.ts.
+import { app, powerMonitor } from 'electron';
 import os from 'node:os';
 import { notify, sendToast } from '../notify/notify';
 import {
   IFACE_POLL_MS,
   IFACE_SETTLE_MS,
-  MIN_AUTO_RECONNECT_GAP_MS,
   PROBE_INTERVAL_MS,
   PROBE_RETRY_MS,
+  RESUME_GRACE_MS,
+  inReconnectCooldown,
   inspectRoutes,
   interfaceFingerprint,
   interfaceLabel,
@@ -19,6 +21,7 @@ import {
   judgeProbe,
   probeTunnel,
   reconnectDecision,
+  resetInterfaceLabels,
   type ProbeResult,
   type RouteView,
 } from './health';
@@ -28,24 +31,31 @@ import {
   onVpnStatus,
   reconnectVpn,
   setVpnStale,
+  wasDisconnectedByUser,
 } from './openvpn';
 import { getVpnCredentials } from './store';
 
 /** 감시 토스트는 한 장만 유지한다 — 응답 없음 → 재연결 중 → 재연결됨 이 같은 자리에서 바뀐다 */
 const TOAST_KEY = 'vpn-health';
 
-type Timer = ReturnType<typeof setTimeout> | null;
-let ifaceTimer: Timer = null;
-let probeTimer: Timer = null;
-let settleTimer: Timer = null;
-let retryTimer: Timer = null;
+type Interval = ReturnType<typeof setInterval> | null;
+type Timeout = ReturnType<typeof setTimeout> | null;
+let ifaceTimer: Interval = null;
+let probeTimer: Interval = null;
+let settleTimer: Timeout = null;
+let retryTimer: Timeout = null;
 let fingerprint = '';
 let failures = 0;
 let probing = false;
+// 프로브 중에 트리거(인터페이스 변화·주기)가 왔다 — 진행 중 프로브는 옛 네트워크의 결과일 수 있으니 끝난 뒤 한 번 더 돈다.
+// 없으면 트리거가 조용히 삼켜져 다음 점검이 30초 주기까지 미뤄졌다
+let rerunRequested = false;
+// 잠자기 복귀 직후 판정 유예 만료 시각 — 그 전엔 프로브를 건너뛴다(health.ts RESUME_GRACE_MS)
+let resumeGraceUntil = 0;
 // 경로 옮기기를 시도한 네트워크 구성 — 옮겨도 정렬이 안 되면 같은 구성에서 30초마다 흔들지 않는다
 let followedFor: string | null = null;
 let lastAutoReconnectAt = 0; // 자동 SIGHUP 쿨다운 기준
-const inCooldown = () => Date.now() - lastAutoReconnectAt < MIN_AUTO_RECONNECT_GAP_MS;
+const inCooldown = () => inReconnectCooldown(lastAutoReconnectAt, Date.now());
 // 프로브·도달 확인은 합쳐 십수 초 걸린다 — 그 사이 OpenVPN 이 스스로 RECONNECTING 으로 갔으면(proto tcp 소켓 리셋 등,
 // 상태는 connecting) 우리가 끼어들 일이 아니다. await 뒤마다 확인해 옛 터널의 판정으로 토스트·SIGHUP 을 내지 않는다.
 // 끼어들면 reconnectVpn 이 "연결된 상태에서만" 으로 throw 해 헛된 실패 알럿이 떴다(2026-09-07 리뷰)
@@ -58,6 +68,16 @@ export function startVpnHealthMonitor() {
     else disarm();
   });
   if (getVpnStatus().state === 'connected') arm();
+  // powerMonitor 는 app ready 뒤에만 쓸 수 있다 — 이 함수는 main.ts 최상위(registerVpnIpc)에서 ready 전에 불린다
+  void app.whenReady().then(() => {
+    powerMonitor.on('resume', onResume);
+  });
+}
+
+/** 잠자기 복귀 — 잠들기 전 누적 실패를 버리고, 소켓이 회복될 시간 동안 판정을 유예한다 */
+function onResume() {
+  failures = 0;
+  resumeGraceUntil = Date.now() + RESUME_GRACE_MS;
 }
 
 function arm() {
@@ -69,8 +89,12 @@ function arm() {
 }
 
 function disarm() {
-  for (const t of [ifaceTimer, probeTimer, settleTimer, retryTimer]) if (t) clearTimeout(t);
+  if (ifaceTimer) clearInterval(ifaceTimer);
+  if (probeTimer) clearInterval(probeTimer);
+  if (settleTimer) clearTimeout(settleTimer);
+  if (retryTimer) clearTimeout(retryTimer);
   ifaceTimer = probeTimer = settleTimer = retryTimer = null;
+  rerunRequested = false; // connected 를 벗어났다 — 빚진 재점검은 무효, 다시 connected 가 되면 새 주기가 돈다
 }
 
 function checkInterfaces() {
@@ -80,18 +104,25 @@ function checkInterfaces() {
   // 네트워크 구성이 바뀌었으니 경로 옮기기를 다시 허용한다 — 같은 지문이 돌아와도(뽑았다 다시 꽂음)
   // 새 구성이다. 지문 값 비교로 막으면 두 번째 꽂기부터 옮기지 않는다(2026-09-07 실측)
   followedFor = null;
+  resetInterfaceLabels(); // 새 어댑터일 수 있다 — 라벨 캐시를 비워 장치명(en8) 대신 이름이 나오게
   // 인터페이스가 바뀌었다(유선 꽂기/빼기·와이파이 토글) — 경로 재구성이 끝날 시간을 주고 점검
   if (settleTimer) clearTimeout(settleTimer);
   settleTimer = setTimeout(() => void runProbe(), IFACE_SETTLE_MS);
 }
 
 async function runProbe() {
-  if (probing || getVpnStatus().state !== 'connected') return;
+  if (getVpnStatus().state !== 'connected') return;
+  if (probing) {
+    rerunRequested = true;
+    return;
+  }
+  if (Date.now() < resumeGraceUntil) return; // 잠자기 복귀 유예 — 유예 뒤 다음 주기 프로브가 자연히 온다
   probing = true;
   try {
     const routes = await inspectRoutes(getVpnServer()?.ip ?? null);
     const result = await probeTunnel(routes);
     if (!stillConnected()) return; // 프로브 사이 데몬이 스스로 재연결에 들어갔다 — 이 결과는 옛 터널 것
+    if (Date.now() < resumeGraceUntil) return; // 프로브 도중 잠들었다 깼다 — 이 결과는 잠든 소켓 것, 실패로 세지 않는다
     const judged = judgeProbe(result, failures);
     failures = judged.failures;
     if (judged.verdict === 'alive') {
@@ -111,6 +142,11 @@ async function runProbe() {
     await onTunnelDead(result as Exclude<ProbeResult, 'ok'>, routes);
   } finally {
     probing = false;
+    if (rerunRequested) {
+      rerunRequested = false;
+      // 재귀 대신 다음 틱 — 이 finally 의 호출 스택을 끊고, 그 사이 disarm 됐으면 runProbe 의 connected 검사가 걸러낸다
+      if (stillConnected()) setTimeout(() => void runProbe(), 0);
+    }
   }
 }
 
@@ -152,11 +188,15 @@ async function followDefaultInterface(routes: RouteView) {
 /**
  * 재연결 실패 알림 — 그 사이 사용자가 [연결 해제]로 데몬을 끝냈거나(SIGTERM → disconnected) OpenVPN 이 스스로
  * 재연결에 들어갔으면(connecting) 우리 실패가 아니다. 우리 SIGHUP 의 실패는 waitForConnected 가 error·disconnected
- * 로 만든 뒤 reject 하므로 connecting 으로 여기 오는 경우는 그 자체 RECONNECTING 뿐이다 — 결과는 상태 리스너가 받는다
+ * 로 만든 뒤 reject 하므로 connecting 으로 여기 오는 경우는 그 자체 RECONNECTING 뿐이다 — 결과는 상태 리스너가 받는다.
+ * ⚠️ disconnected 는 사용자 해제만이 아니다 — 데몬이 사유 없이 죽어도(외부 kill·크래시, openvpn.ts close 핸들러)
+ * 같은 상태가 되므로 `wasDisconnectedByUser()` 로 구분해 그 경우엔 알린다.
+ * 여기의 await 는 감시를 막지 않는다 — 실패 뒤 상태가 error·disconnected 라 이미 disarm 됐다
  */
 async function reportReconnectFailure(title: string, err: unknown) {
   const { state } = getVpnStatus();
-  if (state === 'disconnected' || state === 'connecting') return;
+  if (state === 'connecting') return;
+  if (state === 'disconnected' && wasDisconnectedByUser()) return;
   await notify({ title, body: `${(err as Error).message}\nVPN 위젯에서 다시 연결하세요.` });
 }
 
@@ -185,9 +225,10 @@ async function onTunnelDead(result: Exclude<ProbeResult, 'ok'>, routes: RouteVie
 
   const cred = getVpnCredentials();
   if (!cred?.totpSecret) {
-    // 자동 재인증 수단이 없다 — 알럿으로 확실히 알리고 사용자가 OTP 를 넣어 재연결하게 한다
+    // 자동 재인증 수단이 없다 — 알럿으로 확실히 알리고 사용자가 OTP 를 넣어 재연결하게 한다.
+    // ⚠️ 기다리지 않는다(void) — 여기는 probing 구간 안이라 await 하면 사용자가 모달을 닫을 때까지 감시가 멈춘다
     if (!wasStale) {
-      await notify({
+      void notify({
         title: 'VPN 터널 응답 없음',
         body: '네트워크가 바뀐 뒤 VPN 이 끊긴 것 같습니다. VPN 위젯에서 OTP 를 입력하고 [재연결]을 누르세요.',
       });

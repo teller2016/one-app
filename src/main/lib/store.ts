@@ -111,7 +111,11 @@ let firstAccessDone = false;
 function beforeSecretAccess(): void {
   if (firstAccessDone) return;
   firstAccessDone = true;
-  if (app.isReady()) app.focus({ steal: true });
+  // 포커스를 **훔치는** 것은 패키징된 앱에서만 — 개발 인스턴스(`npm start`)는 사용자가 설치본 One App 의
+  // 터미널에서 작업하는 옆에서 기동하므로, 훔치면 그 작업의 포커스를 빼앗는다(2026-09-07 리뷰).
+  // 기준은 `!app.isPackaged` = lib/devInstance.ts 의 IS_DEV_INSTANCE 와 같다 — 이 파일은 단독 배포판 lite
+  // 번들에도 실리므로 그 모듈을 import 하지 않고 기준만 맞춘다.
+  if (app.isReady()) app.focus({ steal: app.isPackaged });
 }
 
 /** 키체인 워밍업이 끝날 때까지 기다린다 (기동 경로에서 decryptSecret 을 부르기 전에) */

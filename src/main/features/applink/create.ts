@@ -1,7 +1,7 @@
 // applink.kr 딥링크 생성 — 보안상 클라이언트 JS 호출은 막혀 있어 메인(서버측)에서 호출한다.
 import type { ApplinkInput } from '../../../shared/types';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch } from '../../lib/http';
+import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 
 const ENDPOINT = 'https://applink.kr/deeplink/deeplink_create.asp';
 
@@ -43,13 +43,9 @@ export async function createDeeplink(
     short_code?: string;
     deeplink_idx?: string;
   };
-  let json: CreateResponse;
-  try {
-    json = (await res.json()) as CreateResponse;
-  } catch {
-    // 점검 페이지 등 HTML 이 200 으로 오면 V8 파싱 메시지가 아니라 읽을 수 있는 문구로
-    throw new Error('applink.kr 응답을 해석할 수 없습니다 — 잠시 후 다시 시도하세요.');
-  }
+  // 점검 페이지 등 HTML 이 200 으로 오면 V8 파싱 메시지가 아니라 읽을 수 있는 문구로
+  // (환경설정 주소가 아니라 고정 엔드포인트라 기본 힌트 대신 재시도 안내)
+  const json = await readJson<CreateResponse>(res, 'applink.kr', '잠시 후 다시 시도하세요.');
   const url = json.url ?? json.deep_link_url;
   if (!url) throw new Error('응답에 딥링크 URL 이 없습니다.');
   return { url, shortCode: json.short_code ?? json.deeplink_idx };

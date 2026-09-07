@@ -15,8 +15,13 @@ paths:
 - **JSON 응답 파싱은 `main/lib/http.ts` 의 `readJson(res, label)`** — `res.json()` 을 직접 부르지
   말 것. ⚠️ 베이스 주소가 잘못되면 서버가 **HTML 을 HTTP 200 으로** 돌려주는데(`res.ok` 로는 안
   걸린다), 그때 V8 의 `Unexpected token '<' …` 가 사용자 배너에 그대로 새어 나갔다.
+- **fetch 예외 → 사용자 문구는 `main/lib/http.ts` 의 `describeFetchError(err, label)`** — catch 에서
+  `'…에 연결할 수 없습니다.'` 로 덮어쓰지 말 것. `fetchWithTimeout` 의 타임아웃 문장과 `readJson` 의
+  주소 확인 힌트는 `HttpMessageError` 로 표시돼 있어 이 헬퍼가 그대로 살린다(문자열 `includes('시간 초과')`
+  판별 금지). Jira(jira·report)·젠킨스가 쓴다.
 - **Jira 인증 헤더는 `features/jira/jira.ts` 의 `jiraAuth()`** — Basic 헤더를 직접 조립하지 말 것
-  (jira·work·nightwatch 세 곳이 각자 만들던 것을 단일화했다).
+  (jira·work·nightwatch 세 곳이 각자 만들던 것을 단일화했다). 다른 기능에서는 `features/jira`(index.ts)
+  로 import 한다.
 - **날짜·시간 문자열은 `shared/date.ts`**(`pad2`·`dayKey`·`todayKey`·`monthKey`·`parseDayKey`·
   `toMinutes`·`fromMinutes`·`WEEKDAY_KO`) — main·preload·렌더러 공용. `String(n).padStart(2,'0')` 을
   새로 쓰지 말 것. ⚠️ 예외 하나: `lib/util.ts` 의 `localDateKey` 는 0패딩 없는 레거시 형식이고
@@ -27,7 +32,9 @@ paths:
   `ownerRepoPartsFromUrl`(조각). ⚠️ `new URL()` 로 파싱하지 말 것 — ssh 주소에서 던진다.
 - userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(`readUserJson`·`writeUserJson`·`encryptSecret`·`decryptSecret`).
 - 전 창 이벤트는 `main/lib/broadcast.ts`.
-- `sleep`·`localDateKey`·`withTimeout` 은 `main/lib/util.ts`.
+- `sleep`·`localDateKey`·`withTimeout`·`mapLimit`·`shQuote` 은 `main/lib/util.ts`. **`handleShared` 채널의
+  번호 인자(PR 번호·빌드 번호)는 `isPositiveInt` 로 검증**한다 — 폰에서 문자열이 올 수 있고 REST 경로에
+  그대로 들어간다.
 - **브라우저 자동화는 `main/lib/browser.ts`** (Electron BrowserWindow — `openPage`·`goto`·
   `evalInPage`·`waitInPage`·`fireInPage`·`waitForPopup`·`releasePage`·`closePage`).
   ⚠️ **`puppeteer` 를 새로 쓰지 말 것** — 2026-08-10 전환으로 앱에서 완전히 빠졌다(시스템 Chrome

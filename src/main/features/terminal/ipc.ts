@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { whenSecretsReady } from '../../lib/store';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -9,6 +8,7 @@ import type {
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
+import { whenSecretsReady } from '../../lib/store';
 import { sleep } from '../../lib/util';
 import { notifyToast, sendToast } from '../notify/notify';
 import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
@@ -227,17 +227,25 @@ export function registerTerminalIpc() {
   // 막기 위해 시작이 거부된다(사유는 `server.ts` 의 바인딩 주석). 한 번만 시도하면 그 경우
   // 사용자가 접속 모달에서 손으로 켜야 하므로, 올라올 시간을 주며 몇 번 더 시도한다.
   if (getServerEnabled()) {
-    void app.whenReady().then(async () => {
-      // 토큰 복호화가 이 앱의 **첫 키체인 접근**이 되면 창이 그려지기 전에 프롬프트로 main 이 멈춘다 —
-      // 메인 창이 그려진 뒤 워밍업(lib/store.ts)이 끝나길 기다린다
-      await whenSecretsReady();
-      for (const wait of [0, 3_000, 8_000, 20_000]) {
-        if (wait) await sleep(wait);
-        const status = await startServer();
-        // 떴거나, 기다려도 안 풀리는 사유(포트 충돌 등)면 그만둔다
-        if (status.running || !status.needsTailscale) return;
-      }
-    });
+    void app
+      .whenReady()
+      .then(async () => {
+        // 토큰 복호화가 이 앱의 **첫 키체인 접근**이 되면 창이 그려지기 전에 프롬프트로 main 이 멈춘다 —
+        // 메인 창이 그려진 뒤 워밍업(lib/store.ts)이 끝나길 기다린다
+        await whenSecretsReady();
+        for (const wait of [0, 3_000, 8_000, 20_000]) {
+          if (wait) await sleep(wait);
+          // 기다리는 동안(워밍업 최대 15초·재시도 간격) 사용자가 환경설정에서 토글을 껐으면 켜지 않는다 —
+          // 대기 전 값으로 진행하면 꺼 둔 서버가 뒤늦게 켜진다
+          if (!getServerEnabled()) return;
+          const status = await startServer();
+          // 떴거나, 기다려도 안 풀리는 사유(포트 충돌 등)면 그만둔다
+          if (status.running || !status.needsTailscale) return;
+        }
+      })
+      // startServer 첫 줄의 getOrCreateToken 은 tokenEnc 가 없고 키체인을 못 쓰면 regenerateToken → encryptSecret
+      // 이 throw 한다 — unhandled rejection 으로 두지 않고 기록만 남긴다(사용자가 위젯에서 손으로 켤 수 있다)
+      .catch((err) => console.error('[terminal] MO 서버 자동 시작 실패:', err));
   }
 
   // 팝아웃 창 — 세션↔창 배정 레지스트리 + 창 IPC (열기·포커스·이동·드래그 중계)

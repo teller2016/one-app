@@ -19,6 +19,12 @@ export const IFACE_SETTLE_MS = 3_000;
 export const PROBE_INTERVAL_MS = 30_000;
 /** 1회 실패 뒤 재확인까지의 간격 */
 export const PROBE_RETRY_MS = 5_000;
+/**
+ * HTTP 시도 **1회**의 타임아웃. ⚠️ 프로브 1회의 실효 최악 시간은 이 값의 약 2배(≈10.4초)다 —
+ * `fetchWithTimeout` 이 HEAD 를 멱등으로 보고 타임아웃·네트워크 오류를 1회 재시도(0.4초 대기)하기 때문.
+ * 즉 "연속 2회 실패" 사망 판정은 HTTP 최대 4회 시도, 재확인 간격까지 더해 약 26초다.
+ * 오탐(순간 끊김을 사망으로)을 줄이는 방향이라 그대로 둔다.
+ */
 export const PROBE_TIMEOUT_MS = 5_000;
 /** 연속 이 횟수만큼 응답이 없으면 사망 판정 (루프 확정은 즉시) */
 export const DEAD_AFTER_FAILURES = 2;
@@ -28,6 +34,21 @@ export const PROBE_URL = 'https://www.gstatic.com/generate_204';
 export const REACH_TIMEOUT_MS = 3_000;
 /** 자동 재연결(사망 복구·경로 옮기기) 사이의 최소 간격 — 접촉 불량·불안정 와이파이로 SIGHUP 이 연달아 나가는 것을 막는다 */
 export const MIN_AUTO_RECONNECT_GAP_MS = 60_000;
+/**
+ * 잠자기 복귀 직후 판정을 건너뛰는 유예 — 복귀 뒤 와이파이 재접속·DHCP·TCP 소켓 회복에 수 초가 걸려,
+ * 그 사이 프로브 2회가 실패하면(≈15초) 살아날 터널에 불필요한 SIGHUP 이 나간다. 15초면 통상의 회복은 끝나고,
+ * 진짜 죽었으면 유예 뒤 다음 주기 프로브(≤30초)가 잡는다.
+ */
+export const RESUME_GRACE_MS = 15_000;
+
+/**
+ * 자동 재연결 쿨다운 중인가 — 마지막 자동 SIGHUP 으로부터 gap 이 지나지 않았으면 true.
+ * lastAt 이 0(아직 한 번도 안 함)이면 쿨다운이 아니다.
+ */
+export function inReconnectCooldown(lastAt: number, now: number, gap = MIN_AUTO_RECONNECT_GAP_MS): boolean {
+  if (lastAt <= 0) return false;
+  return now - lastAt < gap;
+}
 
 /** STATE CONNECTED 라인에서 얻는 원격 서버 (IP·포트) */
 export type VpnServer = { ip: string; port: number };
@@ -144,6 +165,14 @@ export async function inspectRoutes(serverIp: string | null): Promise<RouteView>
 
 let hardwarePorts: Map<string, string> | null = null;
 
+/**
+ * 장치명→이름 캐시를 비운다 — 새 USB 어댑터를 꽂으면 목록에 없는 장치(en8)라 라벨이 장치명으로 나오므로,
+ * 인터페이스 지문이 바뀔 때(monitor.ts) 호출해 다음 조회에서 다시 읽게 한다.
+ */
+export function resetInterfaceLabels() {
+  hardwarePorts = null;
+}
+
 /** 인터페이스 장치명을 사람이 읽는 이름으로 (알림 문구용). 실패하면 장치명 그대로 */
 export async function interfaceLabel(iface: string): Promise<string> {
   if (!hardwarePorts) {
@@ -180,6 +209,7 @@ export function isServerReachable(server: VpnServer, timeoutMs = REACH_TIMEOUT_M
 /**
  * 터널 생존 프로브 — 서버 경로가 utun 이면 루프(즉시 확정), 아니면 터널을 통과하는
  * HTTP 응답이 오는지 본다. 응답 코드는 무관하다 — 무엇이든 왔으면 터널이 트래픽을 통과시킨 것.
+ * 소요 시간: 정상 0.2초 · 응답 없음이면 `fetchWithTimeout` 의 HEAD 1회 재시도까지 최악 ≈ 2×PROBE_TIMEOUT_MS + 0.4초.
  */
 export async function probeTunnel(routes: RouteView): Promise<ProbeResult> {
   if (routes.serverIface && isTunnelInterface(routes.serverIface)) return 'loop';

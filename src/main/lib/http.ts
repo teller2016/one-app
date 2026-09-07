@@ -42,6 +42,22 @@ const isIdempotent = (init: RequestInit) => {
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * 이 모듈이 만든 예외 — **메시지가 이미 사용자 문구**다(타임아웃·JSON 아닌 응답·파싱 실패).
+ * `describeFetchError` 가 이것은 그대로 살리고, undici 의 `fetch failed` 같은 저수준 예외만 감싼다.
+ * 호출부가 문자열(`includes('시간 초과')`)로 타임아웃을 알아내던 것을 타입으로 바꿨다.
+ */
+export class HttpMessageError extends Error {
+  constructor(
+    message: string,
+    /** timeout — fetchWithTimeout 의 시간 초과 · response — readJson 의 응답 형식·파싱 안내 */
+    readonly kind: 'timeout' | 'response',
+  ) {
+    super(message);
+    this.name = 'HttpMessageError';
+  }
+}
+
+/**
  * 전역 fetch 와 같은 시그니처 + 기본 타임아웃 + 네트워크 오류 1회 재시도.
  * 호출부가 직접 signal 을 넘기면 그 signal 이 우선한다(그 경우 타임아웃은 호출부 책임).
  *
@@ -71,11 +87,28 @@ export async function fetchWithTimeout(
   }
 
   if (lastErr instanceof Error && lastErr.name === 'TimeoutError') {
-    throw new Error(
+    throw new HttpMessageError(
       `요청 시간 초과(${Math.round(timeoutMs / 1000)}초) — 네트워크(VPN)를 확인하세요.`,
+      'timeout',
     );
   }
   throw lastErr;
+}
+
+/**
+ * fetch 예외 → 사용자 문구. **catch 에서 `'…에 연결할 수 없습니다.'` 로 덮어쓰지 말고 이것을 쓴다** —
+ * 그러면 `fetchWithTimeout` 이 만든 타임아웃 문장과 `readJson` 의 주소 확인 힌트가 화면까지 오지 못한다.
+ * - 타임아웃 → `${label} 응답이 없습니다 — 요청 시간 초과(N초) — …`
+ * - `readJson` 의 안내(HTML 200·파싱 실패) → 이미 원인을 말하는 문장이므로 **그대로**
+ * - 그 밖(undici `fetch failed`·ECONNREFUSED …) → `${label} 에 연결할 수 없습니다 — <원인>`
+ * `label` 은 서비스 이름('Jira'·'젠킨스'). 문장은 티켓 보고(단독 배포판에도 실린다)가 쓰던 것을 그대로 따른다.
+ */
+export function describeFetchError(err: unknown, label: string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof HttpMessageError) {
+    return err.kind === 'timeout' ? `${label} 응답이 없습니다 — ${message}` : message;
+  }
+  return `${label} 에 연결할 수 없습니다 — ${message}`;
 }
 
 /**
@@ -94,13 +127,17 @@ export async function readJson<T>(
 ): Promise<T> {
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
   if (!/\bjson\b/i.test(type)) {
-    throw new Error(
+    throw new HttpMessageError(
       `${label} 가 JSON 대신 ${type || '알 수 없는 형식'} 을 돌려줬습니다 (HTTP ${res.status}) — ${hint}`,
+      'response',
     );
   }
   try {
     return (await res.json()) as T;
   } catch {
-    throw new Error(`${label} 응답을 해석할 수 없습니다 (HTTP ${res.status}) — 잠시 후 다시 시도하세요.`);
+    throw new HttpMessageError(
+      `${label} 응답을 해석할 수 없습니다 (HTTP ${res.status}) — 잠시 후 다시 시도하세요.`,
+      'response',
+    );
   }
 }

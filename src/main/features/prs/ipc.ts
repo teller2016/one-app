@@ -1,4 +1,5 @@
 import { handleShared } from '../../lib/moIpc';
+import { isPositiveInt } from '../../lib/util';
 import {
   fetchOpenPrs,
   enrichApprovals,
@@ -60,7 +61,6 @@ const BAD_REPO = '저장소 이름이 올바르지 않습니다.';
 const isValidRepo = (repo: unknown): repo is string =>
   typeof repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(repo) && !repo.includes('..');
 // PR 번호도 경로에 들어간다 — 폰에서 문자열이 오면 `/pulls/<n>/merge` 를 다른 경로로 비틀 수 있다
-const isValidNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 0;
 const BAD_NUMBER = 'PR 번호가 올바르지 않습니다.';
 
 type GiteaConfig = NonNullable<ReturnType<typeof getGiteaConfig>>;
@@ -233,7 +233,7 @@ export function registerPrsIpc() {
       const gitea = getGiteaConfig();
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
-      if (!isValidNumber(number)) return { ok: false, error: BAD_NUMBER };
+      if (!isPositiveInt(number)) return { ok: false, error: BAD_NUMBER };
       try {
         const info = await fetchMergeInfo(gitea.url, gitea.token, repo, number);
         return { ok: true, ...info };
@@ -272,7 +272,7 @@ export function registerPrsIpc() {
       if (!gitea) return { ok: false, error: NO_GITEA };
       if (!gitea.token) return { ok: false, error: NO_TOKEN };
       if (!isValidRepo(repo)) return { ok: false, error: BAD_REPO };
-      if (!isValidNumber(number)) return { ok: false, error: BAD_NUMBER };
+      if (!isPositiveInt(number)) return { ok: false, error: BAD_NUMBER };
       try {
         await mergePr(gitea.url, gitea.token, repo, number, method);
         invalidatePrList(); // 머지된 PR 이 목록에 남아 있지 않게
