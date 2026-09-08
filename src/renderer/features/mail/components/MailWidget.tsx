@@ -88,13 +88,17 @@ export function MailWidget() {
   const hasUnread = configured && unread != null && unread > 0;
   // 접힌 사이드바의 뱃지용 — 세 자리는 72px 폭을 넘치게 하므로 클램프한다
   const unreadBadge = unread != null && unread > 99 ? '99+' : String(unread ?? 0);
+  // 값이 한 번도 안 온 채 실패했으면 "새 메일 없음"이 아니라 실패라고 말한다
+  // (조회에 성공한 뒤의 실패는 마지막 값을 유지하고 아래 오류 줄로만 알린다)
   const status = !configured
     ? '계정 설정 필요'
     : spinning && unread === null
       ? '확인 중…'
-      : hasUnread
-        ? `새 메일 ${unread}통`
-        : '새 메일 없음';
+      : unread === null && error
+        ? '조회 실패'
+        : hasUnread
+          ? `새 메일 ${unread}통`
+          : '새 메일 없음';
 
   return (
     <div className="mail-nav">

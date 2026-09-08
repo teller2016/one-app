@@ -32,6 +32,8 @@ paths:
 - 세션은 계정별 **메모리 캐시(15분)** + 동시 요청 공유(그룹웨어는 같은 계정 동시 로그인을 거부한다). 디스크에 남기지 않는다.
 - 파라미터 빌더(`mailListParams`·`mailBoxCountParams`)와 파서(`parse.ts`)는 내 계정 경로와 **공유**한다.
 
+⚠️ **세션 만료는 JSON 으로 온다 (2026-09-08 실측)** — mail2 세션이 없거나 만료되면 `getMailBoxCount.do`·`getMailList.do` 가 로그인 HTML 이 아니라 **HTTP 200 + `{"code":-2,"gwUrl":".../gw/userMain.do","Records":[]}`** 를 돌려준다. `Records` 가 빈 배열이라 형태만 보면 빈 메일함과 같다. 이걸 `parse.ts` 의 `isAuthFailureJson` 이 AuthError 로 바꿔 재로그인 경로에 태우고, `mail.ts` 는 `mailboxList`·`Records` 가 없는 응답을 0·빈 목록으로 뭉개지 않고 오류로 돌려준다. (전엔 위젯이 "새 메일 없음", 리더가 "받은 메일이 없습니다"로 둔갑했고, 다른 기능이 공용 세션을 재수립할 때까지 그대로였다.)
+
 ⚠️ 실측 함정 (2026-08-13, 실계정 정찰):
 - **메일 전용 계정은 `portletEmailList.do` 가 JSON 을 주지 않는다**(HTML 반환 — 포털 위젯 권한이 없다). 그래서 `bootstrapMail()` 이 portlet → 부트스트랩 HTML 정규식(`emailInHtml`) 순으로 이메일을 파악한다.
 - 로그인 후 리다이렉트가 `userMain.do` 가 아니라 **`bizboxMailEx.do`** 다. 로그인 화면으로 튕기는 것은 아니라서 `isLoginUrl` 실패 판정은 그대로 통과한다.

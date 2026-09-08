@@ -82,6 +82,10 @@ async function fetchBoxCount(s: MailSession): Promise<{
     mailBoxCountParams(s),
   );
   const count = await parseJson<BoxCountResp>(countRes);
+  // 폴더 목록도 서버 집계값도 없으면 데이터 응답이 아니다 — 0 으로 뭉개면 "새 메일 없음"으로 둔갑한다
+  if (!Array.isArray(count.mailboxList) && count.allunseen == null) {
+    throw new Error('메일 서버 응답에 폴더 정보가 없습니다.');
+  }
   const boxes = count.mailboxList ?? [];
   const findBox = (name: string) =>
     boxes.find((m) => m.name?.toUpperCase() === name);
@@ -161,7 +165,11 @@ export async function getInbox(
         ),
       );
       const list = await parseJson<MailListResp>(listRes);
-      const items: MailItem[] = (list.Records ?? []).map((r) => ({
+      // 목록 배열이 없으면 데이터 응답이 아니다 — 빈 배열로 뭉개면 "받은 메일이 없습니다"로 둔갑한다
+      if (!Array.isArray(list.Records)) {
+        throw new Error('메일 서버 응답에 목록이 없습니다.');
+      }
+      const items: MailItem[] = list.Records.map((r) => ({
         muid: r.muid,
         subject: decodeEntities(r.subject?.trim() || '(제목 없음)'),
         from: decodeEntities(r.mail_from?.trim() || ''),
