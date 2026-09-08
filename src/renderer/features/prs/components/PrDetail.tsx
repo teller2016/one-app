@@ -7,12 +7,14 @@ import {
   type PrMergeInfoResult,
   type PrMergeMethod,
 } from '../../../../shared/types';
+import { issueKeysIn } from '../../../../shared/jira-url';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 import { TextLink } from '../../../components/TextLink';
+import { IssueChip } from '../../../components/IssueChip';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
@@ -36,6 +38,7 @@ const statusLetter = (s: string) =>
 export function PrDetail({
   pr,
   defaultBranch,
+  jiraUrl,
   hasToken,
   conflictPending,
   onMerged,
@@ -43,6 +46,8 @@ export function PrDetail({
   pr: PrItem;
   /** 프로젝트 레지스트리의 기본 브랜치 — 그 외 브랜치로 가는 PR 경고용 */
   defaultBranch?: string;
+  /** 환경설정의 Jira 주소 — 있으면 제목의 이슈 키를 티켓 칩(클릭 = Jira 열기)으로 붙인다 */
+  jiraUrl?: string;
   hasToken: boolean;
   /** 머지 직후 Gitea 재검사 창 — 이때의 mergeable=false 는 충돌로 단정하지 않는다 */
   conflictPending?: boolean;
@@ -130,6 +135,8 @@ export function PrDetail({
   };
 
   const off = !!base && !!defaultBranch && base !== defaultBranch;
+  // 제목의 Jira 이슈 키 — 주소 미설정이면 제목에 이미 있는 키를 되풀이할 뿐이라 칩을 그리지 않는다
+  const issueKeys = jiraUrl ? issueKeysIn(pr.title) : [];
 
   return (
     <div className="prs__detail">
@@ -143,6 +150,9 @@ export function PrDetail({
             {pr.createdAt ? ` · ${rel(pr.createdAt)}` : ''}
           </span>
         )}
+        {issueKeys.map((k) => (
+          <IssueChip key={k} issueKey={k} jiraUrl={jiraUrl} />
+        ))}
         {pr.url && (
           <TextLink
             small

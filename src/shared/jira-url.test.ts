@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeJiraBase } from './jira-url';
+import { issueKeysIn, jiraIssueUrl, normalizeJiraBase } from './jira-url';
 
 describe('normalizeJiraBase', () => {
   it('정상 사이트 주소는 그대로 둔다 (끝 슬래시만 정리)', () => {
@@ -35,5 +35,34 @@ describe('normalizeJiraBase', () => {
     expect(normalizeJiraBase('')).toBe('');
     expect(normalizeJiraBase('   ')).toBe('');
     expect(normalizeJiraBase('acme.atlassian.net')).toBe('acme.atlassian.net');
+  });
+});
+
+describe('jiraIssueUrl', () => {
+  it('베이스 뒤에 /browse/키 를 붙인다 (끝 슬래시 정리)', () => {
+    expect(jiraIssueUrl('https://acme.atlassian.net', 'BBJ-1')).toBe(
+      'https://acme.atlassian.net/browse/BBJ-1',
+    );
+    expect(jiraIssueUrl('https://acme.co.kr/jira/', 'ABC-12')).toBe(
+      'https://acme.co.kr/jira/browse/ABC-12',
+    );
+  });
+});
+
+describe('issueKeysIn', () => {
+  it('제목 속 이슈 키를 등장 순서대로 중복 없이 뽑는다', () => {
+    expect(issueKeysIn('[BBJ-2924] 로그인 수정 (BBJ-2924, CNM-907)')).toEqual([
+      'BBJ-2924',
+      'CNM-907',
+    ]);
+  });
+
+  it('키가 없으면 빈 배열', () => {
+    expect(issueKeysIn('fix: 오타 수정')).toEqual([]);
+    expect(issueKeysIn('')).toEqual([]);
+  });
+
+  it('소문자·글자에 붙어 쓴 것은 키로 보지 않는다', () => {
+    expect(issueKeysIn('bbj-1 xBBJ-2')).toEqual([]);
   });
 });

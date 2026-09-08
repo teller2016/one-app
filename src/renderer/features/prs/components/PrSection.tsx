@@ -6,6 +6,7 @@ import type {
   Project,
 } from '../../../../shared/types';
 import { ownerRepoFromUrl } from '../../../../shared/types';
+import { issueKeysIn } from '../../../../shared/jira-url';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Icon } from '../../../components/Icon';
 import { Banner } from '../../../components/Banner';
@@ -47,6 +48,7 @@ export function PrSection() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [hasToken, setHasToken] = useState(false);
   const [giteaUrl, setGiteaUrl] = useState(''); // 저장소 PR 경로 링크용 (빈 값이면 링크 생략)
+  const [jiraUrl, setJiraUrl] = useState(''); // 상세 패널 티켓 칩 링크용 (빈 값이면 칩 생략)
   const [query, setQuery] = useState('');
   // 저장소 탭(owner/repo) — 마지막 선택을 기억한다 (휘발성 UI 상태라 localStorage)
   const [repoTab, setRepoTab] = useState<string>(
@@ -64,9 +66,10 @@ export function PrSection() {
   const confirmDialog = useConfirm();
 
   // 머지 직후 — PR 제목에서 Jira 이슈 키를 추출해 해결됨 전환을 제안한다
-  // (새 PR 이 브랜치명의 이슈 키를 제목에 넣으므로 문자열 패턴 매칭으로 충분)
+  // (새 PR 이 브랜치명의 이슈 키를 제목에 넣으므로 문자열 패턴 매칭으로 충분 — 상세 패널
+  // 티켓 칩과 같은 `issueKeysIn`. 키가 여럿이면 첫 번째만 제안한다)
   const offerJiraResolve = async (prTitle: string) => {
-    const key = prTitle.match(/[A-Z][A-Z0-9]*-\d+/)?.[0];
+    const key = issueKeysIn(prTitle)[0];
     if (!key) return; // 이슈 키 없는 PR 이면 조용히 넘어감
     const ok = await confirmDialog({
       title: `${key} 해결됨으로 전환할까요?`,
@@ -118,6 +121,7 @@ export function PrSection() {
     window.oneApp.settings.get().then((s) => {
       setHasToken(s.hasGiteaToken);
       setGiteaUrl(s.giteaUrl.replace(/\/+$/, ''));
+      setJiraUrl(s.jiraUrl);
     });
     void window.oneApp.projects.list().then(setProjects);
     return window.oneApp.projects.onChanged(setProjects);
@@ -438,6 +442,7 @@ export function PrSection() {
                   key={keyOf(selected)}
                   pr={selected}
                   defaultBranch={defaultBranchOf(selected.repo)}
+                  jiraUrl={jiraUrl}
                   hasToken={hasToken}
                   conflictPending={conflictPending}
                   onMerged={onMerged}

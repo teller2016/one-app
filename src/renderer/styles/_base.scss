@@ -1001,6 +1001,39 @@ input.input--bare {
   }
 }
 
+// Jira 티켓 칩 — 이슈 키(BBJ-1234) 필. `--link` 는 클릭하면 Jira 이슈로 가는 버튼.
+// 배포 확인 모달·PR 상세 패널 공용(`components/IssueChip.tsx`).
+// (배포 미리보기 목록은 panel-dark 안이라 --accent 가 다크용으로 자동 치환된다)
+.issue-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-full);
+  background: transparent;
+  font-family: var(--font-mono);
+  @include type-caption;
+  // ⚠️ 색·자간은 믹스인 **뒤에** — type-caption 이 `color: var(--text-2)` 를 포함해 앞에 두면 덮인다
+  // (배포 모달 시절부터 액센트 글자색이 조용히 --text-2 로 나오던 원인, 2026-09-08 /test 실측)
+  color: var(--accent);
+  letter-spacing: normal;
+
+  &--link {
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease);
+    @include focus-ring(1px);
+
+    &:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent-hover);
+      color: var(--accent-hover);
+    }
+  }
+}
+
 // 뱃지 옆 보조 타임스탬프 (음수 마진 금지 — 간격은 부모 gap으로)
 .badge-time {
   font-size: var(--fs-caption);

@@ -34,3 +34,21 @@ export function normalizeJiraBase(raw: string): string {
   const path = hit ? parsed.pathname.slice(0, hit.index) : parsed.pathname;
   return `${parsed.origin}${path}`.replace(/\/+$/, '');
 }
+
+/**
+ * Jira 이슈 키 패턴 — 예: BBJ-1234. 전역 플래그라 `matchAll`·`String#match` 용이다
+ * (⚠️ `.test()` 는 lastIndex 가 남아 두 번째 호출부터 어긋나니 쓰지 말 것).
+ */
+export const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
+
+/** 이슈 브라우저 주소 — `{base}/browse/{key}` */
+export const jiraIssueUrl = (jiraUrl: string, key: string) =>
+  `${jiraUrl.replace(/\/+$/, '')}/browse/${key}`;
+
+/**
+ * 한 줄 텍스트(PR 제목·브랜치명 등)에서 이슈 키를 **등장 순서대로 중복 없이** 뽑는다.
+ * 커밋 메시지처럼 여러 줄 산문은 `JSR-310`·`UTF-8` 같은 오탐이 있어 여기서 훑지 않는다 —
+ * 그쪽은 키가 적히는 자리를 기준으로 삼는 deploy 의 `extractIssueKeys` 를 쓴다.
+ */
+export const issueKeysIn = (text: string): string[] =>
+  [...new Set(text.match(JIRA_KEY_RE) ?? [])];

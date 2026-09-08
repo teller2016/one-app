@@ -6,13 +6,14 @@ import {
   type DeployTarget,
   type DeployPreviewResult,
 } from '../../../../shared/types';
-import { formatTime, extractIssueKeys, jiraIssueUrl } from '../lib/format';
+import { formatTime, extractIssueKeys } from '../lib/format';
 import { Modal } from '../../../components/Modal';
 import { Button } from '../../../components/Button';
 import { Banner } from '../../../components/Banner';
 import { Input } from '../../../components/Input';
 import { Icon } from '../../../components/Icon';
 import { TextLink } from '../../../components/TextLink';
+import { IssueChip } from '../../../components/IssueChip';
 import { useCopy } from '../../../lib/useCopy';
 
 /**
@@ -30,22 +31,6 @@ function buildShareText(commits: Pick<DeployCommit, 'message' | 'isMerge'>[]): s
     })
     .filter(Boolean)
     .join('\n');
-}
-
-/** 티켓 칩 — Jira 주소가 있으면 클릭해서 이슈를 연다 */
-function IssueChip({ issueKey, jiraUrl }: { issueKey: string; jiraUrl?: string }) {
-  if (!jiraUrl) return <span className="deploy__issue-chip">{issueKey}</span>;
-  return (
-    <button
-      type="button"
-      className="deploy__issue-chip deploy__issue-chip--link"
-      aria-label={`Jira 이슈 열기 — ${issueKey}`}
-      title={`Jira 이슈 열기 — ${issueKey}`}
-      onClick={() => void window.oneApp.openExternal(jiraIssueUrl(jiraUrl, issueKey))}
-    >
-      {issueKey}
-    </button>
-  );
 }
 
 /** 배포 미리보기 로드 상태 */

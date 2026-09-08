@@ -4,12 +4,8 @@ import {
   type DeployBuildDetail,
   type DeployBuildSummary,
 } from '../../../../shared/types';
-import {
-  formatTime,
-  formatDuration,
-  JIRA_KEY_RE,
-  jiraIssueUrl,
-} from '../lib/format';
+import { formatTime, formatDuration } from '../lib/format';
+import { JIRA_KEY_RE, jiraIssueUrl } from '../../../../shared/jira-url';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { TextLink } from '../../../components/TextLink';

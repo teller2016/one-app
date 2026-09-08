@@ -1,6 +1,7 @@
 // deploy 기능 공용 헬퍼 — 상태 키·진행 판별·시간 포맷
 import type { DeployStatus } from '../../../../shared/types';
 import { ownerRepoPartsFromUrl } from '../../../../shared/types';
+import { JIRA_KEY_RE } from '../../../../shared/jira-url';
 
 /** 상태/패널 맵의 키 (projectId:targetId) */
 export const statusKey = (projectId: string, targetId: string) =>
@@ -54,9 +55,6 @@ export const giteaCommitBase = (
   return `${giteaUrl.replace(/\/+$/, '')}/${parsed.owner}/${parsed.repo}/commit/`;
 };
 
-/** Jira 이슈 키 패턴 — 예: BBJ-1234 */
-export const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
-
 /** 커밋 트레일러 — `refs: BBJ-1234` (대소문자·공백 자유, `ref:` 도 허용) */
 const REFS_LINE_RE = /^[ \t]*refs?[ \t]*:(.*)$/gim;
 
@@ -99,6 +97,3 @@ export const extractIssueKeys = (message: string): string[] => {
 
   return [...new Set(keys)];
 };
-
-export const jiraIssueUrl = (jiraUrl: string, key: string) =>
-  `${jiraUrl.replace(/\/+$/, '')}/browse/${key}`;
