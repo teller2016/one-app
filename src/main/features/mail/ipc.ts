@@ -16,33 +16,63 @@ const UNREAD_TTL_MS = 15_000;
 type UnreadResult = Awaited<ReturnType<typeof getUnreadCount>>;
 let unreadCache: { at: number; res: UnreadResult } | null = null;
 let unreadInFlight: Promise<UnreadResult> | null = null;
+// 캐시 세대 — 무효화 뒤에 도착하는 "그 전에 나간" 조회 결과는 이미 옛 값이라 캐시에 앉히지 않는다
+let unreadGen = 0;
+
+/**
+ * 안읽은 수 캐시 무효화 — 메일을 읽어 서버 카운트가 바뀐 직후에 부른다.
+ * ⚠️ 안 비우면 위젯이 로컬에서 −1 한 뒤 도착하는 폴링이 캐시된 읽기 전 값을 되씌워
+ *    "읽었는데 사이드바 카운트가 남는" 현상이 된다(2026-09-08 사용자 신고).
+ */
+function invalidateUnreadCache(): void {
+  unreadCache = null;
+  unreadInFlight = null; // 진행 중 조회는 읽기 전 값 — 새 요청을 거기에 합류시키지 않는다
+  unreadGen += 1;
+}
+
+/** 다른 경로(목록 조회)가 방금 서버에서 받은 카운트로 캐시를 갱신 — 다음 폴링이 그 값을 쓴다 */
+function primeUnreadCache(unreadCount: number): void {
+  unreadCache = {
+    at: Date.now(),
+    res: { ok: true, configured: true, unreadCount },
+  };
+}
 
 async function getUnreadCountCached(): Promise<UnreadResult> {
   if (unreadCache && Date.now() - unreadCache.at < UNREAD_TTL_MS) {
     return unreadCache.res;
   }
   if (unreadInFlight) return unreadInFlight;
-  unreadInFlight = getUnreadCount()
+  const gen = unreadGen;
+  const p = getUnreadCount()
     .then((res) => {
-      if (res.ok) unreadCache = { at: Date.now(), res };
+      if (res.ok && gen === unreadGen) unreadCache = { at: Date.now(), res };
       return res;
     })
     .finally(() => {
-      unreadInFlight = null;
+      if (unreadInFlight === p) unreadInFlight = null;
     });
-  return unreadInFlight;
+  unreadInFlight = p;
+  return p;
 }
 
 /** 메일(비즈박스) 관련 IPC 핸들러 등록 */
 export function registerMailIpc() {
   // 안읽은 수만 (위젯 폴링용 경량 — TTL 캐시로 중복 폴링 흡수)
   handleShared('mail:unread-count', () => getUnreadCountCached());
-  // 메일 목록 — 안읽은 수 + 폴더(받은편지함·스팸)의 요청 페이지 목록
-  handleShared('mail:inbox', (query?: MailListQuery) => getInbox(query));
-  // 본문 조회 (unread=true 면 열 때 읽음 처리)
-  handleShared('mail:body', (muid: number, unread: boolean) =>
-    getBody(muid, unread),
-  );
+  // 메일 목록 — 안읽은 수 + 폴더(받은편지함·스팸)의 요청 페이지 목록.
+  // 같은 getMailBoxCount 를 방금 떠 왔으므로 그 카운트로 위젯 캐시도 최신으로 맞춘다
+  handleShared('mail:inbox', async (query?: MailListQuery) => {
+    const res = await getInbox(query);
+    if (res.ok) primeUnreadCache(res.unreadCount);
+    return res;
+  });
+  // 본문 조회 (unread=true 면 열 때 읽음 처리) — 읽음 처리됐으면 안읽은 수 캐시를 버린다
+  handleShared('mail:body', async (muid: number, unread: boolean) => {
+    const res = await getBody(muid, unread);
+    if (unread && res.ok) invalidateUnreadCache();
+    return res;
+  });
   // 브라우저로 비즈박스 메일함 바로 열기 (SPA 진입점)
   ipcMain.handle('mail:open-web', async () => {
     await shell.openExternal(MAIL_CONFIG.webUrl);

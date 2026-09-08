@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { useSidebarCollapsed } from '../../../components/Sidebar';
@@ -23,14 +23,20 @@ export function MailWidget() {
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const collapsed = useSidebarCollapsed();
+  // 리더에서 읽음 처리한 누적 횟수 — 폴링 요청이 나간 뒤에 읽은 메일은 그 응답에 반영돼
+  // 있지 않으므로, 응답값에서 "요청 중에 읽은 수"만큼 빼서 반영한다(안 빼면 읽기 전 값이
+  // 방금 한 −1 을 되돌려 카운트가 남는다 — 2026-09-08 사용자 신고)
+  const readsRef = useRef(0);
 
   // showSpinner=false 면 백그라운드 무음 갱신 (30초 폴링마다 스피너가 깜빡이지 않게)
   const load = useCallback(async (showSpinner: boolean): Promise<void> => {
     if (showSpinner) setSpinning(true);
+    const readsBefore = readsRef.current;
     const res = await window.oneApp.mail.getUnreadCount();
     setConfigured(res.configured);
     if (res.ok) {
-      setUnread(res.unreadCount);
+      const readDuring = readsRef.current - readsBefore;
+      setUnread(Math.max(0, res.unreadCount - readDuring));
       setError('');
     } else if (res.configured) {
       setError(res.error ?? '조회 실패');
@@ -82,8 +88,14 @@ export function MailWidget() {
   }, [load]);
 
   const handleRead = () => {
+    readsRef.current += 1;
     setUnread((n) => (n && n > 0 ? n - 1 : 0));
   };
+
+  // 모달이 목록을 불러오며 서버에서 받은 카운트 — 캐시를 거치지 않은 최신값이라 그대로 맞춘다
+  // (웹·폰에서 읽은 메일이 있어도 모달을 여는 순간 사이드바가 따라온다).
+  // ⚠️ 모달의 목록 조회 콜백 의존성이라 반드시 안정된 참조여야 한다(useCallback)
+  const handleCount = useCallback((n: number) => setUnread(n), []);
 
   const hasUnread = configured && unread != null && unread > 0;
   // 접힌 사이드바의 뱃지용 — 세 자리는 72px 폭을 넘치게 하므로 클램프한다
@@ -169,7 +181,13 @@ export function MailWidget() {
 
       {error && <p className="mail-nav__error">{error}</p>}
 
-      {open && <MailModal onClose={() => setOpen(false)} onRead={handleRead} />}
+      {open && (
+        <MailModal
+          onClose={() => setOpen(false)}
+          onRead={handleRead}
+          onCount={handleCount}
+        />
+      )}
     </div>
   );
 }

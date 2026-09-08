@@ -56,10 +56,17 @@ function bodyDoc(html: string, webUrl: string): string {
 export function MailModal({
   onClose,
   onRead,
+  onCount,
 }: {
   onClose: () => void;
   /** 안읽은 메일을 열어 읽음 처리됐을 때 (사이드바 뱃지 즉시 갱신용) */
   onRead: (muid: number) => void;
+  /**
+   * 목록을 불러오며 서버에서 받은 전체 안읽은 수 (사이드바 카운트를 최신값으로 맞추는 용도).
+   * ⚠️ 목록 조회 콜백(`loadList`)의 의존성이므로 **안정된 참조**(useCallback)로 넘길 것 —
+   *    렌더마다 새 함수면 목록을 무한 재조회한다.
+   */
+  onCount?: (unreadCount: number) => void;
 }) {
   const [tab, setTab] = useState<Tab>('inbox');
   const [folder, setFolder] = useState<MailFolder>('inbox');
@@ -95,12 +102,13 @@ export function MailModal({
       setTotal(res.total ?? res.items.length);
       // 폴더별 안읽음은 목록과 같은 응답에 실려 온다(추가 왕복 없음)
       if (res.folderUnread) setUnread(res.folderUnread);
+      onCount?.(res.unreadCount);
       setListError('');
     } else {
       setListError(res.error ?? '메일을 불러오지 못했습니다.');
     }
     setLoading(false);
-  }, []);
+  }, [onCount]);
 
   useEffect(() => {
     void loadList(folder, page);
