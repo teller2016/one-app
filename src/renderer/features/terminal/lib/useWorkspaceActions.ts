@@ -25,6 +25,8 @@ export type WorkspaceActions = {
   onRemoveWorkspace: (ws: TerminalWorkspace) => void;
   onRename: (ws: TerminalWorkspace, name: string) => void;
   onSetColor: (ws: TerminalWorkspace, color: number) => void;
+  /** 안 쓰는 폴더 감추기/되돌리기 — 축소 LNB 타일에서 빠진다 */
+  onToggleHidden: (ws: TerminalWorkspace) => void;
   onReveal: (ws: TerminalWorkspace) => void;
   onReorder: (ids: string[]) => void;
 };
@@ -107,9 +109,15 @@ export function useWorkspaceActions({
     [confirm, toast]
   );
 
-  // 이름·색 변경은 같은 save 채널 — 미지정 필드는 main 이 기존 값을 유지한다
+  // 이름·색·숨김 변경은 같은 save 채널 — 미지정 필드는 main 이 기존 값을 유지한다
   const saveWorkspace = useCallback(
-    async (input: { id: string; name: string; repoPath: string; color?: number }) => {
+    async (input: {
+      id: string;
+      name: string;
+      repoPath: string;
+      color?: number;
+      hidden?: boolean;
+    }) => {
       try {
         await window.oneApp.workspaces.save(input);
       } catch (err) {
@@ -176,6 +184,18 @@ export function useWorkspaceActions({
     },
     [saveWorkspace]
   );
+  // 숨김 반전 — 목록 갱신은 onChanged 브로드캐스트가 한다(색 변경과 같은 흐름)
+  const onToggleHidden = useCallback(
+    (ws: TerminalWorkspace): void => {
+      void saveWorkspace({
+        id: ws.id,
+        name: ws.name,
+        repoPath: ws.repoPath,
+        hidden: !ws.hidden,
+      });
+    },
+    [saveWorkspace]
+  );
   const onReveal = useCallback(
     (ws: TerminalWorkspace): void => {
       void revealWorkspace(ws);
@@ -188,6 +208,7 @@ export function useWorkspaceActions({
     onRemoveWorkspace,
     onRename,
     onSetColor,
+    onToggleHidden,
     onReveal,
     onReorder,
   };

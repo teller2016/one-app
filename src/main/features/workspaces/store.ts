@@ -57,6 +57,8 @@ function sanitize(raw: unknown): TerminalWorkspace[] {
           : path.basename(repoPath),
       repoPath,
       color: sanitizeColor(row.color),
+      // false 는 굳이 파일에 남기지 않는다 — 기본값(노출)과 같다
+      hidden: row.hidden === true ? true : undefined,
     });
   }
   return out;
@@ -122,6 +124,11 @@ export function saveWorkspace(input: WorkspaceSaveInput): TerminalWorkspace[] {
     repoPath: normalizePath(input.repoPath),
     // 이름만 바꾸는 저장에서 색이 사라지지 않게 — 미지정이면 기존 값 유지
     color: sanitizeColor(input.color) ?? existing?.color,
+    // 숨김도 같은 규칙 — 미지정이면 유지, 명시적 false 는 undefined 로 정리한다
+    hidden:
+      typeof input.hidden === 'boolean'
+        ? input.hidden || undefined
+        : existing?.hidden,
   };
   if (!next.repoPath) throw new Error('폴더 경로는 필수입니다.');
   // 실제 존재하는 폴더만 — LNB 에 죽은 항목이 쌓이는 것을 막는다. git 저장소 여부는

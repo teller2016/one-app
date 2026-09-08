@@ -262,6 +262,43 @@
     &--dragging {
       opacity: 0.45;
     }
+
+    // 숨김 폴더 — 축소 패널에선 타일이 아예 빠지고(WorkspaceNav 의 tiles), 펼친
+    // 패널에선 흐리게 남아 되돌릴 수 있다. 색을 새로 만들지 않고 투명도만 쓴다
+    &--hidden {
+      opacity: 0.45;
+
+      // 되돌릴 눈 버튼을 읽을 수 있을 만큼만 올린다 (완전히 1 로 올리면 숨김인지 헷갈린다)
+      &:hover,
+      &:focus-within {
+        opacity: 0.75;
+      }
+    }
+  }
+
+  // 숨김 토글 버튼 — 평소엔 폭 0 으로 접어 좁은 패널의 이름 자리를 살린다.
+  // ⚠️ `display: none` 이 아니라 폭 0 인 이유 — 탭 순회에 남아야 마우스 없이도 켤 수 있다.
+  &__ws-hide {
+    width: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      width var(--dur-1) var(--ease),
+      opacity var(--dur-1) var(--ease);
+
+    // 이미 숨김인 폴더는 항상 보인다 — 상태 표시 겸 되돌리기 버튼
+    &--on {
+      width: 24px;
+      opacity: 1;
+    }
+  }
+
+  // 행에 마우스를 올리거나 행 안으로 포커스가 들어오면 펼친다
+  &__ws-row:hover &__ws-hide,
+  &__ws-row:focus-within &__ws-hide {
+    width: 24px;
+    opacity: 1;
   }
 
   // 이름 인라인 편집 행 — 타일은 그대로 두고 이름 자리에만 입력창

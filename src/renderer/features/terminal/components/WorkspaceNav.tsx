@@ -2,6 +2,7 @@
 // 워크트리를 고르면 상단 탭바가 그 위치의 세션들로 바뀐다.
 // 행 드래그로 순서 변경, 우클릭 컨텍스트 메뉴로 이름·색·Finder·제거.
 // 축소 모드에선 워크스페이스 타일 + (펼친 워크스페이스의) 워크트리 아이콘 타일이 남는다.
+// 행의 눈 버튼으로 '숨김' 을 켜면 축소 모드 타일에서 빠진다(펼친 모드에선 흐리게 남는다).
 import { memo, useMemo, useState } from 'react';
 import type {
   CSSProperties,
@@ -107,6 +108,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   onReorder,
   onRename,
   onSetColor,
+  onToggleHidden,
   onReveal,
 }: {
   workspaces: TerminalWorkspace[];
@@ -128,6 +130,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   onReorder: (ids: string[]) => void;
   onRename: (ws: TerminalWorkspace, name: string) => void;
   onSetColor: (ws: TerminalWorkspace, color: number) => void;
+  /** 숨김 반전 — 축소 모드 타일에서 빼거나 되돌린다 */
+  onToggleHidden: (ws: TerminalWorkspace) => void;
   onReveal: (ws: TerminalWorkspace) => void;
 }) {
   // 우클릭 컨텍스트 메뉴 — 대상 워크스페이스 + 마우스 좌표
@@ -237,6 +241,22 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     return { count, waiting, busy };
   };
 
+  /**
+   * 축소 모드에 그릴 워크스페이스 — '숨김' 은 뺀다. 자리를 아끼려고 접는 패널이라
+   * 안 쓰는 폴더 타일이 남으면 접는 의미가 없다(사용자 요청 2026-09-08).
+   * ⚠️ 지금 보고 있는 워크스페이스는 숨김이어도 남긴다 — 빼면 그 세션들을 보고 있는데
+   *    활성 표시가 패널 어디에도 없어 위치를 알 수 없다.
+   */
+  const tiles = useMemo(
+    () =>
+      workspaces.filter(
+        (ws) =>
+          !ws.hidden ||
+          (selection?.kind === 'worktree' && selection.wsId === ws.id)
+      ),
+    [workspaces, selection]
+  );
+
   const contextMenu = menu && (
     <ContextMenu
       x={menu.x}
@@ -299,7 +319,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   if (collapsed) {
     return (
       <div className="terminal__list" role="list">
-        {workspaces.map((ws) => {
+        {tiles.map((ws) => {
           const { count: wsCount, waiting, busy } = wsAgg(ws);
           const isOpen = expanded.includes(ws.id);
           const wsActive =
@@ -463,7 +483,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
             <div
               className={
                 'terminal__ws-row' +
-                (dragId === ws.id ? ' terminal__ws-row--dragging' : '')
+                (dragId === ws.id ? ' terminal__ws-row--dragging' : '') +
+                (ws.hidden ? ' terminal__ws-row--hidden' : '')
               }
               onContextMenu={(e) => openMenu(ws, e)}
               {...dragSource(ws)}
@@ -528,6 +549,29 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     )}
                   </button>
                   <span className="terminal__ws-actions">
+                    {/* 숨김 토글 — 켜면 축소 패널 타일에서 빠진다. 평소엔 폭 0 으로
+                        접어 두고 행 hover·키보드 포커스에서만 펼친다(SCSS __ws-hide).
+                        숨김 상태는 되돌릴 수 있게 항상 보인다 */}
+                    <Tooltip
+                      label={
+                        ws.hidden
+                          ? '숨김 해제 — 접은 패널에 다시 표시'
+                          : '숨기기 — 접은 패널에서 감춘다 (목록에선 흐리게 남는다)'
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={
+                          'icon-btn terminal__ws-hide' +
+                          (ws.hidden ? ' terminal__ws-hide--on' : '')
+                        }
+                        aria-pressed={ws.hidden === true}
+                        aria-label={`'${ws.name}' ${ws.hidden ? '숨김 해제' : '숨기기'}`}
+                        onClick={() => onToggleHidden(ws)}
+                      >
+                        <Icon name={ws.hidden ? 'eye-off' : 'eye'} size={14} />
+                      </button>
+                    </Tooltip>
                     {/* 일반 폴더엔 워크트리를 만들 수 없다(git worktree add 가 실패한다) */}
                     {!plain && (
                       <Tooltip label="새 워크트리 — 브랜치를 별도 폴더에 체크아웃">

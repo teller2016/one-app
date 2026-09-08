@@ -67,7 +67,9 @@ export type IconName =
   | "maximize"
   | "git-commit"
   | "arrow-up-to-line"
-  | "code-xml";
+  | "code-xml"
+  | "eye"
+  | "eye-off";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -396,6 +398,21 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="m18 16 4-4-4-4" />
       <path d="m6 8-4 4 4 4" />
       <path d="m14.5 4-5 16" />
+    </>
+  ),
+  // 노출/숨김 토글 — 터미널 LNB 워크스페이스 행 (숨기면 축소 LNB 타일에서 빠진다)
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <path d="m2 2 20 20" />
     </>
   ),
 };

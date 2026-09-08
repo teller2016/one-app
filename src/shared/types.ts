@@ -1370,6 +1370,9 @@ export type TerminalWorkspace = {
   name: string; // 표시명 (기본: 폴더명)
   repoPath: string; // 폴더 절대 경로 (git 저장소면 주 워크트리 루트)
   color?: number; // 타일 색 — 차트 팔레트 인덱스(1..10). 없으면 이름 해시로 자동 배정
+  // 안 쓰는 폴더 표시 — 축소 LNB 타일에서 빠진다(펼친 LNB 에선 흐리게 남아 되돌릴 수 있다).
+  // 목록에서 아예 지우는 것과 다르다 — 세션·프리셋·워크트리는 그대로 살아 있다
+  hidden?: boolean;
 };
 
 export type WorkspaceSaveInput = {
@@ -1377,6 +1380,7 @@ export type WorkspaceSaveInput = {
   name: string;
   repoPath: string;
   color?: number; // 1..10 — 없으면 기존 값 유지
+  hidden?: boolean; // 축소 LNB 에서 감추기 — 없으면 기존 값 유지
 };
 
 /** 워크스페이스의 워크트리 하나 — `git worktree list` 결과 + 미커밋 변경량 */
