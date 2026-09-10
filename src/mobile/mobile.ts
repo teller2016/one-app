@@ -100,12 +100,13 @@ const cwdBackdrop = document.getElementById('cwdBackdrop') as HTMLElement;
 const cwdList = document.getElementById('cwdList') as HTMLElement;
 const cwdTitle = document.getElementById('cwdTitle') as HTMLElement;
 
-// 주소창의 토큰은 서버가 쿠키로 승격했으니 지운다 (공유·스크린샷 노출 방지).
+// 주소창의 쿼리는 읽은 뒤 지운다 — 토큰은 서버가 쿠키로 승격했고(공유·스크린샷 노출 방지),
+// `session` 은 폰 알림을 눌러 들어온 경우 SW(`sw.js`)가 붙여 준 '먼저 보여줄 세션'이다.
 // ⚠️ 경로는 현재 경로를 유지할 것 — '/' 로 고정하면 이 페이지(`/terminal/`)가 아니라
 // 앱 셸로 URL 이 바뀌어 새로고침·홈 화면 아이콘이 엉뚱한 화면을 연다.
-if (new URLSearchParams(location.search).has('token')) {
-  history.replaceState(null, '', location.pathname);
-}
+/** 첫 sessions 수신 때 우선 attach 할 세션 — 알림 클릭(`?session=`·SW postMessage)이 채운다 */
+let pendingFocusId: string | null = new URLSearchParams(location.search).get('session');
+if (location.search) history.replaceState(null, '', location.pathname);
 
 // 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다.
 // 기본값은 최소 크기 — claude 같은 넓은 TUI 를 폰에서 통째로 보는 게 첫 화면의 목적이고,
@@ -302,57 +303,76 @@ function syncKeybar() {
   syncViewport(); // 높이가 바뀌었으니 PTY 행도 따라간다
 }
 
-// ── 입력 대기 세션 바로가기 ──
+// ── 입력 대기 세션 — 안정화된 집합 ──
 // 폰은 '자리를 비웠을 때 이어받는' 화면이라, 어떤 세션이 나를 기다리는지가 가장 중요한 정보다.
-// 예전엔 select 를 열어야 글리프(●)가 보였다.
+// 툴바의 `● N` 버튼, 홈 화면 아이콘 배지, 백그라운드 폰 알림이 전부 **이 집합 하나**를 본다.
 //
-// ⚠️ **상태를 그대로 반영하면 버튼이 깜빡인다**(2026-08-08 사용자 지적) — claude 는 입력
-// 대기 화면에서도 주기적으로 화면을 다시 그리고, 그 출력이 오는 순간 세션이 waiting→busy
-// 로 내려갔다가 2.5 초 침묵 뒤 다시 waiting 이 된다(`pty.ts` noteOutput/statusTick,
-// 실측 로그: `waiting→busy (output) bytes=1717` ↔ `busy→waiting (silence)`).
-// 상태 판정 자체는 데스크톱 알림·뱃지가 함께 쓰므로 건드리지 않고, **표시만 안정화**한다:
-// 생기면 즉시 띄우고, 사라지면 유예를 둔 뒤 그때도 없으면 숨긴다.
+// ⚠️ **상태를 그대로 반영하면 깜빡인다**(2026-08-08 사용자 지적) — claude 는 입력 대기 화면에서도
+// 주기적으로 화면을 다시 그리고, 그 출력이 오는 순간 세션이 waiting→busy 로 내려갔다가 2.5 초
+// 침묵 뒤 다시 waiting 이 된다(`pty.ts` noteOutput/statusTick, 실측 로그:
+// `waiting→busy (output) bytes=1717` ↔ `busy→waiting (silence)`).
+// 상태 판정 자체는 데스크톱 알림·뱃지가 함께 쓰므로 건드리지 않고, **집합만 안정화**한다:
+// 대기가 생기면 즉시 넣고, 사라지면 유예를 둔 뒤 그때도 없으면 뺀다. 알림도 이 집합에
+// **새로 들어온 순간**에만 보내므로 진동 구간마다 알림이 다시 울리지 않는다.
 const WAIT_HIDE_GRACE_MS = 3000;
-let waitHideTimer: ReturnType<typeof setTimeout> | null = null;
-/** 마지막으로 관측한 대기 세션 — 유예 중(진동 구간)에 눌러도 이동이 되게 */
-let lastWaitingIds: string[] = [];
+const stableWaiting = new Set<string>();
+/** 대기에서 빠진 것으로 보이는 세션 → 확정 유예 타이머 */
+const waitLeaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function renderWaiting() {
-  const waiting = sessions.filter((s) => s.status === 'waiting');
-
-  if (waiting.length) {
-    if (waitHideTimer !== null) {
-      clearTimeout(waitHideTimer); // 숨기려던 참이었다면 취소
-      waitHideTimer = null;
+function updateWaiting() {
+  const now = new Set(sessions.filter((s) => s.status === 'waiting').map((s) => s.id));
+  const added: string[] = [];
+  for (const id of now) {
+    const t = waitLeaveTimers.get(id);
+    if (t !== undefined) {
+      clearTimeout(t); // 진동이었다 — 빼려던 것을 취소
+      waitLeaveTimers.delete(id);
     }
-    lastWaitingIds = waiting.map((s) => s.id);
-    waitBtn.hidden = false;
-    // ⚠️ textContent 로 덮으면 안의 SVG 가 날아간다 — 숫자는 겹치는 배지 span 에만 넣는다
-    waitCount.textContent = String(waiting.length);
-    waitBtn.setAttribute(
-      'aria-label',
-      `입력 대기 ${waiting.length}개 — 다음 대기 세션으로 이동`
-    );
-    return;
+    if (!stableWaiting.has(id)) {
+      stableWaiting.add(id);
+      added.push(id);
+    }
   }
+  for (const id of stableWaiting) {
+    if (now.has(id) || waitLeaveTimers.has(id)) continue;
+    if (!sessions.some((s) => s.id === id)) {
+      stableWaiting.delete(id); // 세션 자체가 사라졌다(종료) — 유예할 이유가 없다
+      continue;
+    }
+    waitLeaveTimers.set(
+      id,
+      setTimeout(() => {
+        waitLeaveTimers.delete(id);
+        if (sessions.some((s) => s.id === id && s.status === 'waiting')) return; // 그새 다시 대기
+        stableWaiting.delete(id);
+        onWaitingChanged([]);
+      }, WAIT_HIDE_GRACE_MS)
+    );
+  }
+  onWaitingChanged(added);
+}
 
-  // 0 이 됐다 — 진동일 수 있으니 바로 숨기지 않는다
-  if (waitBtn.hidden || waitHideTimer !== null) return;
-  waitHideTimer = setTimeout(() => {
-    waitHideTimer = null;
-    if (sessions.some((s) => s.status === 'waiting')) return; // 그새 다시 대기
-    waitBtn.hidden = true;
-    lastWaitingIds = [];
-  }, WAIT_HIDE_GRACE_MS);
+/** 집합이 바뀌었다 — 표시 셋을 한 번에 맞춘다. added 는 이번에 새로 대기가 된 세션 */
+function onWaitingChanged(added: string[]) {
+  renderWaitButton();
+  syncAppBadge();
+  if (added.length) void notifyWaiting(added);
+  // 대기가 풀린 세션의 알림은 걷는다 — 이미 답한 세션의 알림이 트레이에 남지 않게
+  void closeNotificationsFor((id) => !stableWaiting.has(id));
+}
+
+function renderWaitButton() {
+  const n = stableWaiting.size;
+  waitBtn.hidden = n === 0;
+  if (!n) return;
+  // ⚠️ textContent 로 덮으면 안의 SVG 가 날아간다 — 숫자는 겹치는 배지 span 에만 넣는다
+  waitCount.textContent = String(n);
+  waitBtn.setAttribute('aria-label', `입력 대기 ${n}개 — 다음 대기 세션으로 이동`);
 }
 
 waitBtn.addEventListener('click', () => {
-  // 유예 중이면 지금 목록이 비어 있을 수 있다 — 마지막으로 본 대기 세션으로 간다.
-  // (이게 없으면 버튼이 보이는데 눌러도 아무 일이 없는 순간이 생긴다)
-  const now = sessions.filter((s) => s.status === 'waiting').map((s) => s.id);
-  const pool = now.length
-    ? now
-    : lastWaitingIds.filter((id) => sessions.some((s) => s.id === id));
+  // 유예 중인 세션도 집합에 있다 — 버튼이 보이는데 눌러도 아무 일이 없는 순간이 생기지 않는다
+  const pool = [...stableWaiting].filter((id) => sessions.some((s) => s.id === id));
   if (!pool.length) return;
   // 이미 보고 있는 대기 세션 다음 것으로 — 여러 개면 눌러서 순회한다
   const cur = pool.indexOf(attachedId ?? '');
@@ -360,6 +380,189 @@ waitBtn.addEventListener('click', () => {
   if (next !== attachedId) attach(next);
   term.focus();
 });
+
+// ── 홈 화면 아이콘 배지 — 대기 수 ──
+// 홈 화면에 추가한 PWA 아이콘에 숫자가 붙는다(안드로이드 Chrome). 페이지를 닫아도 마지막 값이
+// 남으므로 집합이 바뀔 때마다 맞춘다. 미지원(iOS 브라우저 탭 등)이면 아무 일도 하지 않는다.
+function syncAppBadge() {
+  if (!('setAppBadge' in navigator)) return;
+  const n = stableWaiting.size;
+  const p = n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge();
+  p.catch(() => undefined); // 설치되지 않은 탭에서는 거부될 수 있다 — 표시 보조일 뿐이다
+}
+
+// ── 폰 알림 — 자리를 비운 동안 입력 대기가 생기면 알린다 ──
+// 페이지가 **백그라운드**(다른 앱·화면 꺼짐)일 때 세션이 대기로 바뀌면 폰 알림을 띄운다.
+// 보고 있을 때는 띄우지 않는다 — `● N` 버튼이 그 역할이다.
+//
+// ⚠️ 안드로이드 Chrome 은 페이지의 `new Notification()` 을 거부한다("Illegal constructor") —
+//    서비스 워커의 `showNotification` 만 허용한다. 그래서 알림 하나를 위해 `sw.js` 를 등록한다.
+//    SW 는 fetch 를 가로채지 않는다(캐시 정책은 서버의 Cache-Control 이 정본) — 알림 클릭 처리만.
+// ⚠️ 진짜 푸시가 아니다 — 페이지가 백그라운드에서 **살아 있는 동안**(WS 연결 유지)만 온다.
+//    OS 가 탭을 정리하면 그 뒤로는 없다. "보장"이 아니라 "지금보다 훨씬 자주 알게 됨"이다.
+// ⚠️ 두 API 모두 secure context 전용 — 인증서 없이 http 로 뜬 경우엔 통째로 비활성(붙여넣기와 같은 규칙).
+const NOTIFY_DISMISS_KEY = 'mo:notifyBarDismissed';
+const notifyBar = document.getElementById('notifyBar') as HTMLElement;
+const notifyAllow = document.getElementById('notifyAllow') as HTMLButtonElement;
+const notifyDismiss = document.getElementById('notifyDismiss') as HTMLButtonElement;
+
+const notifySupported = () =>
+  window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator;
+
+let swReg: ServiceWorkerRegistration | null = null;
+/** SW 등록(1회) — 권한이 허용된 뒤에만 부른다(허용 안 한 사용자에게 워커를 깔 이유가 없다) */
+async function ensureSw(): Promise<ServiceWorkerRegistration | null> {
+  if (!notifySupported()) return null;
+  if (swReg) return swReg;
+  try {
+    // 상대 경로 — 이 페이지는 `/terminal/` 아래라 스코프도 `/terminal/` 이 된다(앱 셸 `/` 과 무관)
+    swReg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    return swReg;
+  } catch {
+    return null; // 등록 실패(구형 브라우저 등) — 알림만 포기한다
+  }
+}
+
+async function notifyWaiting(ids: string[]) {
+  if (document.visibilityState === 'visible') return;
+  if (!notifySupported() || Notification.permission !== 'granted') return;
+  const reg = await ensureSw();
+  if (!reg) return;
+  for (const id of ids) {
+    const s = sessions.find((x) => x.id === id);
+    if (!s) continue;
+    const where = s.projectName ?? s.cwd.split('/').filter(Boolean).pop() ?? '';
+    try {
+      await reg.showNotification(s.title, {
+        body: `${TERMINAL_AGENT_NAMES[s.agentId]} 입력 대기${where ? ` · ${where}` : ''}`,
+        // 같은 세션은 한 장 — 진동 구간에 다시 들어와도 기존 알림을 갱신할 뿐 새로 울리지 않는다
+        tag: `wait:${id}`,
+        data: { id },
+      });
+    } catch {
+      // 권한 회수·워커 비활성 — 조용히 넘어간다
+    }
+  }
+}
+
+/** 떠 있는 우리 알림 중 조건에 맞는 것을 걷는다 */
+async function closeNotificationsFor(match: (sessionId: string) => boolean) {
+  if (!swReg) return;
+  try {
+    for (const n of await swReg.getNotifications()) {
+      const id = (n.data as { id?: string } | null)?.id;
+      if (id && match(id)) n.close();
+    }
+  } catch {
+    // 워커가 사라졌으면 걷을 것도 없다
+  }
+}
+
+/** 알림을 눌러 들어왔다(SW → postMessage) — 그 세션으로 */
+function focusSession(id: string) {
+  if (sessions.some((s) => s.id === id)) {
+    if (id !== attachedId) attach(id);
+  } else if (!sessions.length) {
+    pendingFocusId = id; // 세션 목록이 아직 안 왔다 — 첫 sessions 수신 때 붙는다
+  } else {
+    notice('그 세션은 이미 종료됐습니다');
+  }
+}
+
+function syncNotifyBar() {
+  const show =
+    notifySupported() &&
+    Notification.permission === 'default' &&
+    !localStorage.getItem(NOTIFY_DISMISS_KEY);
+  if (notifyBar.hidden === !show) return;
+  notifyBar.hidden = !show;
+  syncViewport(); // 한 줄이 생기거나 사라졌다 — PTY 행을 맞춘다
+}
+
+notifyAllow.addEventListener('click', () => {
+  void Notification.requestPermission().then((perm) => {
+    if (perm === 'granted') void ensureSw();
+    syncNotifyBar(); // granted·denied 어느 쪽이든 안내는 끝났다(denied 는 브라우저가 기억한다)
+  });
+});
+notifyDismiss.addEventListener('click', () => {
+  localStorage.setItem(NOTIFY_DISMISS_KEY, '1');
+  syncNotifyBar();
+});
+
+if (notifySupported()) {
+  navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
+    const data = e.data as { type?: string; id?: string } | null;
+    if (data?.type === 'focus-session' && data.id) focusSession(data.id);
+  });
+  if (Notification.permission === 'granted') void ensureSw(); // 이미 허용한 폰 — 워커를 미리 준비
+}
+
+// ── 화면 켜둠 — 보고 있는 세션이 일하는 동안 화면이 꺼지지 않게 ──
+// 지켜보는 중에 화면이 꺼지면 브라우저가 백그라운드로 가서 소켓이 끊기고, 다시 켤 때 재접속과 전체
+// 리드로우를 겪는다. 동영상 앱처럼 **보는 동안만** 잠금을 막고, 끝나면(waiting·idle) 풀어 배터리를
+// 지킨다. 토글 버튼은 두지 않는다 — 툴바 한 칸을 먹고, 켜둔 채 잊으면 배터리가 샌다.
+// 판정은 `working`(출력이 이어지는 중 — 데스크톱 LNB 로딩 표시와 같은 값) 또는 `busy` 다.
+// ⚠️ 해제는 유예를 둔다 — claude 는 대기 화면에서도 주기적으로 다시 그려 busy↔waiting 이 진동한다.
+//    그때마다 락을 껐다 켜면 요청만 반복된다.
+// 다른 앱으로 나가면 OS 가 스스로 해제한다(release 이벤트) — 돌아오면 다시 잡는다.
+// ⚠️ secure context 전용 — http 로 뜬 경우 `navigator.wakeLock` 자체가 없다.
+const WAKE_RELEASE_GRACE_MS = 5000;
+let wakeSentinel: WakeLockSentinel | null = null;
+let wakeRequesting = false;
+let wakeReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function watchingWork(): boolean {
+  const s = attachedId ? sessions.find((x) => x.id === attachedId) : null;
+  return !!s && (s.working || s.status === 'busy');
+}
+
+async function acquireWake() {
+  if (!('wakeLock' in navigator) || wakeSentinel || wakeRequesting) return;
+  wakeRequesting = true;
+  try {
+    const sentinel = await navigator.wakeLock.request('screen');
+    sentinel.addEventListener('release', () => {
+      if (wakeSentinel === sentinel) wakeSentinel = null;
+    });
+    wakeSentinel = sentinel;
+  } catch {
+    // 배터리 절약 모드·저전력 상태면 브라우저가 거부한다 — 그냥 넘어간다
+  } finally {
+    wakeRequesting = false;
+  }
+}
+
+function releaseWake() {
+  if (wakeReleaseTimer !== null) {
+    clearTimeout(wakeReleaseTimer);
+    wakeReleaseTimer = null;
+  }
+  const s = wakeSentinel;
+  wakeSentinel = null;
+  void s?.release().catch(() => undefined);
+}
+
+function syncWakeLock() {
+  const want =
+    document.visibilityState === 'visible' &&
+    ws?.readyState === WebSocket.OPEN &&
+    watchingWork();
+  if (want) {
+    if (wakeReleaseTimer !== null) {
+      clearTimeout(wakeReleaseTimer);
+      wakeReleaseTimer = null;
+    }
+    void acquireWake();
+    return;
+  }
+  if (!wakeSentinel || wakeReleaseTimer !== null) return;
+  wakeReleaseTimer = setTimeout(() => {
+    wakeReleaseTimer = null;
+    if (!watchingWork()) releaseWake();
+  }, WAKE_RELEASE_GRACE_MS);
+}
 
 // 상태 글리프 — <option> 은 스타일이 안 먹어 텍스트 글리프가 유일한 표현 수단
 const STATUS_GLYPHS: Record<TerminalSessionInfo['status'], string> = {
@@ -398,9 +601,12 @@ function renderSessions() {
   }
   // 그릴 내용이 이전과 같으면 건너뛴다 — 세션 목록 브로드캐스트는 상태 전이마다(초 단위)
   // 오는데 대부분은 이 select 에 안 보이는 변화다(프로젝트 공통 규칙: 같으면 이전 유지)
-  const sig = `${attachedId ?? ''}${rows
-    .map((r) => `${r.value} ${r.label}`)
-    .join('')}`;
+  // ⚠️ 구분자는 **이스케이프로** 쓴다 — 예전엔 제어문자를 리터럴로 넣어 파일에 NUL 바이트가
+  //    들어갔고, 그러면 `grep`·`rg` 가 이 파일을 **바이너리로 판정해 매치를 아무것도 출력하지
+  //    않는다**(exit 0 + 0줄이라 '그 심볼이 없다'고 오판하기 쉽다 — 2026-09-10 실제로 겪었다).
+  const sig = `${attachedId ?? ''}\u0001${rows
+    .map((r) => `${r.value}\u0000${r.label}`)
+    .join('\u0001')}`;
   if (sig !== lastSessionsSig) {
     lastSessionsSig = sig;
     selectEl.innerHTML = '';
@@ -447,12 +653,18 @@ function handleMessage(msg: TermServerMsg) {
         attachedId = null;
       }
       renderSessions();
-      renderWaiting();
+      updateWaiting();
+      syncWakeLock();
       if (!attachedId) {
-        // 마지막에 보던 세션은 작업 영역과 무관하게 이어본다(폰은 '이어서 쓰는' 화면이다).
-        // 없으면 지금 영역의 첫 세션으로.
+        // 알림을 눌러 들어왔으면 그 세션이 먼저다. 다음은 마지막에 보던 세션 — 작업 영역과 무관하게
+        // 이어본다(폰은 '이어서 쓰는' 화면이다). 없으면 지금 영역의 첫 세션으로.
+        const wanted = pendingFocusId;
+        pendingFocusId = null; // 한 번만 — 없는 세션이면 평소 규칙으로
         const last = localStorage.getItem(LAST_SESSION_KEY);
-        const next = sessions.find((s) => s.id === last) ?? visibleSessions()[0];
+        const next =
+          sessions.find((s) => s.id === wanted) ??
+          sessions.find((s) => s.id === last) ??
+          visibleSessions()[0];
         if (next) attach(next.id);
       }
       break;
@@ -494,6 +706,8 @@ function handleMessage(msg: TermServerMsg) {
         term.resize(msg.cols, msg.rows);
       }
       renderSessions();
+      syncWakeLock();
+      void closeNotificationsFor((id) => id === msg.id); // 열어 봤으면 그 알림은 용건이 끝났다
       break;
     case 'data':
       if (msg.id === attachedId && msg.seq > attachSeq) term.write(msg.data);
@@ -567,6 +781,7 @@ function connect() {
   sock.onopen = () => {
     reconnectDelay = 1000;
     setStatus('연결됨', true);
+    syncWakeLock();
     // 서버가 접속 직후 sessions 를 보내주고, 그때 마지막 세션으로 재attach 된다
   };
   sock.onmessage = (e) => {
@@ -581,6 +796,7 @@ function connect() {
     ws = null;
     attachedId = null; // 재접속 시 재attach
     pendingAttachId = null; // 못 받은 응답을 기다리며 재attach 를 막으면 안 된다
+    releaseWake(); // 끊긴 화면을 켜 둘 이유가 없다
     setStatus('연결 끊김 — 재연결 중…', false);
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -1422,13 +1638,19 @@ window.addEventListener('resize', onViewportChange);
 
 // 탭 슬립(잠금·앱 전환) 복귀 시 즉시 재연결
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !ws) {
-    reconnectDelay = 1000;
-    connect();
+  if (document.visibilityState === 'visible') {
+    if (!ws) {
+      reconnectDelay = 1000;
+      connect();
+    }
+    // 돌아왔다 — `● N` 버튼이 보이므로 트레이의 알림은 걷는다
+    void closeNotificationsFor(() => true);
   }
+  syncWakeLock(); // 보이면 일하는 세션의 잠금을 다시 잡고, 숨으면 OS 해제에 맡긴다
 });
 
 renderScope(); // 저장된 작업 영역을 첫 페인트부터 반영 (세션 목록은 sessions 수신 때 그린다)
 baseViewportH = viewportH(); // 첫 관측이 '키보드 없는 높이' 기준이 된다
 syncKeybar(); // 고정 설정을 반영 — 기본(비고정)이면 키보드가 뜰 때까지 접혀 있다
+syncNotifyBar(); // 알림 권한 안내 — 미정이고 닫지 않았을 때만 한 줄
 connect();

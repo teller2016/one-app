@@ -201,6 +201,47 @@ body {
   font-size: 11px;
 }
 
+/* 폰 알림 권한 안내 — 권한이 미정이고 닫지 않았을 때만 한 줄. 모양은 #scope 와 같은 결 */
+#notifyBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#notifyBar[hidden] {
+  display: none;
+}
+
+#notifyBar span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notifyBar button {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+/* [허용] 이 주 동작 — 연결 점과 같은 초록으로 눈에 띄게 */
+#notifyBar #notifyAllow {
+  color: var(--fg);
+  border-color: var(--ok);
+}
+
 /* 연결 정상일 때는 텍스트 대신 점만 — 글자로 자리를 먹지 않게.
    끊겼을 때의 안내 문구는 버튼들이 늘어난 만큼 **먼저 양보**하고 말줄임 한다
    (nowrap + shrink:0 이면 바 오른쪽 밖으로 밀려 잘린 것처럼 보인다). */

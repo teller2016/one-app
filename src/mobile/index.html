@@ -107,6 +107,14 @@
     </header>
     <!-- 선택된 작업 영역 — 세션이 그 위치 것만 걸러지고 새 세션·프리셋도 여기서 열린다 -->
     <div id="scope" hidden></div>
+    <!-- 폰 알림 권한 안내 — 권한이 미정(default)이고 닫지 않았을 때만 보인다(mobile.ts syncNotifyBar).
+         자리를 비운 동안 입력 대기가 생기면 알림으로 받는 기능의 유일한 진입점이다(권한 요청은
+         사용자 제스처 안에서만 되므로 자동으로 물을 수 없다). -->
+    <div id="notifyBar" hidden>
+      <span>자리를 비운 동안 입력 대기를 폰 알림으로 받기</span>
+      <button id="notifyAllow" type="button">허용</button>
+      <button id="notifyDismiss" type="button">나중에</button>
+    </div>
     <main id="term">
       <button id="toBottom" type="button" hidden aria-label="맨 아래로">↓ 맨 아래로</button>
       <!-- 핀치 중에만 잠깐 뜨는 글자 크기 표시 (버튼이 없어졌으므로 현재 값을 알 방법) -->
