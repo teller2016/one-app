@@ -32,6 +32,13 @@ export type TermClientMsg =
   | { type: 'attach'; id: string; cols: number; rows: number }
   | { type: 'input'; data: string } // attach 된 세션에 키 입력
   | { type: 'resize'; cols: number; rows: number }
+  // 스크롤 위임 — 데스크톱 휠과 **같은 경로**(main 의 scrollSession → tmux 3단 분기)를 탄다.
+  // ⚠️ 클라이언트가 휠을 xterm 에 직접 넘기면, 대체 화면에서 xterm 이 그것을 방향키(↑↓)로
+  //    바꿔 앱에 보낸다 — claude 는 리렌더마다 마우스 모드를 껐다 켜므로 그 틈에 들어간
+  //    휠이 프롬프트 히스토리를 롤링했다(2026-09-09 사용자 신고). 마우스 사용 여부의
+  //    진실은 tmux pane 플래그뿐이라 판정을 서버로 넘긴다.
+  | { type: 'scroll'; lines: number } // 양수 = 위(과거)로
+  | { type: 'scroll-bottom' } // [맨 아래로] — copy-mode 종료
   // cwd 없으면 홈 디렉터리. command/title 은 프리셋 실행용 — 데스크톱 프리셋 칩과
   // 같은 동작(그 위치의 새 세션에서 명령 자동 실행)을 폰에서도 하기 위한 필드다.
   // ⚠️ cols/rows 를 함께 보내 **처음부터 클라이언트 크기로** 만든다 — 안 보내면 80x24 로
@@ -60,6 +67,7 @@ export type TermServerMsg =
       id: string;
       replay: string;
       alt?: boolean; // 대체 화면(TUI)이라 replay 생략 — 클라이언트가 ?1049h 를 합성한다
+      tmux?: boolean; // tmux 백엔드 = 스크롤백의 주인이 tmux — 스크롤을 서버로 위임할지의 판정
       seq: number;
       cols: number;
       rows: number;
@@ -67,4 +75,7 @@ export type TermServerMsg =
   | { type: 'data'; id: string; data: string; seq: number }
   | { type: 'exit'; id: string; exitCode: number }
   | { type: 'resized'; id: string; cols: number; rows: number }
+  // scroll/scroll-bottom 응답 — 위로 올라가 있는지가 [맨 아래로] 버튼의 판정이다
+  // (위임 스크롤은 tmux copy-mode 를 움직이므로 xterm 버퍼로는 알 수 없다)
+  | { type: 'scrolled'; id: string; scrolledUp: boolean }
   | { type: 'error'; message: string };

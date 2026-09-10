@@ -801,7 +801,15 @@ export async function attachSession(
   // alt: 대체 화면이라 replay 를 생략했음을 클라이언트에 알린다 — 화면 전환 시퀀스
   // (?1049h)는 tmux 클라이언트 시작 때 딱 한 번 나오므로, 나중에 붙는 xterm 은
   // replay 없이는 자기 buffer 를 'normal' 로 오판한다 (Shift+Enter 게이트가 꺼짐).
-  return { ok: true, replay, alt: skipReplay, seq: s.seq, cols: s.cols, rows: s.rows };
+  return {
+    ok: true,
+    replay,
+    alt: skipReplay,
+    tmux: !!s.tmuxName, // 스크롤의 주인이 tmux 인가 — 클라이언트의 스크롤 위임 판정
+    seq: s.seq,
+    cols: s.cols,
+    rows: s.rows,
+  };
 }
 
 /**

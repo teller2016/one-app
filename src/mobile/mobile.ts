@@ -168,6 +168,8 @@ void document.fonts.ready.then(() => {
 let ws: WebSocket | null = null;
 let attachedId: string | null = null;
 let attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — 버린다
+let tmuxBackend = false; // 지금 보는 세션이 tmux 백엔드인가 (스크롤 위임의 전제)
+let serverScrolledUp = false; // tmux copy-mode 로 올라가 있는가 — [맨 아래로] 판정
 let sessions: TerminalSessionInfo[] = [];
 let cwdOptions: TermCwdOption[] = []; // 새 세션 위치 후보 (서버가 프로젝트 레지스트리에서 보내줌)
 let workspaceTree: TermWorkspaceNode[] = []; // 작업 영역 트리 (시트를 열 때 받아온다)
@@ -232,7 +234,14 @@ function renderScope() {
 }
 
 function sendMsg(msg: TermClientMsg) {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify(msg));
+  // 입력이 들어가면 서버가 copy-mode 를 자동으로 끝낸다(pty.writeSession) — 스크롤 위치가
+  // 바닥으로 돌아오므로 [맨 아래로] 도 함께 내린다. 전송 지점이 여럿이라 관문에서 한 번만 본다.
+  if (msg.type === 'input' && serverScrolledUp) {
+    serverScrolledUp = false;
+    syncBottomBtn();
+  }
 }
 
 function setStatus(text: string, ok: boolean) {
@@ -472,6 +481,10 @@ function handleMessage(msg: TermServerMsg) {
       // buffer 타입을 실제 상태와 맞춘다(터치 스크롤의 방향키 변환 등이 이 판정을 쓴다)
       if (msg.alt) term.write('\x1b[?1049h');
       if (msg.replay) term.write(msg.replay);
+      tmuxBackend = msg.tmux ?? false;
+      serverScrolledUp = false; // 새 세션 — 이전 세션의 copy-mode 상태를 물려받지 않는다
+      scrollAcc = 0;
+      scrollSentAt = 0; // 이전 세션으로 보낸 위임의 응답을 기다리지 않는다
       syncBottomBtn();
       if (
         msg.cols > 0 &&
@@ -484,6 +497,13 @@ function handleMessage(msg: TermServerMsg) {
       break;
     case 'data':
       if (msg.id === attachedId && msg.seq > attachSeq) term.write(msg.data);
+      break;
+    case 'scrolled':
+      // 위임 스크롤의 결과 — tmux copy-mode 는 xterm 버퍼로 알 수 없으므로 서버가 알려준다
+      if (msg.id !== attachedId) break;
+      scrollSentAt = 0; // 왕복 종료 — 다음 flush 가 바로 나갈 수 있다
+      serverScrolledUp = msg.scrolledUp;
+      syncBottomBtn();
       break;
     case 'resized': {
       if (msg.id !== attachedId) break;
@@ -612,6 +632,7 @@ term.onData((raw) => {
 const PTY_RESIZE_DEBOUNCE_MS = 120;
 let ptyResizeTimer: number | null = null;
 term.onResize(({ cols, rows }) => {
+  cellH = 0; // 셀 높이가 바뀌었을 수 있다 — 터치 스크롤의 줄 환산 기준
   if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
   ptyResizeTimer = window.setTimeout(() => {
     ptyResizeTimer = null;
@@ -1202,15 +1223,57 @@ cwdBackdrop.addEventListener('click', closeSheet);
 
 // ── 터치 스크롤 ──
 // 폰에서는 손가락 스크롤이 그냥은 먹지 않는다(터미널 텍스트 레이어가 덮고 있고,
-// xterm 6 은 네이티브 스크롤 영역을 쓰지 않는다). 그래서 드래그를 **합성 휠 이벤트**로 바꿔
-// xterm 에 그대로 넘긴다 — 데스크톱에서 휠을 돌린 것과 완전히 같은 경로가 된다:
-//   · 일반 화면    → xterm 이 스크롤백을 스크롤
-//   · 마우스 트래킹 켜진 TUI(claude 등) → xterm 이 마우스 이벤트로 인코딩해 앱에 전달
-//     (claude 는 대체 화면이라 스크롤백이 없다 — scrollLines 를 부르면 아무 일도 안 일어난다)
+// xterm 6 은 네이티브 스크롤 영역을 쓰지 않는다). 드래그를 두 갈래로 나눈다 —
+// 데스크톱 휠(TerminalView 의 attachCustomWheelEventHandler)과 **같은 판정·같은 경로**다:
+//   · 마우스 트래킹을 켠 앱(claude 등) → **합성 휠 이벤트**를 xterm 에 넘긴다.
+//     xterm 이 좌표까지 실어 마우스 리포트로 인코딩하고, 앱이 자체 스크롤을 한다.
+//   · 그 외(tmux 백엔드) → 줄 수만 세어 **서버로 위임**(`scroll`). tmux 가 pane 플래그로
+//     3단 분기하므로 일반 셸은 copy-mode 로 tmux 스크롤백(10000줄)까지 올라간다.
+//
+// ⚠️ 마우스 트래킹이 꺼진 상태의 휠을 xterm 에 넘기면 안 된다 — 대체 화면에서 xterm 은
+//    휠을 **방향키(↑↓)로 바꿔** 앱에 보낸다(xterm 6 `Terminal._bindMouse`). claude 는
+//    리렌더마다 마우스 모드를 껐다 켜므로 그 틈에 넘어간 휠이 프롬프트 히스토리를
+//    롤링했다(2026-09-09 사용자 신고). 모드가 순간 꺼져도 tmux pane 플래그는 안 흔들린다.
 // `.xterm-screen` 은 term.open() 이후 바뀌지 않는다 — touchmove 마다 다시 찾을 이유가 없다
 let wheelTargetEl: HTMLElement | null = null;
 const wheelTarget = () =>
   (wheelTargetEl ??= termEl.querySelector<HTMLElement>('.xterm-screen')) ?? termEl;
+
+// 위임 주기 — 한 번의 위임이 tmux CLI 를 한 번 돌리므로 프레임마다 보내지 않는다
+// (데스크톱 WHEEL_FLUSH_MS 와 같은 값). 픽셀 델타는 소수로 누적해 줄 단위로만 나간다.
+const SCROLL_FLUSH_MS = 24;
+// 응답이 유실돼도 스크롤이 영영 멈추지 않도록 하는 상한 — 왕복은 보통 수 ms 다
+const SCROLL_ACK_TIMEOUT_MS = 500;
+let scrollAcc = 0; // 아직 안 보낸 줄 수(소수 — 한 프레임은 1줄에 못 미친다)
+let scrollTimer: number | null = null;
+let scrollSentAt = 0; // 응답 대기 시작 시각 (0 = 대기 없음)
+
+// 셀 높이(px) — 픽셀 델타를 줄 수로 바꾸는 기준. touchmove 마다 레이아웃을 읽으면
+// 리플로우를 유발하므로 캐시하고, 크기·글자 크기가 바뀔 때만 버린다.
+let cellH = 0;
+function cellHeight() {
+  if (!cellH) cellH = wheelTarget().clientHeight / Math.max(1, term.rows);
+  return cellH || 16;
+}
+
+/** 스크롤을 서버(tmux)로 위임할까 — 데스크톱 휠 핸들러와 같은 판정 순서다 */
+const delegateScroll = () =>
+  tmuxBackend && // 폴백(tmux 미설치) 세션은 xterm 에 스크롤백이 쌓인다 — 기본 동작이 옳다
+  term.modes.mouseTrackingMode === 'none'; // 마우스 앱은 자체 스크롤을 갖고 있다
+
+function flushScroll() {
+  scrollTimer = null;
+  // 왕복 중이면 겹쳐 보내지 않고 다음 flush 에 합친다(tmux CLI 가 밀리지 않게)
+  if (scrollSentAt && Date.now() - scrollSentAt < SCROLL_ACK_TIMEOUT_MS) {
+    scrollTimer = window.setTimeout(flushScroll, SCROLL_FLUSH_MS);
+    return;
+  }
+  const n = Math.trunc(scrollAcc);
+  if (!n) return;
+  scrollAcc -= n;
+  scrollSentAt = Date.now();
+  sendMsg({ type: 'scroll', lines: n });
+}
 
 let dragY = 0;
 let dragging = false;
@@ -1259,6 +1322,12 @@ termEl.addEventListener(
     if (!dragged && Math.abs(dy) < 4) return; // 탭과 구분되는 최소 이동
     dragged = true;
     e.preventDefault(); // 페이지가 대신 움직이지 않게
+    if (delegateScroll()) {
+      scrollAcc += -dy / cellHeight(); // 손가락을 내리면(dy<0) 양수 = 위(과거)로
+      if (scrollTimer === null)
+        scrollTimer = window.setTimeout(flushScroll, SCROLL_FLUSH_MS);
+      return;
+    }
     // 좌표까지 실어 보낸다 — 마우스 트래킹 앱은 휠 이벤트의 행·열을 함께 보고한다
     wheelTarget().dispatchEvent(
       new WheelEvent('wheel', {
@@ -1287,11 +1356,16 @@ termEl.addEventListener('touchend', (e) => {
 // 스크롤 위치에 따라 '맨 아래로' 버튼 노출 — 위로 올려 본 뒤 돌아올 방법
 function syncBottomBtn() {
   const buf = term.buffer.active;
-  bottomBtn.hidden = buf.viewportY >= buf.baseY;
+  // 올라가 있는 경로가 둘이다 — xterm 스크롤백(폴백 세션)과 tmux copy-mode(위임 스크롤)
+  bottomBtn.hidden = !serverScrolledUp && buf.viewportY >= buf.baseY;
 }
 term.onScroll(() => syncBottomBtn());
 bottomBtn.addEventListener('pointerdown', (e) => e.preventDefault());
 bottomBtn.addEventListener('click', () => {
+  if (serverScrolledUp) {
+    sendMsg({ type: 'scroll-bottom' }); // tmux copy-mode 종료 — 응답이 상태를 되돌린다
+    serverScrolledUp = false; // 낙관적 반영(왕복을 기다리면 버튼이 늦게 사라진다)
+  }
   term.scrollToBottom();
   syncBottomBtn();
   term.focus();
@@ -1301,6 +1375,7 @@ bottomBtn.addEventListener('click', () => {
 function setFontSize(next: number) {
   const size = Math.min(FONT_MAX, Math.max(FONT_MIN, next));
   term.options.fontSize = size;
+  cellH = 0; // 글자 크기가 바뀌면 셀 높이도 바뀐다(행 수가 그대로일 수 있어 onResize 만으론 부족)
   localStorage.setItem(FONT_KEY, String(size));
   fit.fit(); // 열·행이 바뀌므로 PTY 도 따라온다(onResize)
 }

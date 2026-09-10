@@ -175,7 +175,9 @@ paths:
   - ⚠️ tmux `mouse on` 금지 — xterm 네이티브 드래그 선택·링크 클릭이 회귀한다(휠만 가로챌 것).
 - 마우스 트래킹 앱(claude 등)에는 휠 pass-through(핸들러 `true` 반환 — 자체 스크롤 보유). 폴백 세션도 xterm 기본 동작.
 - 스크롤 중 입력은 `exitCopyMode` 후 **`pendingInput` 큐**로 순서 보존(첫 글자 유실 방지). 렌더러는 소수 누적 + 24ms flush + `wheelBusy` 스킵으로 tmux 호출을 묶는다. pane 조준은 `data-pane-session`(탭 `data-session` 과 분리).
-- MO 터치 스크롤은 이 경로가 아니라 **합성 WheelEvent → `.xterm-screen` 디스패치** — ⚠️ `scrollLines()` 직접 호출은 claude(대체 화면)에서 안 된다.
+- MO 터치 스크롤도 **같은 판정·같은 경로**다(2026-09-10) — 마우스 트래킹 ON 이면 합성 WheelEvent 를 `.xterm-screen` 에 디스패치(xterm 이 좌표까지 리포트로 인코딩), 아니면 WS `scroll` 메시지로 **서버 위임**(`scrollSession` 재사용, 24ms 묶음·응답 대기 중 겹침 금지). ⚠️ `scrollLines()` 직접 호출은 claude(대체 화면)에서 안 된다.
+  - ⚠️ **마우스가 꺼진 상태의 휠을 xterm 에 넘기지 말 것** — 대체 화면에서 xterm 이 휠을 방향키(↑↓)로 바꿔 보낸다(xterm 6 `bindMouse` 의 상시 wheel 리스너). claude 의 모드 껐다 켜기 틈에 이게 걸려 **폰에서 프롬프트 히스토리가 롤링됐다**(2026-09-09 신고). tmux 위임이 전제인 세션 판정은 `attached` 응답의 `tmux` 필드.
+  - `[맨 아래로]` 는 위임 스크롤에서 xterm 버퍼로 알 수 없다 — 서버가 `scrolled`(scrolledUp)로 알려주고, 입력이 나가면(`sendMsg` 관문) copy-mode 자동 종료에 맞춰 함께 내린다.
 
 ## 상태 휴리스틱·알림
 - `pty.ts`: `busy`(출력 있음) / `waiting`(에이전트 세션 **완전 침묵 2.5초** + 입력 후 출력 ≥50B) / `idle`(**셸 세션은 waiting 없음**). bare BEL 은 조기 판정(0.3초)+바이트 면제. **판정 규칙과 상수는 `status.ts` 의 순수 함수**(`decideSilence`·`decideWaitingNotify`)에 있고 `status.test.ts` 가 케이스를 고정한다 — 규칙을 손볼 때는 pty.ts 가 아니라 그쪽을 고치고 `npm test` 로 확인할 것.

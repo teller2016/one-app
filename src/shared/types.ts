@@ -1337,6 +1337,7 @@ export type TerminalAttachResult = {
   replay?: string;
   seq?: number; // 이 값 이하의 라이브 출력 이벤트는 replay 에 이미 포함 (중복 제거 기준)
   alt?: boolean; // 세션이 대체 화면(TUI)이라 replay 를 생략함 — 클라이언트가 ?1049h 를 합성해 xterm 모델을 맞춘다
+  tmux?: boolean; // tmux 백엔드 세션인가 — 스크롤의 주인이 tmux 인지(= 스크롤을 위임할지)의 판정
   cols?: number;
   rows?: number;
   error?: string;

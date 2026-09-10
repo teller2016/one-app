@@ -28,6 +28,8 @@ import {
   onTerminalData,
   onTerminalExit,
   resizeSession,
+  scrollSession,
+  scrollSessionToBottom,
   writeSession,
 } from './pty';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
@@ -317,6 +319,7 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
           id: attachId,
           replay: res.replay ?? '',
           alt: res.alt ?? false,
+          tmux: res.tmux ?? false,
           seq: res.seq ?? 0,
           cols: res.cols ?? 0,
           rows: res.rows ?? 0,
@@ -331,6 +334,26 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       if (state.attachedId)
         resizeSession(state.attachedId, msg.cols, msg.rows);
       break;
+    // 터치 스크롤 위임 — 데스크톱 휠(terminal:scroll)과 **같은 함수**를 탄다. tmux 가
+    // pane 플래그로 3단 분기(SGR 휠 주입 / 방향키 / copy-mode)하므로, 마우스 모드를
+    // 껐다 켜는 앱(claude)의 틈에도 방향키가 새어 나가지 않는다 — 판정의 진실은 tmux 다.
+    // 응답의 scrolledUp 이 폰의 [맨 아래로] 버튼 판정이다(copy-mode 는 xterm 이 모른다).
+    case 'scroll': {
+      const sid = state.attachedId;
+      if (sid)
+        void scrollSession(sid, msg.lines).then((res) =>
+          send(ws, { type: 'scrolled', id: sid, scrolledUp: res.scrolledUp })
+        );
+      break;
+    }
+    case 'scroll-bottom': {
+      const sid = state.attachedId;
+      if (sid)
+        void scrollSessionToBottom(sid).then(() =>
+          send(ws, { type: 'scrolled', id: sid, scrolledUp: false })
+        );
+      break;
+    }
     case 'create': {
       const info = createSession({
         cwd: msg.cwd,
