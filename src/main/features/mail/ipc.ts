@@ -80,10 +80,15 @@ export function registerMailIpc() {
   });
 
   // ── 팀 공용 계정 인증코드 (피그마) ──
-  // ⚠️ 여기부터는 `handleShared` 가 아니다 — 계정 등록(쓰기)과 비밀 정보를 다루므로
-  //    MO(폰) 셸에는 열지 않는다.
-  ipcMain.handle('mail:authcode:accounts', () => listAltAccounts());
+  // 조회 둘은 폰(MO)에도 연다 — 폰 메일 탭의 [인증코드] 가 같은 패널(AuthCodePanel)을 마운트하는데,
+  // 2026-09-10 까지는 채널이 닫혀 있어 탭을 누르는 순간 메일 탭 전체가 오류 카드가 됐다.
+  // 계정 목록은 loginId 만 나가고, 코드 조회는 맥에서 로그인해 결과 문자열만 돌려준다
+  // (피그마 코드를 폰에서 받아 붙이는 실사용 흐름).
+  handleShared('mail:authcode:accounts', () => listAltAccounts());
+  handleShared('mail:authcode:fetch', (loginId: string) => getAuthCode(loginId));
 
+  // ⚠️ 등록·삭제는 `handleShared` 가 아니다 — 비밀번호를 받는 쓰기 채널이라 MO(폰) 셸에는
+  //    열지 않는다(등록 화면 자체가 환경설정 = 데스크톱 전용).
   ipcMain.handle(
     'mail:authcode:save-account',
     (_e, loginId: string, password: string) => {
@@ -102,8 +107,4 @@ export function registerMailIpc() {
     forgetAltSession(loginId);
     return { ok: true, accounts: removeAltAccount(loginId) };
   });
-
-  ipcMain.handle('mail:authcode:fetch', (_e, loginId: string) =>
-    getAuthCode(loginId),
-  );
 }

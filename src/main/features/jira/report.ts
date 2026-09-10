@@ -7,7 +7,6 @@
 //
 // 이 모듈은 One App 본체와 단독 배포판(standalone/lite)이 **같은 파일을 import** 한다 —
 // 여기서 electron 외의 데스크톱 전용 의존(파일 경로·터미널 등)을 끌어오지 말 것.
-import { ipcMain } from 'electron';
 import type {
   JiraLabelsResult,
   JiraProjectOption,
@@ -19,6 +18,7 @@ import type {
 } from '../../../shared/types';
 import { buildReportJql, normalizeProjectKeys } from '../../../shared/jira-report';
 import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
+import { handleShared } from '../../lib/moIpc';
 import { describeJiraHttpError, jiraAuth, mapIssue, type RawIssue } from './jira';
 import { getReportPrefs, saveReportPrefs } from './store';
 
@@ -386,16 +386,20 @@ export async function fetchLabels(
 
 /**
  * 보고 IPC 등록 — 본체는 `registerJiraIpc()` 안에서, 단독 배포판은 main.ts 에서 직접 부른다.
- * 폰(MO)에 열 이유가 없어 handleShared 가 아니라 ipcMain.handle 이다.
+ *
+ * 전부 `handleShared` — 폰(MO) 셸의 Jira 탭이 **같은 보고 패널을 그대로 마운트**하기 때문이다.
+ * 2026-09-10 까지는 `ipcMain.handle` 이어서 폰에서 [보고] 를 누르면 `jira.report` 가 없어 탭
+ * 전체가 오류 카드가 됐다. 조회 셋은 순수 REST, prefs 둘은 화면 취향(프로젝트·기간·템플릿)만
+ * 오가고 비밀 정보가 없어 폰에 열어도 안전하다. (moIpc 는 electron 만 의존 — lite 에서도 그대로 돈다)
  */
 export function registerJiraReportIpc(): void {
-  ipcMain.handle('jira:report:projects', (_e, force?: boolean) => fetchProjects(force === true));
-  ipcMain.handle('jira:report:labels', (_e, projectKeys?: string[], force?: boolean) =>
+  handleShared('jira:report:projects', (force?: boolean) => fetchProjects(force === true));
+  handleShared('jira:report:labels', (projectKeys?: string[], force?: boolean) =>
     fetchLabels(Array.isArray(projectKeys) ? projectKeys : [], force === true),
   );
-  ipcMain.handle('jira:report:search', (_e, query: JiraReportQuery) => searchReport(query));
-  ipcMain.handle('jira:report:prefs:get', () => getReportPrefs());
-  ipcMain.handle('jira:report:prefs:set', (_e, prefs: Partial<JiraReportPrefs>) =>
+  handleShared('jira:report:search', (query: JiraReportQuery) => searchReport(query));
+  handleShared('jira:report:prefs:get', () => getReportPrefs());
+  handleShared('jira:report:prefs:set', (prefs: Partial<JiraReportPrefs>) =>
     saveReportPrefs(prefs),
   );
 }

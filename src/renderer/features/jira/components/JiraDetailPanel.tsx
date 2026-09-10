@@ -236,7 +236,12 @@ export function JiraDetailPanel({
               )}
             </div>
             <div className="jira-view__actions">
-              <Button size="sm" onClick={() => onStartWork(state.detail)}>
+              {/* jira-view__work — 폰(MO) 셸이 숨기는 기준 클래스(맥에 femc 세션을 만드는 데스크톱 흐름) */}
+              <Button
+                size="sm"
+                className="jira-view__work"
+                onClick={() => onStartWork(state.detail)}
+              >
                 <Icon name="play" size={13} />
                 작업 시작
               </Button>

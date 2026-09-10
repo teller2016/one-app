@@ -113,7 +113,7 @@ Segment 가 `[내 이슈 | 주간 | 보고]` 3개다. 보고 화면(`JiraReportP
 - **저장**: 템플릿·프로젝트·기간 기준·기간 방식은 `userData/jira.json` 의 `report`
   (`jira:report:prefs:*`) — localStorage 아님(보존 데이터). 저장된 프로젝트가 있으면 탭을 열자마다
   한 번 자동 조회한다. 월은 저장하지 않고 항상 이번 달로 시작한다(다음 달 ▶ 는 이번 달까지만).
-- 채널은 `ipcMain.handle`(`jira:report:*`) — 폰에 열 이유가 없어 handleShared 가 아니다.
+- 채널은 `handleShared`(`jira:report:*`) — **폰 셸의 Jira 탭이 같은 보고 패널을 마운트한다**(2026-09-10). 그전엔 `ipcMain.handle` 이어서 폰에서 [보고] 를 누르면 `jira.report` 가 없어 탭 전체가 오류 카드였다. 조회 셋은 순수 REST, prefs 둘은 화면 취향만 오가 폰에 열어도 안전하다. 폰 폭 오버라이드(결과 표 가로 스크롤 등)는 `mobile-app/styles/mo.scss`.
   `registerJiraReportIpc()` 는 `report.ts` 에 있고 `registerJiraIpc()` 가 부른다(단독판은 직접 부른다).
 - 제목 클릭은 `onOpenDetail` 이 있으면 앱 안 상세 패널(본체), 없으면 브라우저(단독판).
 

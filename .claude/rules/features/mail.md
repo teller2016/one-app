@@ -25,7 +25,7 @@ paths:
 ### 팀 공용 계정 인증코드 (피그마)
 리더 모달 세그먼트의 **세 번째 탭 '인증코드'**(`AuthCodePanel`) — 팀 공용 피그마 계정(zeplin_fe1/fe2)의 메일함에서 로그인 인증코드를 뽑아 **누르는 즉시 클립보드에 넣는다**(코드를 받는 목적이 붙여넣기라서).
 
-**계정 등록은 환경설정 → [추가 비즈박스 계정]**(`AltAccountsCard` — mail 기능이 `index.ts` 로 공개하고 `SettingsSection` 이 렌더한다). 조회 화면과 등록 화면을 가른 이유는 계정 관리가 다른 계정 설정과 한자리에 있어야 찾기 쉽기 때문이다. 비밀번호는 `safeStorage` 로 암호화해 `userData/alt-mail-accounts.json` 에 두고 렌더러로는 `loginId` 만 나간다. 같은 아이디를 다시 추가하면 비밀번호만 갱신하며, **빈 비밀번호로는 덮어쓰지 않는다**(실수로 로그인이 깨지지 않게). 채널은 `handleShared` 가 아니라 `ipcMain.handle` — 쓰기·비밀 정보라 MO(폰)에 열지 않는다.
+**계정 등록은 환경설정 → [추가 비즈박스 계정]**(`AltAccountsCard` — mail 기능이 `index.ts` 로 공개하고 `SettingsSection` 이 렌더한다). 조회 화면과 등록 화면을 가른 이유는 계정 관리가 다른 계정 설정과 한자리에 있어야 찾기 쉽기 때문이다. 비밀번호는 `safeStorage` 로 암호화해 `userData/alt-mail-accounts.json` 에 두고 렌더러로는 `loginId` 만 나간다. 같은 아이디를 다시 추가하면 비밀번호만 갱신하며, **빈 비밀번호로는 덮어쓰지 않는다**(실수로 로그인이 깨지지 않게). 채널은 둘로 가른다 — **등록·삭제는 `ipcMain.handle`**(비밀번호를 받는 쓰기라 MO(폰)에 열지 않는다), **목록·코드 조회(`mail:authcode:accounts`·`fetch`)는 `handleShared`**(2026-09-10 — 폰 메일 탭의 [인증코드] 가 같은 패널을 마운트하는데 채널이 닫혀 있어 탭 전체가 오류 카드였다. loginId 와 코드 문자열만 오간다).
 
 내 계정 경로와 갈라지는 지점:
 - 로그인은 **`loginWithAccount()`** — 공용 세션 캐시와 분리되고 전용 파티션(`AUTOMATION_PARTITION.altLogin`)을 쓴다. ⚠️ `login` 파티션을 재사용하면 `openPage` 가 쿠키를 비워 **메일 위젯·근태의 공용 세션이 통째로 날아간다**.
