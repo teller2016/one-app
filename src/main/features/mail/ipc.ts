@@ -8,7 +8,7 @@ import {
   saveAltAccount,
 } from './altAccounts';
 import { MAIL_CONFIG } from './config';
-import type { MailListQuery } from '../../../shared/types';
+import type { AuthCodeServiceId, MailListQuery } from '../../../shared/types';
 
 // 안읽은 수 캐시 — 위젯(30초)과 홈 카드(120초)가 같은 조회를 각자 폴링하므로
 // 짧은 TTL + 동시 요청 공유로 그룹웨어 왕복을 반으로 줄인다(2026-08-07 성능 감사)
@@ -79,13 +79,18 @@ export function registerMailIpc() {
     return { ok: true };
   });
 
-  // ── 팀 공용 계정 인증코드 (피그마) ──
+  // ── 팀 공용 계정 인증코드 (피그마·유데미) ──
   // 조회 둘은 폰(MO)에도 연다 — 폰 메일 탭의 [인증코드] 가 같은 패널(AuthCodePanel)을 마운트하는데,
   // 2026-09-10 까지는 채널이 닫혀 있어 탭을 누르는 순간 메일 탭 전체가 오류 카드가 됐다.
   // 계정 목록은 loginId 만 나가고, 코드 조회는 맥에서 로그인해 결과 문자열만 돌려준다
-  // (피그마 코드를 폰에서 받아 붙이는 실사용 흐름).
+  // (피그마·유데미 코드를 폰에서 받아 붙이는 실사용 흐름).
   handleShared('mail:authcode:accounts', () => listAltAccounts());
-  handleShared('mail:authcode:fetch', (loginId: string) => getAuthCode(loginId));
+  // service 를 안 주면 피그마 — 유데미가 붙기 전(2026-09-11) 호출 형태와 호환된다
+  handleShared(
+    'mail:authcode:fetch',
+    (loginId: string, service?: AuthCodeServiceId) =>
+      getAuthCode(loginId, service),
+  );
 
   // ⚠️ 등록·삭제는 `handleShared` 가 아니다 — 비밀번호를 받는 쓰기 채널이라 MO(폰) 셸에는
   //    열지 않는다(등록 화면 자체가 환경설정 = 데스크톱 전용).

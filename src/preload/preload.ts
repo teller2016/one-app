@@ -1,6 +1,7 @@
 // preload: 렌더러에 안전하게 노출할 API를 contextBridge 로 등록한다.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
+  AuthCodeServiceId,
   AppToastPayload,
   ScheduleNotionRecordPayload,
   ScheduleRunPayload,
@@ -162,14 +163,14 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 브라우저로 비즈박스 메일함 바로 열기
     openWeb: () => ipcRenderer.invoke("mail:open-web"),
 
-    // 팀 공용 계정 인증코드(피그마) — 계정 등록·비밀 정보를 다루므로 폰에는 열지 않는다
+    // 팀 공용 계정 인증코드(피그마·유데미) — 계정 등록·비밀 정보를 다루므로 폰에는 열지 않는다
     authCodeAccounts: () => ipcRenderer.invoke("mail:authcode:accounts"),
     saveAuthCodeAccount: (loginId: string, password: string) =>
       ipcRenderer.invoke("mail:authcode:save-account", loginId, password),
     removeAuthCodeAccount: (loginId: string) =>
       ipcRenderer.invoke("mail:authcode:remove-account", loginId),
-    getAuthCode: (loginId: string) =>
-      ipcRenderer.invoke("mail:authcode:fetch", loginId),
+    getAuthCode: (loginId: string, service?: AuthCodeServiceId) =>
+      ipcRenderer.invoke("mail:authcode:fetch", loginId, service),
   },
   jira: {
     // 내게 할당된 미해결 이슈 목록 (미설정이면 configured:false)

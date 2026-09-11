@@ -401,7 +401,7 @@
   }
 }
 
-// ===== 인증코드 탭 (팀 공용 계정의 피그마 로그인 코드) =====
+// ===== 인증코드 탭 (팀 공용 계정의 피그마·유데미 로그인 코드) =====
 .mail-authcode {
   // 목록 자리를 그대로 물려받는다 — 계정이 늘어나면 이 안에서만 스크롤한다
   flex: 1;
@@ -435,6 +435,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+  }
+
+  // 서비스 버튼(피그마·유데미) — 계정 줄이 좁아지면 아래로 흐른다
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   &__id {
@@ -494,6 +502,14 @@
     gap: 10px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
+  }
+
+  // 서비스 버튼(피그마·유데미) — 계정 줄이 좁아지면 아래로 흐른다
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   &__id {

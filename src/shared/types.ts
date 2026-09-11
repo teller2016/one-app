@@ -1214,7 +1214,7 @@ export type MailBodyResult = {
 };
 
 /**
- * 팀 공용 메일 계정 (피그마 인증코드 조회용) — 비밀번호는 main 에만 있고 렌더러로 오지 않는다.
+ * 팀 공용 메일 계정 (인증코드 조회용) — 비밀번호는 main 에만 있고 렌더러로 오지 않는다.
  * 환경설정의 비즈박스 계정과는 별개다.
  */
 export type AltMailAccount = {
@@ -1228,6 +1228,27 @@ export type AltMailAccountsResult = {
   error?: string;
 };
 
+/** 인증코드를 받아오는 서비스 — 메일 본문·발신자 패턴은 main 의 `features/mail/config.ts` 에 있다 */
+export type AuthCodeServiceId = 'figma' | 'udemy';
+
+/**
+ * 서비스 표시 이름과 코드 유효시간 — 렌더러(버튼·만료 문구)와 main(만료 판정·오류 문구)이
+ * **같은 값**을 봐야 하므로 여기 한 곳에 둔다. 유효시간은 실측이다(피그마 10분 · 유데미 15분 — 본문 명시).
+ */
+export const AUTH_CODE_SERVICES: readonly {
+  id: AuthCodeServiceId;
+  label: string;
+  freshMinutes: number;
+}[] = [
+  { id: 'figma', label: '피그마', freshMinutes: 10 },
+  { id: 'udemy', label: '유데미', freshMinutes: 15 },
+];
+
+/** 서비스 메타 조회 — 모르는 id 면 첫 서비스(피그마)로 떨어진다 */
+export function authCodeService(id: AuthCodeServiceId) {
+  return AUTH_CODE_SERVICES.find((s) => s.id === id) ?? AUTH_CODE_SERVICES[0];
+}
+
 /** 인증코드 조회 결과 */
 export type AuthCodeResult = {
   ok: boolean;
@@ -1235,7 +1256,7 @@ export type AuthCodeResult = {
   code?: string;
   receivedAt?: number; // 메일 도착 시각 (epoch ms)
   subject?: string;
-  /** 유효 시간(10분)을 넘긴 코드 — 값은 주되 UI 에서 만료 가능성을 알린다 */
+  /** 서비스별 유효 시간을 넘긴 코드 — 값은 주되 UI 에서 만료 가능성을 알린다 */
   stale?: boolean;
   error?: string;
 };

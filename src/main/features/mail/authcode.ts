@@ -1,4 +1,5 @@
-// 팀 공용 계정의 피그마 인증코드 조회 — 메일 목록에서 인증 메일만 골라 본문에서 코드를 뽑는다.
+// 팀 공용 계정의 인증코드 조회 — 메일 목록에서 인증 메일만 골라 본문에서 코드를 뽑는다.
+// 서비스(피그마·유데미)마다 발신자·제목·본문 문맥이 달라 패턴만 갈아 끼운다(`config.ts` 의 authCode.services).
 //
 // **왜 별도 세션인가**: 공용 세션(`groupware/session.ts`)은 환경설정의 내 계정 전용이다.
 // 팀 공용 계정으로 로그인하려면 별도 파티션·별도 캐시가 필요하다(`loginWithAccount`).
@@ -24,7 +25,8 @@ import {
   type MailIdentity,
 } from './session';
 import { loginWithAccount } from '../groupware/session';
-import type { AuthCodeResult } from '../../../shared/types';
+import { authCodeService } from '../../../shared/types';
+import type { AuthCodeResult, AuthCodeServiceId } from '../../../shared/types';
 
 /** 계정별 메일 세션 — 로그인이 무거우니 메모리에만 캐시한다(디스크에 남기지 않는다) */
 type AltSession = MailIdentity & { cookie: string; at: number };
@@ -102,14 +104,21 @@ type ListResp = {
   }[];
 };
 
+/** 서비스별 메일 패턴 — 모르는 id 가 오면(폰에서 임의 문자열이 올 수 있다) 피그마로 떨어진다 */
+function patternsOf(service: AuthCodeServiceId) {
+  const { services } = MAIL_CONFIG.authCode;
+  return services[service] ?? services.figma;
+}
+
 /**
  * 본문 평문에서 인증코드를 뽑는다.
  *
  * ⚠️ 반환은 **문자열**이다 — 코드가 0으로 시작할 수 있어(실측 `0432458`) 숫자로 바꾸면 깨진다.
- * 문맥("이 코드를 입력하여 …") 기반 추출을 먼저 쓰고, 안 잡히면 자릿수 폴백으로 내려간다.
+ * 문맥(피그마 "이 코드를 입력하여 …" · 유데미 "아래 코드를 사용해 …") 기반 추출을 먼저 쓰고,
+ * 안 잡히면 자릿수 폴백으로 내려간다.
  */
-function extractCode(text: string): string | null {
-  const { codeContext, codeFallback } = MAIL_CONFIG.authCode;
+function extractCode(text: string, service: AuthCodeServiceId): string | null {
+  const { codeContext, codeFallback } = patternsOf(service);
   const ctx = text.match(codeContext);
   // 문맥 정규식이 한국어·영어 두 갈래라 잡힌 캡처가 1번일 수도 2번일 수도 있다
   const fromContext = ctx?.[1] ?? ctx?.[2];
@@ -117,9 +126,14 @@ function extractCode(text: string): string | null {
   return text.match(codeFallback)?.[0] ?? null;
 }
 
-/** 받은편지함에서 가장 최근 인증 메일을 찾아 본문의 코드를 반환 */
-async function readLatestCode(s: AltSession): Promise<AuthCodeResult> {
+/** 받은편지함에서 가장 최근 인증 메일(그 서비스의)을 찾아 본문의 코드를 반환 */
+async function readLatestCode(
+  s: AltSession,
+  service: AuthCodeServiceId,
+): Promise<AuthCodeResult> {
   const cfg = MAIL_CONFIG.authCode;
+  const pat = patternsOf(service);
+  const meta = authCodeService(service);
 
   // 1) 받은편지함 mboxSeq — ⚠️ 계정마다 값이 다르다(내 계정 1977 / zeplin_fe1 1990)
   const boxRes = await mailPost(
@@ -148,7 +162,7 @@ async function readLatestCode(s: AltSession): Promise<AuthCodeResult> {
       date: parseDate(r.rfc822date),
     }))
     .filter(
-      (m) => cfg.fromPattern.test(m.from) && cfg.subjectPattern.test(m.subject),
+      (m) => pat.fromPattern.test(m.from) && pat.subjectPattern.test(m.subject),
     )
     // 응답이 최신순으로 오지만 순서에 기대지 않는다
     .sort((a, b) => b.date - a.date)[0];
@@ -156,7 +170,7 @@ async function readLatestCode(s: AltSession): Promise<AuthCodeResult> {
   if (!latest) {
     return {
       ok: false,
-      error: `최근 메일 ${cfg.scanCount}건에 피그마 인증 메일이 없습니다 — 피그마에서 코드를 다시 보내보세요.`,
+      error: `최근 메일 ${cfg.scanCount}건에 ${meta.label} 인증 메일이 없습니다 — ${meta.label}에서 코드를 다시 보내보세요.`,
     };
   }
 
@@ -168,7 +182,7 @@ async function readLatestCode(s: AltSession): Promise<AuthCodeResult> {
   const html = await contRes.text();
   if (looksLikeLogin(html)) throw new AuthError('세션이 만료되었습니다.');
 
-  const code = extractCode(htmlToText(html));
+  const code = extractCode(htmlToText(html), service);
   if (!code) {
     return {
       ok: false,
@@ -183,14 +197,17 @@ async function readLatestCode(s: AltSession): Promise<AuthCodeResult> {
     receivedAt: latest.date,
     subject: latest.subject,
     // 이 계정엔 인증 메일이 하루 여러 통 온다 — 오래된 코드면 만료 경고를 붙여 보낸다
-    stale: Date.now() - latest.date > cfg.freshMs,
+    stale: Date.now() - latest.date > meta.freshMinutes * 60_000,
   };
 }
 
-/** 지정한 팀 공용 계정의 최신 피그마 인증코드를 가져온다 */
-export async function getAuthCode(loginId: string): Promise<AuthCodeResult> {
+/** 지정한 팀 공용 계정에서 그 서비스의 최신 인증코드를 가져온다 */
+export async function getAuthCode(
+  loginId: string,
+  service: AuthCodeServiceId = 'figma',
+): Promise<AuthCodeResult> {
   try {
-    return await withAltSession(loginId, readLatestCode);
+    return await withAltSession(loginId, (s) => readLatestCode(s, service));
   } catch (err) {
     return {
       ok: false,

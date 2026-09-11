@@ -77,6 +77,7 @@ import type {
   AltMailAccount,
   AltMailAccountsResult,
   AuthCodeResult,
+  AuthCodeServiceId,
   ChangesTarget,
   ChangesDiffFile,
   ChangesDiffScope,
@@ -180,7 +181,10 @@ declare global {
         removeAuthCodeAccount: (
           loginId: string,
         ) => Promise<AltMailAccountsResult>;
-        getAuthCode: (loginId: string) => Promise<AuthCodeResult>;
+        getAuthCode: (
+          loginId: string,
+          service?: AuthCodeServiceId,
+        ) => Promise<AuthCodeResult>;
       };
       jira: {
         // force=true 는 수동 새로고침·전환 직후 — main 의 TTL 캐시 우회

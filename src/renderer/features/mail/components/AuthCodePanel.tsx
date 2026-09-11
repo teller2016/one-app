@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AltMailAccount, AuthCodeResult } from '../../../../shared/types';
+import {
+  AUTH_CODE_SERVICES,
+  authCodeService,
+  type AltMailAccount,
+  type AuthCodeResult,
+  type AuthCodeServiceId,
+} from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
@@ -7,19 +13,23 @@ import { Icon } from '../../../components/Icon';
 import { useCopy } from '../../../lib/useCopy';
 import { relativeTime } from '../lib/format';
 
-/** 계정별 조회 상태 */
+/**
+ * 계정별 조회 상태 — 서비스가 둘이라 **어느 서비스로** 조회 중인지까지 들고 있어야
+ * 누른 버튼만 스피너가 돌고, 결과도 그 서비스 것으로 표시된다.
+ */
 type CodeState =
   | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'done'; result: AuthCodeResult };
+  | { kind: 'loading'; service: AuthCodeServiceId }
+  | { kind: 'done'; service: AuthCodeServiceId; result: AuthCodeResult };
 
 const IDLE: CodeState = { kind: 'idle' };
 
 /**
- * 팀 공용 계정의 피그마 인증코드 패널 (메일 리더 모달의 '인증코드' 탭).
+ * 팀 공용 계정의 인증코드 패널 (메일 리더 모달의 '인증코드' 탭).
  *
- * 버튼을 누르면 그 계정으로 로그인해 최근 메일에서 인증 메일만 골라 코드를 뽑고,
- * **성공하면 바로 클립보드에 넣는다** — 코드를 받는 목적이 붙여넣기이기 때문이다.
+ * 계정 한 줄에 서비스 버튼(피그마·유데미)이 붙는다. 누르면 그 계정으로 로그인해 최근 메일에서
+ * 해당 서비스의 인증 메일만 골라 코드를 뽑고, **성공하면 바로 클립보드에 넣는다** —
+ * 코드를 받는 목적이 붙여넣기이기 때문이다.
  * 계정 등록은 여기가 아니라 **환경설정 → [추가 비즈박스 계정]** 에서 한다.
  */
 export function AuthCodePanel() {
@@ -32,10 +42,13 @@ export function AuthCodePanel() {
   }, []);
 
   const fetchCode = useCallback(
-    async (loginId: string) => {
-      setCodes((prev) => ({ ...prev, [loginId]: { kind: 'loading' } }));
-      const result = await window.oneApp.mail.getAuthCode(loginId);
-      setCodes((prev) => ({ ...prev, [loginId]: { kind: 'done', result } }));
+    async (loginId: string, service: AuthCodeServiceId) => {
+      setCodes((prev) => ({ ...prev, [loginId]: { kind: 'loading', service } }));
+      const result = await window.oneApp.mail.getAuthCode(loginId, service);
+      setCodes((prev) => ({
+        ...prev,
+        [loginId]: { kind: 'done', service, result },
+      }));
       if (result.ok && result.code) {
         await copy(result.code, {
           success: `인증코드 ${result.code} 복사되었습니다`,
@@ -65,6 +78,8 @@ export function AuthCodePanel() {
         {accounts.map((a) => {
           const state = codes[a.loginId] ?? IDLE;
           const done = state.kind === 'done' ? state.result : null;
+          const shown =
+            state.kind === 'idle' ? null : authCodeService(state.service);
           return (
             <li key={a.loginId} className="mail-authcode__row">
               <div className="mail-authcode__head">
@@ -72,13 +87,20 @@ export function AuthCodePanel() {
                   <Icon name="key" size={14} />
                   {a.loginId}
                 </span>
-                <Button
-                  size="sm"
-                  loading={state.kind === 'loading'}
-                  onClick={() => void fetchCode(a.loginId)}
-                >
-                  코드 가져오기
-                </Button>
+                <div className="mail-authcode__actions">
+                  {AUTH_CODE_SERVICES.map((svc) => (
+                    <Button
+                      key={svc.id}
+                      size="sm"
+                      loading={
+                        state.kind === 'loading' && state.service === svc.id
+                      }
+                      onClick={() => void fetchCode(a.loginId, svc.id)}
+                    >
+                      {svc.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
 
               {done?.ok && done.code ? (
@@ -90,12 +112,12 @@ export function AuthCodePanel() {
                       className="mail-authcode__code"
                       onClick={() => void copy(done.code ?? '')}
                       title="클릭하면 다시 복사합니다"
-                      aria-label={`인증코드 ${done.code} 복사`}
+                      aria-label={`${shown?.label} 인증코드 ${done.code} 복사`}
                     >
                       {done.code}
                     </button>
                     <span className="mail-authcode__meta">
-                      {relativeTime(done.receivedAt ?? 0)} 도착
+                      {shown?.label} · {relativeTime(done.receivedAt ?? 0)} 도착
                     </span>
                     <Button
                       variant="ghost"
@@ -108,8 +130,9 @@ export function AuthCodePanel() {
                   </div>
                   {done.stale && (
                     <Banner variant="warning">
-                      10분이 지난 코드입니다 — 이미 만료됐을 수 있으니, 피그마에서
-                      코드를 다시 보낸 뒤 한 번 더 가져오세요.
+                      {shown?.freshMinutes}분이 지난 코드입니다 — 이미 만료됐을 수
+                      있으니, {shown?.label}에서 코드를 다시 보낸 뒤 한 번 더
+                      가져오세요.
                     </Banner>
                   )}
                 </>
