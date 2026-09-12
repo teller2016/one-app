@@ -1204,6 +1204,77 @@
     box-shadow: 0 0 0 1px var(--border-dark);
   }
 
+  // 폰(MO)이 세션을 보고 있는 동안 남는 여백 — 크기는 '마지막에 주장한 쪽' 기준이라
+  // 폰이 붙으면 PTY 가 폰 화면 크기로 줄고, 넓은 PC 창에는 xterm 이 안 채우는 영역이
+  // 남는다. 그 영역을 빗금으로 덮어 "여긴 터미널이 아니라 화면 밖"임을 분명히 한다.
+  // 좌표(--remote-fit-w/h)는 TerminalView 가 실측한 `.xterm-screen` 의 우/하단 경계다.
+  //
+  // ⚠️ 두 영역은 **겹치지 않게** 자른다 — 아래쪽 띠의 폭을 경계까지로 제한(::after 의
+  // width)해서 L 자로 맞물린다. 둘 다 전체를 덮으면 모서리에서 빗금이 두 겹으로 그려져
+  // 그 사각형만 유독 진해진다.
+  &__remote-fit {
+    position: absolute;
+    inset: 0;
+    z-index: 1; // xterm 위 · 검색(2)·포커스 링(3)·드롭(4) 아래 — 조작 오버레이를 안 가린다
+    pointer-events: none;
+
+    // 빗금은 다크 패널 위라 on-dark 계열을 옅게 — 글자보다 확실히 뒤로 물러나야 한다
+    $hatch: repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--on-dark-3) 34%, transparent) 0 1px,
+      transparent 1px 8px
+    );
+
+    // 오른쪽 여백 (폰 화면 경계 ~ 패널 끝)
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: var(--remote-fit-w);
+      right: 0;
+      background: $hatch;
+      border-left: 1px dashed color-mix(in srgb, var(--accent-on-dark) 55%, transparent);
+    }
+
+    // 아래 여백 (폰 화면 경계까지만 — 위 ⚠️ 참고)
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      width: var(--remote-fit-w);
+      top: var(--remote-fit-h);
+      bottom: 0;
+      background: $hatch;
+      border-top: 1px dashed color-mix(in srgb, var(--accent-on-dark) 55%, transparent);
+    }
+  }
+
+  // 여백이 왜 생겼는지 한 줄로 — 기본은 폰 화면 경계 바로 오른쪽 위.
+  // 오른쪽 여백이 배지보다 좁으면(폰을 가로로 돌리면 cols 가 PC 보다 커진다) 아래 여백으로
+  // 내린다 — 그대로 두면 host 의 overflow: hidden 에 잘려 아무것도 안 보인다.
+  &__remote-fit-badge {
+    position: absolute;
+    top: 8px;
+    left: calc(var(--remote-fit-w) + 8px);
+
+    &--below {
+      top: calc(var(--remote-fit-h) + 8px);
+      left: 8px;
+    }
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: var(--r-full);
+    background: var(--surface-dark);
+    box-shadow: 0 0 0 1px var(--border-dark);
+    color: var(--on-dark-2);
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
   // 드롭 프리뷰 — 분할될 반쪽(중앙 드롭이면 pane 전체)을 액센트로 미리 보여준다
   &__drop-hint {
     position: absolute;

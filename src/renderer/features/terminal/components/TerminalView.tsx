@@ -13,6 +13,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
@@ -45,6 +46,20 @@ const PTY_RESIZE_DEBOUNCE_MS = 120;
 // 다만 디바운스만 두면 드래그를 붙잡고 있는 동안 아무도 화면을 채우지 않는다 — **마지막 전송**
 // 으로부터 이 시간이 지났으면 즉시 보내, 드래그 시작 직후와 드래그 중 모두 화면이 채워지게 한다
 const PTY_RESIZE_THROTTLE_MS = 250;
+
+// 다른 화면(폰)이 크기를 쥐고 있다고 볼 최소 여백(px) — 이보다 작으면 `.xterm` 자체 padding·
+// 셀 나머지라 표시하지 않는다(우측 padding 6px·하단 8px 이 평상시 값이다)
+const REMOTE_FIT_GAP_MIN = 18;
+// 행·열 차이가 이만큼은 나야 '다른 화면이 쥐고 있다'고 본다 — 한 행(≈17px)만 남는 차이는
+// 폰과 PC 가 우연히 비슷한 경우라 빗금을 칠 만한 일이 아니다(실측: 361×93 ↔ 361×92)
+const REMOTE_FIT_SLACK_MIN = 2;
+// 배지('폰 화면 108×90')가 오른쪽 여백에 들어갈 수 있는 최소 폭 — 모자라면 아래 여백에 놓는다
+// (폰을 가로로 돌리면 cols 가 PC 보다 커져 오른쪽은 넘치고 아래만 남는다)
+const REMOTE_FIT_BADGE_W = 150;
+
+/** 폰(MO)이 맞춰 둔 화면 — w/h 는 pane 기준 경계 좌표(px), cols/rows 는 그쪽이 정한 크기.
+ *  badgeBelow: 오른쪽 여백이 배지를 담기엔 좁아(또는 없어) 아래 여백에 놓아야 하는지 */
+type RemoteFit = { w: number; h: number; cols: number; rows: number; badgeBelow: boolean };
 
 // 휠 위임 주기 — 한 번의 IPC 가 tmux CLI 를 한 번 돌리므로 프레임마다 보내지 않는다
 const WHEEL_FLUSH_MS = 24;
@@ -208,6 +223,7 @@ export const TerminalView = memo(function TerminalView({
   /** 스크롤백을 위로 올렸는지 — 상단 바의 [맨 아래로] 노출 판정 (tmux 폴백 세션만 발화) */
   onScrolledChange: (sessionId: string, scrolledUp: boolean) => void;
 }) {
+  const paneRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -231,6 +247,10 @@ export const TerminalView = memo(function TerminalView({
   const [hits, setHits] = useState({ index: -1, count: 0 });
   // Finder 파일을 끌어와 있는 동안만 true — 드롭 안내 오버레이 표시용
   const [fileDragOver, setFileDragOver] = useState(false);
+  // 폰(MO)이 더 작은 크기를 주장해 내 pane 에 여백이 남는 상태 — null 이면 평소(내 크기)
+  const [remoteFit, setRemoteFit] = useState<RemoteFit | null>(null);
+  // 여백 측정을 다른 effect(보이게 됨·글자 크기)에서도 부를 수 있게 노출한다
+  const syncRemoteFitRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -604,6 +624,7 @@ export const TerminalView = memo(function TerminalView({
     let ptyResizeTimer: number | null = null;
     let ptyResizeSentAt = 0;
     const resizeSub = term.onResize(({ cols, rows }) => {
+      syncRemoteFit(); // 내 크기든 폰이 밀어 넣은 크기든 — 여백 표시를 다시 잰다
       // ⚠️ 숨은 pane 은 PTY 크기를 주장하지 않는다 — 세션마다 xterm 을 살려 두므로
       // 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣고,
       // 폰(MO)이 보고 있는 세션의 크기까지 되돌려 버린다(크기 공유는 마지막 주장 기준).
@@ -650,7 +671,9 @@ export const TerminalView = memo(function TerminalView({
         // 마운트 직후엔 레이아웃이 아직 안정되지 않아 fit 이 좁게 잡힐 수 있다(탭바·스크롤바
         // 확정 전). 다음 프레임에 한 번 더 맞춰 잘못된 크기를 PTY 에 남기지 않는다.
         requestAnimationFrame(() => {
-          if (!disposed) fit.fit();
+          if (disposed) return;
+          fit.fit();
+          syncRemoteFit(); // 폰이 먼저 붙어 있었다면 여기서 이미 작은 크기다
         });
       });
 
@@ -670,9 +693,72 @@ export const TerminalView = memo(function TerminalView({
         if (disposed) return;
         lastBox = `${host.clientWidth}x${host.clientHeight}`; // fit 직전 크기로 기준 갱신
         fit.fit();
+        syncRemoteFit(); // 창을 키우면 폰 화면과의 차이도 함께 커진다
       });
     });
     ro.observe(host);
+
+    // ── 폰(MO)이 맞춰 둔 화면 표시 ────────────────────────────────────
+    // 크기는 '마지막에 주장한 쪽' 기준이라, 폰이 세션을 보는 동안 PTY 는 폰 화면 크기로
+    // 줄고 넓은 PC 창에는 xterm 이 안 채우는 영역이 그대로 남는다. 그 여백을 빗금으로
+    // 덮어 "지금 이 세션은 폰 화면 크기로 그려지는 중"임을 알린다(창을 클릭해 포커스를
+    // 주면 아래 reclaimSize 가 크기를 되찾아 여백도 함께 사라진다).
+    // 측정은 rAF 로 코얼레스한다 — fit → term.resize → onResize 로 한 번의 리사이즈가
+    // 이 함수를 여러 번 부르고, getBoundingClientRect 는 레이아웃을 강제한다.
+    let remoteFitRaf: number | null = null;
+    const measureRemoteFit = () => {
+      remoteFitRaf = null;
+      if (disposed) return;
+      const pane = paneRef.current;
+      const screen = term.element?.querySelector<HTMLElement>('.xterm-screen');
+      if (!visibleRef.current || !pane || !screen) {
+        setRemoteFit(null); // 숨은 pane 은 애초에 크기를 주장하지 않는다 — 여백도 무의미
+        return;
+      }
+      const dims = fit.proposeDimensions();
+      // 내 창은 더 큰 화면을 제안하는데 PTY 가 그보다 작다 = 다른 화면이 크기를 쥐고 있다
+      if (
+        !dims?.cols ||
+        !dims.rows ||
+        (dims.cols - term.cols < REMOTE_FIT_SLACK_MIN &&
+          dims.rows - term.rows < REMOTE_FIT_SLACK_MIN)
+      ) {
+        setRemoteFit(null);
+        return;
+      }
+      const hb = host.getBoundingClientRect();
+      const sb = screen.getBoundingClientRect();
+      const gapX = hb.right - sb.right;
+      if (gapX < REMOTE_FIT_GAP_MIN && hb.bottom - sb.bottom < REMOTE_FIT_GAP_MIN) {
+        setRemoteFit(null); // 한두 셀 차이 — 빗금을 깔 만한 여백이 아니다
+        return;
+      }
+      // 오버레이는 pane 자식이라 좌표도 pane 기준으로 환산한다(host 와 같은 자리지만
+      // 검색바 같은 형제가 늘어도 어긋나지 않게 실제 오프셋을 쓴다)
+      const pb = pane.getBoundingClientRect();
+      const next: RemoteFit = {
+        w: Math.round(sb.right - pb.left),
+        h: Math.round(sb.bottom - pb.top),
+        cols: term.cols,
+        rows: term.rows,
+        badgeBelow: gapX < REMOTE_FIT_BADGE_W,
+      };
+      setRemoteFit((prev) =>
+        prev &&
+        prev.w === next.w &&
+        prev.h === next.h &&
+        prev.cols === next.cols &&
+        prev.rows === next.rows &&
+        prev.badgeBelow === next.badgeBelow
+          ? prev // 같은 값이면 참조를 유지해 리렌더를 막는다 (리사이즈 중 초당 수십 번 불린다)
+          : next
+      );
+    };
+    const syncRemoteFit = () => {
+      if (remoteFitRaf !== null) return;
+      remoteFitRaf = requestAnimationFrame(measureRemoteFit);
+    };
+    syncRemoteFitRef.current = syncRemoteFit;
 
     // 창으로 돌아오면 내 화면 크기를 다시 주장한다 — MO 가 폰 크기로 줄여 둔 채면
     // 데스크톱에 빈 공간이 남고 좁게 보인다(크기 공유는 '마지막에 주장한 쪽' 기준).
@@ -693,6 +779,8 @@ export const TerminalView = memo(function TerminalView({
     return () => {
       disposed = true;
       reclaimRef.current = null;
+      syncRemoteFitRef.current = null;
+      if (remoteFitRaf !== null) cancelAnimationFrame(remoteFitRaf);
       onScrolledChangeRef.current(id, false); // 상단 바의 [맨 아래로] 잔존 방지
       ro.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
@@ -723,6 +811,7 @@ export const TerminalView = memo(function TerminalView({
     if (term.options.fontSize === fontSize) return;
     term.options.fontSize = fontSize;
     fitRef.current?.fit();
+    syncRemoteFitRef.current?.(); // 글자를 키우면 내가 제안하는 행·열 수도 달라진다
   }, [fontSize]);
 
   // 보이게 된 순간 — 숨어 있는 동안 크기를 주장하지 않았으므로 여기서 되찾는다.
@@ -733,6 +822,7 @@ export const TerminalView = memo(function TerminalView({
     if (!visible) return;
     fitRef.current?.fit();
     reclaimRef.current?.();
+    syncRemoteFitRef.current?.(); // 숨어 있는 동안은 재지 않았다
     // 숨어 있는 동안 들어온 출력이 그리다 만 프레임으로 남아 있을 수 있어 전체를 다시 그린다.
     //
     // ⚠️ 여기서 `clearTextureAtlas()` 를 부르면 안 된다 — 아틀라스는 pane 사이 공유물이라
@@ -833,6 +923,7 @@ export const TerminalView = memo(function TerminalView({
 
   return (
     <div
+      ref={paneRef}
       className={[
         'terminal__pane',
         splitStyle ? 'terminal__pane--split' : '',
@@ -963,6 +1054,32 @@ export const TerminalView = memo(function TerminalView({
       {fileDragOver && (
         <div className="terminal__file-drop">
           <span className="terminal__file-drop-label">놓으면 경로 입력</span>
+        </div>
+      )}
+
+      {/* 폰이 맞춰 둔 화면 밖 여백 — 클릭을 가로채지 않는 순수 표시 레이어.
+          ⚠️ host 안이 아니라 pane 자식이다 — host 내부는 xterm 이 소유하는 DOM 이라
+          React 가 자식을 끼우면 재조정이 그 트리를 건드릴 수 있다. */}
+      {remoteFit && (
+        <div
+          className="terminal__remote-fit"
+          style={
+            {
+              '--remote-fit-w': `${remoteFit.w}px`,
+              '--remote-fit-h': `${remoteFit.h}px`,
+            } as CSSProperties
+          }
+          aria-hidden
+        >
+          <span
+            className={
+              'terminal__remote-fit-badge' +
+              (remoteFit.badgeBelow ? ' terminal__remote-fit-badge--below' : '')
+            }
+          >
+            <Icon name="smartphone" size={12} />
+            폰 화면 {remoteFit.cols}×{remoteFit.rows}
+          </span>
         </div>
       )}
 
