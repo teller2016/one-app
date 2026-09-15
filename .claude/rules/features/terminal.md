@@ -23,6 +23,7 @@ paths:
 - ⚠️ tmux 타깃 `=이름` 정확 매칭은 **target-session 계열(has/kill/attach)에서만** 검증됨 — `send-keys` 등 pane 타깃엔 안 먹는다(3.7b 실측). pane id 는 세션에 캐시한다.
 - 세션 [x] = `kill-session`(sidecar 제거), `before-quit` 은 **detach 만**(sidecar 유지). 외부 detach 로 클라이언트만 죽으면 `has-session` 확인 후 조용히 재attach.
 - 미설치면 직접 spawn 폴백(영속 없음, 새 세션 모달에 설치 힌트, `terminal:backend` IPC).
+- ⚠️ **`list-sessions` 는 세션 이름순**(`oneapp-<랜덤 id>` → 사실상 무작위)이다 — `restoreSessions()` 는 sidecar `createdAt` 순으로 정렬해 담는다(Map 삽입 순서 = 탭 기본 순서). 정렬을 빼면 재시작마다 탭 순서가 뒤섞인다(2026-09-15).
 
 ## 자동 실행 명령 (에이전트 시작)
 - ⚠️ **명령을 PTY write / `send-keys` 로 주입하지 말 것** — zsh ZLE 초기화·tmux DA 협상과 경합해 입력이 깨진다(send-keys 도 동일 — 되돌린 시도, 다시 가지 말 것). `new-session` 의 **shell-command 인자**로 넘긴다(`launchShellCommand()`).

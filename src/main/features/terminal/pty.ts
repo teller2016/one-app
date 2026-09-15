@@ -674,7 +674,15 @@ export async function restoreSessions(): Promise<void> {
   }
   const now = Date.now();
   let restored = false;
-  for (const name of live) {
+  // ⚠️ list-sessions 는 세션 이름(oneapp-<랜덤 id>)순으로 나열해 생성 순서와 무관하다 —
+  // 그대로 Map 에 담으면 삽입 순서(= 탭 기본 순서)가 재시작마다 뒤섞인다(2026-09-15 신고).
+  // sidecar 의 createdAt 순으로 복원해 생성 순서를 지킨다. 메타 없는 고아 세션은 뒤로.
+  const createdAtOf = (name: string): number => {
+    const id = sessionIdFromTmuxName(name);
+    return (id ? persisted.get(id)?.createdAt : undefined) ?? Number.MAX_SAFE_INTEGER;
+  };
+  const ordered = [...live].sort((a, b) => createdAtOf(a) - createdAtOf(b));
+  for (const name of ordered) {
     const id = sessionIdFromTmuxName(name);
     if (!id || sessions.has(id)) continue;
     const meta = persisted.get(id);
