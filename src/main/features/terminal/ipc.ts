@@ -59,17 +59,13 @@ function updateDockBadge(sessions: TerminalSessionInfo[]) {
 
 /** 터미널 관련 IPC 핸들러 등록 */
 export function registerTerminalIpc() {
-  // 데스크톱 attach 추적 — pane 이 떠 있는 세션에만 terminal:data 를 방송한다.
+  // 데스크톱 attach 추적 — pane 이 떠 있는 세션의 출력을, **그 pane 을 띄운 창에만** 보낸다.
   // 없으면 다른 섹션(Jira 등)에 있어 리스너가 0개여도 세션당 최대 62 msg/s 를
   // 계속 직렬화·전송했다(2026-08-07 성능 감사). MO(WS)는 server.ts 가 소켓별
   // attachedId 로 자체 필터하므로 이 게이트와 무관하다.
   // ⚠️ 창(sender)별로 나눠 들어야 한다 — 전역 Set 하나면 창 하나의 파괴·리로드
   // 정리가 다른 창(팝아웃)이 attach 한 세션의 방송까지 끊는다.
   const attachedBySender = new Map<Electron.WebContents, Set<string>>();
-  const isDesktopAttached = (id: string): boolean => {
-    for (const ids of attachedBySender.values()) if (ids.has(id)) return true;
-    return false;
-  };
 
   ipcMain.handle('terminal:list', () => listSessions());
   ipcMain.handle('terminal:create', (_e, opts: TerminalCreateInput) =>
@@ -169,9 +165,25 @@ export function registerTerminalIpc() {
   });
 
   // 세션 이벤트를 모든 창에 push (모바일 WS 는 server.ts 가 별도 구독).
-  // 출력은 데스크톱 pane 이 attach 한 세션만 — 안 보는 출력은 보내지 않는다.
+  // ⚠️ 출력만은 broadcast 가 아니라 **그 세션을 attach 한 창에만** 보낸다 — broadcast 는
+  // 모든 BrowserWindow 에 send 하므로, 팝아웃이 떠 있으면 메인 창이 보는 세션의 chunk 가
+  // 팝아웃에도(그 반대도) 전송돼 창 수만큼 직렬화·IPC 가 곱해진다. 받는 쪽이 id 로 버릴 뿐
+  // 비용은 이미 치른 뒤다(2026-09-15 성능 감사). 폰은 `/term` 소켓이 따로 받으므로 이 채널을
+  // broadcast 로 흘릴 필요가 없다 — rpc 브리지도 고빈도 채널은 구독 목록에서 버린다(rpc.ts).
   onTerminalData((id, data, seq) => {
-    if (isDesktopAttached(id)) broadcast('terminal:data', { id, data, seq });
+    for (const [sender, ids] of attachedBySender) {
+      if (!ids.has(id)) continue;
+      // 파괴된 sender 정리 — 'destroyed' 가 정본이지만 한 번이라도 유실되면 Map 에 영영 남는다
+      if (sender.isDestroyed()) {
+        attachedBySender.delete(sender);
+        continue;
+      }
+      try {
+        sender.send('terminal:data', { id, data, seq });
+      } catch {
+        // 창 파괴 직후의 종료 타이밍 예외 — 남은 창 전파가 끊기지 않게 삼킨다(broadcast 와 같은 규칙)
+      }
+    }
   });
   onTerminalExit((id, exitCode) => {
     for (const ids of attachedBySender.values()) ids.delete(id);
