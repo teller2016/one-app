@@ -366,8 +366,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 작업 프롬프트(md) 읽기 — 아침에 Claude Code 에 붙여넣을 작업 지시문
     getPrompt: (key: string) => ipcRenderer.invoke("nightwatch:prompt", key),
     // 미션 진행 로그 tail (실행 중 라이브 표시 + 사후 확인)
-    getMissionLog: (key: string) =>
-      ipcRenderer.invoke("nightwatch:mission-log", key),
+    // knownSize 를 주면 로그가 그대로일 때 본문 없이 unchanged 로 온다 (3초 폴링의 정상 경로)
+    getMissionLog: (key: string, knownSize?: number) =>
+      ipcRenderer.invoke("nightwatch:mission-log", key, knownSize),
     // 실행 로그 tail
     getLog: () => ipcRenderer.invoke("nightwatch:log"),
   },

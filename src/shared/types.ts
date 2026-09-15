@@ -1150,6 +1150,15 @@ export type NightwatchTextResult = {
   error?: string;
 };
 
+/** 미션 로그 tail — 3초 폴링이라 **변화 없음**이 정상 응답이다.
+ *  호출부는 받은 `size` 를 다음 호출에 그대로 돌려주고, 크기가 같으면 본문 없이 `unchanged` 로 온다. */
+export type NightwatchMissionLogResult = NightwatchTextResult & {
+  /** 이번에 읽은 시점의 로그 파일 크기(byte) — 다음 호출의 knownSize */
+  size?: number;
+  /** knownSize 와 같아 본문을 싣지 않았다 — 화면을 그대로 두면 된다 */
+  unchanged?: boolean;
+};
+
 // ── 메일 (비즈박스 그룹웨어) ──
 
 /** 메일 목록 폴더 — 받은편지함 / 스팸메일함 */

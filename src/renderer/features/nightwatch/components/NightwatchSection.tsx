@@ -154,6 +154,7 @@ export function NightwatchSection() {
     if (!queued) {
       setAnalyzing(key);
       setMissionLog("");
+      logSizeRef.current = undefined; // 새 미션 — 이전 로그의 크기 기준을 버린다
     }
     try {
       // 직접 실행이면 미션이 끝날 때까지(수 분~타임아웃) promise 가 유지된다
@@ -327,14 +328,29 @@ export function NightwatchSection() {
   // 실행 중 미션 진행 로그 라이브 tail (3초 폴링)
   const runningKeyRef = useRef(runningKey);
   runningKeyRef.current = runningKey;
+  /** 직전에 받은 로그 크기 — main 이 이 값으로 '변화 없음'을 판정해 본문을 싣지 않는다.
+   *  티켓이 바뀌면 남의 크기가 되므로 함께 리셋한다(아래 effect). */
+  const logSizeRef = useRef<number | undefined>(undefined);
   const pollMissionLog = useCallback(() => {
     const key = runningKey;
     if (!key) return;
-    void window.oneApp.nightwatch.getMissionLog(key).then((res) => {
-      // 응답이 오는 사이 다른 티켓으로 넘어갔으면 그 결과는 버린다
-      if (runningKeyRef.current !== key) return;
-      if (res.ok && res.content) setMissionLog(res.content);
-    });
+    void window.oneApp.nightwatch
+      .getMissionLog(key, logSizeRef.current)
+      .then((res) => {
+        // 응답이 오는 사이 다른 티켓으로 넘어갔으면 그 결과는 버린다 (크기도 남의 것이 된다)
+        if (runningKeyRef.current !== key) return;
+        if (!res.ok) return;
+        logSizeRef.current = res.size;
+        // 폴링의 정상 경로 — 로그가 그대로면 setState 를 하지 않아 리렌더도 없다
+        if (res.unchanged) return;
+        if (res.content) setMissionLog(res.content);
+      });
+  }, [runningKey]);
+
+  // 보는 티켓이 바뀌면 크기 기준을 버린다 — 안 그러면 새 티켓의 첫 응답이 남의 크기와
+  // 우연히 같을 때 unchanged 로 와서 이전 티켓 로그가 화면에 남는다
+  useEffect(() => {
+    logSizeRef.current = undefined;
   }, [runningKey]);
   usePolling(pollMissionLog, 3_000, { enabled: !!runningKey });
 

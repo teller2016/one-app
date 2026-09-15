@@ -69,6 +69,7 @@ import type {
   NightwatchConfig,
   NightwatchCandidatesResult,
   NightwatchCommandResult,
+  NightwatchMissionLogResult,
   NightwatchTextResult,
   MailListQuery,
   MailInboxResult,
@@ -303,7 +304,10 @@ declare global {
         deleteTicket: (key: string) => Promise<NightwatchCommandResult>;
         getReport: (key: string) => Promise<NightwatchTextResult>;
         getPrompt: (key: string) => Promise<NightwatchTextResult>;
-        getMissionLog: (key: string) => Promise<NightwatchTextResult>;
+        getMissionLog: (
+          key: string,
+          knownSize?: number
+        ) => Promise<NightwatchMissionLogResult>;
         getLog: () => Promise<NightwatchTextResult>;
       };
       changes: {

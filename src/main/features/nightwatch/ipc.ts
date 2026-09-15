@@ -67,8 +67,14 @@ export function registerNightwatchIpc() {
   ipcMain.handle("nightwatch:prompt", (_e, key: string) =>
     readNightwatchPrompt(String(key))
   );
-  ipcMain.handle("nightwatch:mission-log", (_e, key: string) =>
-    readMissionLog(String(key))
+  // knownSize — 렌더러가 직전에 받은 로그 크기. 그대로면 본문 없이 unchanged 로 답한다
+  ipcMain.handle(
+    "nightwatch:mission-log",
+    (_e, key: string, knownSize?: number) =>
+      readMissionLog(
+        String(key),
+        typeof knownSize === "number" ? knownSize : undefined
+      )
   );
   ipcMain.handle("nightwatch:log", () => readNightwatchLog());
 }

@@ -8,6 +8,7 @@ import type {
   NightwatchCandidatesResult,
   NightwatchCommandResult,
   NightwatchConfig,
+  NightwatchMissionLogResult,
   NightwatchStatus,
   NightwatchTextResult,
   NightwatchTicket,
@@ -720,18 +721,58 @@ export function readNightwatchPrompt(key: string): NightwatchTextResult {
   }
 }
 
-/** 미션 진행 로그 tail — 실행 중 UI 라이브 표시 + 사후 확인 공용 */
-export function readMissionLog(key: string): NightwatchTextResult {
+/** 화면에 쓰는 줄 수 — 이만큼만 보이므로 파일 전체를 읽고 버릴 이유가 없다 */
+const MISSION_LOG_TAIL_LINES = 200;
+/** 그 200줄을 확보하기 위해 끝에서 읽는 최대 바이트(줄당 600B 여유) */
+const MISSION_LOG_TAIL_BYTES = 128 * 1024;
+
+/**
+ * 미션 진행 로그 tail — 실행 중 UI 라이브 표시(3초 폴링) + 사후 확인 공용.
+ *
+ * ⚠️ `readFileSync` 로 통째 읽지 않는다 — 미션이 길어질수록 로그가 자라는데 화면에 쓰는 건
+ * 마지막 200줄뿐이라, 3초마다 파일 전체를 읽고 UTF-8 디코딩하던 비용이 선형으로 늘었다
+ * (2026-09-15 성능 감사). 끝에서 필요한 만큼만 읽고, 크기가 그대로면 본문조차 만들지 않는다.
+ */
+export function readMissionLog(
+  key: string,
+  knownSize?: number
+): NightwatchMissionLogResult {
   if (!TICKET_KEY_RE.test(key)) {
     return { ok: false, error: "잘못된 티켓 키입니다." };
   }
+  let fd: number | null = null;
   try {
-    const raw = fs
-      .readFileSync(path.join(nwPaths().logs, `${key}.mission.log`), "utf8")
-      .trimEnd();
-    return { ok: true, content: raw.split("\n").slice(-200).join("\n") };
+    fd = fs.openSync(path.join(nwPaths().logs, `${key}.mission.log`), "r");
+    const size = fs.fstatSync(fd).size;
+    // 폴링의 정상 경로 — 크기가 그대로면 읽지도, 보내지도 않는다.
+    // (파일이 줄었으면 knownSize 와 다르므로 아래에서 자연히 전체 tail 을 다시 보낸다)
+    if (typeof knownSize === "number" && knownSize === size) {
+      return { ok: true, unchanged: true, size };
+    }
+    const start = Math.max(0, size - MISSION_LOG_TAIL_BYTES);
+    const buf = Buffer.allocUnsafe(size - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    let text = buf.toString("utf8");
+    // 끝에서 잘라 읽었으면 첫 줄은 버린다 — 줄 중간에서 시작해 깨져 있다(한글이면 글자까지)
+    if (start > 0) {
+      const nl = text.indexOf("\n");
+      text = nl >= 0 ? text.slice(nl + 1) : text;
+    }
+    return {
+      ok: true,
+      size,
+      content: text.trimEnd().split("\n").slice(-MISSION_LOG_TAIL_LINES).join("\n"),
+    };
   } catch {
     return { ok: false, error: "미션 로그가 없습니다." };
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // 이미 닫혔거나 열리지 않은 fd — 무시
+      }
+    }
   }
 }
 
