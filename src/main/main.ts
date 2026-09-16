@@ -10,6 +10,7 @@ import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
+import { startPowerWatch } from "./features/power";
 import {
   getNotifyWindow,
   setNotifyWindow,
@@ -237,6 +238,8 @@ app.on("ready", () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
+  // 잠자기 상태 감시 — 덮개 닫힘 뒤 다크웨이크 동안 폴러를 멈추고, 복귀 때 폭주면 알린다
+  startPowerWatch();
 });
 
 // 앱 종료 시 PTY 클라이언트·MO 서버 정리 — tmux 백엔드 세션은 서버에 남아

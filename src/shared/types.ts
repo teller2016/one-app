@@ -1663,3 +1663,9 @@ export type ChangesCommitResult = {
   hash?: string; // 만들어진 커밋 축약 해시
   error?: string;
 };
+
+/** 시스템 잠자기 상태 — main `features/power` 가 `power:state` 로 broadcast 한다 */
+export type PowerState = {
+  /** true = 잠자기 중(덮개 닫힘 뒤의 다크웨이크 포함). 사용자가 깨운 완전 복귀에만 false 로 돌아온다 */
+  asleep: boolean;
+};

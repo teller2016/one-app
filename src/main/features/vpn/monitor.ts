@@ -6,6 +6,7 @@
 import { app, powerMonitor } from 'electron';
 import os from 'node:os';
 import { notify, sendToast } from '../notify/notify';
+import { isSystemAsleep } from '../power';
 import {
   IFACE_POLL_MS,
   IFACE_SETTLE_MS,
@@ -98,6 +99,7 @@ function disarm() {
 }
 
 function checkInterfaces() {
+  if (isSystemAsleep()) return; // 다크웨이크의 반쪽짜리 네트워크 상태로 판정하지 않는다 — 복귀 뒤 다음 틱이 본다
   const next = interfaceFingerprint(os.networkInterfaces());
   if (next === fingerprint) return;
   fingerprint = next;
@@ -111,6 +113,7 @@ function checkInterfaces() {
 }
 
 async function runProbe() {
+  if (isSystemAsleep()) return; // 잠자기 중 프로브는 잠든 소켓의 실패만 세운다 (resume 유예와 별개로 아예 돌지 않는다)
   if (getVpnStatus().state !== 'connected') return;
   if (probing) {
     rerunRequested = true;

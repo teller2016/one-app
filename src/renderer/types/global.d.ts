@@ -105,6 +105,7 @@ import type {
   TerminalDragState,
   TerminalPopoutOpenInput,
   TerminalWindowInfo,
+  PowerState,
 } from '../../shared/types';
 
 declare global {
@@ -439,6 +440,11 @@ declare global {
         onReveal?: (
           cb: (req: { sessionId: string; cwd: string }) => void,
         ) => () => void;
+      };
+      // 시스템 잠자기 상태 구독 (main features/power — lib/powerState.ts 가 쓴다).
+      // ?. 옵셔널 — 구 preload(재시작 전)·폰 셸에는 없다
+      power?: {
+        onState: (cb: (state: PowerState) => void) => () => void;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

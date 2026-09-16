@@ -109,6 +109,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/jira.md` | jira | 내 이슈·주간 활동·[작업] femc 연동 |
 | `features/nightwatch.md` | nightwatch | 티켓 무인 분석 미션·읽기전용 계약 |
 | `features/system.md` | settings · vpn · mirror · notify · applink | 위젯·알림 인프라·adb 함정 |
+| `features/power.md` | power · `renderer/lib/powerState.ts` | 잠자기 상태 감시(다크웨이크 구분)·깨어남 폭주 경고·잠자기 중 폴링 중단 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
 **스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)

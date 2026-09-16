@@ -6,6 +6,7 @@ import { runAttendance, getKnownAttendanceToday } from './attend';
 import { getReminderConfig } from './reminders';
 import { getCredentials } from '../settings/store';
 import { notify } from '../notify/notify';
+import { isSystemAsleep } from '../power';
 import type { AttendanceInfo } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { readUserJson, writeUserJson } from '../../lib/store';
@@ -226,6 +227,9 @@ function pushStamping(action: 'come' | 'leave' | null) {
 }
 
 function tick() {
+  // 잠자기(다크웨이크 포함) 중엔 아무것도 하지 않는다 — 덮개 닫힌 채 알럿을 띄워 봤자 볼 수 없고,
+  // 알럿이 창 포커스를 뺏으면 복귀 판정까지 흔든다. 복귀 뒤 다음 틱이 그대로 잡는다
+  if (isSystemAsleep()) return;
   const now = new Date();
   const dateKey = localDateKey(now);
   if (dateKey !== stateDate) {

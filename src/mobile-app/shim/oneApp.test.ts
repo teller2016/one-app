@@ -30,6 +30,8 @@ const DESKTOP_ONLY: Record<string, string> = {
   'jira.prepareWork': 'StartWorkModal — 맥에 femc 세션을 만드는 흐름. 진입 버튼을 mo.scss(.jira__work/.jira-view__work)가 숨긴다',
   'jira.workAccounts': 'StartWorkModal — 위와 같음',
   approval: 'OvertimeModal(야근 결재) — 상신 흐름이라 mo.scss(.sbw__overtime)가 진입 버튼을 숨긴다',
+  power:
+    'lib/powerState.ts 가 `window.oneApp?.power` 옵셔널 가드로 부른다 — 맥의 잠자기 상태로 usePolling 을 멈추는 용도. 폰은 맥이 잠들면 WS 자체가 끊기고 복귀 신호도 못 받아 멈추면 영영 안 풀리므로 항상 깨어 있는 것으로 본다',
 };
 
 /** SPEC 에 선언해 두되 main 이 **의도적으로** 열지 않는 채널 — 브리지가 거절 문구를 돌려주게 하려는 선언 */

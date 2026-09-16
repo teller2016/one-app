@@ -166,6 +166,13 @@ Network service crashed or was terminated, restarting
 Error sending from webFrameMain: Render frame was disposed before WebFrameMain could be accessed
     at broadcast (.vite/build/main.js:…)  ← 스택에 broadcast·node-pty flush 가 찍힌다
 ```
+`electron-forge start` 를 먼저 죽이면 Vite 서버가 사라져 렌더러 재로드가 실패한 줄도 함께 찍힌다(2026-09-17 실측) —
+```
+[main] 렌더러 종료: killed 15
+(node:<pid>) electron: Failed to load URL: http://localhost:5173/ with error: ERR_CONNECTION_REFUSED
+```
+Electron 본체는 SIGTERM 뒤 몇 초 살아 있을 수 있으니 `pkill` 뒤 3초쯤 기다렸다가 `pgrep` 으로 확인하고 남았으면 한 번 더 보낸다.
+
 마지막 것은 **코드 결함이 아니다.** `main/lib/broadcast.ts` 는 이미 `isDestroyed()` 체크 + `try/catch` 를 하고 있는데, `webContents.send` 는 동기로 던지지 않고 **Electron 내부가 자체 `console.error` 로 찍는다** — 그래서 잡히지 않는다. 종료 중 렌더러가 먼저 죽고 pty flush 가 남아 발생한다.
 > ⚠️ 단, **종료가 아닌 평상시에 이 로그가 반복되면 조사할 것** — 팝아웃 창을 닫은 뒤에도 그 창으로 계속 보내고 있다는 신호일 수 있다.
 

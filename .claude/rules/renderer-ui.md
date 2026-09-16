@@ -51,6 +51,7 @@ paths:
 - 주기 폴링·시계 틱은 `lib/usePolling.ts`(`usePolling`·`useTick`)
   - ⚠️ **`usePolling` 에 인라인 화살표(`() => void refresh()`)를 넘기지 말 것** — 매 렌더마다 콜백 identity 가 바뀌어 effect 가 인터벌을 재시작하며 `immediate` 즉시 실행을 반복하고, 응답의 setState 가 다시 렌더를 일으켜 **IPC 왕복 주기(수십 ms)로 폴링이 폭주**한다(2026-08-06 변경사항 diff CPU 폭주 실측 원인). 반드시 `useCallback` 으로 안정화한 콜백을 그대로 넘긴다. (`immediate: false` 여도 안전하지 않다 — 인터벌이 계속 리셋돼 **폴링이 한 번도 발화하지 않는** 반대 증상이 된다. 2026-08-07 터미널 워크트리 폴링 실측.)
   - 두 훅 모두 **창 활성(보임+포커스) 인지**가 내장돼 있다(2026-08-07) — 비활성이면 `usePolling` 은 주기가 6배로 늘고 `useTick` 은 멈추며, 복귀 시 즉시 1회 따라잡는다. 호출부에서 visibility 처리를 중복 구현하지 말 것.
+  - **시스템 잠자기(덮개 닫힘 뒤 다크웨이크 포함) 중엔 `usePolling` 이 틱을 건너뛴다**(2026-09-17, `lib/powerState.ts` ← main `features/power` 의 `power:state`). 창이 가려져도 타이머는 다크웨이크마다 돌아 폴링이 헛돌았다. 사용자가 깨운 완전 복귀에 즉시 1회 따라잡는다 — 호출부에서 잠자기 처리를 따로 하지 말 것. 상세는 `features/power` 규칙.
 - 조회 한 건의 loading·error·data 는 `lib/useAsync.ts`(`useAsync(fn, {immediate})`) — 세대 카운터가
   **늦게 도착한 응답이 최신 화면을 덮어쓰는 문제**까지 막는다(호출부가 ref 로 손수 방어하던 것).
   ⚠️ `usePolling` 과 같은 규칙 — `fn` 은 `useCallback` 으로 안정화해 넘긴다. IPC 의 `{ok, error}`

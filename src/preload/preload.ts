@@ -39,6 +39,7 @@ import type {
   WorktreeAddInput,
   NightwatchAnalyzeOpts,
   NightwatchConfig,
+  PowerState,
 } from "../shared/types";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 // lite(standalone/lite)에도 실리는 브리지는 bridges/ 슬라이스로 조립한다 — 채널 문자열은 그쪽 한 곳에만
@@ -587,6 +588,14 @@ contextBridge.exposeInMainWorld("oneApp", {
   // 알림 미리보기 — 샘플 데스크톱 알림을 즉시 띄운다 (권한 확인·모양 확인용)
   testNotification: () => ipcRenderer.invoke("notify:test"),
   // 기본 브라우저로 링크 열기 (http/https 만 허용)
+  // 시스템 잠자기 상태 구독 (main features/power) — 덮개를 닫은 뒤의 다크웨이크 동안 폴러가 헛돌지 않게
+  power: {
+    onState: (cb: (state: PowerState) => void) => {
+      const listener = (_e: unknown, state: PowerState) => cb(state);
+      ipcRenderer.on("power:state", listener);
+      return () => ipcRenderer.removeListener("power:state", listener);
+    },
+  },
   openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
   // 드래그 앤 드롭된 File 객체의 실제 경로 — 렌더러에서는 File.path 를 읽을 수 없고
   // (Electron 32 에서 제거) webUtils 는 preload 에서만 접근 가능하다.
