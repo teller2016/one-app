@@ -5,7 +5,12 @@
 // 런타임에 "No handler registered" 로 터졌다. 인터페이스를 구현과 같은 파일에 두어 preload 와
 // 렌더러 타입(global.d.ts)이 같은 계약을 가리키게 한다.
 import type { IpcRenderer } from 'electron';
-import type { AppSettingsView, SaveSettingsInput, ThemePref } from '../../shared/types';
+import type {
+  AppSettingsView,
+  NotifySoundKind,
+  SaveSettingsInput,
+  ThemePref,
+} from '../../shared/types';
 
 export interface SettingsBridge {
   /** 현재 설정 조회 (비밀번호 값은 오지 않고 설정 여부만) */
@@ -14,10 +19,24 @@ export interface SettingsBridge {
   set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
   /** 테마만 즉시 저장 (다음 실행의 창 배경색 결정에 main 이 읽음) */
   setTheme: (theme: ThemePref) => Promise<AppSettingsView>;
+  /** 알림음 — 목록·미리듣기·선택 저장 (선택은 [저장] 버튼 없이 즉시 저장) */
+  sounds: {
+    list: () => Promise<string[]>;
+    preview: (name: string) => Promise<{ ok: boolean }>;
+    set: (
+      kind: NotifySoundKind,
+      name: string,
+    ) => Promise<{ ok: boolean; sounds: Record<NotifySoundKind, string> }>;
+  };
 }
 
 export const settingsBridge = (ipcRenderer: IpcRenderer): SettingsBridge => ({
   get: () => ipcRenderer.invoke('settings:get'),
   set: (input) => ipcRenderer.invoke('settings:set', input),
   setTheme: (theme) => ipcRenderer.invoke('settings:theme:set', theme),
+  sounds: {
+    list: () => ipcRenderer.invoke('settings:sounds:list'),
+    preview: (name) => ipcRenderer.invoke('settings:sounds:preview', name),
+    set: (kind, name) => ipcRenderer.invoke('settings:sounds:set', kind, name),
+  },
 });

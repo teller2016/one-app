@@ -1,4 +1,3 @@
-import { execFile } from 'node:child_process';
 import { app, ipcMain, shell } from 'electron';
 import type {
   TerminalCreateInput,
@@ -8,9 +7,11 @@ import type {
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { setWaitingBadge } from '../../lib/dockBadge';
+import { playSound } from '../../lib/sound';
 import { whenSecretsReady } from '../../lib/store';
 import { sleep } from '../../lib/util';
 import { notifyToast, sendToast } from '../notify/notify';
+import { getNotifySound } from '../settings/store';
 import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
 import { sessionLocation, sessionLocationLabel } from './location';
@@ -203,11 +204,8 @@ export function registerTerminalIpc() {
   // 입력대기 알림 — 뱃지(사이드바·독)는 sessions 브로드캐스트가 담당하고, 여기선 강도별 추가 신호만
   onAgentWaiting((info) => {
     const level = getNotifyLevel();
-    // 시스템 경고음(shell.beep) 대신 전용 알림음 — 다른 앱 경고음과 구분된다
-    if (level === 'sound')
-      execFile('afplay', ['/System/Library/Sounds/Blow.aiff'], () => {
-        // 재생 실패는 무시 — 소리가 안 나도 뱃지·토스트는 그대로 동작한다
-      });
+    // 시스템 경고음(shell.beep) 대신 전용 알림음 — 다른 앱 경고음·다른 기능 알림음과 구분된다
+    if (level === 'sound') playSound(getNotifySound('terminalWaiting'));
     // 토스트는 강도와 무관한 기본 표시 — [이동]이 그 세션까지 포커스한다.
     // sticky 지만 dedupeKey 로 세션당 1장만 유지되고, 이미 보고 있는 세션이면
     // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.

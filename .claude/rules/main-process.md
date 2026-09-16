@@ -32,6 +32,12 @@ paths:
   `ownerRepoPartsFromUrl`(조각). ⚠️ `new URL()` 로 파싱하지 말 것 — ssh 주소에서 던진다.
 - userData JSON·safeStorage 암복호화는 `main/lib/store.ts`(`readUserJson`·`writeUserJson`·`encryptSecret`·`decryptSecret`).
 - 전 창 이벤트는 `main/lib/broadcast.ts`.
+- **알림음은 `main/lib/sound.ts`**(`playSound(이름)`·`listSounds()`·`isKnownSound()`) — `afplay` 를
+  직접 spawn 하지 말 것. 목록은 `/System/Library/Sounds` + `~/Library/Sounds` 스캔(60초 캐시)이고,
+  ⚠️ **재생은 스캔 목록에서 찾은 경로로만** 한다 — 이름을 경로로 조립하면 설정 파일·폰에서 온 값이
+  임의 파일을 여는 통로가 된다. 어느 음을 쓸지는 `settings/store.ts` 의 `getNotifySound(kind)` 가
+  답한다(사용자가 환경설정에서 고른다). 자리를 늘리려면 `shared/types.ts` 의 `NotifySoundKind`·
+  `NOTIFY_SOUND_DEFAULTS` 에 키를 더한다 — **기본값은 서로 다른 음으로**(소리만 듣고 구분해야 한다).
 - `sleep`·`localDateKey`·`withTimeout`·`mapLimit`·`shQuote` 은 `main/lib/util.ts`. **`handleShared` 채널의
   번호 인자(PR 번호·빌드 번호)는 `isPositiveInt` 로 검증**한다 — 폰에서 문자열이 올 수 있고 REST 경로에
   그대로 들어간다.

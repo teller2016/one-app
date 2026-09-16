@@ -19,7 +19,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 
 // 본체와 같은 채널·핸들러 — preload 가 노출하는 window.oneApp 의 부분집합과 짝이다
-registerSettingsIpc(); // settings:get · settings:set · settings:theme:set
+registerSettingsIpc(); // settings:get · settings:set · settings:theme:set · settings:sounds:*
 registerApprovalIpc(); // approval:* (야근·휴가·지출결의서·상신함)
 registerJiraReportIpc(); // jira:report:* (프로젝트 목록·조회·저장된 조건)
 registerUpdateIpc(); // update:check — 이 앱만의 채널 (본체엔 없다)

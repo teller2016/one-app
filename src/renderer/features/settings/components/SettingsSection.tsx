@@ -8,6 +8,7 @@ import { Input } from '../../../components/Input';
 import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
+import { Select } from '../../../components/Select';
 import { TextLink } from '../../../components/TextLink';
 import { TimePicker } from '../../../components/TimePicker';
 import { useToast } from '../../../components/Toast';
@@ -15,7 +16,9 @@ import { errMsg } from '../../../lib/errMsg';
 import { AltAccountsCard } from '../../mail';
 import { applyThemePref, getThemePref } from '../../../lib/theme';
 import {
+  NOTIFY_SOUND_DEFAULTS,
   SCHEDULE_START_CONFIG_DEFAULT,
+  type NotifySoundKind,
   type ReminderConfig,
   type DayReminderConfig,
   type ScheduleStartConfig,
@@ -46,6 +49,12 @@ export function SettingsSection() {
   const [hasPassword, setHasPassword] = useState(false);
   const [approvalDept, setApprovalDept] = useState('');
   const [notifyDeploy, setNotifyDeploy] = useState(true);
+  const [notifyMail, setNotifyMail] = useState(true);
+  // 알림음 — 선택값(자리별)과 고를 수 있는 음원 목록
+  const [sounds, setSounds] = useState<Record<NotifySoundKind, string>>(
+    NOTIFY_SOUND_DEFAULTS,
+  );
+  const [soundNames, setSoundNames] = useState<string[]>([]);
   const [autostart, setAutostart] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(getThemePref); // localStorage 미러로 즉시 표시
   const [jiraUrl, setJiraUrl] = useState('');
@@ -88,6 +97,8 @@ export function SettingsSection() {
         setHasPassword(s.hasPassword);
         setApprovalDept(s.approvalDept);
         setNotifyDeploy(s.notifyDeploy);
+        setNotifyMail(s.notifyMail);
+        setSounds(s.sounds);
         setJiraUrl(s.jiraUrl);
         setJiraEmail(s.jiraEmail);
         setHasJiraToken(s.hasJiraToken);
@@ -112,6 +123,11 @@ export function SettingsSection() {
         (prev) =>
           prev || `${what} 설정을 불러오지 못했습니다. 저장 전에 값을 확인하세요.`,
       );
+    // 음원 목록 — 실패해도 선택값은 그대로 두고 드롭다운만 비게 둔다(알림음 자체는 동작한다)
+    window.oneApp?.settings.sounds
+      .list()
+      .then(setSoundNames)
+      .catch(() => setSoundNames([]));
     window.oneApp
       ?.getAutostart()
       .then((r) => setAutostart(r.enabled))
@@ -141,6 +157,14 @@ export function SettingsSection() {
       .then(setSchedStart)
       .catch(warn('일정 시작'));
   }, []);
+
+  // 음원 드롭다운 옵션 — 목록 조회가 실패해도 **지금 값은 보이게** 합쳐 둔다
+  // (빈 목록이면 Select 가 placeholder 만 띄워 마치 설정이 날아간 것처럼 보인다)
+  const soundOptions = [
+    ...new Set([...soundNames, sounds.mail, sounds.terminalWaiting]),
+  ]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ value: name, label: name }));
 
   // 재택 요일 토글 — 오름차순 유지
   const toggleRemoteDay = (day: number, on: boolean) =>
@@ -173,6 +197,16 @@ export function SettingsSection() {
     });
   };
 
+  // 알림음 — 고르는 즉시 들려주고 즉시 저장한다 ([저장] 버튼을 기다리면
+  // "소리는 났는데 저장은 안 된" 상태가 된다)
+  const changeSound = (kind: NotifySoundKind, name: string) => {
+    setSounds((prev) => ({ ...prev, [kind]: name }));
+    void window.oneApp?.settings.sounds.preview(name);
+    window.oneApp?.settings.sounds.set(kind, name).catch(() => {
+      toast('알림음 저장에 실패했습니다', 'fail');
+    });
+  };
+
   // 터미널 입력대기 알림 강도 — 테마처럼 즉시 저장
   const changeTermNotify = (next: TerminalNotifyLevel) => {
     setTermNotify(next);
@@ -198,6 +232,7 @@ export function SettingsSection() {
           password,
           approvalDept,
           notifyDeploy,
+          notifyMail,
           jiraUrl,
           jiraEmail,
           jiraToken,
@@ -208,6 +243,7 @@ export function SettingsSection() {
         });
         setHasPassword(res.hasPassword);
         setNotifyDeploy(res.notifyDeploy);
+        setNotifyMail(res.notifyMail);
         setJiraUrl(res.jiraUrl);
         setJiraEmail(res.jiraEmail);
         setHasJiraToken(res.hasJiraToken);
@@ -343,12 +379,36 @@ export function SettingsSection() {
         icon={<Icon name="bell" size={14} />}
         storageKey="settings:group:notify"
       >
-        <Checkbox
-          checked={notifyDeploy}
-          onChange={(e) => setNotifyDeploy(e.target.checked)}
-          disabled={loading}
-          label="배포가 끝나면 알림 받기 (성공/실패)"
-        />
+        <div className="settings__checks">
+          <Checkbox
+            checked={notifyDeploy}
+            onChange={(e) => setNotifyDeploy(e.target.checked)}
+            disabled={loading}
+            label="배포가 끝나면 알림 받기 (성공/실패)"
+          />
+          <Checkbox
+            checked={notifyMail}
+            onChange={(e) => setNotifyMail(e.target.checked)}
+            disabled={loading}
+            label="새 메일이 오면 소리로 알리기"
+          />
+        </div>
+        <div className="form-row">
+          <span className="form-row__label">메일 알림음</span>
+          <Select
+            small
+            className="settings__sound"
+            options={soundOptions}
+            value={sounds.mail}
+            onChange={(v) => changeSound('mail', v)}
+            disabled={loading || !notifyMail}
+            aria-label="새 메일 알림음"
+          />
+        </div>
+        <p className="note">
+          안읽은 메일 수가 늘면 알림음이 한 번 울립니다 — 메일함을 열어 둔 채 읽을 때는
+          울리지 않고, 앱을 켤 때 쌓여 있던 메일에도 울리지 않습니다. (알림음은 즉시 저장)
+        </p>
         <div className="settings__test-row">
           <Button size="sm" onClick={() => window.oneApp?.testNotification()}>
             테스트 알림 보내기
@@ -372,6 +432,18 @@ export function SettingsSection() {
             ]}
             value={termNotify}
             onChange={changeTermNotify}
+          />
+        </div>
+        <div className="form-row">
+          <span className="form-row__label">알림음</span>
+          <Select
+            small
+            className="settings__sound"
+            options={soundOptions}
+            value={sounds.terminalWaiting}
+            onChange={(v) => changeSound('terminalWaiting', v)}
+            disabled={loading || termNotify === 'badge'}
+            aria-label="터미널 입력대기 알림음"
           />
         </div>
         <p className="note">

@@ -1,7 +1,17 @@
 import { ipcMain, nativeTheme } from 'electron';
 import { handleShared } from '../../lib/moIpc';
-import { getSettingsForRenderer, saveSettings, saveTheme } from './store';
-import type { SaveSettingsInput, ThemePref } from '../../../shared/types';
+import { listSounds, playSound } from '../../lib/sound';
+import {
+  getSettingsForRenderer,
+  saveSettings,
+  saveTheme,
+  setNotifySound,
+} from './store';
+import type {
+  NotifySoundKind,
+  SaveSettingsInput,
+  ThemePref,
+} from '../../../shared/types';
 
 /** 환경설정 관련 IPC 핸들러 등록 */
 export function registerSettingsIpc() {
@@ -19,4 +29,21 @@ export function registerSettingsIpc() {
     nativeTheme.themeSource = theme;
     return saveTheme(theme);
   });
+
+  // ── 알림음 (환경설정 전용 — 맥에서만 소리가 나므로 MO 에는 열지 않는다) ──
+  // 고를 수 있는 음원 목록: /System/Library/Sounds + ~/Library/Sounds 스캔
+  ipcMain.handle('settings:sounds:list', async () => listSounds());
+  // 미리듣기 — 고르는 즉시 들려준다. 목록에 없는 이름은 playSound 가 무시한다
+  ipcMain.handle('settings:sounds:preview', async (_e, name: string) => {
+    playSound(name);
+    return { ok: true };
+  });
+  // 선택 저장 — [저장] 버튼 없이 즉시 저장(테마·터미널 알림 강도와 같은 규칙)
+  ipcMain.handle(
+    'settings:sounds:set',
+    async (_e, kind: NotifySoundKind, name: string) => {
+      const ok = setNotifySound(kind, name);
+      return { ok, sounds: getSettingsForRenderer().sounds };
+    },
+  );
 }

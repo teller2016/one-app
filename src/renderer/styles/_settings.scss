@@ -63,6 +63,24 @@
   margin-top: 12px;
 }
 
+// 체크박스 여러 개를 세로로 쌓는다 — 공용 `.checkbox` 는 `inline-flex` 라
+// 감싸지 않으면 같은 줄에 흘러 붙는다(2026-09-16 알림 그룹).
+.settings__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 14px; // 아래 form-row 와 같은 간격 (form-row 는 margin-top 이 없다)
+}
+
+// 알림음 드롭다운 — 폭을 고정한다. `.select` 는 `width:100%` 라 부모가 정해 주는데,
+// form-row 의 flex 아이템으로 들어가면 내용 폭(≈69px)까지 줄어 음원 이름이 잘렸다.
+// 가장 긴 이름(Submarine) 기준 + 다른 그룹의 Segment 와 비슷한 무게로 180px.
+.settings__sound {
+  flex: 0 0 auto;
+  width: 180px;
+}
+
 // Collapsible 그룹 첫머리 설명 (TSX 인라인 스타일 대체)
 .settings__group-desc {
   margin: 0 0 12px;

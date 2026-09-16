@@ -1,5 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { handleShared } from '../../lib/moIpc';
+import { playSound } from '../../lib/sound';
+import { getNotifySound, isMailNotifyEnabled } from '../settings/store';
 import { getBody, getInbox, getUnreadCount } from './mail';
 import { forgetAltSession, getAuthCode } from './authcode';
 import {
@@ -19,6 +21,22 @@ let unreadInFlight: Promise<UnreadResult> | null = null;
 // 캐시 세대 — 무효화 뒤에 도착하는 "그 전에 나간" 조회 결과는 이미 옛 값이라 캐시에 앉히지 않는다
 let unreadGen = 0;
 
+// 새 메일 알림음의 기준선 — 직전에 확인한 안읽은 수.
+// ⚠️ 첫 조회는 기준선만 잡고 울리지 않는다(앱을 켤 때 쌓여 있던 메일은 '도착'이 아니다).
+let lastUnread: number | null = null;
+
+/**
+ * 안읽은 수를 기준선에 반영하고, **늘었으면** 알림음을 울린다.
+ * 폴링 주체가 여럿(사이드바 위젯·폰)이지만 판정이 이 길목 한 곳이라 창이 몇 개든 소리는 한 번이다.
+ */
+function noteUnread(count: number): void {
+  const prev = lastUnread;
+  lastUnread = count; // 기준선은 알림이 꺼져 있어도 항상 갱신한다 (다시 켰을 때 밀린 메일로 울리지 않게)
+  if (prev === null || count <= prev) return; // 첫 조회 · 변화 없음 · 읽어서 줄어듦
+  if (!isMailNotifyEnabled()) return;
+  playSound(getNotifySound('mail')); // 음원은 환경설정에서 고른다
+}
+
 /**
  * 안읽은 수 캐시 무효화 — 메일을 읽어 서버 카운트가 바뀐 직후에 부른다.
  * ⚠️ 안 비우면 위젯이 로컬에서 −1 한 뒤 도착하는 폴링이 캐시된 읽기 전 값을 되씌워
@@ -36,6 +54,8 @@ function primeUnreadCache(unreadCount: number): void {
     at: Date.now(),
     res: { ok: true, configured: true, unreadCount },
   };
+  // 목록을 여는 순간은 사용자가 메일함을 보고 있는 때다 — 소리 없이 기준선만 맞춘다
+  lastUnread = unreadCount;
 }
 
 async function getUnreadCountCached(): Promise<UnreadResult> {
@@ -46,7 +66,10 @@ async function getUnreadCountCached(): Promise<UnreadResult> {
   const gen = unreadGen;
   const p = getUnreadCount()
     .then((res) => {
-      if (res.ok && gen === unreadGen) unreadCache = { at: Date.now(), res };
+      if (res.ok && gen === unreadGen) {
+        unreadCache = { at: Date.now(), res };
+        noteUnread(res.unreadCount); // 늘었으면 알림음 (세대가 어긋난 옛 응답은 여기 못 온다)
+      }
       return res;
     })
     .finally(() => {

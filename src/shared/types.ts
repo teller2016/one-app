@@ -73,10 +73,25 @@ export type ScheduleNotionRecordResult = {
 /** 테마 설정 — system 은 macOS 화면 모드를 따라간다 */
 export type ThemePref = "system" | "light" | "dark";
 
+/**
+ * 알림음이 붙는 자리 — 값(음원 이름)은 환경설정에서 고른다.
+ * ⚠️ 기본값은 서로 **다른 음**이어야 한다: 소리만 듣고 어느 알림인지 알 수 있는 것이 목적이다.
+ */
+export type NotifySoundKind = "mail" | "terminalWaiting";
+
+export const NOTIFY_SOUND_DEFAULTS: Record<NotifySoundKind, string> = {
+  mail: "Glass", // 새 메일 도착
+  terminalWaiting: "Blow", // 터미널 입력대기
+};
+
+export const NOTIFY_SOUND_KINDS: NotifySoundKind[] = ["mail", "terminalWaiting"];
+
 export type AppSettingsView = {
   bizboxId: string;
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
+  notifyMail: boolean; // 새 메일 도착 알림음 on/off
+  sounds: Record<NotifySoundKind, string>; // 알림음 이름 (미설정이면 기본값으로 해석된 값)
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   jiraEmail: string; // Jira 계정 이메일 (내 이슈 API 인증용, 빈 값이면 비활성)
   hasJiraToken: boolean; // Jira API 토큰 저장 여부 (내 이슈 조회용)
@@ -102,6 +117,7 @@ export type SaveSettingsInput = {
   password?: string; // 빈 값이면 기존 비밀번호 유지
   approvalDept?: string; // 미지정이면 기존 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
+  notifyMail?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   jiraEmail?: string; // 미지정이면 기존 유지
   jiraToken?: string; // 빈 값이면 기존 유지

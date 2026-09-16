@@ -1,9 +1,15 @@
 // 앱 설정 저장 — 비밀번호는 Electron safeStorage(OS 키체인)로 암호화해 저장
 import type {
   AppSettingsView,
+  NotifySoundKind,
   SaveSettingsInput,
   ThemePref,
 } from '../../../shared/types';
+import {
+  NOTIFY_SOUND_DEFAULTS,
+  NOTIFY_SOUND_KINDS,
+} from '../../../shared/types';
+import { isKnownSound } from '../../lib/sound';
 import { normalizeJiraBase } from '../../../shared/jira-url';
 import {
   readUserJson,
@@ -17,6 +23,8 @@ interface StoredSettings {
   bizboxId: string;
   bizboxPasswordEnc?: string; // safeStorage 로 암호화된 비밀번호(base64)
   notifyDeploy?: boolean; // 배포 완료/실패 알림 (기본 on)
+  notifyMail?: boolean; // 새 메일 도착 알림음 (기본 on)
+  sounds?: Partial<Record<NotifySoundKind, string>>; // 알림음 이름 (미설정이면 기본값)
   jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
   jiraEmail?: string; // Jira 계정 이메일 (내 이슈 API 인증)
   jiraTokenEnc?: string; // safeStorage 로 암호화된 Jira API 토큰
@@ -62,6 +70,8 @@ export function getSettingsForRenderer(): AppSettingsView {
     bizboxId: s.bizboxId ?? '',
     hasPassword: !!s.bizboxPasswordEnc,
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
+    notifyMail: s.notifyMail !== false, // 기본값 on
+    sounds: resolveSounds(s.sounds),
     // 저장된 값에 티켓·보드 경로가 붙어 있으면 여기서 정리해 보여준다 — 화면·API 호출·
     // 커밋 이슈 링크가 같은 베이스를 쓰게 한다(다음 저장 때 파일에도 정리된 값이 남는다)
     jiraUrl: normalizeJiraBase(s.jiraUrl ?? ''),
@@ -104,6 +114,9 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   // 알림 토글은 명시적으로 넘어온 경우만 갱신
   if (typeof input.notifyDeploy === 'boolean') {
     next.notifyDeploy = input.notifyDeploy;
+  }
+  if (typeof input.notifyMail === 'boolean') {
+    next.notifyMail = input.notifyMail;
   }
   // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
   if (typeof input.jiraUrl === 'string') {
@@ -159,6 +172,43 @@ export function getJiraApiConfig(): {
 /** 배포 완료 알림이 켜져 있는지 (기본 on) */
 export function isDeployNotifyEnabled(): boolean {
   return readStored().notifyDeploy !== false;
+}
+
+/** 새 메일 도착 알림음이 켜져 있는지 (기본 on) */
+export function isMailNotifyEnabled(): boolean {
+  return readStored().notifyMail !== false;
+}
+
+/**
+ * 저장된 알림음 이름을 자리별로 해석한다 — 미설정이거나 **음원이 사라졌으면 기본값**.
+ * ⚠️ 존재 확인을 빼면 개인 음원(`~/Library/Sounds`)을 지웠을 때 알림이 통째로 무음이 된다.
+ */
+function resolveSounds(
+  stored: Partial<Record<NotifySoundKind, string>> | undefined,
+): Record<NotifySoundKind, string> {
+  const out = {} as Record<NotifySoundKind, string>;
+  for (const kind of NOTIFY_SOUND_KINDS) {
+    const name = stored?.[kind];
+    out[kind] = name && isKnownSound(name) ? name : NOTIFY_SOUND_DEFAULTS[kind];
+  }
+  return out;
+}
+
+/** 그 자리의 알림음 이름 — 알림을 울리는 쪽(mail·terminal)이 부른다 */
+export function getNotifySound(kind: NotifySoundKind): string {
+  return resolveSounds(readStored().sounds)[kind];
+}
+
+/**
+ * 알림음 선택 저장 — 테마·터미널 알림 강도처럼 [저장] 버튼 없이 즉시 저장한다
+ * (고르는 즉시 소리가 나는데 저장이 안 되면 어긋난다).
+ * ⚠️ 목록에 없는 이름은 저장하지 않는다 — 임의 경로가 설정 파일에 들어오는 통로가 된다.
+ */
+export function setNotifySound(kind: NotifySoundKind, name: string): boolean {
+  if (!NOTIFY_SOUND_KINDS.includes(kind) || !isKnownSound(name)) return false;
+  const s = readStored();
+  writeStored({ ...s, sounds: { ...s.sounds, [kind]: name } });
+  return true;
 }
 
 /** 노션 연동 설정 — 토큰·루트 페이지 URL 이 모두 있어야 사용 가능 (아니면 null) */
