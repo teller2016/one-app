@@ -26,7 +26,6 @@ import { getThemePref } from "./features/settings/store";
 import { registerTerminalIpc } from "./features/terminal/ipc";
 import { disposeAll as disposeTerminals } from "./features/terminal/pty";
 import { stopServer as stopTerminalServer } from "./features/terminal/server";
-import { createTray } from "./features/tray/tray";
 import { registerVpnIpc } from "./features/vpn/ipc";
 import { registerWeeklyIpc } from "./features/weekly/ipc";
 import { registerWorkspacesIpc } from "./features/workspaces/ipc";
@@ -238,20 +237,6 @@ app.on("ready", () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
-  // 메뉴바 트레이 — 창이 닫혀 있어도 열기·출퇴근 찍기 가능.
-  // ⚠️ getAllWindows()[0] 을 쓰지 말 것 — 터미널 팝아웃 창이 잡힐 수 있다.
-  // '메인 창' 판정은 setNotifyWindow 로 등록된 참조가 정본이다.
-  createTray(() => {
-    const win = getNotifyWindow();
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-    } else {
-      createWindow();
-    }
-    app.focus({ steal: true });
-  });
 });
 
 // 앱 종료 시 PTY 클라이언트·MO 서버 정리 — tmux 백엔드 세션은 서버에 남아

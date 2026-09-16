@@ -4,7 +4,6 @@ paths:
   - "src/main/features/vpn/**"
   - "src/main/features/mirror/**"
   - "src/main/features/notify/**"
-  - "src/main/features/tray/**"
   - "src/main/features/applink/**"
   - "src/renderer/features/settings/**"
   - "src/renderer/features/vpn/**"
@@ -12,7 +11,7 @@ paths:
   - "src/renderer/features/applink/**"
 ---
 
-# 시스템·위젯 기능 (환경설정 · VPN · 미러링 · 알림 · 트레이 · 딥링크)
+# 시스템·위젯 기능 (환경설정 · VPN · 미러링 · 알림 · 딥링크)
 
 > **사이드바 위젯(VPN·미러링·근태)은 공용 `SidebarWidget` 셸로 감싼다** — 사이드바가 접히면
 > 아이콘 타일만 남고, 누르면 위젯 본체가 오른쪽 팝오버로 펼쳐져 접은 채로 전부 조작된다.
@@ -98,10 +97,11 @@ scrcpy 창을 닫으면 exit 이벤트로 위젯 상태 자동 갱신(`mirror:ch
 - **"연결했는데 기기 인식 안 됨" 의 실제 원인 1위는 `unauthorized`** — 폰 화면이 잠긴 채 케이블을 꽂으면 "USB 디버깅 허용" 팝업이 잠금화면 뒤에 가려지고, 승인 없이 방치되면 `adb devices` 가 `unauthorized` 로 남는다(2026-08-05 실측). "이 컴퓨터에서 항상 허용" 을 체크하지 않으면 재연결마다 반복된다. 해결은 폰 잠금 해제 → 재연결 → 항상 허용 체크(팝업이 안 뜨면 개발자 옵션 → **USB 디버깅 승인 취소** 후 재연결).
 - ⚠️ **파싱에서 이 상태를 버리지 말 것** — 예전 코드가 `unauthorized|offline` 행을 필터로 제외해 `device: null` 로만 만들었고, 위젯이 '기기 없음' 만 띄워 케이블·포트를 의심하게 했다.
 
-## 트레이·자동 시작
-`main/features/tray`
+## 자동 시작
 
-메뉴바 아이콘(항상 표시) — One App 열기 / 출근·퇴근 찍기(확인 대화상자 → `runAttendance` → 결과 알럿 + `attendance:changed` 로 위젯 갱신) / 종료. 창을 닫아도 macOS 에선 앱이 상주하므로 트레이로 복귀.
+> ⚠️ **메뉴바 트레이 아이콘은 쓰지 않는다** — 2026-09-16 사용자 요청으로 `main/features/tray` 를
+> 삭제했다(출퇴근 찍기는 사이드바 근태 위젯에 있고, 창을 다 닫아도 Dock 아이콘 클릭 →
+> `app.on("activate")` 로 복귀한다). 다시 넣자는 제안을 하지 말 것.
 
 **로그인 시 자동 시작**은 환경설정 → 일반 토글(`app:autostart:get/set` IPC, OS 로그인 아이템이 원본이라 파일 저장 없음, 패키징 앱에서 실질 동작).
 

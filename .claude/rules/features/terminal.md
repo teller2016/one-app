@@ -13,7 +13,7 @@ paths:
 > **경위·실측 수치·시도와 폐기 기록은 `docs/terminal-notes.md`** (절 제목 동일). 여기는 지금도 유효한 불변식·함정만 남긴다. 새 함정 발견 시: 여기에 한 줄 요약, 상세는 노트에.
 
 ## 구조
-- **main 의 `pty.ts` 가 PTY 단일 소유자**(`Map<id, 세션>`) — 데스크톱(IPC)·모바일(WS)은 각자 attach. 세션은 창과 무관하게 유지(트레이 상주), tmux 백엔드면 앱 재시작에도 살아남는다.
+- **main 의 `pty.ts` 가 PTY 단일 소유자**(`Map<id, 세션>`) — 데스크톱(IPC)·모바일(WS)은 각자 attach. 세션은 창과 무관하게 유지(창을 닫아도 main 은 산다), tmux 백엔드면 앱 재시작에도 살아남는다.
 - tmux 는 전용 소켓(`-L oneapp`) + 전용 conf — `tmux.ts` 가 시작 시 덮어쓰고 살아있는 서버엔 `source-file` 재적용. 세션 메타는 sidecar `userData/terminal-sessions.json`(평문), 시작 시 `restoreSessions()` 가 `list-sessions` 와 대조해 복원.
 
 ## tmux 백엔드 불변식
@@ -89,7 +89,7 @@ paths:
 - 입력대기 알림 게이트(`isVisibleInPopout`)는 **그 창이 포커스를 갖고 있는가**로 판정한다 — '렌더 중'만 보면 최소화·백그라운드 팝아웃도 true 라 **뒤에 둔 창의 입력대기가 통째로 무음**이 됐다(2026-09-01). 포커스가 곧 판정이므로 `isVisible`·`isMinimized` 를 겹쳐 볼 필요가 없다(포커스된 창은 그럴 수 없고, 앱이 백그라운드면 어느 창도 포커스가 없다).
   - ⚠️ **알럿(`notifyToast`)은 이 게이트를 통과시킨다** — 메인 창도 '보고 있어도 alert 는 나간다'가 규칙인데 여기서 통째로 return 하면 팝아웃 세션만 alert 를 잃는다. 게이트는 `sendToast`(토스트)에만 건다.
   - ⚠️ 떠 있던 토스트 회수는 **팝아웃의 `focus` 에서도 재보고**하고, main 은 **직전 목록과 비교하지 않고 매번** `app:toast:dismiss` 를 보낸다. 창이 뒤에 있는 동안 뜬 토스트는 **화면 세션이 그대로인 채 창만 포커스될 때** 거둬야 하는데, 그때 보고 목록은 직전과 같아 `!prev.includes(id)` 에 전부 걸러졌다(dismiss 는 없는 키에 no-op).
-- 부수 규칙: 트레이·`activate` 의 '메인 창' 판정은 `getNotifyWindow()`(getAllWindows()[0] 금지 — 팝아웃이 잡힘). `setNotifyWindow` 는 메인 창 전용. [이동]·focusReq 는 분리 세션이면 그 창 포커스로 라우팅.
+- 부수 규칙: `activate` 의 '메인 창' 판정은 `getNotifyWindow()`(getAllWindows()[0] 금지 — 팝아웃이 잡힘). `setNotifyWindow` 는 메인 창 전용. [이동]·focusReq 는 분리 세션이면 그 창 포커스로 라우팅.
 
 ## 분할(스플릿) 그룹
 - ⚠️ 아래 규칙(특히 '한 세션 = pane 하나'와 무변화 시 **원본 참조 반환**)은 `lib/layout.test.ts` 가 고정한다 — 트리 함수를 손볼 때는 `npm test` 로 확인할 것(`status.ts` 와 같은 방식).

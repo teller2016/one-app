@@ -382,7 +382,7 @@ icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, s
 
 ## 8. 백로그 (이번 범위 밖)
 
-- ~~`window.confirm` → 앱 내 커스텀 다이얼로그~~ → **완료(2026-07 Confirm 컴포넌트)** — §4 Confirm 참조. 트레이의 네이티브 dialog 확인은 main 프로세스라 유지.
+- ~~`window.confirm` → 앱 내 커스텀 다이얼로그~~ → **완료(2026-07 Confirm 컴포넌트)** — §4 Confirm 참조.
 - 네이티브 폼 컨트롤(checkbox·time 피커·number 스피너) 커스텀 렌더링 — macOS 네이티브와 톤이 맞아 위화감 적음
 - ~~서브내브 frosted glass~~ · ~~BrowserWindow vibrancy~~ → **완료(2026-07 셸 강화)** — §4 셸 참조 · ~~다크 테마 재지원~~ → **완료(2026-07 테마 설정)** — §1 다크 모드 참조
 - 배포 폼 화면 전환 → 모달/사이드 패널 검토

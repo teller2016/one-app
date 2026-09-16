@@ -46,7 +46,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 - **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
 - **사이드바 위젯**: 메일(상단) · 폰 미러링 · VPN · 출퇴근(하단 — 야근 결재 모달 진입점 포함)
 - **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용)
-- **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리) · `tray`
+- **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리)
 
 ## ⚠️ 반드시 지킬 것
 - **진입점 파일명 고정**: `src/main/main.ts`, `src/preload/preload.ts`, `src/renderer/renderer.tsx` 의 **파일 이름**이 빌드 산출물 이름(`main.js`/`preload.js`)이 된다. 바꾸면 실행이 깨진다.
@@ -108,7 +108,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/prs.md` | prs | Gitea PR 목록·생성·머지, 브랜치 API 실측 |
 | `features/jira.md` | jira | 내 이슈·주간 활동·[작업] femc 연동 |
 | `features/nightwatch.md` | nightwatch | 티켓 무인 분석 미션·읽기전용 계약 |
-| `features/system.md` | settings · vpn · mirror · notify · tray · applink | 위젯·알림 인프라·adb 함정 |
+| `features/system.md` | settings · vpn · mirror · notify · applink | 위젯·알림 인프라·adb 함정 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
 **스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)
