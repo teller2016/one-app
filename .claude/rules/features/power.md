@@ -9,8 +9,8 @@ paths:
 `main/features/power` + `renderer/lib/powerState.ts`
 
 > 배경(2026-09-16): 덮개를 닫고 퇴근했는데 맥이 Wi-Fi/BT 칩 사유(`pmset -g log` 의
-> `DarkWake … wifibt SMC.OutboxNotEmpty centauri-beta`)로 **57분 동안 248번** 다크웨이크해 41분을 켜진 채
-> 있었고, 가방 안이라 방열이 안 되어 `Thermal Emergency Sleep` → 강제 종료까지 갔다. 같은 폭주가 전날들에도
+> `DarkWake … wifibt SMC.OutboxNotEmpty centauri-beta`)로 **57분 동안 248번** 다크웨이크했다(잠이 평균 10초 단위로
+> 쪼개져 깨어 있던 합계는 16분이지만 배터리 80→62%). 가방 안이라 방열이 안 되어 `Thermal Emergency Sleep` → 강제 종료까지 갔다. 같은 폭주가 전날들에도
 > 매일 있었다(98회·112회). One App 은 잠자기를 막지 않았지만(assertion·wake request 없음) 폴러 타이머가
 > 다크웨이크마다 헛돌았고, 터미널 안 Claude 세션이 돌린 도커 빌드가 직전까지 돌고 있었다.
 
@@ -42,11 +42,19 @@ paths:
 - `Sleep/Wakes since boot … Dark Wake Count in this sleep cycle:N` 요약 줄은 쓰지 않는다 — 잠든 시각 기준으로
   자를 수 없다. 표본 줄과 규칙은 `wakeLog.test.ts`.
 
+## `pmset -g log` 의 `N secs` 읽는 법
+⚠️ **Sleep 줄 끝의 `N secs` 는 그 잠자기가 이어진 길이, DarkWake/Wake 줄의 `N secs` 는 그 깨어남이 이어진 길이**다
+(다음 줄 시각과 맞춰 보면 확인된다). 처음 조사 때 거꾸로 읽어 "41분 깨어 있었다" 고 보고했다 — 실제는 16분(2026-09-17 정정).
+
 ## 근본 조치는 OS 전원 설정이다
 앱은 감지·절감만 한다. 폭주 자체는 배터리에서도 켜져 있던 **잠자기 중 네트워크 유지**가 Wi-Fi/BT 칩을
 살려 둔 것이 유력해, 사용자가 직접 `sudo pmset -b tcpkeepalive 0 && sudo pmset -b powernap 0` 을 적용했다
 (배터리 전원에만 — 덮개 닫고 배터리일 때 푸시 알림을 못 받는 대신 잠을 잔다). 확인은 다음 덮개 닫기 뒤
 `pmset -g log | grep -c "DarkWake from"` 과 복귀 토스트.
+**2026-09-17 첫 검증**: 02:54 덮개 닫힘 → 10:04 복귀(7시간), `TCPKeepAlive=disabled` 확인, 다크웨이크 86회(그중
+`wifibt centauri-beta` 77회)지만 3~4회 묶음 뒤 1~2시간씩 푹 잠들어 깨어 있던 합계 12분·배터리 80%→80%·발열 없음.
+즉 wifibt 깨우기 자체는 남아 있으나(블루투스 코어 추정) 설정 뒤로는 연쇄가 끊겨 무해하다. 토스트는 시간당 12회로
+임계(15회/h) 아래라 뜨지 않았다 — 의도된 동작.
 
 - ⚠️ 덮개가 **열린** 상태에서 Claude Code 가 작업 중이면 `caffeinate -i -t 300` 을 띄워 유휴 잠자기를 막는다
   (`pmset -g` 에 `sleep prevented by caffeinate`). Claude Code 의 의도된 동작이고 덮개 닫힘 잠자기는 못 막으니
