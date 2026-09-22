@@ -595,6 +595,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.on("power:state", listener);
       return () => ipcRenderer.removeListener("power:state", listener);
     },
+    // 잠잘 때 블루투스 끄기에 필요한 blueutil 이 깔려 있는지 (환경설정 안내용)
+    checkBlueutil: () => ipcRenderer.invoke("power:blueutil:check"),
   },
   openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
   // 드래그 앤 드롭된 File 객체의 실제 경로 — 렌더러에서는 File.path 를 읽을 수 없고

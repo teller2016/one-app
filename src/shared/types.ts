@@ -91,6 +91,11 @@ export type AppSettingsView = {
   hasPassword: boolean;
   notifyDeploy: boolean; // 배포 완료/실패 데스크톱 알림 on/off
   notifyMail: boolean; // 새 메일 도착 알림음 on/off
+  /**
+   * 잠잘 때 블루투스 끄기 on/off (기본 off — 옵트인).
+   * 덮개 닫힘 · 외부 모니터 없음 · 배터리 전원이 모두 참일 때만 실제로 끈다.
+   */
+  sleepBluetoothOff: boolean;
   sounds: Record<NotifySoundKind, string>; // 알림음 이름 (미설정이면 기본값으로 해석된 값)
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   jiraEmail: string; // Jira 계정 이메일 (내 이슈 API 인증용, 빈 값이면 비활성)
@@ -118,6 +123,7 @@ export type SaveSettingsInput = {
   approvalDept?: string; // 미지정이면 기존 유지
   notifyDeploy?: boolean; // 미지정이면 기존 유지
   notifyMail?: boolean; // 미지정이면 기존 유지
+  sleepBluetoothOff?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   jiraEmail?: string; // 미지정이면 기존 유지
   jiraToken?: string; // 빈 값이면 기존 유지

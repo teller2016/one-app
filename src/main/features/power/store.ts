@@ -1,0 +1,33 @@
+// 잠잘 때 블루투스 끄기 — "우리가 껐다" 플래그.
+//
+// ⚠️ 이 플래그를 메모리에만 두면 안 된다. 2026-09-16 처럼 발열로 강제 종료되면 블루투스가
+// 꺼진 채 남고, 다음 실행은 그걸 되돌릴 근거를 잃는다(사용자가 직접 꺼둔 것과 구분이 안 된다).
+// 그래서 userData JSON 에 적어 재시작 뒤에도 복구할 수 있게 한다.
+import { readUserJson, writeUserJson } from '../../lib/store';
+
+const FILE = 'power.json';
+
+interface StoredPower {
+  /** 우리가 블루투스를 끈 시각(ms). 없으면 우리가 끈 적 없다 */
+  btOffAt?: number;
+}
+
+const read = (): StoredPower => readUserJson<StoredPower>(FILE, {});
+
+/** 우리가 껐다고 기록 */
+export function markBluetoothOff(): void {
+  writeUserJson(FILE, { ...read(), btOffAt: Date.now() });
+}
+
+/** 되돌렸으니 기록 삭제 */
+export function clearBluetoothOff(): void {
+  const s = read();
+  if (s.btOffAt === undefined) return;
+  delete s.btOffAt;
+  writeUserJson(FILE, s);
+}
+
+/** 우리가 꺼서 아직 안 되돌린 상태인가 */
+export function didWeTurnBluetoothOff(): boolean {
+  return typeof read().btOffAt === 'number';
+}

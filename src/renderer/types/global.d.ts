@@ -445,6 +445,8 @@ declare global {
       // ?. 옵셔널 — 구 preload(재시작 전)·폰 셸에는 없다
       power?: {
         onState: (cb: (state: PowerState) => void) => () => void;
+        /** 잠잘 때 블루투스 끄기에 필요한 blueutil 설치 여부 (환경설정 안내용) */
+        checkBlueutil?: () => Promise<{ installed: boolean }>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

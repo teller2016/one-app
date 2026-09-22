@@ -10,7 +10,7 @@ import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
-import { startPowerWatch } from "./features/power";
+import { registerPowerIpc, startPowerWatch } from "./features/power";
 import {
   getNotifyWindow,
   setNotifyWindow,
@@ -66,6 +66,7 @@ registerProjectsIpc();
 registerTerminalIpc();
 registerChangesIpc();
 registerWorkspacesIpc();
+registerPowerIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {

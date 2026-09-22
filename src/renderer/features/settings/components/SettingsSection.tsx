@@ -50,6 +50,9 @@ export function SettingsSection() {
   const [approvalDept, setApprovalDept] = useState('');
   const [notifyDeploy, setNotifyDeploy] = useState(true);
   const [notifyMail, setNotifyMail] = useState(true);
+  // 잠잘 때 블루투스 끄기 — blueutil 이 있어야 동작하므로 설치 여부를 함께 들고 있는다
+  const [sleepBluetoothOff, setSleepBluetoothOff] = useState(false);
+  const [hasBlueutil, setHasBlueutil] = useState(true);
   // 알림음 — 선택값(자리별)과 고를 수 있는 음원 목록
   const [sounds, setSounds] = useState<Record<NotifySoundKind, string>>(
     NOTIFY_SOUND_DEFAULTS,
@@ -98,6 +101,7 @@ export function SettingsSection() {
         setApprovalDept(s.approvalDept);
         setNotifyDeploy(s.notifyDeploy);
         setNotifyMail(s.notifyMail);
+        setSleepBluetoothOff(s.sleepBluetoothOff);
         setSounds(s.sounds);
         setJiraUrl(s.jiraUrl);
         setJiraEmail(s.jiraEmail);
@@ -156,6 +160,14 @@ export function SettingsSection() {
       .getStartConfig()
       .then(setSchedStart)
       .catch(warn('일정 시작'));
+    // blueutil 설치 여부 — 브리지가 없는 구 preload·폰 셸에서는 안내를 띄우지 않는다
+    // (체크박스만 잠기고 경고가 뜨는 어정쩡한 상태를 피한다)
+    const checkBlueutil = window.oneApp?.power?.checkBlueutil;
+    if (checkBlueutil) {
+      checkBlueutil()
+        .then((r) => setHasBlueutil(r.installed))
+        .catch(() => setHasBlueutil(true));
+    }
   }, []);
 
   // 음원 드롭다운 옵션 — 목록 조회가 실패해도 **지금 값은 보이게** 합쳐 둔다
@@ -233,6 +245,7 @@ export function SettingsSection() {
           approvalDept,
           notifyDeploy,
           notifyMail,
+          sleepBluetoothOff,
           jiraUrl,
           jiraEmail,
           jiraToken,
@@ -244,6 +257,7 @@ export function SettingsSection() {
         setHasPassword(res.hasPassword);
         setNotifyDeploy(res.notifyDeploy);
         setNotifyMail(res.notifyMail);
+        setSleepBluetoothOff(res.sleepBluetoothOff);
         setJiraUrl(res.jiraUrl);
         setJiraEmail(res.jiraEmail);
         setHasJiraToken(res.hasJiraToken);
@@ -449,6 +463,32 @@ export function SettingsSection() {
         <p className="note">
           에이전트(claude 등)가 작업을 마치고 입력을 기다리면 사이드바·독(Dock)
           뱃지로 표시됩니다 — 소리나 알럿을 더할지 선택하세요. (즉시 저장)
+        </p>
+      </Collapsible>
+
+      <Collapsible
+        title="전원"
+        icon={<Icon name="laptop" size={14} />}
+        storageKey="settings:group:power"
+      >
+        <Checkbox
+          checked={sleepBluetoothOff}
+          onChange={(e) => setSleepBluetoothOff(e.target.checked)}
+          disabled={loading || !hasBlueutil}
+          label="잠잘 때 블루투스 끄기"
+        />
+        {!hasBlueutil && (
+          <Banner variant="warning">
+            blueutil 이 필요합니다 — 터미널에서 <code>brew install blueutil</code>{' '}
+            를 실행한 뒤 앱을 다시 시작하세요.
+          </Banner>
+        )}
+        <p className="note">
+          <strong>덮개를 닫고 · 외부 모니터도 없고 · 배터리로만</strong> 있을 때(=
+          가방 안)에만 끕니다. 깨어나면 다시 켜고, 원래 꺼져 있었다면 건드리지
+          않습니다. 책상에서 외부 모니터를 연결한 채 덮개를 닫고 쓰는 중에는
+          동작하지 않습니다 — 블루투스 키보드·마우스로 맥을 깨울 수 없게 되기
+          때문입니다.
         </p>
       </Collapsible>
 
