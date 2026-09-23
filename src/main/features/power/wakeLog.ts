@@ -112,8 +112,18 @@ export function formatDuration(ms: number): string {
   return mins > 0 ? `${hours}시간 ${mins}분` : `${hours}시간`;
 }
 
-/** 폭주 토스트 문구 — 제목은 덮개 닫힘 여부로, 본문은 횟수·배터리·발열 순으로 */
-export function formatWakeStormToast(s: SleepCycleSummary): { title: string; message: string } {
+/**
+ * 폭주 토스트 문구 — 제목은 덮개 닫힘 여부로, 본문은 횟수·배터리·발열, 끝에 다음 조치 한 줄.
+ *
+ * ⚠️ **힌트로 `pmset tcpkeepalive` 를 가리키지 말 것.** 2026-09-20 에 진짜 원인이 **블루투스 HID
+ * 재연결 루프**로 확정됐고 그 설정은 이미 적용돼 있다. 자동 끄기를 켠 뒤 다크웨이크가 시간당
+ * 20.7회 → 1.2회로 떨어진 것이 확인됐다(09-23). 그래서 힌트는 **그 토글을 켰는지**로 갈린다 —
+ * 껐으면 켜라고 하고, 켰는데도 폭주했다면 조건(외부 모니터·전원)에 걸려 안 꺼진 것이다.
+ */
+export function formatWakeStormToast(
+  s: SleepCycleSummary,
+  bluetoothOffEnabled = false,
+): { title: string; message: string } {
   const title = s.lidClosed
     ? '덮개를 닫은 동안 맥이 계속 깨어났습니다'
     : '잠자기 중 맥이 계속 깨어났습니다';
@@ -122,8 +132,8 @@ export function formatWakeStormToast(s: SleepCycleSummary): { title: string; mes
     parts.push(`배터리 ${s.batteryStart}%→${s.batteryEnd}%`);
   }
   if (s.thermal) parts.push('발열 비상 잠자기 발생');
-  return {
-    title,
-    message: `${parts.join(' · ')}. 잠자기 중 네트워크 유지(pmset tcpkeepalive) 설정을 확인하세요.`,
-  };
+  const hint = bluetoothOffEnabled
+    ? '외부 모니터나 전원이 연결돼 있으면 블루투스를 끄지 않습니다 — 연결을 확인하세요.'
+    : "환경설정 → 전원에서 '잠잘 때 블루투스 끄기'를 켜 보세요.";
+  return { title, message: `${parts.join(' · ')}. ${hint}` };
 }

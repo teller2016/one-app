@@ -175,4 +175,19 @@ describe('formatWakeStormToast', () => {
     expect(t.title).not.toContain('덮개');
     expect(t.message).not.toContain('배터리');
   });
+
+  // 힌트가 엉뚱한 곳(pmset tcpkeepalive)을 가리키던 것을 고친 뒤로, 두 갈래를 고정해 둔다
+  it('블루투스 끄기가 꺼져 있으면 그걸 켜라고 안내한다', () => {
+    const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(s, false);
+    expect(t.message).toContain('블루투스 끄기');
+    expect(t.message).not.toContain('tcpkeepalive');
+  });
+
+  it('이미 켜져 있으면 조건(외부 모니터·전원)을 확인하라고 안내한다', () => {
+    const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(s, true);
+    expect(t.message).toContain('외부 모니터');
+    expect(t.message).not.toContain('tcpkeepalive');
+  });
 });

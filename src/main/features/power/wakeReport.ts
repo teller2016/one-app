@@ -2,6 +2,7 @@
 // 폭주(다크웨이크 과다·발열 비상)면 sticky 토스트로 알린다. 규칙은 wakeLog.ts.
 import { execFile } from 'node:child_process';
 import { sendToast } from '../notify/notify';
+import { isSleepBluetoothOffEnabled } from '../settings/store';
 import {
   MIN_REPORT_CYCLE_MS,
   formatDuration,
@@ -51,7 +52,7 @@ export async function reportSleepCycle(sinceMs: number, untilMs: number): Promis
   );
   if (!verdict.storm) return;
   sendToast({
-    ...formatWakeStormToast(summary),
+    ...formatWakeStormToast(summary, isSleepBluetoothOffEnabled()),
     variant: 'fail',
     sticky: true,
     dedupeKey: TOAST_KEY,
