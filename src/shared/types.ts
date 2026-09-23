@@ -804,6 +804,37 @@ export type SaveProjectInput = {
   jiraProjectKey?: string;
 };
 
+// ── 포트 (리스닝 포트 관리) ──
+/**
+ * 리스닝 중인 **프로세스 하나** — 포트 단위가 아니다.
+ *
+ * ⚠️ 한 프로세스가 여러 포트를 여는 일이 흔해서(Docker 6개·Vite 3개·언어 서버 3개) 포트마다
+ * 한 줄씩 그리면 목록이 두 배가 넘는다(2026-09-23 실측 46행 → 묶으면 24행). 어차피 **특정 포트만
+ * 닫을 방법은 없고 프로세스를 죽여야 하므로**, 묶어도 할 수 있는 일이 줄지 않는다.
+ */
+export type PortProcess = {
+  pid: number;
+  /** 전체 명령 이름 — lsof 기본 출력은 9자에서 자르므로 `-F` 포맷으로 받는다 */
+  command: string;
+  user: string; // 소유자 로그인 이름
+  ports: number[]; // 이 프로세스가 여는 포트들 (오름차순·중복 제거)
+  /** 리스닝 주소들 — IPv4/IPv6 가 따로 잡힌다 (`*:3000`·`127.0.0.1:3000`·`[::1]:3000`) */
+  addresses: string[];
+  cwd: string; // 프로세스 작업 디렉터리 (못 읽으면 빈 값)
+  projectName: string; // cwd 로 매칭된 프로젝트 이름 (없으면 빈 값)
+  /** 죽이면 곤란한 것 — macOS 구성요소·One App 자신. UI 가 한 번 더 확인한다 */
+  guarded: boolean;
+  /** 내가 띄운 개발 서버로 보이는가 — 기본 필터('개발')가 이 값으로 거른다 */
+  dev: boolean;
+};
+
+export type PortKillResult = {
+  ok: boolean;
+  /** 신호를 보낸 뒤에도 살아 있는가 — true 면 UI 가 강제 종료를 제안한다 */
+  alive: boolean;
+  message: string;
+};
+
 // ── VPN (OpenVPN) ──
 export type VpnState = "disconnected" | "connecting" | "connected" | "error";
 

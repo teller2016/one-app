@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
  *   16(기본 — 사이드바·배너) · 18(섹션 제목) · 20(빈 상태)
  */
 export type IconName =
+  | "network"
   | "calendar"
   | "bar-chart"
   | "rocket"
@@ -304,6 +305,16 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <polyline points="4 17 10 11 4 5" />
       <line x1="12" x2="20" y1="19" y2="19" />
+    </>
+  ),
+  // 포트(리스닝 네트워크 소켓) — 포트 섹션
+  network: (
+    <>
+      <rect x="16" y="16" width="6" height="6" rx="1" />
+      <rect x="2" y="16" width="6" height="6" rx="1" />
+      <rect x="9" y="2" width="6" height="6" rx="1" />
+      <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
+      <path d="M12 12V8" />
     </>
   ),
   // 시작(작업 착수) — Jira 행의 [작업] 버튼

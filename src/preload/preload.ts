@@ -598,6 +598,12 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 잠잘 때 블루투스 끄기에 필요한 blueutil 이 깔려 있는지 (환경설정 안내용)
     checkBlueutil: () => ipcRenderer.invoke("power:blueutil:check"),
   },
+  // 리스닝 포트 목록·종료 (포트 섹션) — 폰에서 프로세스를 죽일 이유가 없어 데스크톱 전용이다
+  ports: {
+    list: () => ipcRenderer.invoke("ports:list"),
+    kill: (pid: number, force?: boolean) =>
+      ipcRenderer.invoke("ports:kill", pid, force),
+  },
   openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
   // 드래그 앤 드롭된 File 객체의 실제 경로 — 렌더러에서는 File.path 를 읽을 수 없고
   // (Electron 32 에서 제거) webUtils 는 preload 에서만 접근 가능하다.

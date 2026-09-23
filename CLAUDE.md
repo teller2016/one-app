@@ -43,7 +43,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 ```
 
 **기능 목록**
-- **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
+- **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 포트 · 배포 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
 - **사이드바 위젯**: 메일(상단) · 폰 미러링 · VPN · 출퇴근(하단 — 야근 결재 모달 진입점 포함)
 - **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용)
 - **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리)
@@ -110,6 +110,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/nightwatch.md` | nightwatch | 티켓 무인 분석 미션·읽기전용 계약 |
 | `features/system.md` | settings · vpn · mirror · notify · applink | 위젯·알림 인프라·adb 함정 |
 | `features/power.md` | power · `renderer/lib/powerState.ts` | 잠자기 상태 감시(다크웨이크 구분)·깨어남 폭주 경고·잠자기 중 폴링 중단 |
+| `features/ports.md` | ports | 리스닝 포트 확인·종료 — lsof 함정(20개 제한·이름 잘림)·cwd 프로젝트 매칭 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
 **스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)

@@ -105,6 +105,8 @@ import type {
   TerminalDragState,
   TerminalPopoutOpenInput,
   TerminalWindowInfo,
+  PortKillResult,
+  PortProcess,
   PowerState,
 } from '../../shared/types';
 
@@ -447,6 +449,11 @@ declare global {
         onState: (cb: (state: PowerState) => void) => () => void;
         /** 잠잘 때 블루투스 끄기에 필요한 blueutil 설치 여부 (환경설정 안내용) */
         checkBlueutil?: () => Promise<{ installed: boolean }>;
+      };
+      // 리스닝 포트 관리 (main features/ports). ?. 옵셔널 — 구 preload·폰 셸에는 없다
+      ports?: {
+        list: () => Promise<PortProcess[]>;
+        kill: (pid: number, force?: boolean) => Promise<PortKillResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

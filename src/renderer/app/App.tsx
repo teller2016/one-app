@@ -10,6 +10,7 @@ import { JiraSection, isDone } from "../features/jira";
 import { MailWidget } from "../features/mail";
 import { MirrorWidget } from "../features/mirror";
 import { ProjectsSection } from "../features/projects";
+import { PortsSection } from "../features/ports";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
@@ -82,6 +83,12 @@ const SECTIONS: AppSection[] = [
     label: "PR",
     icon: <Icon name="git-pull-request" size={16} />,
     render: () => <PrSection />,
+  },
+  {
+    id: "ports",
+    label: "포트",
+    icon: <Icon name="network" size={16} />,
+    render: () => <PortsSection />,
   },
   {
     id: "deploy",

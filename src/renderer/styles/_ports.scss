@@ -1,0 +1,129 @@
+@use './base' as *;
+
+// 포트 — 리스닝 포트 목록 + 프로세스 종료
+.ports {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  // ⚠️ 높이를 채워 **목록만** 스크롤시킨다. 안 그러면 목록이 길어질 때 `.main` 전체에
+  // 스크롤바가 생기면서 콘텐츠 폭이 10px 줄어 **툴바가 좌우로 밀린다**(2026-09-23 사용자 지적,
+  // '개발'↔'전체' 전환 때 새로고침 버튼이 5px 이동). 덤으로 검색창이 항상 보인다.
+  height: 100%;
+
+  // ── 검색 + 건수 + 새로고침 ──
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  &__search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // 세그먼트 라벨 안의 개수 — 자릿수가 바뀌어도 흔들리지 않게 등폭 숫자
+  &__n {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
+  }
+
+  // ── 목록 ──
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+
+    &:hover {
+      border-color: var(--border-strong);
+    }
+  }
+
+  // 포트 칩 — 한 프로세스가 여는 포트들을 나열한다 (Docker 6개·Vite 3개가 흔하다)
+  &__ports {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  &__chip {
+    @include type-small;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 1px 6px;
+  }
+
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &__cmd {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__pid {
+    @include type-small;
+    font-family: var(--font-mono);
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+
+  // 보호 대상 자물쇠 — 죽이면 곤란한 프로세스 표시
+  &__guard {
+    display: inline-flex;
+    align-items: center;
+    color: var(--warning);
+    flex-shrink: 0;
+  }
+
+  &__cwd {
+    @include type-small;
+    font-family: var(--font-mono);
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-left: 4px;
+    min-width: 0;
+  }
+}

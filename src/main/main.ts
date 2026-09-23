@@ -17,6 +17,7 @@ import {
   registerNotifyIpc,
 } from "./features/notify/notify";
 import { registerProjectsIpc } from "./features/projects/ipc";
+import { registerPortsIpc } from "./features/ports/ipc";
 import { registerPrsIpc } from "./features/prs/ipc";
 import {
   registerScheduleIpc,
@@ -67,6 +68,7 @@ registerTerminalIpc();
 registerChangesIpc();
 registerWorkspacesIpc();
 registerPowerIpc();
+registerPortsIpc();
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {
