@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { useSidebarCollapsed } from '../../../components/Sidebar';
+import { errMsg } from '../../../lib/errMsg';
+import { usePolling } from '../../../lib/usePolling';
 import { MailModal } from './MailModal';
 
-// 폴링 간격 — 비즈박스는 실시간 푸시가 없어 폴링이 유일. 창이 활성일 땐 촘촘히,
-// 백그라운드(가려짐·포커스 아웃)면 느슨하게 돌려 낭비를 줄인다.
+// 폴링 간격 — 비즈박스는 실시간 푸시가 없어 폴링이 유일. 창이 활성일 땐 30초,
+// 백그라운드(가려짐·포커스 아웃)면 usePolling 이 6배(3분)로 늘린다.
 const POLL_ACTIVE_MS = 30_000;
-const POLL_IDLE_MS = 180_000;
 
 /**
  * 사이드바 최상단 메일 진입점 — 안읽은 메일 수를 보여준다.
@@ -32,60 +33,38 @@ export function MailWidget() {
   const load = useCallback(async (showSpinner: boolean): Promise<void> => {
     if (showSpinner) setSpinning(true);
     const readsBefore = readsRef.current;
-    const res = await window.oneApp.mail.getUnreadCount();
-    setConfigured(res.configured);
-    if (res.ok) {
-      const readDuring = readsRef.current - readsBefore;
-      setUnread(Math.max(0, res.unreadCount - readDuring));
-      setError('');
-    } else if (res.configured) {
-      setError(res.error ?? '조회 실패');
+    try {
+      const res = await window.oneApp.mail.getUnreadCount();
+      setConfigured(res.configured);
+      if (res.ok) {
+        const readDuring = readsRef.current - readsBefore;
+        setUnread(Math.max(0, res.unreadCount - readDuring));
+        setError('');
+      } else if (res.configured) {
+        setError(res.error ?? '조회 실패');
+      }
+    } catch (err) {
+      // IPC 자체가 거부돼도(폰 WS 끊김 등) 스피너가 굳지 않게
+      setError(errMsg(err, '조회 실패'));
+    } finally {
+      if (showSpinner) setSpinning(false);
     }
-    if (showSpinner) setSpinning(false);
   }, []);
 
   const refresh = useCallback((): void => {
     void load(true);
   }, [load]);
 
-  // 포커스/가시성 인지 적응형 폴링
+  // 적응형 폴링은 공용 usePolling 에 맡긴다 — 활성 30초/비활성 6배(3분) 비율이 원래 이 위젯에서
+  // 승격된 것이라 주기는 같고, 여기에 **잠자기(다크웨이크 포함) 중 건너뛰기**가 더해진다.
+  // 직접 굴리던 setTimeout 루프는 덮개를 닫은 뒤 다크웨이크마다 HTTP·재로그인까지 돌았다.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let stopped = false;
-    const active = () =>
-      document.visibilityState === 'visible' && document.hasFocus();
-
-    const schedule = (): void => {
-      if (stopped) return;
-      timer = setTimeout(() => void tick(), active() ? POLL_ACTIVE_MS : POLL_IDLE_MS);
-    };
-    const tick = async (): Promise<void> => {
-      await load(false); // 폴링은 무음
-      schedule();
-    };
-
-    void (async () => {
-      await load(true); // 최초 1회는 스피너 표시
-      schedule();
-    })();
-
-    // 창으로 돌아오면 즉시 한 번 갱신하고 촘촘한 주기로 리셋
-    const onWake = () => {
-      if (stopped || !active()) return;
-      clearTimeout(timer);
-      void load(false);
-      schedule();
-    };
-    window.addEventListener('focus', onWake);
-    document.addEventListener('visibilitychange', onWake);
-
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-      window.removeEventListener('focus', onWake);
-      document.removeEventListener('visibilitychange', onWake);
-    };
+    void load(true); // 최초 1회는 스피너 표시
   }, [load]);
+  const poll = useCallback((): void => {
+    void load(false); // 폴링은 무음
+  }, [load]);
+  usePolling(poll, POLL_ACTIVE_MS, { immediate: false });
 
   const handleRead = () => {
     readsRef.current += 1;

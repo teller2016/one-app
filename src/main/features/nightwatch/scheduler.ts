@@ -16,6 +16,7 @@
 // (빈 배열이면 제한 없음). ②의 후보 목록만 좁히면 ①의 학습값이 그 게이트를 우회한다 —
 // 한 번 잘못 고른 저장소가 repoDefaults 에 굳으면 계속 그리로 가므로 게이트는
 // usableRepoId() 한 곳에 둔다. 수동 [분석]은 이 게이트와 무관하다.
+import { isSystemAsleep } from "../power";
 import { getJiraApiConfig } from "../settings/store";
 import { findProjectsByJiraKey, getProject, listProjects } from "../projects/store";
 import { analyzeTicket, isAnalysisActive, listCandidates } from "./engine";
@@ -133,6 +134,9 @@ async function resolveRepoId(
 
 async function tick() {
   if (ticking) return;
+  // ⚠️ 잠자기(덮개 닫힘 뒤 다크웨이크 포함) 중엔 돌지 않는다 — setInterval 은 다크웨이크마다
+  // 발화해 Jira 조회·haiku 호출에 최대 40분짜리 미션까지 시작할 수 있다(2026-09-16 과열 사건 계열)
+  if (isSystemAsleep()) return;
   const cfg = getNightwatchConfig();
   if (!cfg.auto.enabled) return;
 
