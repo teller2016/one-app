@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 import { useBackClose } from '../lib/useBackClose';
@@ -34,11 +35,12 @@ export function useConfirm() {
 
 /**
  * 전역 확인 다이얼로그 — App 최상단에서 한 번만 감싼다.
- * Escape = 취소, Enter = 확인. 스타일은 _base.scss 의 .confirm 사용.
+ * Escape = 취소, Enter = 포커스된 버튼(기본은 확인). 스타일은 _base.scss 의 .confirm 사용.
  * 일반 Modal 과 달리 dim(오버레이) 클릭으로는 닫히지 않는다 — 확인/취소는 명시적 선택만.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const confirm = useCallback(
     (opts: ConfirmOptions) =>
@@ -72,6 +74,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         close(false);
       } else if (e.key === 'Enter') {
         e.stopPropagation();
+        // 다이얼로그 안 버튼에 포커스가 있으면 그 버튼의 기본 동작(click)에 맡긴다 —
+        // Tab 으로 [취소]에 옮겨 놓고 Enter 를 눌렀는데 '확인'이 되면 안 된다
+        const active = document.activeElement;
+        if (active instanceof HTMLButtonElement && dialogRef.current?.contains(active)) return;
         close(true);
       }
     };
@@ -85,6 +91,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {pending && (
         <div className="modal-overlay modal-overlay--center confirm-overlay">
           <div
+            ref={dialogRef}
             className="confirm"
             role="alertdialog"
             aria-modal="true"

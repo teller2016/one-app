@@ -314,17 +314,24 @@ export function App() {
   const [jiraUnread, setJiraUnread] = useState(0);
   const [jiraOpenKeys, setJiraOpenKeys] = useState<string[] | null>(null);
 
-  // 사이드바 Jira 뱃지 — 미해결 이슈 수를 2분마다 갱신 (미설정·오류 시 조용히 0).
+  // 사이드바 Jira 뱃지 — 미해결 이슈 수를 2분마다 갱신 (미설정이면 0, 조회 실패면 직전 값 유지).
   // usePolling 경유 — 창이 백그라운드면 주기가 늘어나고, main 의 TTL 캐시로
   // 홈 카드·Jira 섹션과 실제 네트워크 호출을 공유한다(2026-08-07 성능 감사).
   const refreshJiraBadge = useCallback(() => {
     void (async () => {
       try {
         const res = await window.oneApp?.jira.list();
-        const keys =
-          res?.ok && res.issues
-            ? res.issues.filter((i) => !isDone(i)).map((i) => i.key)
-            : [];
+        // ⚠️ 조회 실패(main 은 throw 대신 ok:false 로 돌려준다)면 아무것도 건드리지 않는다 —
+        // 빈 목록으로 취급하면 아래 위생 정리가 '확인함' 목록을 통째로 지워, 다음 성공 조회에서
+        // 미해결 티켓 전부가 새 티켓으로 뜬다 (덮개 열림 직후 네트워크 미연결에서 흔함)
+        if (res && !res.configured) {
+          // 미설정(설정을 지운 경우 포함)은 실패가 아니라 '없음' — 뱃지만 내린다
+          setJiraCount(0);
+          setJiraUnread(0);
+          return;
+        }
+        if (!res?.ok || !res.issues) return;
+        const keys = res.issues.filter((i) => !isDone(i)).map((i) => i.key);
         setJiraCount(keys.length);
         setJiraOpenKeys(keys);
         // 확인 목록 위생 — 해결돼 목록에서 빠진 키는 더 기억할 필요 없다

@@ -191,14 +191,21 @@ export function DeploySection() {
   });
 
   // ── 배포 실행 — 확인 모달을 열고, 모달에서 [배포]를 눌러야 트리거된다 ──
+  // 미리보기 요청 세대 — ⚠️ 모달을 닫고 다른 대상(PROD 등)을 열었을 때, 늦게 도착한 이전 대상의
+  // 미리보기가 새 모달을 덮어써 틀린 커밋 목록을 보고 배포하는 일을 막는다
+  const previewSeq = useRef(0);
   const openDeployConfirm = (projectId: string, targetId: string) => {
     setConfirm({ projectId, targetId });
     // 이번 배포에 포함될 커밋 미리보기 (Gitea 미설정이면 즉시 configured:false)
     setPreview({ loading: true });
+    const seq = ++previewSeq.current;
     void window.oneApp.deploy
       .getPreview(projectId, targetId)
-      .then((result) => setPreview({ loading: false, result }))
-      .catch((err: unknown) =>
+      .then((result) => {
+        if (seq === previewSeq.current) setPreview({ loading: false, result });
+      })
+      .catch((err: unknown) => {
+        if (seq !== previewSeq.current) return;
         setPreview({
           loading: false,
           result: {
@@ -206,8 +213,8 @@ export function DeploySection() {
             configured: true,
             error: errMsg(err, '미리보기 조회 실패'),
           },
-        }),
-      );
+        });
+      });
   };
 
   const doDeploy = async (projectId: string, targetId: string) => {
