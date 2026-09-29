@@ -11,7 +11,7 @@ import type {
 } from '../../../shared/types';
 import { mainBranchRank } from '../../../shared/types';
 // 인증 헤더·연결 실패·인증 실패 문구는 공용 클라이언트가 담당한다 (deploy 기능과 공유)
-import { giteaFetch, giteaJson } from '../../lib/gitea';
+import { GiteaTimeoutError, giteaFetch, giteaJson } from '../../lib/gitea';
 import { mapLimit } from '../../lib/util';
 
 /** PR 별 리뷰 조회(N+1) 동시성 — 50개를 한꺼번에 쏘면 Gitea 가 잠깐 버벅인다 */
@@ -575,12 +575,52 @@ export async function mergePr(
   method: PrMergeMethod,
 ): Promise<void> {
   // 오류면 giteaFetch 가 던진다 — 여기까지 오면 머지 완료(200)
+  try {
+    await postMerge(giteaUrl, token, repo, number, method);
+  } catch (err) {
+    if (!(err instanceof GiteaTimeoutError)) throw err;
+    // ⚠️ 큰 저장소 머지는 서버에서 끝났는데 응답만 늦을 수 있다 — 실패로 알리면 사용자가 다시 눌러
+    // 405 를 받거나 혼란스럽다. 실제 상태를 다시 조회해 판정한다.
+    const merged = await isPrMerged(giteaUrl, token, repo, number).catch((): null => null);
+    if (merged) return;
+    throw new Error(
+      merged === false
+        ? `${err.message} (지금은 아직 머지 전입니다 — 서버가 처리 중일 수 있으니 잠시 뒤 새로고침해 확인하세요)`
+        : `${err.message} — 서버에서는 머지됐을 수 있으니 PR 상태를 새로고침해 확인한 뒤 다시 시도하세요.`,
+    );
+  }
+}
+
+/** PR 이 머지됐는가 — 머지 요청이 타임아웃 났을 때 결과 판정용 */
+async function isPrMerged(
+  giteaUrl: string,
+  token: string,
+  repo: string,
+  number: number,
+): Promise<boolean> {
+  const data = await giteaJson<{ merged?: boolean }>(
+    `${giteaUrl}/api/v1/repos/${repo}/pulls/${number}`,
+    token,
+    { label: 'PR 조회' },
+  );
+  return data.merged === true;
+}
+
+async function postMerge(
+  giteaUrl: string,
+  token: string,
+  repo: string,
+  number: number,
+  method: PrMergeMethod,
+): Promise<void> {
   await giteaFetch(`${giteaUrl}/api/v1/repos/${repo}/pulls/${number}/merge`, token, {
     init: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Do: method }),
     },
+    // 머지는 큰 저장소에서 기본 15초를 넘길 수 있다
+    timeoutMs: 60_000,
     label: '머지',
     errors: {
       auth: 'Gitea 인증 실패 — 토큰에 쓰기 권한이 있는지 확인하세요.',

@@ -9,7 +9,12 @@ import type {
   DeployRunningBuild,
 } from '../../../shared/types';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
-import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
+import {
+  HttpMessageError,
+  fetchWithTimeout as fetch,
+  readJson,
+  describeFetchError,
+} from '../../lib/http';
 import { sleep } from '../../lib/util';
 
 // 응답 JSON 파싱 — 주소가 프록시·SSO 로그인 페이지를 가리키면 HTML 이 HTTP 200 으로 오는데,
@@ -74,11 +79,16 @@ export async function triggerBuild(
 ): Promise<{ queueUrl: string }> {
   const base = jobUrl(a, jobPath);
   let crumbHeaders: Record<string, string> = {};
+  // 트리거는 되돌릴 수 없다 — 기본 15초로 끊으면 큐에는 들어갔는데 실패로 보여 이중 배포를 부른다
   const doPost = (endpoint: 'build' | 'buildWithParameters') =>
-    fetch(`${base}/${endpoint}`, {
-      method: 'POST',
-      headers: { Authorization: authHeader(a), ...crumbHeaders },
-    });
+    fetch(
+      `${base}/${endpoint}`,
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader(a), ...crumbHeaders },
+      },
+      30_000,
+    );
 
   let res: Response;
   try {
@@ -96,7 +106,12 @@ export async function triggerBuild(
     if (res.status === 400) {
       res = await doPost('buildWithParameters');
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof HttpMessageError && err.kind === 'timeout') {
+      throw new Error(
+        '젠킨스 응답이 없습니다 — 빌드가 이미 큐에 들어갔을 수 있습니다. 다시 누르기 전에 상태·젠킨스 잡 페이지를 확인하세요.',
+      );
+    }
     throw new Error(
       `젠킨스에 연결할 수 없습니다 (${a.baseUrl}) — URL·네트워크(VPN)를 확인하세요.`,
     );

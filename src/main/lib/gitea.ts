@@ -3,7 +3,7 @@
 // 같은 헤더와 **글자까지 똑같은 에러 문구**를 각자 들고 있었다(문구 하나가 17번 반복).
 //
 // ⚠️ 호출은 `fetchWithTimeout` 경유 — 전역 fetch 는 타임아웃이 없어 소켓 hang 시 IPC 가 안 풀린다.
-import { fetchWithTimeout, readJson } from './http';
+import { HttpMessageError, fetchWithTimeout, readJson } from './http';
 
 /** 토큰이 있을 때만 인증 헤더 — 공개 저장소는 토큰 없이도 읽힌다 */
 export const giteaAuthHeaders = (
@@ -14,6 +14,12 @@ export const giteaAuthHeaders = (
 const CONNECT_FAIL =
   'Gitea 에 연결할 수 없습니다 — 주소·네트워크(VPN)를 확인하세요.';
 const AUTH_FAIL = 'Gitea 인증 실패 — 환경설정의 Gitea 토큰을 확인하세요.';
+
+/**
+ * 요청은 나갔는데 응답이 시간 안에 오지 않았다 — 연결 실패와 달리 **서버에서는 처리됐을 수 있다.**
+ * 되돌릴 수 없는 쓰기(머지 등) 호출부는 이 오류면 실제 상태를 다시 조회해 판정해야 한다.
+ */
+export class GiteaTimeoutError extends Error {}
 
 export type GiteaFetchOpts = {
   init?: RequestInit;
@@ -52,8 +58,12 @@ export async function giteaFetch(
       { ...init, headers: { ...giteaAuthHeaders(token), ...init.headers } },
       timeoutMs,
     );
-  } catch {
-    // 타임아웃 래퍼의 문구보다 "어느 서버인지" 가 중요해 Gitea 문구로 덮는다
+  } catch (err) {
+    // 타임아웃은 연결 실패와 따로 — 서버가 요청을 받아 처리했을 수 있다
+    if (err instanceof HttpMessageError && err.kind === 'timeout') {
+      throw new GiteaTimeoutError(`Gitea ${label ? `${label} ` : ''}응답이 없습니다 — ${err.message}`);
+    }
+    // 그 밖의 연결 실패는 "어느 서버인지" 가 중요해 Gitea 문구로 덮는다
     throw new Error(CONNECT_FAIL);
   }
 
