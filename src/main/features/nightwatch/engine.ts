@@ -17,6 +17,7 @@ import type {
 import { fetchMyIssues, jiraAuth } from "../jira";
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 import { fetchWithTimeout as fetch, readJson } from "../../lib/http";
+import { mapLimit } from "../../lib/util";
 import { getProject } from "../projects/store";
 import { getJiraApiConfig } from "../settings/store";
 import {
@@ -38,6 +39,7 @@ import {
 } from "./store";
 import type { NwState } from "./store";
 import { execFile } from "node:child_process";
+import crypto from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -554,11 +556,10 @@ async function processTicket(
     fs.writeFileSync(ticketJsonPath, `${JSON.stringify(ticket, null, 2)}\n`);
 
     // 분석 컨텍스트 기록 + 미션 전 스냅샷 (읽기 전용 검증 기준점)
-    const branch = await git(repo.path, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const before = await snapshotRepo(repo.path);
     appendMissionLog(
       missionLogPath,
-      `저장소: ${repo.name} (${branch.stdout || "?"}${
+      `저장소: ${repo.name} (${before.branch || "?"}${
         before.status ? ", 작업 중 변경분 있음" : ""
       }) — 현재 체크아웃 그대로 분석`
     );
@@ -592,7 +593,8 @@ async function processTicket(
     runningChild = null;
     runningTicket = null;
 
-    const violation = await detectRepoTampering(key, repo.path, before);
+    const tampering = await detectRepoTampering(key, repo.path, before);
+    const violation = tampering.length > 0;
     // ⚠️ `as typeof result` 로 쓰지 말 것 — 좁혀진 타입(null)이 잡혀 result 가 never 가 된다
     let result: MissionResultFile | null = null;
     try {
@@ -622,7 +624,11 @@ async function processTicket(
         durationMin,
         costUsd: outcome.costUsd,
         summary: result?.summary ?? null,
-        error: outcome.ok ? null : outcome.error,
+        error: violation
+          ? `저장소 변조 감지: ${tampering.join(" · ")}`
+          : outcome.ok
+          ? null
+          : outcome.error,
         status,
       });
       return true;
@@ -659,34 +665,124 @@ async function processTicket(
 }
 
 // ── 읽기 전용 검증 (실제 저장소라 절대 원복하지 않는다) ─────────────────
-type RepoSnapshot = { status: string; diff: string };
+//
+// ⚠️ status/diff 만 비교하면 못 잡는 변조가 있다 — 깨끗한 트리에서 `git commit -am`·`git stash`
+// 는 전후 status/diff 가 둘 다 비고, `git checkout 다른브랜치`·이미 `??` 였던 파일의 내용 변경도
+// status 문자열이 그대로다(2026-09-29 전체 검토). 그래서 HEAD·브랜치·stash 목록·기존 untracked
+// 파일 해시까지 스냅샷에 넣는다. 여전히 못 잡는 것: `.gitignore` 대상 파일(.env 등)·저장소 밖 쓰기·
+// push(원격만 바뀜) — 이건 도구 차단/격리의 몫이다.
+// ⚠️ 미션(최대 40분) 도중 사용자가 같은 저장소를 직접 편집·커밋해도 변조로 찍힌다(오탐) — 알려진 한계.
 
-async function snapshotRepo(repoPath: string): Promise<RepoSnapshot> {
-  const status = await git(repoPath, ["status", "--porcelain"]);
-  const diff = await git(repoPath, ["diff"]);
-  return { status: status.stdout, diff: diff.stdout };
+/** 이 크기를 넘는 untracked 파일은 내용 대신 mtime+size 로 비교한다 (거대 산출물 해시 비용 방지) */
+const UNTRACKED_HASH_MAX_BYTES = 2 * 1024 * 1024;
+/** untracked 파일이 이보다 많으면 앞쪽만 본다 — 빌드 산출물이 ignore 안 된 저장소 대비 */
+const UNTRACKED_MAX_FILES = 2000;
+
+type RepoSnapshot = {
+  status: string;
+  diff: string;
+  head: string;
+  /** 현재 브랜치 이름, detached 면 "(detached)" */
+  branch: string;
+  stash: string;
+  /** 스냅샷 시점 untracked 파일 → 내용 지문 */
+  untracked: Record<string, string>;
+};
+
+/**
+ * 파일 지문 — 작으면 sha1, 크면 mtime+size, 읽을 수 없으면(삭제 등) "missing".
+ * ⚠️ 비동기로 읽는다 — 최대 2000개 × 2MB 를 동기로 읽으면 main 이 멈춰 앱 전체가 굳는다.
+ */
+async function fingerprint(file: string): Promise<string> {
+  try {
+    const st = await fs.promises.stat(file);
+    if (!st.isFile()) return `nonfile:${st.mode}`;
+    if (st.size > UNTRACKED_HASH_MAX_BYTES) return `big:${st.size}:${st.mtimeMs}`;
+    const buf = await fs.promises.readFile(file);
+    return `sha1:${crypto.createHash("sha1").update(buf).digest("hex")}`;
+  } catch {
+    return "missing";
+  }
+}
+
+async function snapshotRepo(
+  repoPath: string,
+  trackUntracked?: string[]
+): Promise<RepoSnapshot> {
+  const [status, diff, head, branch, stash] = await Promise.all([
+    git(repoPath, ["status", "--porcelain"]),
+    git(repoPath, ["diff"]),
+    git(repoPath, ["rev-parse", "HEAD"]),
+    git(repoPath, ["symbolic-ref", "--short", "-q", "HEAD"]),
+    git(repoPath, ["stash", "list", "--format=%gd %H"]),
+  ]);
+  // 미션 전: 지금 untracked 인 파일 목록을 뜬다. 미션 후: 미션 전 목록만 다시 잰다
+  // (새로 생긴 untracked 는 status 비교가 이미 잡는다)
+  let files = trackUntracked;
+  if (!files) {
+    const ls = await git(repoPath, ["ls-files", "--others", "--exclude-standard", "-z"]);
+    files = ls.stdout.split("\0").filter(Boolean).slice(0, UNTRACKED_MAX_FILES);
+  }
+  const untracked: Record<string, string> = {};
+  // 동시 읽기는 mapLimit 으로 제한 — 한꺼번에 열면 fd 가 모자랄 수 있다
+  const prints = await mapLimit(files, 16, (f) => fingerprint(path.join(repoPath, f)));
+  files.forEach((f, i) => (untracked[f] = prints[i]));
+  return {
+    status: status.stdout,
+    diff: diff.stdout,
+    head: head.stdout,
+    branch: branch.code === 0 ? branch.stdout : "(detached)",
+    stash: stash.stdout,
+    untracked,
+  };
+}
+
+/** 전후 스냅샷에서 무엇이 바뀌었는지 사람이 읽을 사유 목록으로 */
+function describeTampering(before: RepoSnapshot, after: RepoSnapshot): string[] {
+  const reasons: string[] = [];
+  if (after.head !== before.head)
+    reasons.push(`HEAD 이동 (${before.head.slice(0, 8)} → ${after.head.slice(0, 8)})`);
+  if (after.branch !== before.branch)
+    reasons.push(`브랜치 전환 (${before.branch} → ${after.branch})`);
+  if (after.stash !== before.stash) reasons.push("stash 목록 변경");
+  if (after.status !== before.status || after.diff !== before.diff)
+    reasons.push("작업 트리 변경 (status/diff)");
+  const changed = Object.keys(before.untracked).filter(
+    (f) => after.untracked[f] !== before.untracked[f]
+  );
+  if (changed.length)
+    reasons.push(
+      `기존 untracked 파일 내용 변경 ${changed.length}개 (${changed.slice(0, 5).join(", ")}${
+        changed.length > 5 ? " …" : ""
+      })`
+    );
+  return reasons;
 }
 
 /**
- * 미션 전후 스냅샷 비교로 저장소를 건드렸는지 검사.
+ * 미션 전후 스냅샷 비교로 저장소를 건드렸는지 검사 — 바뀐 항목의 사유 목록을 돌려준다(없으면 빈 배열).
  * 사용자의 작업본과 섞일 수 있어 자동 원복은 하지 않고, 증거 patch 를 남기고 경고만 한다.
  */
 async function detectRepoTampering(
   key: string,
   repoPath: string,
   before: RepoSnapshot
-): Promise<boolean> {
-  const after = await snapshotRepo(repoPath);
-  if (after.status === before.status && after.diff === before.diff)
-    return false;
+): Promise<string[]> {
+  const after = await snapshotRepo(repoPath, Object.keys(before.untracked));
+  const reasons = describeTampering(before, after);
+  if (!reasons.length) return reasons;
   fs.writeFileSync(
     path.join(nwPaths().reports, `${key}.partial.patch`),
-    `# 미션 전 status:\n${before.status}\n\n# 미션 후 status:\n${after.status}\n\n# 미션 후 diff:\n${after.diff}\n`
+    `# 감지 사유:\n${reasons.map((r) => `- ${r}`).join("\n")}\n\n` +
+      `# 미션 전 HEAD/브랜치: ${before.head} (${before.branch})\n` +
+      `# 미션 후 HEAD/브랜치: ${after.head} (${after.branch})\n\n` +
+      `# 미션 전 stash:\n${before.stash}\n\n# 미션 후 stash:\n${after.stash}\n\n` +
+      `# 미션 전 status:\n${before.status}\n\n# 미션 후 status:\n${after.status}\n\n# 미션 후 diff:\n${after.diff}\n`
   );
   appendCycleLog(
-    `[경고] ${key}: 미션이 저장소(${repoPath})를 수정한 흔적 — git status 로 확인하세요 (자동 원복 안 함)`
+    `[경고] ${key}: 미션이 저장소(${repoPath})를 수정한 흔적 — ${reasons.join(" · ")} — git status/log/stash 로 확인하세요 (자동 원복 안 함)`
   );
-  return true;
+  return reasons;
 }
 
 // ── 리포트·프롬프트·로그 조회 ───────────────────────────────────────────

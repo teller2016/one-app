@@ -55,6 +55,9 @@ Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 
 숨김·삭제·자동 정리가 전부 되돌아간다(lost update — 2026-08-31 감사에서 발견·수정). 미션 종료
 기록은 해당 티켓 키만 병합하고, 미션 중 사용자가 지운 행은 되살리지 않는다(기록 생략 + 사이클 로그).
 
-안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 `git status/diff` 비교로 변조 감지(`violation_edited` 경고, patch 증거 보존).
+안전장치: `--disallowedTools Edit MultiEdit NotebookEdit` 로 편집 도구 차단 + 읽기 전용 계약 프롬프트 + 미션 전후 스냅샷 비교로 변조 감지(`violation_edited` 경고, 사유는 원장 `error`·사이클 로그에, 증거는 `reports/{key}.partial.patch`).
+- 스냅샷 = `status --porcelain` + `diff` + **`rev-parse HEAD` · 현재 브랜치(`symbolic-ref`, detached 표시) · `stash list` · 미션 전 untracked 파일 지문**(sha1, 2MB 초과는 mtime+size, 최대 2000개). ⚠️ status/diff 만으로는 깨끗한 트리의 `commit -am`·`stash`·`checkout`·기존 `??` 파일 내용 변경을 못 잡았다(2026-09-29 전체 검토).
+- 여전히 못 잡는 것: `.gitignore` 대상(.env 등)·저장소 밖 쓰기·`push` — 감지가 아니라 차단/격리(worktree)의 몫이다(보류 중).
+- ⚠️ 미션 도중 사용자가 같은 저장소를 직접 편집·커밋해도 변조로 찍힌다(오탐, 알려진 한계).
 
 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 자동 순회 진행 `auto-state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분·자동 분석 대상 저장소 `auto.repoIds` — 저장소 정보 자체는 프로젝트 레지스트리가 출처). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
