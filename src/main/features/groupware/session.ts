@@ -12,6 +12,7 @@
 //
 // ⚠️ 쿠키는 이름이 같고 경로만 다른 JSESSIONID 가 2개(`/gw`, `/`)다. 그래서 합친 문자열이
 // 아니라 도메인·경로가 붙은 객체 목록을 정본으로 보관하고, HTTP 용 헤더는 파생값으로 만든다.
+import { createHash } from 'node:crypto';
 import { GROUPWARE_CONFIG } from './config';
 import { getCredentials } from '../settings/store';
 import { sleep } from '../../lib/util';
@@ -41,6 +42,29 @@ export type GroupwareSession = {
   header: string; // 순수 HTTP 호출용 "name=value; …"
   establishedAt: number; // 이 세션의 신원 — 파생 캐시(메일 등)의 유효성 판단에 쓴다
 };
+
+/**
+ * 로그인 폼을 제출했는데 **로그인 화면으로 되돌아온** 실패 — 계정 정보가 틀렸을 가능성이 크다.
+ * 네트워크·타임아웃 같은 일시 장애와 구분해, 자동 재시도가 틀린 비밀번호로 서버를 계속
+ * 두드리지 않게 한다(그룹웨어에 N회 실패 잠금 정책이 있으면 계정이 잠긴다).
+ * 호출부(결재 폼 로그인 폴백 등)는 이 오류면 다른 로그인 경로로 재시도하지 말 것.
+ */
+export class GroupwareCredentialError extends Error {}
+
+/** 이만큼 연속으로 로그인 화면에 되돌아오면 자동 로그인을 멈춘다 */
+const MAX_AUTH_FAILS = 2;
+let authFails = 0;
+/** 멈춘 시점 계정의 지문 — 환경설정에서 계정을 바꿔 저장하면(지문이 달라지면) 바로 풀린다 */
+let blockedFingerprint: string | null = null;
+/**
+ * 멈춤 유지 시간 — 그 뒤엔 다시 시도한다(최악이어도 30분에 두 번). 일시 장애가 우연히 겹쳐
+ * 멈췄거나 서버 쪽 비밀번호만 되돌린 경우, 같은 계정을 다시 저장하지 않아도 풀리게 한다.
+ */
+const AUTH_BLOCK_MS = 30 * 60 * 1000;
+let blockedAt = 0;
+
+const credFingerprint = (cred: { id: string; password: string }): string =>
+  createHash('sha256').update(`${cred.id}\0${cred.password}`).digest('hex');
 
 let cached: GroupwareSession | null = null;
 // 로그인은 무거우니 동시 요청이 겹치면 하나의 로그인을 공유한다
@@ -129,7 +153,7 @@ async function login(
       //    로그인 화면으로 튕기는 것은 아니므로 아래 판정은 그대로 통과한다 — 2026-08-13 실측.
       await goto(page, GROUPWARE_CONFIG.mainUrl);
       if (isLoginUrl(page.wc.getURL())) {
-        throw new Error(
+        throw new GroupwareCredentialError(
           '그룹웨어 로그인 실패 — 환경설정의 계정 정보를 확인하세요.',
         );
       }
@@ -187,10 +211,33 @@ export async function getGroupwareSession(
       '비즈박스 계정이 없습니다 — 환경설정에서 ID·비밀번호를 입력하세요.',
     );
   }
+  const fingerprint = credFingerprint(cred);
+  if (blockedFingerprint !== null) {
+    if (blockedFingerprint === fingerprint && Date.now() - blockedAt < AUTH_BLOCK_MS) {
+      throw new GroupwareCredentialError(
+        `그룹웨어 로그인이 ${MAX_AUTH_FAILS}번 연속 실패해 30분간 자동 로그인을 멈췄습니다 — 환경설정에서 비즈박스 ID·비밀번호를 확인하고 저장하면 바로 다시 시도합니다.`,
+      );
+    }
+    // 계정이 바뀌었거나 멈춤 시간이 지났다 — 다시 시도한다
+    blockedFingerprint = null;
+    authFails = 0;
+  }
   inFlight = login(cred, AUTOMATION_PARTITION.login)
     .then((s) => {
       cached = s;
+      authFails = 0;
       return s;
+    })
+    .catch((err: unknown) => {
+      if (err instanceof GroupwareCredentialError) {
+        authFails += 1;
+        if (authFails >= MAX_AUTH_FAILS) {
+          blockedFingerprint = fingerprint;
+          blockedAt = Date.now();
+          console.warn('[groupware] 로그인 연속 실패 — 계정이 바뀔 때까지 자동 로그인을 멈춥니다');
+        }
+      }
+      throw err;
     })
     .finally(() => {
       inFlight = null;

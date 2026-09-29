@@ -7,7 +7,11 @@
 //      standalone 판에서 검증된 경로다. 이때도 withGroupwareLogin 큐를 지나 직렬화한다.
 import { evalInPage, goto, waitInPage, type Page } from '../../lib/browser';
 import { GW_CONFIG } from './config';
-import { gotoWithSessionInWindow, isLoginUrl } from '../groupware/session';
+import {
+  GroupwareCredentialError,
+  gotoWithSessionInWindow,
+  isLoginUrl,
+} from '../groupware/session';
 import { getCredentials } from '../settings/store';
 import { withGroupwareLogin } from '../../lib/groupware';
 import { sleep } from '../../lib/util';
@@ -90,7 +94,9 @@ export async function gotoAsUser(page: Page, url: string): Promise<void> {
     // 공용 세션 쿠키 주입 → 로그인 화면 건너뛰기 (만료 시 내부에서 1회 재로그인)
     await gotoWithSessionInWindow(page, url);
     return;
-  } catch {
+  } catch (err) {
+    // 계정 정보 오류면 폼 로그인으로 또 시도하지 않는다 — 틀린 비밀번호로 실패 횟수만 늘린다
+    if (err instanceof GroupwareCredentialError) throw err;
     // 공용 세션 확보 실패 — 창에서 직접 로그인하는 경로로 내려간다.
     // ⚠️ 이 폴백을 지우지 말 것: 결재 기능을 단독 앱으로 떼어낼 때의 유일한 탈출구다.
   }
