@@ -39,6 +39,7 @@ import {
 } from './pty';
 import { initTmux } from './tmux';
 import {
+  dropAllClients,
   getServerStatus,
   onServerChanged,
   startServer,
@@ -162,6 +163,7 @@ export function registerTerminalIpc() {
   });
   ipcMain.handle('terminal:server:regen-token', () => {
     regenerateToken();
+    dropAllClients(); // 이미 붙은 기기까지 무효화 — 확인창의 "모든 기기 무효화" 약속
     return getServerStatus(); // 새 토큰이 반영된 URL 목록
   });
 

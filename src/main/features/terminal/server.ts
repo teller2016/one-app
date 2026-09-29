@@ -628,6 +628,17 @@ export async function startServer(): Promise<TerminalServerStatus> {
   return getServerStatus();
 }
 
+/**
+ * 붙어 있는 폰 연결(`/term`·`/rpc`)을 전부 끊는다 — 토큰 재발급 직후 호출.
+ * ⚠️ 인증은 upgrade 순간에만 검사하므로, 이걸 안 하면 재발급해도 이미 붙은 기기는
+ * ping 에만 응답하면 셸·RPC 를 계속 쓸 수 있다(분실·유출 대응이 무력화된다).
+ * 끊긴 폰은 재연결 시 옛 토큰으로 upgrade 가 거부된다.
+ */
+export function dropAllClients(): void {
+  for (const ws of socketState.keys()) ws.terminate();
+  socketState.clear();
+}
+
 export async function stopServer(): Promise<void> {
   if (!server) return;
   if (pingTimer) clearInterval(pingTimer);
@@ -637,8 +648,7 @@ export async function stopServer(): Promise<void> {
   offPty.forEach((off) => off());
   offPty = [];
   stopRpcBridge();
-  for (const ws of socketState.keys()) ws.terminate();
-  socketState.clear();
+  dropAllClients();
   wss?.close();
   wss = null;
   rpcWss?.close();
