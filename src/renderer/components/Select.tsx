@@ -84,9 +84,12 @@ export function Select({
   useEffect(() => {
     if (!open) return;
     setQuery('');
+    // 검색어가 빈 상태의 렌더 목록 기준으로 찾는다 — commit 은 visible 을 인덱싱하므로
+    // limit 밖(렌더 안 된) 위치를 가리키면 Enter 가 엉뚱한 값·undefined 를 고른다
+    const base = limit != null ? options.slice(0, limit) : options;
     const idx = Math.max(
       0,
-      options.findIndex((o) => o.value === value),
+      base.findIndex((o) => o.value === value),
     );
     setHi(idx);
     listRef.current
@@ -99,11 +102,6 @@ export function Select({
     // 의존성은 open 만 — 열리는 순간의 선택값 기준 1회면 충분
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  // 검색어가 바뀌면 첫 후보로 하이라이트를 옮긴다
-  useEffect(() => {
-    if (open) setHi(0);
-  }, [query, open]);
 
   // 하이라이트 이동 시 보이게 스크롤
   useEffect(() => {
@@ -194,7 +192,12 @@ export function Select({
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
                   autoComplete="off"
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    // 검색어가 바뀌면 첫 후보로 — ⚠️ effect([query, open])로 두면 여는 순간에도 돌아
+                    // 위의 '현재 값 하이라이트'를 0 으로 덮는다(열자마자 Enter 가 첫 옵션을 골랐다)
+                    setHi(0);
+                  }}
                 />
               </div>
             )}

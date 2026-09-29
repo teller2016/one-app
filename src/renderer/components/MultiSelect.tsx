@@ -110,7 +110,9 @@ export function MultiSelect({
   useEffect(() => {
     if (!open) return;
     setQuery('');
-    const first = options.findIndex((o) => selected.includes(o.value));
+    // 검색어가 빈 상태의 렌더 목록 기준 — limit 밖을 가리키면 하이라이트가 보이지 않는 행에 선다
+    const base = limit != null ? options.slice(0, limit) : options;
+    const first = base.findIndex((o) => selected.includes(o.value));
     setHi(isAll || first < 0 ? 0 : first + (allLabel != null ? 1 : 0));
     // ⚠️ 포커스는 다음 프레임에 — 트리거 버튼의 기본 포커스가 이 effect 뒤에 확정된다(Select 와 동일)
     const raf = requestAnimationFrame(() => searchRef.current?.focus());
@@ -118,11 +120,6 @@ export function MultiSelect({
     // 의존성은 open 만 — 열리는 순간의 선택값 기준 1회면 충분
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  // 검색어가 바뀌면 첫 후보로 하이라이트를 옮긴다
-  useEffect(() => {
-    if (open) setHi(allLabel != null ? 1 : 0);
-  }, [query, open, allLabel]);
 
   // 하이라이트 이동 시 보이게 스크롤
   useEffect(() => {
@@ -239,7 +236,11 @@ export function MultiSelect({
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
                   autoComplete="off"
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    // 검색어가 바뀌면 첫 후보로 — effect 로 두면 여는 순간에도 돌아 첫 선택 하이라이트를 덮는다
+                    setHi(allLabel != null ? 1 : 0);
+                  }}
                 />
               </div>
             )}

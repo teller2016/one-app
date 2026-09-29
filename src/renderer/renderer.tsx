@@ -6,6 +6,7 @@
 import './styles/index.scss';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initTheme } from './lib/theme';
 
 // 첫 페인트 전에 테마 적용 (localStorage 미러 — 플래시 방지)
@@ -38,6 +39,12 @@ if (container) {
       m.mountTerminalPopout(container, popoutId)
     );
   } else {
-    createRoot(container).render(<App />);
+    // 최상위 경계 — 섹션·위젯 경계 바깥(사이드바·탑바·토스트·확인창 Provider)의 렌더 예외가
+    // React 루트를 통째로 언마운트해 앱이 백지가 되는 것을 막는다(마지막 방어선)
+    createRoot(container).render(
+      <ErrorBoundary label="앱">
+        <App />
+      </ErrorBoundary>,
+    );
   }
 }
