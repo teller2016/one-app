@@ -161,8 +161,20 @@ export function powerOffForSleep(): void {
     return;
   }
   if (readPower(bin) !== true) return; // 이미 꺼져 있거나 못 읽음 → 건드리지 않는다
-  if (!writePower(bin, false)) return;
-  markBluetoothOff();
+  // ⚠️ 기록을 **먼저** 남긴다. 끄고 나서 기록하면, 끄기 명령이 타임아웃으로 강제 종료됐는데
+  // 전원 변경은 이미 들어간 경우 "꺼짐 + 기록 없음"이 되어 복구 경로가 영영 켜지 않는다
+  // (BT 키보드·마우스 먹통). 기록 저장이 실패하면 끄지 않는다 — 켜진 채가 안전한 쪽이다.
+  try {
+    markBluetoothOff();
+  } catch (err) {
+    console.warn('[power] 블루투스 기록을 남기지 못해 끄지 않습니다:', err);
+    return;
+  }
+  if (!writePower(bin, false)) {
+    // 실패로 보고됐어도 실제로 꺼졌을 수 있다 — 다시 읽어 확실히 켜져 있을 때만 기록을 지운다
+    if (readPower(bin) === true) clearBluetoothOff();
+    return;
+  }
   console.log(`[power] 블루투스를 껐습니다 — ${verdict.reason}`);
 }
 
