@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildReportJql, normalizeLabels, normalizeProjectKeys } from "./jira-report";
+import {
+  buildReportJql,
+  normalizeEpicKeys,
+  normalizeLabels,
+  normalizeProjectKeys,
+} from "./jira-report";
 
 describe("normalizeProjectKeys", () => {
   it("대문자로 맞추고 중복·빈 값·형식 위반을 버린다", () => {
@@ -126,6 +131,55 @@ describe("buildReportJql", () => {
     ).toThrow("레이블");
   });
 
+  it("에픽은 parentEpic 으로 자르고 에픽 자신은 뺀다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: ["DFD"],
+        period: { mode: "all" },
+        dateField: "updated",
+        epics: ["DFD-442", "DFD-441"],
+      }),
+    ).toBe(
+      "project IN (DFD) AND parentEpic IN (DFD-442, DFD-441) AND key NOT IN (DFD-442, DFD-441) ORDER BY created ASC",
+    );
+  });
+
+  it("에픽만 있어도 조회할 수 있다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: [],
+        period: { mode: "all" },
+        dateField: "updated",
+        epics: ["dfd-442"],
+      }),
+    ).toBe("parentEpic IN (DFD-442) AND key NOT IN (DFD-442) ORDER BY created ASC");
+  });
+
+  it("레이블·에픽·기간을 함께 주면 모두 AND 로 붙는다", () => {
+    expect(
+      buildReportJql({
+        projectKeys: ["DFD"],
+        period: { mode: "month", month: "2026-09" },
+        dateField: "created",
+        labels: ["26/09/17"],
+        epics: ["DFD-442"],
+      }),
+    ).toBe(
+      'project IN (DFD) AND labels IN ("26/09/17") AND parentEpic IN (DFD-442) AND key NOT IN (DFD-442) AND created >= "2026-09-01" AND created < "2026-10-01" ORDER BY created ASC',
+    );
+  });
+
+  it("형식이 어긋난 에픽 키만 있으면 조건이 없는 것으로 보고 던진다", () => {
+    expect(() =>
+      buildReportJql({
+        projectKeys: [],
+        period: { mode: "all" },
+        dateField: "updated",
+        epics: ["DFD-442) OR project = X", "  "],
+      }),
+    ).toThrow("에픽");
+  });
+
   it("레이블의 따옴표는 이스케이프한다", () => {
     expect(
       buildReportJql({
@@ -151,3 +205,14 @@ describe("normalizeLabels", () => {
   });
 });
 
+describe("normalizeEpicKeys", () => {
+  it("대문자로 맞추고 중복·빈 값·형식 위반을 버린다", () => {
+    expect(
+      normalizeEpicKeys([" dfd-442 ", "DFD-442", "", "DFD", "DFD-1 OR 1=1", "ssb-7"]),
+    ).toEqual(["DFD-442", "SSB-7"]);
+  });
+
+  it("undefined 는 빈 목록", () => {
+    expect(normalizeEpicKeys(undefined)).toEqual([]);
+  });
+});

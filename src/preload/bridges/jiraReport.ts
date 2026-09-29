@@ -3,6 +3,7 @@
 // 채널 이름은 여기 한 곳에만 둔다 — 이유는 settings.ts 머리말.
 import type { IpcRenderer } from 'electron';
 import type {
+  JiraEpicsResult,
   JiraLabelsResult,
   JiraProjectsResult,
   JiraReportPrefs,
@@ -18,6 +19,11 @@ export interface JiraReportBridge {
    * 최신 순으로 정렬돼 온다. force=true 는 새로고침(10분 캐시 우회).
    */
   labels: (projectKeys: string[], force?: boolean) => Promise<JiraLabelsResult>;
+  /**
+   * 에픽 선택지 — 고른 프로젝트의 에픽(최신 생성 순). 프로젝트가 비면 빈 목록.
+   * force=true 는 새로고침(10분 캐시 우회).
+   */
+  epics: (projectKeys: string[], force?: boolean) => Promise<JiraEpicsResult>;
   search: (query: JiraReportQuery) => Promise<JiraReportResult>;
   /** 마지막 선택(템플릿·프로젝트·기간 기준) — userData 에 남긴다 */
   getPrefs: () => Promise<JiraReportPrefs>;
@@ -27,6 +33,7 @@ export interface JiraReportBridge {
 export const jiraReportBridge = (ipcRenderer: IpcRenderer): JiraReportBridge => ({
   projects: (force) => ipcRenderer.invoke('jira:report:projects', force),
   labels: (projectKeys, force) => ipcRenderer.invoke('jira:report:labels', projectKeys, force),
+  epics: (projectKeys, force) => ipcRenderer.invoke('jira:report:epics', projectKeys, force),
   search: (query) => ipcRenderer.invoke('jira:report:search', query),
   getPrefs: () => ipcRenderer.invoke('jira:report:prefs:get'),
   savePrefs: (prefs) => ipcRenderer.invoke('jira:report:prefs:set', prefs),

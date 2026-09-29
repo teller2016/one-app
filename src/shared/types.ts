@@ -308,6 +308,11 @@ export type JiraReportQuery = {
    * 붙으므로 기간으로는 잡히지 않는다(그래서 전체 조회 후 화면에서 거르는 수밖에 없었다).
    */
   labels?: string[];
+  /**
+   * 서버(JQL)에서 자를 에픽 키 — 비어 있으면 조건에 넣지 않는다.
+   * 레이블처럼 날짜 축과 무관한 축이고, 에픽 아래 **하위 작업까지** 포함한다(`parentEpic`).
+   */
+  epics?: string[];
   /** 고급 — 값이 있으면 위 조건을 무시하고 이 JQL 을 그대로 보낸다 */
   jql?: string;
 };
@@ -319,6 +324,21 @@ export type JiraLabelsResult = {
   labels?: string[];
   /** 상한(5000개)에 걸려 뒤가 잘렸다 — 검색으로 좁혀야 한다 */
   truncated?: boolean;
+  error?: string;
+};
+
+/** 에픽 선택지 한 줄 */
+export type JiraEpicOption = {
+  key: string; // DFD-442
+  summary: string;
+  done: boolean; // 완료 계열 상태 (지난 에픽 표시용)
+};
+
+/** 에픽 선택지 — 고른 프로젝트의 에픽 전부(최신 생성 순) */
+export type JiraEpicsResult = {
+  ok: boolean;
+  configured: boolean;
+  epics?: JiraEpicOption[];
   error?: string;
 };
 

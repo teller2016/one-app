@@ -1,13 +1,16 @@
-// Jira 티켓 보고 — 프로젝트·기간·레이블로 티켓을 모아 한 번에 복사할 목록을 만든다.
+// Jira 티켓 보고 — 프로젝트·기간·레이블·에픽으로 티켓을 모아 한 번에 복사할 목록을 만든다.
 //
-// 필터는 두 층이다. **서버(JQL)** 는 프로젝트·기간만 자르고, 상태·담당자·레이블·유형은
+// 필터는 두 층이다. **서버(JQL)** 는 프로젝트·기간·레이블·에픽을 자르고, 상태·담당자·유형은
 // **렌더러가 받은 결과 안에서 걸러낸다**(facet). 그래야 선택지가 실제 결과에 있는 값만 보이고,
-// 레이블·담당자 후보를 따로 묻는 API(인스턴스마다 다르다)에 기대지 않는다. 월간 보고 규모
-// (수백 건)에서는 한 번 받아 두고 화면에서 거르는 쪽이 빠르기도 하다.
+// 담당자 후보를 따로 묻는 API(인스턴스마다 다르다)에 기대지 않는다. 월간 보고 규모
+// (수백 건)에서는 한 번 받아 두고 화면에서 거르는 쪽이 빠르기도 하다. 레이블·에픽만 서버
+// 조건인 이유는 날짜 축과 무관해서다 — 기간으로 잘린 결과 안에서는 찾을 수 없다.
 //
 // 이 모듈은 One App 본체와 단독 배포판(standalone/lite)이 **같은 파일을 import** 한다 —
 // 여기서 electron 외의 데스크톱 전용 의존(파일 경로·터미널 등)을 끌어오지 말 것.
 import type {
+  JiraEpicOption,
+  JiraEpicsResult,
   JiraLabelsResult,
   JiraProjectOption,
   JiraProjectsResult,
@@ -384,6 +387,60 @@ export async function fetchLabels(
   }
 }
 
+// ── 에픽 목록 (조회 조건) ──
+
+const EPICS_TTL_MS = 10 * 60_000;
+
+/** 캐시 — 프로젝트 조합별로 따로 담는다 */
+const epicsCache = new Map<string, { at: number; list: JiraEpicOption[] }>();
+
+/**
+ * 에픽 선택지 — 고른 프로젝트의 에픽 전부(최신 생성 순, 완료된 에픽 포함 — 지난 에픽 보고용).
+ * **프로젝트를 안 고르면 빈 목록**이다 — 인스턴스 전체 에픽은 선택지로 보여줄 양이 아니다.
+ * 10분 캐시(프로젝트 조합별), force 는 새로고침 버튼.
+ *
+ * ⚠️ 유형 조건은 **시스템 이름 `Epic`** 으로 쓴다 — API 는 유형 이름을 사용자 언어로 주지만
+ *    (`에픽`) JQL 에 `issuetype = "에픽"` 을 넣으면 **오류 없이 0건**이다(2026-09-29 실측).
+ */
+export async function fetchEpics(
+  projectKeys: string[] = [],
+  force = false,
+): Promise<JiraEpicsResult> {
+  const auth = jiraAuth();
+  if (!auth) return { ok: false, configured: false, error: NOT_CONFIGURED };
+  const keys = normalizeProjectKeys(projectKeys);
+  if (keys.length === 0) return { ok: true, configured: true, epics: [] };
+  const cacheKey = keys.join(',');
+  const hit = epicsCache.get(cacheKey);
+  if (!force && hit && Date.now() - hit.at < EPICS_TTL_MS) {
+    return { ok: true, configured: true, epics: hit.list };
+  }
+  try {
+    const jql = `project IN (${keys.join(', ')}) AND issuetype = Epic ORDER BY created DESC`;
+    const { issues } = await searchAll<{
+      key?: string;
+      fields?: { summary?: string; status?: { statusCategory?: { key?: string } } };
+    }>(auth.url, auth.headers, jql, 'summary,status');
+    const list: JiraEpicOption[] = [];
+    for (const it of issues) {
+      if (typeof it.key !== 'string') continue;
+      list.push({
+        key: it.key,
+        summary: it.fields?.summary ?? '(제목 없음)',
+        done: it.fields?.status?.statusCategory?.key === 'done',
+      });
+    }
+    epicsCache.set(cacheKey, { at: Date.now(), list });
+    return { ok: true, configured: true, epics: list };
+  } catch (err) {
+    return {
+      ok: false,
+      configured: true,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 /**
  * 보고 IPC 등록 — 본체는 `registerJiraIpc()` 안에서, 단독 배포판은 main.ts 에서 직접 부른다.
  *
@@ -396,6 +453,9 @@ export function registerJiraReportIpc(): void {
   handleShared('jira:report:projects', (force?: boolean) => fetchProjects(force === true));
   handleShared('jira:report:labels', (projectKeys?: string[], force?: boolean) =>
     fetchLabels(Array.isArray(projectKeys) ? projectKeys : [], force === true),
+  );
+  handleShared('jira:report:epics', (projectKeys?: string[], force?: boolean) =>
+    fetchEpics(Array.isArray(projectKeys) ? projectKeys : [], force === true),
   );
   handleShared('jira:report:search', (query: JiraReportQuery) => searchReport(query));
   handleShared('jira:report:prefs:get', () => getReportPrefs());

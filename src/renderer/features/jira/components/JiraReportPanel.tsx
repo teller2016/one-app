@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  JiraEpicOption,
   JiraProjectOption,
   JiraReportDateField,
   JiraReportIssue,
@@ -26,6 +27,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { Segment } from '../../../components/Segment';
 import { Select } from '../../../components/Select';
 import { Textarea } from '../../../components/Textarea';
+import { TextLink } from '../../../components/TextLink';
 import { Tooltip } from '../../../components/Tooltip';
 import { errMsg } from '../../../lib/errMsg';
 import { useCopy } from '../../../lib/useCopy';
@@ -106,6 +108,22 @@ const dateOf = (it: JiraReportIssue, field: JiraReportDateField): string =>
 const compareName = (a: string, b: string): number =>
   a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b, 'ko', { numeric: true });
 
+/**
+ * 고른 값을 **선택지 순서(= 최신 우선)** 로 맞춘다 — 고른 순서대로 두면 칩·JQL·복사 결과가
+ * 뒤죽박죽 읽힌다. 선택지에 없는 값(다른 프로젝트 것)은 뒤에 이름 역순으로 붙인다.
+ * 순서가 그대로면 받은 배열을 그대로 준다(불필요한 리렌더 방지).
+ */
+function orderByOptions(list: string[], options: string[]): string[] {
+  const order = new Map(options.map((v, i) => [v, i] as const));
+  const at = (v: string) => order.get(v) ?? Number.MAX_SAFE_INTEGER;
+  const sorted = [...list].sort((a, b) => at(a) - at(b) || compareName(b, a));
+  return sorted.every((v, i) => v === list[i]) ? list : sorted;
+}
+
+/** 에픽 선택지·칩의 표기 — "DFD-442 · 제목", 완료된 에픽은 꼬리표를 붙인다 */
+const epicText = (e: JiraEpicOption): string =>
+  `${e.key} · ${e.summary}${e.done ? ' (완료)' : ''}`;
+
 /** 결과 안에서 값별 개수를 세어 MultiSelect 옵션으로 — 많이 나온 값부터 */
 function facetOptions(
   issues: JiraReportIssue[],
@@ -125,12 +143,13 @@ const passes = (selected: string[] | undefined, values: string[]): boolean =>
   !selected || values.some((v) => selected.includes(v));
 
 /**
- * 티켓 보고 — 프로젝트·기간·레이블로 티켓을 모아 필터하고, 템플릿대로 한 번에 복사한다.
+ * 티켓 보고 — 프로젝트·기간·레이블·에픽으로 티켓을 모아 필터하고, 템플릿대로 한 번에 복사한다.
  *
- * 서버(JQL)는 프로젝트·기간·**레이블**을 자르고, 상태·담당자·유형은 받은 결과 안에서 거른다(facet).
- * 레이블이 서버 조건인 이유 — 배포 레이블(`26/10/15_운영배포`)은 8월에 만든 티켓에도 붙어서
- * 날짜 축으로는 잡히지 않는다(기간을 걸면 통째로 빠진다). 선택지는 인스턴스의 **전 레이블**이고
- * 검색창에서 `09` 처럼 토막으로 찾는다.
+ * 서버(JQL)는 프로젝트·기간·**레이블·에픽**을 자르고, 상태·담당자·유형은 받은 결과 안에서
+ * 거른다(facet). 레이블이 서버 조건인 이유 — 배포 레이블(`26/10/15_운영배포`)은 8월에 만든 티켓에도
+ * 붙어서 날짜 축으로는 잡히지 않는다(기간을 걸면 통째로 빠진다). 선택지는 고른 프로젝트가 쓰는
+ * 레이블이고 검색창에서 `09` 처럼 토막으로 찾는다. 에픽도 같은 이유로 서버 조건이다 — 에픽은
+ * 여러 달에 걸치므로 기간으로 잘린 결과 안에서는 온전히 모을 수 없다.
  * `onOpenDetail` 을 주면 제목 클릭이 앱 안 상세 패널을 열고, 없으면(단독 배포판) 브라우저로 연다.
  */
 export function JiraReportPanel({
@@ -156,6 +175,11 @@ export function JiraReportPanel({
   const [labelLoading, setLabelLoading] = useState(false);
   const [labelError, setLabelError] = useState('');
   const [labelTruncated, setLabelTruncated] = useState(false);
+  // 서버 조건으로 보낼 에픽 키 + 선택지(고른 프로젝트의 에픽 — 프로젝트가 없으면 비어 있다)
+  const [epics, setEpics] = useState<string[]>([]);
+  const [epicOptions, setEpicOptions] = useState<JiraEpicOption[]>([]);
+  const [epicLoading, setEpicLoading] = useState(false);
+  const [epicError, setEpicError] = useState('');
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
   // 자리표시자 목록 펼침 — (i) 버튼. 목록에서 누르면 템플릿 커서 자리에 삽입된다
   const [helpOpen, setHelpOpen] = useState(false);
@@ -251,18 +275,9 @@ export function JiraReportPanel({
     void loadLabels();
   }, [loadLabels]);
 
-  /**
-   * 고른 레이블을 **선택지 순서(= 최신 우선)** 로 맞춘다 — 고른 순서대로 두면 칩·JQL·복사 결과가
-   * 뒤죽박죽 읽힌다. 선택지에 없는 값(다른 프로젝트 레이블)은 뒤에 이름 역순으로 붙인다.
-   */
+  /** 고른 레이블을 선택지 순서(= 최신 우선)로 맞춘다 — `orderByOptions` */
   const orderLabels = useCallback(
-    (list: string[]) => {
-      const order = new Map(labelOptions.map((v, i) => [v, i] as const));
-      const at = (v: string) => order.get(v) ?? Number.MAX_SAFE_INTEGER;
-      const sorted = [...list].sort((a, b) => at(a) - at(b) || compareName(b, a));
-      // 순서가 그대로면 기존 배열을 준다 (불필요한 리렌더 방지)
-      return sorted.every((v, i) => v === list[i]) ? list : sorted;
-    },
+    (list: string[]) => orderByOptions(list, labelOptions),
     [labelOptions],
   );
 
@@ -295,6 +310,59 @@ export function JiraReportPanel({
     return all.map((v) => ({ value: v, label: v }));
   }, [labelOptions, labels]);
 
+  // ── 에픽 선택지 — 고른 프로젝트의 에픽(10분 캐시, 최신 생성 순) ──
+  const loadEpics = useCallback(
+    async (force = false) => {
+      setEpicLoading(true);
+      try {
+        const res = await window.oneApp.jira.report.epics(projectKeys, force);
+        setEpicOptions(res.epics ?? []);
+        setEpicError(res.ok ? '' : (res.error ?? '에픽 목록을 불러오지 못했습니다.'));
+      } catch (e) {
+        setEpicError(errMsg(e, '에픽 목록을 불러오지 못했습니다.'));
+      } finally {
+        setEpicLoading(false);
+      }
+    },
+    [projectKeys],
+  );
+
+  // 프로젝트가 바뀌면 그 프로젝트의 에픽으로 갈아 끼운다 (고른 에픽은 레이블처럼 그대로 둔다)
+  useEffect(() => {
+    void loadEpics();
+  }, [loadEpics]);
+
+  /**
+   * 담긴 에픽을 갈아 끼운다 — 레이블과 같은 이유로 **처음 담는 순간 기간 제한을 끈다**.
+   * 에픽은 여러 달에 걸쳐 있어서, 기간이 걸려 있으면 그 달에 움직이지 않은 티켓이 빠진다.
+   */
+  const changeEpics = useCallback(
+    (next: string[]) => {
+      if (epics.length === 0 && next.length > 0) setPeriodMode('all');
+      setEpics(orderByOptions(next, epicOptions.map((e) => e.key)));
+    },
+    [epics, epicOptions],
+  );
+
+  /** 선택지 = 받은 목록 ∪ 이미 고른 것 — 프로젝트를 바꿔 목록이 갈려도 고른 것을 해제할 수 있게 */
+  const epicChoices = useMemo(() => {
+    const all = epicOptions.map((e) => ({
+      value: e.key,
+      label: epicText(e),
+      search: `${e.key} ${e.summary}`,
+    }));
+    for (const k of epics) {
+      if (!epicOptions.some((e) => e.key === k)) all.push({ value: k, label: k, search: k });
+    }
+    return all;
+  }, [epicOptions, epics]);
+
+  /** 칩 표기 — 선택지에 있으면 제목까지, 없으면(다른 프로젝트 에픽) 키만 */
+  const epicName = (key: string): string => {
+    const e = epicOptions.find((o) => o.key === key);
+    return e ? epicText(e) : key;
+  };
+
   // ── 조건 → JQL 미리보기 (main 과 같은 함수) ──
   const period = useMemo<JiraReportPeriod>(
     () =>
@@ -311,9 +379,10 @@ export function JiraReportPanel({
       period,
       dateField,
       labels,
+      epics,
       jql: advanced ? customJql : undefined,
     }),
-    [projectKeys, period, dateField, labels, advanced, customJql],
+    [projectKeys, period, dateField, labels, epics, advanced, customJql],
   );
   const preview = useMemo(() => {
     try {
@@ -468,10 +537,12 @@ export function JiraReportPanel({
     <div className="jira-report">
       {/* ── 조회 조건 ── */}
       <div className="jira-report__query">
-        <div className="jira-report__row">
-          <div className="jira-report__field jira-report__field--grow">
-            <span className="jira-report__label">프로젝트</span>
+        {/* 필터별 한 줄 — 왼쪽 이름 열 + 컨트롤. 고른 레이블·에픽 칩은 그 줄 오른쪽에 붙는다 */}
+        <div className="jira-report__form">
+          <span className="jira-report__label">프로젝트</span>
+          <div className="jira-report__ctrl">
             <MultiSelect
+              className="jira-report__pick"
               options={projects.map((p) => ({
                 value: p.key,
                 label: `${p.key} · ${p.name}`,
@@ -495,10 +566,10 @@ export function JiraReportPanel({
           </div>
 
           {/* 레이블 — facet 이 아니라 **서버 조건**이다. 팝오버 검색창에서 `09` 처럼 찾는다 */}
-          <div className="jira-report__field">
-            <span className="jira-report__label">레이블</span>
+          <span className="jira-report__label">레이블</span>
+          <div className="jira-report__ctrl">
             <MultiSelect
-              className="jira-report__labels"
+              className="jira-report__pick"
               options={labelChoices}
               values={labels}
               onChange={(v) => changeLabels(v ?? [])}
@@ -524,22 +595,96 @@ export function JiraReportPanel({
               />
             </Tooltip>
             {labels.length > 0 && (
-              <Tooltip label="고른 레이블 비우기">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="고른 레이블 비우기"
+              <>
+                <div className="jira-report__chips">
+                  {labels.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className="chip jira-report__label-chip"
+                      disabled={advanced}
+                      aria-label={`${v} 빼기`}
+                      onClick={() => changeLabels(labels.filter((x) => x !== v))}
+                    >
+                      <span className="jira-report__label-chip-name">{v}</span>
+                      <Icon name="x" size={11} />
+                    </button>
+                  ))}
+                </div>
+                <TextLink
+                  small
                   disabled={advanced}
+                  aria-label="고른 레이블 비우기"
                   onClick={() => changeLabels([])}
                 >
-                  <Icon name="x" size={13} />
-                </button>
-              </Tooltip>
+                  비우기
+                </TextLink>
+              </>
             )}
           </div>
 
-          <div className="jira-report__field">
-            <span className="jira-report__label">기간</span>
+          {/* 에픽 — 레이블처럼 **서버 조건**이다. 에픽 아래 하위 작업까지 모은다(parentEpic) */}
+          <span className="jira-report__label">에픽</span>
+          <div className="jira-report__ctrl">
+            <MultiSelect
+              className="jira-report__pick"
+              options={epicChoices}
+              values={epics}
+              onChange={(v) => changeEpics(v ?? [])}
+              emptyLabel={
+                epicLoading
+                  ? '불러오는 중...'
+                  : epicChoices.length
+                    ? '선택 안 함'
+                    : projectKeys.length
+                      ? '에픽 없음'
+                      : '프로젝트 먼저 선택'
+              }
+              countLabel={(n) => `${n}개 선택`}
+              searchable
+              searchPlaceholder="번호·제목 검색"
+              limit={200}
+              disabled={advanced || epicChoices.length === 0}
+              aria-label="에픽"
+            />
+            <Tooltip label="에픽 목록 새로고침">
+              <RefreshButton
+                size={13}
+                spinning={epicLoading}
+                onClick={() => void loadEpics(true)}
+              />
+            </Tooltip>
+            {epics.length > 0 && (
+              <>
+                <div className="jira-report__chips">
+                  {epics.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className="chip jira-report__label-chip jira-report__label-chip--epic"
+                      disabled={advanced}
+                      aria-label={`에픽 ${k} 빼기`}
+                      onClick={() => changeEpics(epics.filter((x) => x !== k))}
+                    >
+                      <span className="jira-report__label-chip-name">{epicName(k)}</span>
+                      <Icon name="x" size={11} />
+                    </button>
+                  ))}
+                </div>
+                <TextLink
+                  small
+                  disabled={advanced}
+                  aria-label="고른 에픽 비우기"
+                  onClick={() => changeEpics([])}
+                >
+                  비우기
+                </TextLink>
+              </>
+            )}
+          </div>
+
+          <span className="jira-report__label">기간</span>
+          <div className="jira-report__ctrl">
             <Segment<PeriodMode>
               options={[
                 { value: 'month', label: '월' },
@@ -550,87 +695,68 @@ export function JiraReportPanel({
               onChange={setPeriodMode}
               disabled={advanced}
             />
-          </div>
 
-          {periodMode === 'month' && (
-            <div className="jira-report__month">
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="이전 달"
-                disabled={advanced}
-                onClick={() => setMonth((m) => shiftMonthKey(m, -1))}
+            {periodMode === 'month' && (
+              <div className="jira-report__month">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="이전 달"
+                  disabled={advanced}
+                  onClick={() => setMonth((m) => shiftMonthKey(m, -1))}
+                >
+                  <Icon name="chevron-left" size={14} />
+                </button>
+                <span className="jira-report__month-label">{monthLabel(month)}</span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="다음 달"
+                  disabled={advanced || !canGoNextMonth}
+                  onClick={() => setMonth((m) => shiftMonthKey(m, 1))}
+                >
+                  <Icon name="chevron-right" size={14} />
+                </button>
+              </div>
+            )}
+
+            {periodMode === 'range' && (
+              <div className="jira-report__range">
+                <DatePicker value={rangeStart} onChange={setRangeStart} disabled={advanced} />
+                <span className="jira-report__tilde">~</span>
+                <DatePicker value={rangeEnd} onChange={setRangeEnd} disabled={advanced} />
+              </div>
+            )}
+
+            {periodMode !== 'all' && (
+              <div className="jira-report__field">
+                <span className="jira-report__label">기준</span>
+                <Select
+                  options={REPORT_DATE_FIELDS}
+                  value={dateField}
+                  onChange={(v) => setDateField(v as JiraReportDateField)}
+                  small
+                  disabled={advanced}
+                  aria-label="기간 기준 필드"
+                />
+              </div>
+            )}
+
+            <div className="jira-report__run">
+              <Button
+                variant="primary"
+                loading={loading}
+                disabled={!preview.jql}
+                onClick={() => void run()}
               >
-                <Icon name="chevron-left" size={14} />
-              </button>
-              <span className="jira-report__month-label">{monthLabel(month)}</span>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="다음 달"
-                disabled={advanced || !canGoNextMonth}
-                onClick={() => setMonth((m) => shiftMonthKey(m, 1))}
-              >
-                <Icon name="chevron-right" size={14} />
-              </button>
+                <Icon name="search" size={14} />
+                조회
+              </Button>
             </div>
-          )}
-
-          {periodMode === 'range' && (
-            <div className="jira-report__range">
-              <DatePicker value={rangeStart} onChange={setRangeStart} disabled={advanced} />
-              <span className="jira-report__tilde">~</span>
-              <DatePicker value={rangeEnd} onChange={setRangeEnd} disabled={advanced} />
-            </div>
-          )}
-
-          {periodMode !== 'all' && (
-            <div className="jira-report__field">
-              <span className="jira-report__label">기준</span>
-              <Select
-                options={REPORT_DATE_FIELDS}
-                value={dateField}
-                onChange={(v) => setDateField(v as JiraReportDateField)}
-                small
-                disabled={advanced}
-                aria-label="기간 기준 필드"
-              />
-            </div>
-          )}
-
-          <div className="jira-report__run">
-            <Button
-              variant="primary"
-              loading={loading}
-              disabled={!preview.jql}
-              onClick={() => void run()}
-            >
-              <Icon name="search" size={14} />
-              조회
-            </Button>
           </div>
         </div>
 
-        {/* 고른 레이블 — 조건에 무엇이 걸렸는지 한눈에 보이게. 누르면 그 하나만 뺀다 */}
-        {labels.length > 0 && (
-          <div className="jira-report__label-chips">
-            {labels.map((v) => (
-              <button
-                key={v}
-                type="button"
-                className="chip jira-report__label-chip"
-                disabled={advanced}
-                aria-label={`${v} 빼기`}
-                onClick={() => changeLabels(labels.filter((x) => x !== v))}
-              >
-                <span className="jira-report__label-chip-name">{v}</span>
-                <Icon name="x" size={11} />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="jira-report__row jira-report__row--sub">
+        <div className="jira-report__sub">
           <Checkbox
             label="JQL 직접 입력"
             checked={advanced}
@@ -658,7 +784,7 @@ export function JiraReportPanel({
           {!advanced && preview.error && (
             <span className="jira-report__jql jira-report__jql--warn">{preview.error}</span>
           )}
-          {!advanced && labels.length > 0 && periodMode !== 'all' && (
+          {!advanced && (labels.length > 0 || epics.length > 0) && periodMode !== 'all' && (
             <span className="jira-report__jql jira-report__jql--warn">
               기간도 함께 걸려 있습니다 — 그 기간에 갱신되지 않은 티켓은 빠집니다.
             </span>
@@ -679,6 +805,7 @@ export function JiraReportPanel({
 
       {projectsError && <Banner variant="warning">{projectsError}</Banner>}
       {labelError && <Banner variant="warning">{labelError}</Banner>}
+      {epicError && <Banner variant="warning">{epicError}</Banner>}
       {labelTruncated && (
         <Banner variant="warning">
           레이블이 많아 앞 {labelOptions.length}개만 받았습니다 — 검색으로 좁혀 고르세요.

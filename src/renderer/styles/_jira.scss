@@ -862,42 +862,40 @@
   flex-direction: column;
   gap: 12px;
 
-  // 조회 조건 카드 — 프로젝트·기간·기준·[조회] 한 줄 + JQL 미리보기 줄
+  // 조회 조건 카드 — 필터별 한 줄(이름 열 + 컨트롤) + 구분선 + JQL 미리보기 줄
   &__query {
     @include card-surface;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     padding: 14px 16px;
   }
 
-  &__row {
+  // 필터 폼 — 이름 열은 가장 긴 이름('프로젝트')에 맞추고 컨트롤 열이 남는 폭을 쓴다.
+  // 세로는 가운데 — 칩이 여러 줄이면 컨트롤 줄 안에서 셀렉트가 가운데로 가므로 이름도 같이 맞춘다
+  &__form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 10px 16px;
+  }
+
+  // 한 필터의 컨트롤 줄 — 셀렉트 + 새로고침 (+ 칩 + 비우기). 좁으면 칩이 아래 줄로 내려간다
+  &__ctrl {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px 14px;
-
-    &--sub {
-      gap: 8px 12px;
-    }
+    gap: 8px 12px;
+    min-width: 0;
+    min-height: var(--control-h);
   }
 
-  // 라벨 + 컨트롤 묶음
+  // 라벨 + 컨트롤 묶음 (기간 줄의 '기준')
   &__field {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
-
-    // 프로젝트 셀렉트는 남는 폭을 차지한다 (이름이 길다)
-    &--grow {
-      flex: 1 1 260px;
-
-      .picker {
-        flex: 1;
-        min-width: 0;
-      }
-    }
   }
 
   &__label {
@@ -905,17 +903,22 @@
     flex-shrink: 0;
   }
 
-  // 레이블 선택 — 트리거는 좁게 두고(고른 개수만 보인다) 목록은 팝오버가 넓게 띄운다
-  &__labels {
-    flex: 0 0 156px;
+  // 세 셀렉트(프로젝트·레이블·에픽)는 같은 폭으로 세로 줄을 맞춘다 — 팝오버가 트리거 폭을
+  // 따라가므로 프로젝트 이름·에픽 제목이 읽힐 만큼 둔다. 칸 폭이 정해진 grid 라 좁은 화면에서는
+  // 그대로 줄어든다(예전 flex 한 줄에서는 부모가 내용 폭으로 줄여 제목이 잘렸다 — 2026-09-29)
+  &__pick {
+    flex: 0 1 320px;
     min-width: 0;
   }
 
-  // 고른 레이블 칩 — 조회 줄 아래. 많이 고르면 세 줄쯤에서 스크롤한다
-  &__label-chips {
+  // 고른 레이블·에픽 칩 — 그 필터 줄의 남는 폭. 많이 고르면 세 줄쯤에서 스크롤한다
+  &__chips {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
+    flex: 1 1 240px;
+    min-width: 0;
     max-height: 96px;
     overflow-y: auto;
   }
@@ -944,6 +947,11 @@
         color: var(--danger);
       }
     }
+  }
+
+  // 에픽 칩은 한글 제목이 섞여 등폭이 어울리지 않는다 — 본문 글꼴로 되돌린다
+  &__label-chip--epic {
+    font-family: inherit;
   }
 
   &__label-chip-name {
@@ -981,6 +989,16 @@
 
   &__run {
     margin-left: auto;
+  }
+
+  // JQL 미리보기 줄 — 필터 폼과 구분선으로 나눈다
+  &__sub {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
   }
 
   // JQL 미리보기 — 실제로 보낼 문자열을 그대로 보여준다 (길면 잘라 두고 title 로 전문)

@@ -50,6 +50,7 @@ export const SPEC: Spec = {
     report: {
       projects: { ch: 'jira:report:projects' },
       labels: { ch: 'jira:report:labels' },
+      epics: { ch: 'jira:report:epics' },
       search: { ch: 'jira:report:search' },
       getPrefs: { ch: 'jira:report:prefs:get' },
       savePrefs: { ch: 'jira:report:prefs:set' },
