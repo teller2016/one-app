@@ -383,6 +383,15 @@
       // bottom:0 을 이기므로(over-constrained) 래퍼가 .content 아래로 44px 삐져나가
       // 숨은 크기 ≠ 활성 크기가 된다(E2E 실측 859→903). auto 면 inset 이 크기를 정한다.
       height: auto;
+
+      // ⚠️ 화면 밖으로 옮겨도 **CSS 애니메이션은 멈추지 않는다** — 다른 섹션을 보는 동안
+      // 에이전트가 일하면 탭 상태점 펄스·LNB 스피너·축소 LNB 아크(stroke-dashoffset = paint)가
+      // 보이지 않는 채로 계속 스타일 계산·페인트를 만들었다(2026-09-29 9라운드 감사).
+      // 개별 규칙의 `animation` 단축 속성이 play-state 를 running 으로 되돌리므로 !important.
+      // 복귀하면 멈춘 지점에서 그대로 이어 돈다.
+      * {
+        animation-play-state: paused !important;
+      }
     }
   }
 }

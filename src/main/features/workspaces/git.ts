@@ -70,6 +70,94 @@ async function parseWorktrees(
   return out;
 }
 
+// ── LNB 폴링용 지문 캐시 ──
+// LNB 는 10초마다 **워크스페이스 전부**에 경량 목록을 묻는다(18개면 저장소마다 git 스폰 18회).
+// 결과는 거의 늘 같으므로, `worktree list` 출력을 좌우하는 파일들의 mtime 을 지문으로 삼아
+// 같으면 git 을 띄우지 않는다. git 은 ref·HEAD 를 lock 파일 + rename 으로 갱신하므로
+// 커밋·체크아웃·워크트리 add/remove/lock 이면 아래 파일 중 하나의 mtime 이 반드시 바뀐다.
+// 놓친 경로가 있어도 CACHE_MAX_MS 뒤에는 무조건 다시 조회한다(최대 지연 상한).
+const CACHE_MAX_MS = 60_000;
+type BareWorktree = Omit<WorktreeInfo, 'dirty' | 'additions' | 'deletions'>;
+const briefCache = new Map<string, { fp: string; at: number; list: BareWorktree[] }>();
+
+async function mtimeOf(p: string): Promise<string> {
+  try {
+    return String((await fs.promises.stat(p)).mtimeMs);
+  } catch {
+    return '-'; // 없음도 상태다 (packed-refs·locked 는 없는 게 보통)
+  }
+}
+
+/** HEAD 파일 + 그것이 가리키는 브랜치 ref(느슨한 ref 파일) 의 mtime */
+async function headPart(headDir: string, commonDir: string): Promise<string> {
+  const headFile = path.join(headDir, 'HEAD');
+  let ref = '';
+  try {
+    ref = /^ref: (.+)$/m.exec(await fs.promises.readFile(headFile, 'utf8'))?.[1]?.trim() ?? '';
+  } catch {
+    /* HEAD 없음 — 아래 mtime 이 '-' 로 반영한다 */
+  }
+  return [
+    await mtimeOf(headFile),
+    ref,
+    ref ? await mtimeOf(path.join(commonDir, ref)) : '',
+  ].join(',');
+}
+
+/** `.git` 이 없는 폴더의 지문 — 일반 폴더 결과(plain)일 때만 캐시에 쓴다(parseWorktreesCached) */
+const NO_GIT = 'no-git';
+
+/**
+ * `worktree list --porcelain` 출력을 좌우하는 파일들의 지문. 캐시할 수 없는 저장소는 null —
+ * `.git` 이 파일(gitlink·보조 워크트리)이면 매번 git 에 맡긴다. `.git` 이 없으면 NO_GIT 인데,
+ * 이건 일반 폴더일 수도 **저장소의 하위 폴더**일 수도 있어 호출부가 결과를 보고 가른다.
+ */
+async function worktreeFingerprint(repoPath: string): Promise<string | null> {
+  const gitDir = path.join(repoPath, '.git');
+  try {
+    if (!(await fs.promises.stat(gitDir)).isDirectory()) return null;
+  } catch {
+    return NO_GIT;
+  }
+  const wtRoot = path.join(gitDir, 'worktrees');
+  let names: string[] = [];
+  try {
+    names = (await fs.promises.readdir(wtRoot)).sort();
+  } catch {
+    /* 추가 워크트리 없음 */
+  }
+  const parts = await Promise.all([
+    headPart(gitDir, gitDir),
+    mtimeOf(path.join(gitDir, 'packed-refs')),
+    mtimeOf(wtRoot),
+    ...names.map(async (n) => {
+      const d = path.join(wtRoot, n);
+      // gitdir: 워크트리 경로(이동·복구) · locked: 잠금 표시
+      return [
+        n,
+        await headPart(d, gitDir),
+        await mtimeOf(path.join(d, 'gitdir')),
+        await mtimeOf(path.join(d, 'locked')),
+      ].join(',');
+    }),
+  ]);
+  return parts.join('|');
+}
+
+/** 지문이 같으면 직전 결과를 재사용하는 `parseWorktrees` — LNB 폴링 전용 */
+async function parseWorktreesCached(repoPath: string): Promise<BareWorktree[]> {
+  const fp = await worktreeFingerprint(repoPath);
+  const hit = briefCache.get(repoPath);
+  if (fp && hit && hit.fp === fp && Date.now() - hit.at < CACHE_MAX_MS) return hit.list;
+  const list = await parseWorktrees(repoPath);
+  // 일반 폴더는 `git init` 하면 .git 이 생겨 지문이 바뀐다. 반면 .git 없는 **하위 폴더**는
+  // 상위 저장소의 변화를 지문이 못 보므로 캐시하지 않는다
+  const cacheable = fp !== null && (fp !== NO_GIT || list[0]?.plain === true);
+  if (fp && cacheable) briefCache.set(repoPath, { fp, at: Date.now(), list });
+  else briefCache.delete(repoPath);
+  return list;
+}
+
 /** 검증용 경량 조회 — 워크트리 경로 목록만 (changes 대상 해석이 쓴다) */
 export async function worktreePaths(repoPath: string): Promise<string[]> {
   return (await parseWorktrees(repoPath)).map((w) => w.path);
@@ -84,8 +172,13 @@ export async function worktreePaths(repoPath: string): Promise<string[]> {
  * 경로만 필요하므로(cwd 대조) 이쪽을 쓴다 — 큰 저장소에서 `status --untracked-files=all`
  * 은 폴링으로 돌리기엔 무겁다.
  */
-export async function listWorktreesBrief(repoPath: string): Promise<WorktreeInfo[]> {
-  const bare = await parseWorktrees(repoPath);
+export async function listWorktreesBrief(
+  repoPath: string,
+  // true 면 지문 캐시를 쓴다 — **LNB 10초 폴링 전용**. 제거·IDE 열기 같은 경로 검증은
+  // 언제나 git 에 직접 묻는다(기본값 false).
+  { cached = false }: { cached?: boolean } = {}
+): Promise<WorktreeInfo[]> {
+  const bare = await (cached ? parseWorktreesCached(repoPath) : parseWorktrees(repoPath));
   return bare.map((w) => ({
     ...w,
     missing: w.missing || !fs.existsSync(w.path),

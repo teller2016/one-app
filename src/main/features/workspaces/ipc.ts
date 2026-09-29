@@ -92,9 +92,12 @@ export function registerWorkspacesIpc() {
 
   // detail=false 면 경량 조회(status·diff 생략) — LNB 가 접힌 워크스페이스에 쓴다.
   // 기본은 상세다: 인자를 안 주는 기존 호출부(MO 트리·워크트리 모달)는 그대로 동작한다.
+  // 경량 조회는 LNB 10초 폴링이 전 워크스페이스에 부르는 경로라 지문 캐시를 쓴다(git.ts)
   ipcMain.handle('workspaces:worktrees', (_e, id: string, detail?: boolean) => {
     const { repoPath } = requireWorkspace(id);
-    return detail === false ? listWorktreesBrief(repoPath) : listWorktrees(repoPath);
+    return detail === false
+      ? listWorktreesBrief(repoPath, { cached: true })
+      : listWorktrees(repoPath);
   });
 
   ipcMain.handle('workspaces:worktree-add', (_e, input: WorktreeAddInput) =>

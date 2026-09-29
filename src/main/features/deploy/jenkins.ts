@@ -136,13 +136,21 @@ export async function triggerBuild(
   throw new Error(`젠킨스 응답 오류 (HTTP ${res.status})`);
 }
 
+// ⚠️ 폴링 경로는 반드시 `tree=` 로 필요한 필드만 받는다 — 빌드 JSON 전체에는 git 플러그인의
+// BuildData(브랜치별 빌드 기록 통째)가 실려 수백 KB~MB 가 되기 쉽다. 배포 섹션을 보는 동안
+// 60초마다 대상 수만큼, 빌드 추적 중에는 2~15초마다 부르는 경로다(2026-09-29 9라운드 감사).
+const LAST_BUILD_TREE = 'number,building,result,timestamp,duration,estimatedDuration';
+const WATCH_BUILD_TREE = 'building,result,timestamp,estimatedDuration';
+const QUEUE_ITEM_TREE = 'cancelled,executable[number]';
+const treeQuery = (t: string) => `?tree=${encodeURIComponent(t)}`;
+
 /** 최근 빌드 상태 조회 — 화면 진입 시 표시용 */
 export async function fetchLastStatus(
   a: JenkinsAuth,
   jobPath: string,
 ): Promise<DeployStatus> {
   try {
-    const res = await fetch(`${jobUrl(a, jobPath)}/lastBuild/api/json`, {
+    const res = await fetch(`${jobUrl(a, jobPath)}/lastBuild/api/json${treeQuery(LAST_BUILD_TREE)}`, {
       headers: { Authorization: authHeader(a) },
     });
     if (res.status === 404) return { state: 'idle' }; // 빌드 이력 없음 or 잡 없음
@@ -395,7 +403,7 @@ export async function watchBuild(
     await sleep(waited < 2 * 60_000 ? 2000 : watchPollMs(waited));
     try {
       if (queueUrl) {
-        const res = await fetch(`${queueUrl}/api/json`, { headers });
+        const res = await fetch(`${queueUrl}/api/json${treeQuery(QUEUE_ITEM_TREE)}`, { headers });
         if (res.ok) {
           const item = await json<{
             cancelled?: boolean;
@@ -410,7 +418,7 @@ export async function watchBuild(
         }
         // 큐 아이템은 빌드 시작 후 일정 시간이 지나면 사라짐(404) → lastBuild 폴백
       }
-      const last = await fetch(`${jobUrl(a, jobPath)}/lastBuild/api/json`, {
+      const last = await fetch(`${jobUrl(a, jobPath)}/lastBuild/api/json${treeQuery(LAST_BUILD_TREE)}`, {
         headers,
       });
       if (last.ok) {
@@ -434,7 +442,7 @@ export async function watchBuild(
     }
     await sleep(watchPollMs(Date.now() - startedAt));
     try {
-      const res = await fetch(`${buildUrl}api/json`, { headers });
+      const res = await fetch(`${buildUrl}api/json${treeQuery(WATCH_BUILD_TREE)}`, { headers });
       if (!res.ok) continue;
       const b = await json<{
         building: boolean;
