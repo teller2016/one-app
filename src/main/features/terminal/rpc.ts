@@ -11,6 +11,9 @@ const sockets = new Map<WebSocket, Set<string>>();
 
 let offBroadcast: (() => void) | null = null;
 
+/** 이벤트 송신 버퍼 상한 — 넘으면 소켓을 끊는다(폰이 재연결) */
+const RPC_BACKPRESSURE_BYTES = 2 * 1024 * 1024;
+
 const send = (ws: WebSocket, msg: MoServerMsg) => {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
 };
@@ -63,7 +66,17 @@ export function startRpcBridge(): void {
   offBroadcast = onBroadcast((channel, args) => {
     if (sockets.size === 0) return; // 폰이 안 붙어 있으면 즉시 빠져나온다(고빈도 채널 낭비 방지)
     for (const [ws, subs] of sockets) {
-      if (subs.has(channel)) send(ws, { type: 'event', channel, args });
+      if (!subs.has(channel)) continue;
+      // ⚠️ 송신 버퍼가 상한을 넘으면(느린 폰·잠긴 폰) 이벤트를 쌓지 않고 소켓을 끊는다.
+      // 이벤트를 골라 버리면 폰 상태가 조용히 어긋나고 호출 응답은 버릴 수 없으므로, 끊어서
+      // 폰이 재연결·재구독하며 다시 받아 오게 한다(server.ts 의 /term 백프레셔와 짝)
+      if (ws.bufferedAmount > RPC_BACKPRESSURE_BYTES) {
+        console.warn('[rpc:ws] 송신 버퍼 초과 — 소켓을 끊습니다');
+        ws.terminate();
+        sockets.delete(ws);
+        continue;
+      }
+      send(ws, { type: 'event', channel, args });
     }
   });
 }

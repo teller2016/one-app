@@ -655,7 +655,10 @@ function handleMessage(msg: TermServerMsg) {
       renderSessions();
       updateWaiting();
       syncWakeLock();
-      if (!attachedId) {
+      // ⚠️ attach 응답을 기다리는 중이면 고르지 않는다 — 알림으로 X 에 attach 를 보낸 뒤 응답 전에
+      // 두 번째 sessions(상태 전이마다 온다)가 오면, pendingFocusId 는 이미 소비돼 '마지막 세션'
+      // Y 로 또 attach 해 알림과 다른 세션이 열렸다(2026-09-29 전체 검토). 실패 응답은 pending 을 푼다.
+      if (!attachedId && !pendingAttachId) {
         // 알림을 눌러 들어왔으면 그 세션이 먼저다. 다음은 마지막에 보던 세션 — 작업 영역과 무관하게
         // 이어본다(폰은 '이어서 쓰는' 화면이다). 없으면 지금 영역의 첫 세션으로.
         const wanted = pendingFocusId;

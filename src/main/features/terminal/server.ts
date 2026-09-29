@@ -33,7 +33,7 @@ import {
   writeSession,
 } from './pty';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
-import { getOrCreateToken, getPort } from './store';
+import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
 
 const COOKIE_NAME = 'oneAppTerm';
@@ -61,10 +61,40 @@ let needsTailscale = false;
 // 소켓별 상태 — attach 된 세션에만 출력을 전달한다
 // kind — /term(터미널 페이지)과 /rpc(폰 앱 셸)를 한 맵에서 ping 으로 함께 관리하되,
 // 터미널 전용 방송(세션 목록 등)이 앱 셸 소켓으로 새지 않게 구분한다(2026-08-07 감사).
-const socketState = new Map<
-  WebSocket,
-  { attachedId: string | null; alive: boolean; kind: 'term' | 'rpc' }
->();
+type SocketState = {
+  attachedId: string | null;
+  alive: boolean;
+  kind: 'term' | 'rpc';
+  /** 마지막으로 받은 폰 터미널 크기 — 백프레셔 재동기화(attach 재실행)에 쓴다 */
+  cols: number;
+  rows: number;
+  /** 출력 프레임을 버린 적이 있다 — 버퍼가 빠지면 attach 를 다시 돌려 화면을 맞춘다 */
+  needsResync: boolean;
+  /** 재동기화 attach 진행 중 (중복 실행 방지) */
+  resyncing: boolean;
+  /** attach 세대 — 재동기화 도중 폰이 다른 세션을 고르면 늦게 끝난 재동기화를 버린다 */
+  attachGen: number;
+};
+const socketState = new Map<WebSocket, SocketState>();
+
+const newSocketState = (kind: SocketState['kind']): SocketState => ({
+  attachedId: null,
+  alive: true,
+  kind,
+  cols: 0,
+  rows: 0,
+  needsResync: false,
+  resyncing: false,
+  attachGen: 0,
+});
+
+/**
+ * 소켓 송신 버퍼 상한 — 넘으면 **출력(data) 프레임을 버린다**.
+ * ⚠️ `ws.send` 는 상대가 못 받아도 main 메모리에 계속 쌓는다. 셀룰러·릴레이처럼 느린 경로의 폰이
+ * 대량 출력(빌드 로그 등)을 보고 있거나, 폰이 잠겨 TCP 가 멈추면(ping 판정까지 최대 60초)
+ * 버퍼가 끝없이 커진다. 버린 만큼은 버퍼가 빠진 뒤 attach 재실행(replay)으로 메운다.
+ */
+const BACKPRESSURE_BYTES = 2 * 1024 * 1024;
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((cb) => cb());
@@ -242,8 +272,58 @@ function send(ws: WebSocket, msg: TermServerMsg) {
 
 function sendToAttached(id: string, msg: TermServerMsg) {
   for (const [ws, state] of socketState) {
-    if (state.attachedId === id) send(ws, msg);
+    if (state.attachedId !== id) continue;
+    if (msg.type !== 'data') {
+      send(ws, msg); // exit·resized 같은 제어 메시지는 버리지 않는다
+      continue;
+    }
+    if (ws.bufferedAmount > BACKPRESSURE_BYTES) {
+      state.needsResync = true; // 버린다 — 버퍼가 빠진 뒤 replay 로 메운다
+      continue;
+    }
+    if (state.needsResync) {
+      resyncSocket(ws, state); // 이 조각도 replay 에 포함되므로 따로 보내지 않는다
+      continue;
+    }
+    send(ws, msg);
   }
+}
+
+/**
+ * 출력을 버렸던 소켓의 화면을 맞춘다 — attach 를 다시 돌려 replay 를 보낸다.
+ * 폰은 'attached' 를 받으면 term.reset() 후 replay 를 쓰므로 버린 구간이 메워진다.
+ */
+function resyncSocket(ws: WebSocket, state: SocketState) {
+  const id = state.attachedId;
+  if (!id || state.resyncing || ws.bufferedAmount > BACKPRESSURE_BYTES) return;
+  state.resyncing = true;
+  state.needsResync = false;
+  const gen = state.attachGen;
+  // attach 스냅샷 전후 라이브 data 가 이중 전달되지 않게 잠시 떼어 둔다(일반 attach 와 같은 규칙)
+  state.attachedId = null;
+  void attachSession(id, state.cols, state.rows)
+    .then((res) => {
+      if (gen !== state.attachGen || !socketState.has(ws)) return; // 그새 다른 세션을 골랐다
+      if (!res.ok) {
+        send(ws, { type: 'error', message: res.error ?? '화면 재동기화 실패' });
+        return;
+      }
+      state.attachedId = id;
+      send(ws, {
+        type: 'attached',
+        id,
+        replay: res.replay ?? '',
+        alt: res.alt ?? false,
+        tmux: res.tmux ?? false,
+        seq: res.seq ?? 0,
+        cols: res.cols ?? 0,
+        rows: res.rows ?? 0,
+      });
+    })
+    .catch((err: unknown) => console.error('[term:ws] 재동기화 실패', err))
+    .finally(() => {
+      state.resyncing = false;
+    });
 }
 
 function broadcastAll(msg: TermServerMsg) {
@@ -304,6 +384,10 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'attach': {
       const attachId = msg.id;
       const { cols, rows } = msg;
+      state.cols = cols;
+      state.rows = rows;
+      state.attachGen += 1; // 진행 중인 재동기화는 이 attach 에 밀려 버려진다
+      state.needsResync = false;
       void attachSession(attachId, cols, rows).then((res) => {
         if (!res.ok) {
           send(ws, { type: 'error', message: res.error ?? 'attach 실패' });
@@ -331,6 +415,8 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       if (state.attachedId) writeSession(state.attachedId, msg.data);
       break;
     case 'resize':
+      state.cols = msg.cols;
+      state.rows = msg.rows;
       if (state.attachedId)
         resizeSession(state.attachedId, msg.cols, msg.rows);
       break;
@@ -394,8 +480,26 @@ function tailscaleIps(): string[] {
 
 // ── 서버 수명 ──
 
-export async function startServer(): Promise<TerminalServerStatus> {
-  if (server) return getServerStatus();
+/**
+ * 시작 진행 중 promise — ⚠️ 동시 호출을 하나로 합친다.
+ * `if (server) return` 뒤에 `await ensureTls()`(tailscale 실행, 수 초)가 있고 `server` 는 listen 이
+ * 끝나야 채워지므로, 자동 시작 재시도와 사용자의 [켜기]가 겹치면 둘 다 통과했다 — 두 번째가
+ * pty 구독·ping 타이머 전역을 덮어써 첫 서버 것이 해제 불능으로 새고, 두 번째의 EADDRINUSE
+ * 정리가 첫 서버의 RPC 브리지까지 죽였다(2026-09-29 전체 검토).
+ */
+let starting: Promise<TerminalServerStatus> | null = null;
+
+export function startServer(): Promise<TerminalServerStatus> {
+  if (server) return Promise.resolve(getServerStatus());
+  if (!starting) {
+    starting = startServerOnce().finally(() => {
+      starting = null;
+    });
+  }
+  return starting;
+}
+
+async function startServerOnce(): Promise<TerminalServerStatus> {
   lastError = '';
 
   // 저장된 접속 토큰을 복호화하지 못하면(키체인 프롬프트 취소·잠김) 시작하지 않는다 — 폰이 인증할 수
@@ -522,7 +626,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
   // 폰 앱 셸의 RPC — 데스크톱과 같은 IPC 핸들러를 호출한다 (rpc.ts)
   startRpcBridge();
   rpcServer.on('connection', (ws: WebSocket) => {
-    socketState.set(ws, { attachedId: null, alive: true, kind: 'rpc' }); // ping 루프 공용
+    socketState.set(ws, newSocketState('rpc')); // ping 루프 공용
     ws.on('pong', () => {
       const st = socketState.get(ws);
       if (st) st.alive = true;
@@ -533,7 +637,7 @@ export async function startServer(): Promise<TerminalServerStatus> {
   });
 
   wsServer.on('connection', (ws: WebSocket) => {
-    socketState.set(ws, { attachedId: null, alive: true, kind: 'term' });
+    socketState.set(ws, newSocketState('term'));
     ws.on('pong', () => {
       const st = socketState.get(ws);
       if (st) st.alive = true;
@@ -588,6 +692,8 @@ export async function startServer(): Promise<TerminalServerStatus> {
       }
       state.alive = false;
       ws.ping();
+      // 출력을 버린 뒤 새 출력이 없으면 sendToAttached 가 재동기화할 기회가 없다 — 여기서 챙긴다
+      if (state.needsResync) resyncSocket(ws, state);
     }
   }, PING_INTERVAL_MS);
 
@@ -623,6 +729,12 @@ export async function startServer(): Promise<TerminalServerStatus> {
     server = srv;
     wss = wsServer;
     rpcWss = rpcServer;
+    // 켜지는 사이(ensureTls 등 수 초) 사용자가 껐다면 곧바로 닫는다 — stopServer 는 시작 완료를
+    // 기다리지만, 끄기 저장만 하고 stopServer 를 부르지 않는 경로가 생겨도 꺼 둔 서버가 켜지지 않게
+    if (!getServerEnabled()) {
+      await teardown();
+      return getServerStatus();
+    }
   }
   emit();
   return getServerStatus();
@@ -640,6 +752,13 @@ export function dropAllClients(): void {
 }
 
 export async function stopServer(): Promise<void> {
+  // 시작이 진행 중이면 끝나기를 기다렸다가 닫는다 — 기다리지 않으면 `server` 가 아직 null 이라
+  // 아무것도 안 하고 돌아가고, 그 뒤 시작이 끝나 꺼 둔 서버가 켜진다
+  if (starting) await starting.catch((): void => undefined);
+  await teardown();
+}
+
+async function teardown(): Promise<void> {
   if (!server) return;
   if (pingTimer) clearInterval(pingTimer);
   pingTimer = null;

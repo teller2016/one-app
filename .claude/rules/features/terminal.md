@@ -228,6 +228,8 @@ paths:
 - ⚠️ **회사 VPN(full-tunnel)을 켜면 MO 가 통째로 끊긴다 — 미해결**(원본 .ovpn 유지, 시도 2건 모두 부작용으로 롤백). 경위·다음 시도 카드·진단 명령은 `docs/terminal-notes.md` 'MO 접속' 절.
 - HTTPS: `tls.ts` 가 `tailscale cert` 로 발급(실패 시 http 폴백) — **PWA 설치(주소창 제거)·clipboard 의 전제**. ⚠️ 접속 URL 은 인증서 도메인만(IP 는 경고 + 설치 조건 깨짐). WS 는 `location.protocol` 따라 wss. 하루 1회 `ensureTls()` → `setSecureContext()` 무중단 갱신. ⚠️ `tailscale cert` 는 `--cert-file/--key-file` 명시(안 주면 cwd 에 쓴다).
 - manifest·아이콘만 `PUBLIC_PATHS` 로 인증 제외(브라우저가 쿠키 없이 받아간다) — 앱 화면은 그대로 403.
+- ⚠️ **`startServer` 는 진행 중 promise 하나로 직렬화한다**(2026-09-29) — `ensureTls()` 로 수 초 걸리는 사이 자동 시작 재시도와 [켜기]가 겹치면 둘 다 통과해 pty 구독·ping 타이머가 새고 RPC 브리지가 죽었다. `stopServer` 는 시작 완료를 기다린 뒤 닫고, 시작은 listen 직후 `getServerEnabled()` 를 다시 봐 꺼져 있으면 스스로 닫는다.
+- ⚠️ **WS 백프레셔**: 송신 버퍼(`bufferedAmount`)가 2MB 를 넘으면 `/term` 은 **data 프레임만 버리고** `needsResync` 를 세운 뒤, 버퍼가 빠지면(다음 출력 또는 ping 틱) attach 를 다시 돌려 replay 로 메운다(제어 메시지는 안 버린다). `/rpc` 는 이벤트를 골라 버리면 폰 상태가 어긋나므로 **소켓을 끊어** 재연결·재구독시킨다. 없으면 느린·잠긴 폰이 main 메모리를 끝없이 키운다.
 
 ## MO 터미널 페이지 (`src/mobile`)
 - 별도 Vite 엔트리(`mobile_window`, base `/terminal/`). 조작은 전부 '버튼 하나 + 바텀시트'(`sheetMode` 하나를 돌려씀). 재접속은 1→2→4→5초 백오프 + `visibilitychange` 즉시 재연결.
@@ -243,6 +245,8 @@ paths:
 - 폰트는 데스크톱과 동일 **JetBrains Mono NL**(Regular·Bold, Italic 제외) + `lineHeight 1.0` + **Unicode11Addon + allowProposedApi 한 쌍**(없으면 CJK 폭 오계산 / throw). `document.fonts.ready` 후 fit.
 - 소프트 키보드: viewport 메타 `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 중 **작은 값**으로 높이 보정 + `overscroll-behavior: none`(pull-to-refresh 방지).
 - ⚠️ 텍스트 표현이 기본인 기호는 **VS16 + 컬러 이모지 폰트** 지정(두부 방지).
+
+- ⚠️ 폰의 자동 attach(세션 목록 수신 시)는 **`!attachedId && !pendingAttachId`** 일 때만 — 알림으로 X 에 attach 를 보낸 뒤 응답 전 두 번째 `sessions` 가 오면 '마지막 세션' Y 로 또 붙어 알림과 다른 세션이 열렸다(2026-09-29).
 
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만** 손대면 된다. 설치 감지는 `zsh -lc "whence -p"` 1회 캐시 — 미설치는 선택지에서 조용히 제외.
