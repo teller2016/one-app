@@ -11,6 +11,7 @@ import {
 import { OVERTIME_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+import { acquireApprovalLock } from './lock';
 import { getWorkerDept } from './store';
 // 시간합계 문구는 렌더러 폼과 공유한다 (미리보기와 실제 입력이 같아야 한다)
 import { formatHoursTotal } from '../../../shared/approval-format';
@@ -18,9 +19,6 @@ import { pad2 } from '../../../shared/date';
 import type { OvertimeSubmitInput } from '../../../shared/types';
 
 export { formatHoursTotal };
-
-/** 동시 실행 방지 (자동화 창 중복 기동 막기) */
-let running = false;
 
 /** 제목 문구 — 그룹웨어 양식 기본 제목 패턴 + 0패딩 (예: 07월 01일 09시 00분) */
 export function formatTitle(name: string, input: OvertimeSubmitInput): string {
@@ -222,15 +220,19 @@ export async function runOvertimeDraft(
   input: OvertimeSubmitInput,
   onStep?: (step: string) => void,
 ): Promise<{ title: string }> {
-  if (running) throw new Error('이미 야근 결재 작업이 진행 중입니다.');
-  running = true;
+  const release = acquireApprovalLock('야근 결재');
   const step = (s: string) => onStep?.(s);
 
-  // 지난 실행에서 남겨둔 창이 있으면 정리
-  closeKeptPage();
-
-  // 작성되는 과정을 사용자가 보도록 처음부터 띄운다
-  const page = await openPage(true);
+  let page: Page;
+  try {
+    // 지난 실행에서 남겨둔 창이 있으면 정리
+    closeKeptPage();
+    // 작성되는 과정을 사용자가 보도록 처음부터 띄운다
+    page = await openPage(true);
+  } catch (err) {
+    release(); // 창을 열기도 전에 실패 — 풀지 않으면 재시작 전까지 결재 전체가 막힌다
+    throw err;
+  }
   let keepOpen = false;
   try {
     step('연장근무내역서 양식 여는 중…');
@@ -253,7 +255,7 @@ export async function runOvertimeDraft(
     keepPage(page);
     return { title };
   } finally {
-    running = false;
+    release();
     if (!keepOpen) closePage(page);
   }
 }

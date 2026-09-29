@@ -64,6 +64,9 @@ export function VacationForm() {
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState('');
   const [error, setError] = useState('');
+  // [결재상신] 이후 실패 — 근태신청이 이미 저장됐을 수 있어 [작성 시작]을 막는다(중복 저장 방지).
+  // 폼을 떠났다 돌아오면 풀린다(결재함을 확인하고 의도적으로 다시 작성하는 경로).
+  const [committed, setCommitted] = useState(false);
   const [done, setDone] = useState<VacationResult | null>(null);
   const [status, setStatus] = useState<VacationStatus | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
@@ -200,6 +203,13 @@ export function VacationForm() {
       if (res.ok) {
         setDone(res);
         toast('휴가신청서를 작성했습니다. 창에서 [상신] 하세요.');
+      } else if (res.committed) {
+        setCommitted(true);
+        setError(
+          `${res.error ?? '실행에 실패했습니다.'} — [결재상신] 이후라 근태신청이 이미 저장됐을 수 있습니다. ` +
+            '다시 작성하면 중복되니, 전자결재 상신함과 근태신청 내역을 먼저 확인하세요. ' +
+            '다시 작성하려면 결재 목록으로 돌아갔다 오세요.',
+        );
       } else {
         setError(res.error ?? '실행에 실패했습니다.');
       }
@@ -467,7 +477,7 @@ export function VacationForm() {
         <Button
           variant="primary"
           onClick={() => void run()}
-          disabled={!valid || busy}
+          disabled={!valid || busy || committed}
           loading={busy}
         >
           작성 시작

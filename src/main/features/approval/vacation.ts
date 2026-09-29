@@ -20,6 +20,7 @@ import {
 import { VACATION_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+import { acquireApprovalLock, approvalLockOwner } from './lock';
 import { getWorkerDept } from './store';
 import { sleep } from '../../lib/util';
 // 표기 규칙은 렌더러 폼과 공유한다 (문자열이 어긋나면 미리보기와 실제 제목이 달라진다)
@@ -34,8 +35,9 @@ import type {
   VacationStatus,
 } from '../../../shared/types';
 
-/** 동시 실행 방지 */
-let running = false;
+
+/** 결재 공용 잠금(lock.ts)에서 이 흐름의 이름 */
+const VACATION_LOCK = '휴가신청서';
 
 /** 연차 현황 조회 동시 실행 방지 — 겹치면 뒤 openPage 가 앞 조회의 파티션 쿠키를 비운다 */
 let statusRunning = false;
@@ -588,8 +590,7 @@ export async function runVacationDraft(
   input: VacationInput,
   onStep?: (step: string) => void,
 ): Promise<VacationResult> {
-  if (running) throw new Error('이미 휴가신청서 작업이 진행 중입니다.');
-  running = true;
+  const release = acquireApprovalLock(VACATION_LOCK);
   const step = (s: string) => onStep?.(s);
   const sel = VACATION_CONFIG.selectors;
 
@@ -599,12 +600,14 @@ export async function runVacationDraft(
     // 작성 과정을 사용자가 보도록 띄운다. save() 가 window.open 을 쓰므로 팝업 허용도 필수
     page = await openPage(true, { allowPopups: true });
   } catch (err) {
-    // 창을 열기도 전에 실패 — 여기서 running 을 풀지 않으면 아래 finally 에 못 가서
-    // 재시작 전까지 휴가 결재·연차 조회가 전부 "진행 중" 으로 막힌다
-    running = false;
+    // 창을 열기도 전에 실패 — 여기서 잠금을 풀지 않으면 아래 finally 에 못 가서
+    // 재시작 전까지 결재 전체가 "진행 중" 으로 막힌다
+    release();
     throw err;
   }
   let handed = false;
+  // [결재상신] 을 눌렀는가 — 그 뒤의 실패는 서버에 근태신청이 이미 저장됐을 수 있다
+  let committed = false;
   try {
     step('휴가신청서 양식 여는 중…');
     await gotoAsUser(page, VACATION_CONFIG.formUrl);
@@ -647,6 +650,7 @@ export async function runVacationDraft(
     // 반환되지만, 창이 파괴될 수 있으므로 실패를 삼키고 팝업 등장으로 판정한다)
     step('결재상신 누르는 중…');
     await takeAlerts(page);
+    committed = true; // 클릭 직전에 세운다 — 클릭이 반환되지 않아도 저장 ajax 는 나갔을 수 있다
     await evalInPage(
       page,
       (btnSel: string) => {
@@ -708,9 +712,9 @@ export async function runVacationDraft(
       await handOver(page, '휴가신청서 — 작성 중 문제 발생');
       handed = true;
     }
-    return { ok: false, error: (err as Error).message };
+    return { ok: false, error: (err as Error).message, committed };
   } finally {
-    running = false;
+    release();
     if (!handed && !page.win.isDestroyed()) closePage(page);
   }
 }
@@ -720,7 +724,7 @@ export async function runVacationDraft(
  * (제목의 이름·소속은 그룹웨어 화면에서만 알 수 있어 폼을 한 번 열어야 한다)
  */
 export async function fetchVacationStatus(): Promise<VacationStatus> {
-  if (running) throw new Error('휴가신청서 작업이 진행 중입니다.');
+  if (approvalLockOwner() === VACATION_LOCK) throw new Error('휴가신청서 작업이 진행 중입니다.');
   if (statusRunning) throw new Error('연차 현황 조회가 이미 진행 중입니다.');
   statusRunning = true;
   // openPage 실패도 finally 로 플래그가 풀리도록 창 열기부터 try 안에서 한다

@@ -22,12 +22,10 @@ import {
 import { EXPEND_CONFIG } from './config';
 import { gotoAsUser } from './gw';
 import { closeKeptPage, keepPage } from './keeper';
+import { acquireApprovalLock } from './lock';
 import { sleep } from '../../lib/util';
 import { monthEndDayKey } from '../../../shared/date';
 import type { ExpendInput, ExpendResult } from '../../../shared/types';
-
-/** 동시 실행 방지 */
-let running = false;
 
 /** 한 항목의 입력 내용 */
 type ItemSpec = {
@@ -444,21 +442,24 @@ export async function runExpendDraft(
   input: ExpendInput,
   onStep?: (step: string) => void,
 ): Promise<ExpendResult> {
-  if (running) throw new Error('이미 지출결의서 작업이 진행 중입니다.');
-  running = true;
-  const step = (s: string) => onStep?.(s);
-
-  // 지난 실행에서 남겨둔 창은 정리
-  closeKeptPage();
-
   const items = buildItems(input);
   if (!items.length) {
-    running = false;
     return { ok: false, error: '작성할 항목이 없습니다. 주차요금이나 석식대를 채워주세요.' };
   }
 
-  // 결재양식 목록 창(opener 역할) — 숨겨두지만 사용자가 작업을 마칠 때까지 살아 있어야 한다
-  const shell = await openPage(false, { allowPopups: true });
+  const release = acquireApprovalLock('지출결의서');
+  const step = (s: string) => onStep?.(s);
+
+  let shell: Page;
+  try {
+    // 지난 실행에서 남겨둔 창은 정리
+    closeKeptPage();
+    // 결재양식 목록 창(opener 역할) — 숨겨두지만 사용자가 작업을 마칠 때까지 살아 있어야 한다
+    shell = await openPage(false, { allowPopups: true });
+  } catch (err) {
+    release(); // 창을 열기도 전에 실패 — 풀지 않으면 재시작 전까지 결재 전체가 막힌다
+    throw err;
+  }
   let page: Page | null = null;
   try {
     step('결재양식 목록 여는 중…');
@@ -519,15 +520,21 @@ export async function runExpendDraft(
     // 실패해도 창은 남긴다 — 어디까지 됐는지 보고 사용자가 이어서 처리할 수 있게
     if (page) {
       await releasePage(page).catch((): void => undefined);
-      await releasePage(shell).catch((): void => undefined);
-      page.win.setTitle('지출결의서(개인) — 작성 중 문제 발생');
-      page.win.show();
-      keepPage(page, shell);
+      // closeChildren:false — 성공 경로와 같은 이유. 빼면 shell 의 팝업인 지출결의서 창까지
+      // 닫혀, 아래 setTitle 이 "Object has been destroyed" 로 진짜 실패 원인을 덮는다
+      await releasePage(shell, { closeChildren: false }).catch((): void => undefined);
+      if (page.win.isDestroyed()) {
+        closePage(shell); // 작성 창이 이미 닫혔다면(사용자가 닫는 등) 넘길 것이 없다
+      } else {
+        page.win.setTitle('지출결의서(개인) — 작성 중 문제 발생');
+        page.win.show();
+        keepPage(page, shell);
+      }
     } else {
       closePage(shell);
     }
     return { ok: false, error: (err as Error).message };
   } finally {
-    running = false;
+    release();
   }
 }
