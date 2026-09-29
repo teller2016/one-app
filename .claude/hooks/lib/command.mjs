@@ -23,6 +23,17 @@ const stripHeredocs = (s) =>
   s.replace(/<<-?\s*(['"]?)([A-Za-z_]\w*)\1[\s\S]*?^\s*\2\s*$/gm, '<<HEREDOC');
 
 /**
+ * `bash -c "…"`·`sh -lc '…'` 의 인자를 풀어 낸다 — 따옴표 안이지만 **실제로 실행되는 명령**이다.
+ * 풀지 않으면 `stripQuoted` 가 통째로 지워 `bash -c "npm run make"` 가 빌드 가드를 통과한다
+ * (2026-09-29 실측). 조각의 맨 앞에 온 셸만 푼다 — `echo "… bash -c '…' …"` 같은 언급은 그대로 둔다.
+ */
+const unwrapShellC = (s) =>
+  s.replace(
+    /(?<=^|[;&|(\n]\s*)(?:\S*\/)?(?:bash|sh|zsh)\s+(?:-[a-z]+\s+)*-[a-z]*c[a-z]*\s+(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/gm,
+    (_, single, double) => `; ${single ?? double.replace(/\\(["\\$`])/g, '$1')} ;`,
+  );
+
+/**
  * 따옴표 안의 셸 구분자를 가린다 — 문자열 안의 `;`·`|`·개행 때문에 조각이 잘못 갈리면
  * (`git commit -m "a; npm run make"`) 뒷동강이 명령으로 오인된다.
  */
@@ -56,11 +67,11 @@ export function harmlessMatcher(extra = []) {
 
 /**
  * 명령에서 **실제로 실행되는 조각들**을 뽑는다.
- * 전처리(줄 연결 → heredoc 제거 → 따옴표 안 구분자 가리기) 후 `;` `|` `&&` `||` 개행으로 나누고,
+ * 전처리(줄 연결 → heredoc 제거 → `bash -c` 풀기 → 따옴표 안 구분자 가리기) 후 `;` `|` `&&` `||` 개행으로 나누고,
  * `harmless` 에 걸리는 조각(읽기 전용 도구 등)은 버린다.
  */
 export function activeSegments(command, harmless) {
-  return maskInQuotes(stripHeredocs(joinContinuations(String(command))))
+  return maskInQuotes(unwrapShellC(stripHeredocs(joinContinuations(String(command)))))
     .split(/\|\||&&|[;|&\n]/)
     .map((x) => x.trim())
     .filter(Boolean)

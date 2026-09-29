@@ -20,6 +20,7 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 - **미설치면 기존 직접 spawn 폴백**(영속 없음 — 새 세션 모달에 설치 힌트, `terminal:backend` IPC).
 - ⚠️ 재시작 후 스크롤백은 현재 화면부터 시작(링버퍼는 앱 메모리라 함께 사라짐 — tmux history 시딩은 미구현).
 - ⚠️ tmux 타깃은 `=이름` 정확 매칭을 쓸 것 — 단 target-session 계열(has/kill/attach)에서만 검증됨, 3.7b 에서 `send-keys` 등 pane 타깃엔 `=` 가 안 먹는 것 실측.
+- ⚠️ **`list-sessions` 는 세션 이름순**으로 돌려준다 — 이름이 `oneapp-<랜덤 id>` 라 사실상 무작위 순서다. `restoreSessions()` 가 그 순서대로 Map 에 담으면(Map 삽입 순서 = 탭 기본 순서) **앱을 재시작할 때마다 탭 순서가 뒤섞였다**(2026-09-15). 지금은 sidecar 의 `createdAt` 순으로 정렬해 담는다.
 
 ## 세션 오케스트레이터 (2026-08 개편)
 상단 탭바 → **좌측 세션 패널**(행 = 상태점 + 제목 + `에이전트 · 상태` 서브라벨) + 우측 xterm. 새 세션은 [+] 모달에서 **위치(프로젝트 레지스트리) + 에이전트**(`agents.ts` — 셸·claude·femc·codex·gemini, `zsh -lc "whence -p"` 1회 캐시로 설치 감지 → **미설치는 선택지에서 조용히 제외**, 안내 문구 없음) 선택 → 셸 spawn 후 명령을 자동 입력(에이전트가 죽어도 셸 세션은 유지).
@@ -36,6 +37,7 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - **tmux 미설치 폴백 세션만** 예전 방식(`launchAgent` → PTY write)을 쓴다 — 거기엔 다른 경로가 없다. ⚠️ spawn 직후 즉시 write 하면 zsh 초기화가 입력을 버리므로, **첫 출력 후 350ms 잠잠해지면** 보내고 상한 3초를 둔다.
 - `ONEAPP_TERM_DEBUG=1` 로 켜지는 `[term:life]` 로그(create·launch·pty-exit·pty-exit:tmux)가 이 계열 문제의 진단 도구다.
 - `TerminalSessionInfo` 는 `agentId/projectId/projectName/status/createdAt` 을 포함하고, `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 실어 재조회가 없다.
+- ⚠️ **PTY 쓰기는 `pty.ts` 의 `ptyWrite()` 를 거친다**(`s.pty.write` 직접 호출 금지) — node-pty 의 `write` 는 **동기로 던진다**(죽은 세션에 남은 키 입력, 형이 어긋난 WS 프레임 등). main 에는 `uncaughtException` 핸들러가 없어서 그 예외 하나가 **앱 전체를 내린다**. `ptyWrite()` 가 그 예외를 삼키는 단일 관문이다.
 
 ### ⚠️ 명령과 `exec` 는 **같은 셸 안에서** 이어야 한다 — tty pgrp (2026-08-10 실측)
 `<sh> -ic '<명령>'; exec <sh> -il` 로 **셸을 두 번** 띄우면 `git pull` 처럼 **끝나는 프리셋**에서 pane 이 즉시 죽었다(`zsh: can't set tty pgrp: Input/output error` → `error on TTY read` → status 1 — 사용자 신고). 앞 셸이 인터랙티브라 job control 을 켜고 tty 소유권(foreground pgrp)을 명령의 프로세스 그룹에 넘긴 뒤 **되돌려주지 않고 죽어서**, 뒤이은 `exec <sh> -il` 이 tty 를 못 잡는다. 지금은 한 셸이 명령을 돌리고 그 자리에서 exec 한다 — `env -u TMUX -u TMUX_PANE <sh> -ic 'trap '\''true'\'' INT; <명령>; exec <sh> -il'`.
@@ -82,6 +84,9 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - 영속화는 localStorage `terminal:layout`(selKey → **트리 배열** 맵 — 구버전 단일 트리 값도 배열로 감싸 읽는다). ⚠️ 복원 sanitize(죽은 세션 걷어내기)는 **`sessionsReady` 이후에만** — 빈 초기 목록으로 돌면 복원한 그룹을 통째로 오파기한다(선택 보정의 ready 게이트와 같은 교훈). 그립 드래그 중에는 저장 effect 를 스킵하고 pointerup 에서 1회 저장한다. 그립의 ratio 갱신은 트리 identity 가 아니라 **splitId 로 대상을 찾는다**(`findSplit` — setRatio 마다 참조가 바뀐다).
 - 그룹 전환으로 숨은 pane(inset:0 = 전체 크기)이 작은 슬롯에 들어올 때의 fit 1회는 불가피한 허용 비용이다(단일 뷰 사이 전환에는 해당 없음).
 - **툴바(프리셋·검색·글자크기·맨아래로·Finder)는 pane 이 아니라 탭바 아래 공용 바 하나다** — 분할하면 pane 마다 반복될 이유가 없다(2026-08-10 사용자 요청, 아래 '상단 공용 바' 절).
+- **탭 순서 변경** = 아이템(단일 탭 · 그룹 통탭) **좌우 가장자리 30%(`REORDER_EDGE`)** 에 드롭. 그래서 탭 위 dragover 는 원칙적으로 preventDefault 하지 않되(스프링 로딩 영역) 그 가장자리 존에서만 한다. 저장은 localStorage `terminal:tabOrder`(selKey → id 배열), 정렬은 `tabSessions` 한 곳에서만 한다 — ⚠️ `sessions` 자체를 정렬하면 pane DOM 순서가 흔들린다. 이동 단위는 **아이템 블록**이라 그룹은 통째로 옮겨지고, 그룹 **내부** 순서는 그대로 분할 트리 소유다.
+  - ⚠️ 순서 드롭 핸들러는 `stopPropagation` 해야 한다 — 안 하면 탭바의 '그룹에서 분리' 드롭이 함께 발화한다. 그런데 stopPropagation 은 위의 document 안전망(bubble)까지 막으므로 **`onDragEndSession()` 을 직접 불러야** 한다 — 안 하면 드롭 존 오버레이가 굳는다(위 `dragSession` 대목과 같은 버그).
+- 위 규칙(특히 '한 세션 = pane 하나'와 무변화 시 **원본 참조 반환**)은 `lib/layout.test.ts` 가 고정한다(`status.ts`/`status.test.ts` 와 같은 방식).
 - ⚠️ **pane 의 경계·포커스 표시를 pane 자체의 inset box-shadow 로 그리면 안 보인다** — inset 그림자는 배경 레이어와 함께 그려져 자식(`__host` 다크 배경)이 위에 덮는다(2026-08-10 실측: 바 높이 22px 에서만 테두리가 보였다). 그래서 pane 사이 구분선은 `split-grip::after` 가 **상시**(2px `--border-dark`, hover 시 `--on-dark-3`) 그리고, focused 테두리는 `--focused::after` 오버레이(z-index + pointer-events:none)로 콘텐츠 위에 띄운다.
 
 ### ⚠️ pane·탭바·LNB 는 `memo` 다 — 넘기는 props 는 참조가 고정돼야 한다 (2026-08-09)
@@ -92,6 +97,8 @@ tmux 백엔드에서는 `new-session` 의 **shell-command 인자**로 넘겨 pan
 - 프리셋 실행 콜백은 `(cwd, preset)` 을 받는다 — 세션마다 다른 화살표를 만들지 않으려고 위치를 인자로 올렸다.
 - LNB 는 위치별 세션 수·대기 여부를 **한 번에 집계**(`byCwd`)한다 — 행마다 `sessions.filter` 를 돌면 워크트리 × 세션 이다.
 - ⚠️ 워크트리 폴링(10초)은 **내용이 같으면 이전 객체를 유지**한다(`JSON.stringify` 비교) — 새 객체로 갈아끼우면 거기 매달린 파생값과 LNB 가 통째로 다시 계산된다.
+- 이후 변경: 툴바를 공용 바로 올린 뒤(아래 '상단 공용 바') **`cwd` 도 넘기지 않는다** — 제목·상태·위치는 전부 탭바·공용 바가 표시하므로 pane 은 `sessionId` 등 원시값만 받는다.
+- ⚠️ **워크트리 폴링은 경량 조회**(`workspaces.worktrees(id, false)` → `listWorktreesBrief` = `git worktree list` 1회)를 쓴다 — 상세 조회는 워크트리마다 `git status --untracked-files=all` + `git diff` 를 돌려 **워크스페이스 14개에 596ms**(경량은 24ms, 2026-08-20 실측)였고 그게 10초마다 돌았다. LNB 의 ±변경량 표시는 이때 걷어냈다(잘 안 보는 값 — 변경 내역은 '변경사항' 드로어가 맡는다). `dirty` 가 필요한 곳(워크트리 제거 확인)만 **그 순간** 상세로 부른다.
 
 - ⚠️ **숨은 pane 은 PTY 크기를 주장하지 않는다**(`activeRef` 로 `onResize` 전달·`reclaimSize` 차단) — 안 막으면 안 보이는 세션들이 창 리사이즈마다 자기 크기를 밀어넣어 **폰(MO)이 보고 있는 세션 크기까지 되돌린다**(크기 공유는 마지막 주장 기준). 보이게 된 순간 `fit`+재주장+포커스를 한다.
 - ⚠️ `display:none` 금지 — 크기가 0 이 되어 다시 보일 때 80x24 를 거치며 TUI 가 두 번 리플로우한다. `inset:0` 이면 숨은 pane 도 활성과 **같은 크기**라 전환 시 리사이즈가 0이다(실측: 세션 4개 전환 왕복에 PTY 301x62 불변).
@@ -217,6 +224,9 @@ FitAddon 은 가용 높이를 **부모의 `getComputedStyle().height`** 로 재�
 ### 데스크톱 terminal:data 게이트 (2026-08-07)
 `terminal:ipc.ts` 가 **pane 이 attach 한 세션 id 만** `terminal:data` 를 broadcast 한다 — `TerminalView` cleanup 이 `terminal:detach`(fire-and-forget) 를 보내고, 렌더러 리로드·창 파괴는 sender 의 `destroyed`/`did-navigate` 에서 전체 clear 로 회수한다. detach 된 세션(livePanes 축출 등)의 출력은 IPC 로 오지 않지만 **링버퍼·tmux 에 남아 재attach replay 로 복원**되므로 유실이 아니다(섹션 이동은 2026-08-13 keep-alive 부터 detach 를 만들지 않는다 — pane 이 attach 를 유지한 채 숨는다). preload 의 `onData`/`onResized` 는 **멀티플렉서**(ipcRenderer 리스너 채널당 1개 + 콜백 Set)라 pane 수만큼 리스너가 늘지 않는다 — 새 고빈도 구독 채널을 추가할 때도 `makeMux` 를 쓸 것. MO(WS)는 이 게이트와 무관하게 `server.ts` 의 `attachedId` 필터를 그대로 쓴다.
 
+### ⚠️ 링버퍼 적재를 `?1049h/l` 바이트로 게이팅하지 말 것 (2026-08-13 시도·실패·되돌림)
+TUI 구간은 attach 가 어차피 replay 를 버리니 링버퍼에 안 쌓으면 되겠다 싶지만, **tmux 클라이언트 자신이 attach 하면서 대체 화면에 들어간다** — TUI 를 하나도 안 띄운 순수 셸 세션도 링버퍼 **오프셋 0 이 `?1049h`** 이고 `?1049l` 은 끝내 오지 않는다(실측). 그래서 모든 tmux 세션이 영구히 '대체 화면'으로 잡혀 **스크롤백 replay 가 통째로 0B** 가 됐다(2.2KB → 0B 실측). `attachSession` 의 `isTmuxAltScreen()` 은 **pane 을 직접 질의**하는 것이라 판정 대상이 다르다 — 바이트 감지로 대체할 수 없다.
+
 ## 크기 공유 — last-claim-wins
 보고 있는 쪽이 주장한다 — 새로 붙은 쪽 크기로 PTY 를 맞추고 `resized` 로 전 클라이언트에 알려 `term.resize()` 로 동기화한다. 여기에 **재주장 규칙**을 더한다: 데스크톱은 **창 포커스** 시(`window 'focus'` → `fit.proposeDimensions()` 와 다르면 재주장), MO 는 **보이는 상태(`visibilityState==='visible'`)에서 `resized` 를 받았을 때** 자기 크기를 되찾는다. 없으면 폰이 줄여 둔 크기로 데스크톱에 빈 공간이 남고(반대로 데스크톱이 키우면 폰은 오른쪽이 잘려 못 읽는다).
 
@@ -318,6 +328,12 @@ route 172.238.0.0 255.255.0.0 net_gateway
 - ⚠️ **진단 중 `tailscale down` 을 하지 말 것** — `up` 은 non-default 플래그(이 환경은 `--accept-routes`)를 전부 다시 명시해야 하고, 그 사이 DNS 가 죽어 있으면 재로그인이 **불가능해져 로그아웃 상태로 고착**된다(실측). 빠져나오려면 `tailscale up --accept-routes --accept-dns=false` 로 Tailscale 의 DNS 관리를 잠시 끄고 로그인한 뒤 되돌린다.
 - ⚠️ **측정할 때마다 VPN 이 실제로 켜져 있는지 함께 확인할 것** — 중간에 VPN 이 꺼진 줄 모르고 "고쳐졌다"고 오판하기 쉽다(실측으로 한 번 겪음). 판정 기준은 `pgrep -x openvpn` + `netstat -rn | grep -E "^(0/1|128\.0/1)"`.
 
+### ⚠️ `startServer` 는 진행 중 promise 하나로 직렬화한다 (2026-09-29)
+`ensureTls()`(`tailscale cert`)로 시작이 수 초 걸리는 사이 **자동 시작 재시도와 사용자의 [켜기]가 겹치면 둘 다 통과**해 서버가 두 번 떴다 — pty 구독·ping 타이머가 새고 RPC 브리지가 죽었다. 지금은 진행 중인 시작 promise 를 공유한다. `stopServer` 는 시작 완료를 기다린 뒤 닫고, 시작은 listen 직후 `getServerEnabled()` 를 다시 봐 그 사이 꺼졌으면 스스로 닫는다.
+
+### ⚠️ WS 백프레셔
+송신 버퍼(`bufferedAmount`)가 2MB 를 넘으면: `/term` 은 **data 프레임만 버리고** `needsResync` 를 세운 뒤, 버퍼가 빠지면(다음 출력 또는 ping 틱) attach 를 다시 돌려 replay 로 메운다(제어 메시지는 버리지 않는다). `/rpc` 는 이벤트를 골라 버리면 폰 상태가 어긋나므로 **소켓을 끊어** 재연결·재구독시킨다. 이 방어가 없으면 느리거나 잠긴 폰이 main 메모리를 끝없이 키운다.
+
 ### HTTPS (Tailscale 인증서)
 `terminal/tls.ts` 가 `tailscale cert` 로 MagicDNS 이름(`<host>.<tailnet>.ts.net`) 인증서를 받아 `userData/mo-cert/` 에 두고, 서버는 그게 있으면 `https`, 없으면 기존 `http` 로 뜬다(폴백).
 
@@ -342,6 +358,8 @@ route 172.238.0.0 255.255.0.0 net_gateway
 별도 Vite 엔트리(`mobile_window`, base `/terminal/`). 폰에서 `/` 는 **앱 셸**이고 터미널은 `/terminal/` 이다(MO 앱 셸 규칙 참고).
 
 UI 는 세션 선택(`<option>` 은 스타일 불가라 상태를 **텍스트 글리프**로 — waiting `●`·busy `◐`·idle `○` + 에이전트명) + **새 세션 시트**(같은 바텀시트에서 ①위치(홈+프로젝트 레지스트리, WS `cwds`) → ②에이전트(WS `agents`, 설치된 것만) 2단계 — 에이전트 목록이 없으면 셸로 즉시 생성) + **글자 크기 조절(A－/A＋, `localStorage` 저장 — 기본값은 최소 6px: claude 같은 넓은 TUI 를 폰에서 통째로 보는 게 첫 화면의 목적이고, 잘려 있으면 무엇을 키울지조차 안 보인다)** + 키바(esc·tab·⇧tab·ctrl 토글·방향키·⏎ — claude CLI 용)이며 재접속은 1→2→4→5초 백오프 + `visibilitychange`(탭 슬립) 즉시 재연결 = 재attach = replay 복원.
+
+- ⚠️ **자동 attach(세션 목록 수신 시)는 `!attachedId && !pendingAttachId` 일 때만** 한다(2026-09-29) — 알림으로 세션 X 에 attach 를 보낸 뒤 응답이 오기 전에 두 번째 `sessions` 가 도착하면, 아직 붙은 세션이 없다고 보고 '마지막 세션' Y 로 또 붙어 **알림과 다른 세션이 열렸다**.
 
 ### ⚠️ 뒤로가기는 오버레이만 닫는다 (2026-08-08)
 안드로이드에서 시트·전체화면이 떠 있을 때 뒤로가기를 누르면 **그 화면만 닫혀야** 한다 — 아무 처리가 없으면 페이지를 벗어나 앱 셸로 나가 버린다(사용자 지적).
@@ -436,3 +454,164 @@ xterm 이 `term.open()` 때 거는 `autocorrect=off`·`autocapitalize=off`·`spe
 
 ### 소프트 키보드 대응 (iOS·안드로이드 공통)
 Chrome 108+ 안드로이드도 iOS Safari 처럼 **visual viewport 만 줄이는 게 기본**이라 키바가 키보드에 가려질 수 있다 → ①viewport 메타에 `interactive-widget=resizes-content`(안드로이드는 레이아웃 뷰포트까지 줄어 flex 가 스스로 맞음, iOS 는 이 키를 무시) ②`visualViewport`·`innerHeight` 중 **작은 값**으로 body 높이 보정 — 둘을 함께 쓴다. pull-to-refresh(안드로이드)로 세션 화면이 리로드되지 않게 `overscroll-behavior: none` 필수. 한글은 직접 입력·**IME 조합**(Gboard) 둘 다 셸까지 전달됨을 확인(xterm 이 textarea 의 `autocapitalize/autocorrect/spellcheck` 를 이미 off 로 설정한다). CJK 가 2셀 폭으로 보이는 건 터미널 정상 동작.
+
+---
+
+> 아래 절들은 2026-09-29 규칙 파일 다이어트 때 `.claude/rules/features/terminal.md` 에서 옮겨 온 상세다. 절 제목은 규칙 파일의 `##` 제목과 같다.
+
+## 데스크톱 pane 관리
+
+### ⚠️ `activateSession` 의 대기 플래그(`pendingRef`)는 반드시 풀린다
+`activateSession` 은 '만든 세션이 목록에 나타나면 활성화' 를 기다리는 대기 플래그(`pendingRef`)를 세우는데, **그동안 '활성 세션 보정' effect 가 통째로 멈춘다.** 목록에 끝내 안 나타나는 id(종료된 세션의 알림 [이동] 등)를 받으면 플래그가 영영 남아, 사용자가 탭을 직접 누르기 전까지 **터미널 화면이 빈 채로 굳었다.** 지금은 3초 만료 타이머 + 만료 시 안내 토스트로 막는다.
+
+- ⚠️ ref 만 비우면 렌더가 일어나지 않아 보정 effect 가 재개되지 않는다 — 해제 신호(`pendingCleared` state)를 보정 effect 의 deps 에 함께 둔다.
+- PTY resize 디바운스+스로틀의 경위·실측은 '⚠️ 리사이즈 — SIGWINCH 폭주 주의' 절.
+
+## 섹션 안 뒤로/앞으로 (2026-08-19)
+세션·워크트리 전환은 `lib/useSessionHistory.ts` 가 방문 스택에 쌓고, `lib/sectionBack` 에 걸어 **섹션 이동보다 먼저** 소비한다 — 터미널에서 ⌘[ 는 다른 메뉴가 아니라 직전에 보던 세션으로 간다.
+
+- 항목은 `{selection, sessionId}` 쌍이다 — 세션 id 만으로는 다른 워크트리의 세션을 복원할 때 그 세션이 현재 탭 목록에 없어서 화면에 안 나온다. 복원은 `rememberActive` 를 **먼저** 심고 `setActiveId` 한다 — 순서가 바뀌면 '활성 세션 보정' effect 가 그 화면의 마지막 탭으로 곧바로 덮어쓴다.
+- ⚠️ **섹션을 떠나면(`active=false`) 스택을 비운다.** 안 비우면 오간 세션 수만큼 뒤로가기를 눌러야 터미널 밖으로 나간다. 스택이 빈 방향은 **등록하지 않아야** App 의 섹션 이동으로 넘어간다.
+- ⚠️ 기록은 **사용자가 고른 전환만** 한다 — 탭 클릭·⌘1~9·⌃Tab(`selectTab`) · LNB 선택(`selectWorkspaceTab`). 자동 경로(새 세션 자동 활성화·죽은 세션 보정·Jira [작업] 진입·분할 pane 포커스 이동)는 기록 없는 `applyTab`/`selectAndSave` 를 쓴다 — 기록하면 노이즈가 되거나, 뒤로 가도 화면이 안 바뀌는 항목이 생긴다.
+
+## 팝아웃 창 (세션 별도 창 분리 — 2026-09-01)
+
+### 배정·attach
+- **세션↔창 배정의 정본은 main `windows.ts`** — sidecar `runtimeFile('terminal-windows.json')`, 렌더러는 `terminal:windows` payload 브로드캐스트의 미러만 든다. 창 bounds 는 `windowState` 의 `popout:<id>` 키.
+- **"한 세션 = 전 창 통틀어 pane 1개"를 배정으로 강제한다** — 메인 창은 분리된 세션의 pane 을 만들지 않고(자리표시자 탭), 각 창의 `TerminalPanes` 에는 **자기 소속 세션만**(mainSessions/mySessions) 넘긴다. 배정에서 빠지면 pane 언마운트 = detach. `useSplitGroups` 에도 소속 목록을 넘겨 sanitize 가 남의 창 세션을 그룹에서 걷어낸다.
+- ⚠️ **ipc.ts 의 attach 추적은 sender 별**(`attachedBySender: Map<WebContents, Set<id>>`) — 팝아웃 이전의 전역 Set + `clear()` 는 창 하나의 파괴·리로드가 **다른 창의 방송까지 끊는** 결함이었다. ⚠️ Map 은 강한 참조라 `destroyed` 가 한 번이라도 유실되면 WebContents 가 영영 남는다 — `terminal:attach`(pane 이 뜰 때만 오는 저빈도 경로)에서 죽은 엔트리를 훑어 지운다. 고빈도인 방송 경로에는 넣지 않는다.
+- 창 재사용: 팝아웃은 `main_window` 엔트리를 `?popout=<id>` 로 로드한다(새 Vite 엔트리 금지 — cacheDir 함정). `renderer.tsx` 가 분기해 `TerminalPopoutApp` 을 띄운다. 그룹째 분리할 때 최초 트리는 open→init 인자로 전달하고, **마운트 전에** localStorage `win:<id>` 키에 심는다(훅의 초기 로드가 그 키를 읽는다).
+- ⚠️ **localStorage(레이아웃·탭 순서·lastActive)는 창들이 공유한다** — 저장은 반드시 **자기 소유 키만 read-merge-write**(`persistLayouts(ownsLayoutKey)`·`persistTabOrder`·`rememberActive`). 통째 쓰기로 되돌리면 다른 창이 그 사이 저장한 키를 마운트 시점 스냅숏으로 되돌린다. 닫힌 창의 `win:*` 키는 메인 창이 배정 목록 기준으로 청소한다(`pruneWindowScreenState`, windowsReady 게이트 필수).
+
+### 창 밖 드롭 판정
+창 밖 드롭 판정은 **탭 자신의 dragend**(document 안전망보다 먼저 온다)에서 **screen 좌표만** 본다. 그룹 트리는 `peekGroup`(무변경 조회)으로 떠 가므로 거부돼도 잃는 것이 없다.
+
+- ⚠️ **`dropEffect` 를 판정에 쓰지 말 것** — 그 값은 우리가 아니라 **놓은 자리의 앱이** 정한다(macOS 는 대상 앱의 NSDragOperation). 노트·IDE 처럼 드래그를 받아들이는 앱은 실을 데이터가 없어도 수락 응답을 내서 `'copy'` 가 되고, `dropEffect==='none'` 을 조건에 두면 **그런 앱 위에서만 분리가 조용히 취소된다**(2026-09-01 신고 "어떤 곳은 열리고 어떤 곳은 안 열린다" — 아래 `text/plain` 제거로는 절반만 고쳐졌고, 이 조건까지 걷어내야 끝났다). 앱 자신의 창 위 드롭은 main 의 히트테스트가 거르므로 이중 방어가 필요 없다. 남는 한계는 **포인터가 창 밖일 때의 Esc 취소**로, HTML5 DnD 로는 구분할 수 없다(창 안 Esc 는 무사).
+- ⚠️ **드래그에 `text/plain` 을 싣지 말 것** — 앱 밖으로 나가면 그것이 macOS 붙여넣기판의 '텍스트'가 되어, 텍스트를 받는 자리(바탕화면·에디터·브라우저·메신저)가 드롭을 **수락**한다. `dropEffect` 가 `'none'` 이 아니게 되어 옛 판정이 탈락했고, **놓는 자리에 따라 팝아웃이 열리다 말다 했다**(같은 신고). 데이터 채널은 커스텀 타입 `application/x-oneapp-term` 하나로 충분하다 — **다른 앱이 인식하지 못하는 것이 목적**이다.
+- ⚠️ main 의 open 히트테스트(오발 방지)는 **탭을 받을 수 있는 창(메인·팝아웃)만** 검사한다. `getAllWindows()` 로 넓히면 그룹웨어 자동 작성 창(`lib/browser.ts`, 1440×900)처럼 무관한 창까지 잡아 **그 창이 떠 있는 자리에서 분리가 조용히 거부된다**(같은 신고의 원인 하나).
+- 창 밖에 놓으면 새 창이 뜨기 직전 탭이 제자리로 되돌아가는 모션(HTML5 DnD 의 snap-back — 이 제스처는 OS 입장에서 언제나 '실패한 드롭'이다)이 보인다. **`setDragImage` 로 고스트를 투명하게 지우는 안은 시도했다가 되돌렸다**(2026-09-01 — 사용자 "더 이상해졌다"). 끌리는 것이 눈에 안 보이는 쪽이 더 나빴다. 다시 가지 말 것.
+
+### 팝아웃 탭바 = 타이틀바
+- ⚠️ 창 손잡이(`app-region: drag`)와 탭이 한 상자에 겹친다. **손잡이는 탭 바깥의 독립 요소(`__tabs-space`)여야 한다**: `__tabs-list` 는 `no-drag` + `flex: 0 1 auto`, 남는 폭을 받는 `__tabs-space` 에만 `drag`. 탭에만 no-drag 를 걸고 부모(탭바)를 drag 로 두면 **창이 비활성인 동안 부모의 drag 가 이겨 탭을 잡아도 창이 끌린다**(2026-09-01 실측: 비활성 팝아웃의 탭을 60px 끌자 창이 정확히 60px 이동하고 DOM 에는 mousedown 조차 오지 않았다 — 같은 앱 안 다른 창이 key 일 때 재현된다).
+- 단 `__tabs-list` 를 `flex:1` 로 되돌리면 빈 공간을 전부 먹어 창을 잡을 곳이 신호등 여백만 남는다(2026-09-01 사용자 지적) — 두 요구를 스페이서가 함께 지킨다. 탭바 높이는 `--titlebar-h`(신호등 y:16 정렬 + 탭 위 여백도 손잡이).
+- **`app-region: drag` 는 드래그 *시작*에만 관여한다**(2026-09-01 실측) — 이미 진행 중인 HTML5 드래그의 `dragover`/`drop` 은 drag 영역에서도 정상 수신된다(그래서 손잡이가 곧 탭바 드롭 존이어도 '그룹 분리'·'가져오기'가 동작한다). 반대로 그 영역의 `mousedown`·`mousemove` 는 DOM 에 아예 오지 않는다 — 드롭이 안 되는 것처럼 보이면 여기가 아니라 창 활성 상태부터 의심할 것.
+
+### 크로스 윈도우 DnD
+dragstart/dragend 를 `terminal:drag` → `terminal:dragState` 로 전 창에 미러한다(`remoteDragId`).
+
+- ⚠️ **드롭을 받은 창은 로컬 트리에 바로 넣지 말 것** — 세션이 아직 그 창 소속이 아니라 sanitize 가 즉시 걷어낸다. `moveSession` 후 소속 브로드캐스트 도착을 기다려 배치한다(`pendingDropRef` → `applyDropAt`).
+- ⚠️ 크로스 드롭은 소스 탭 언마운트로 dragend 가 유실될 수 있다 — main 의 move-session 이 **무조건 dragState null 을 브로드캐스트**하고, `useSplitGroups` 가 드래그 중에만 null 을 구독해 회수한다(dragSession 고착 = 드롭 존 오버레이가 휠·클릭을 삼키는 그 버그).
+
+### 닫힘·복원
+- 닫힘 의미: 사용자 닫기(⌘W) = 세션 전원 메인 복귀(레코드 삭제가 곧 복귀 — 세션은 절대 안 죽는다), 앱 종료 = 레코드 유지 → 재시작 시 복원. 마지막 세션이 죽은 창은 자동으로 닫힌다.
+- ⚠️ 복원(`initTerminalWindows`)은 **restoreSessions() 완료 후에만**(빈 목록과 대조하면 배정을 오파기한다) + **`app.whenReady()` 이후에만** 한다 — BrowserWindow 는 ready 전 생성이 throw 하는데, restore 는 모듈 최상위에서 시작해 tmux 가 빠르면 ready 를 이긴다(2026-09-01 리뷰).
+- ⚠️ `terminal:windows:list` 는 복원 완료 게이트(`windowsRestored`)로 보류한다 — 복원 전 빈 목록을 받으면 메인 렌더러가 windowsReady 로 오판해, 곧 복원될 창의 `win:*` 화면 상태를 오파기한다(`pruneWindowScreenState`).
+- ⚠️ **배정에서 세션을 빼는 경로는 `detachFromAll()` 하나로 모은다** — 비게 된 창을 닫지 않으면 세션 0개인 빈 팝아웃이 남는다. `open`(창 밖 재분리)에만 이 정리가 빠져 있어서, 팝아웃의 **마지막 세션·그룹을 다시 창 밖으로 끌면** 빈 창이 그대로 떠 있었다(2026-09-01 — 정작 그 창의 안내문은 '자동으로 닫힙니다'였다). 지금은 `moveSession`·`onTerminalExit`·`open` 셋 다 같은 경로를 쓴다.
+- ⚠️ **정리를 `close` 이벤트에만 걸지 말 것 — `closed` 에도 건다**(2026-09-01 E2E 실측). 창이 강제 파괴되는 경로(CDP/devtools 로 닫기, 렌더러 크래시)는 `close` 를 건너뛰고 `closed` 만 보낸다. 그때 배정이 남아 **창은 없는데 세션이 그 창에 갇히고**(자리표시자 클릭이 무반응), 재시작하면 **닫은 창이 되살아났다**. `closed` 는 어느 경로로든 반드시 오고, `removePopout` 은 두 번 불려도 no-op 이다.
+- **되돌리기([↩])는 배정만 바꾸면 끝이 아니다** — 메인 창이 그 세션과 **다른 워크트리**를 보고 있으면 되돌린 세션이 화면에 안 나타난다. 팝아웃은 `windows.revealInMain`(main 이 메인 창에 `terminal:reveal` → `App` 이 `openTerminalSession`), 메인 창의 자리표시자 [↩] 는 그 자리에서 `setFocusReq`. 탭바 드롭(`adoptSession`)이 하던 것과 같은 의미다.
+- 팝아웃 창 크기는 `popout-last` 키로 승계한다(`inheritWindowSize` — 닫을 때 **크기만** 저장하고 좌표는 제외해 새 창이 겹쳐 뜨지 않게). 창 id 가 매번 새로 생겨 `popout:<id>` 만으로는 사용자가 조절한 크기가 매번 900×600 으로 되돌아갔다. ⚠️ 승계 키에 `popout:` 접두사를 쓰지 말 것 — `pruneWindowStates` 가 고아로 보고 지운다.
+
+### 탭 우클릭 메뉴
+공용 `ContextMenu` — 분리·되돌리기의 지름길이다. 드래그는 창 밖까지 정확히 끌어야 하고 **끌고 나간 뒤 Esc 취소가 안 되므로**(위 dropEffect 대목) 메뉴 경로가 사실상 주 진입점이다. 항목은 맥락별로 갈린다: 메인 일반 탭 = `별도 창으로 분리`, 팝아웃 탭·자리표시자 = `메인 창으로 되돌리기`(+자리표시자는 `그 창으로 이동`), 그룹 멤버면 `분할에서 빼기`. `onDetachToWindow(id, x?, y?)` 는 좌표를 생략하면 **기억된 자리·크기**로 띄우고 오발 방지 히트테스트도 건너뛴다(메뉴 경로엔 '놓친 드롭'이 없다).
+
+- ⚠️ **탭 더블클릭 이름 편집은 걷어냈다**(2026-09-01) — 탭을 빠르게 두 번 누르는 손놀림에 편집 모드가 걸려 오조작이었다. 인라인 편집 UI 는 그대로 두고 진입만 메뉴로 옮겼다. 되살리지 말 것.
+
+### 알림·부수 규칙
+- 입력대기 알림 게이트(`isVisibleInPopout`)는 **그 창이 포커스를 갖고 있는가**로 판정한다 — '렌더 중'만 보면 최소화·백그라운드 팝아웃도 true 라 **뒤에 둔 창의 입력대기가 통째로 무음**이 됐다(2026-09-01). 포커스가 곧 판정이므로 `isVisible`·`isMinimized` 를 겹쳐 볼 필요가 없다(포커스된 창은 그럴 수 없고, 앱이 백그라운드면 어느 창도 포커스가 없다).
+  - ⚠️ **알럿(`notifyToast`)은 이 게이트를 통과시킨다** — 메인 창도 '보고 있어도 alert 는 나간다'가 규칙인데, 여기서 통째로 return 하면 팝아웃 세션만 alert 를 잃는다. 게이트는 `sendToast`(토스트)에만 건다.
+  - ⚠️ 떠 있던 토스트 회수는 **팝아웃의 `focus` 에서도 재보고**하고, main 은 **직전 목록과 비교하지 않고 매번** `app:toast:dismiss` 를 보낸다. 창이 뒤에 있는 동안 뜬 토스트는 **화면 세션이 그대로인 채 창만 포커스될 때** 거둬야 하는데, 그때 보고 목록은 직전과 같아 `!prev.includes(id)` 에 전부 걸러졌다(dismiss 는 없는 키에 no-op).
+- `activate` 의 '메인 창' 판정은 `getNotifyWindow()` 로 한다(`getAllWindows()[0]` 금지 — 팝아웃이 잡힌다). `setNotifyWindow` 는 메인 창 전용. [이동]·focusReq 는 분리된 세션이면 그 창 포커스로 라우팅한다.
+
+## 키 입력
+> Shift+Enter·⌘←/→·한글 조합 중 Enter·포커스 직후 자모 분리(OS 버그) 판정의 초기 기록은 위 '세션 패널은 드래그 리사이즈 + 완전 축소' 절 끝에 있다. 여기는 2026-08-26 한글 조합 × 합성 키 계열이다.
+
+### ⚠️ 한글 조합 중 방향키를 xterm 에 넘기지 말 것 (2026-08-26)
+`CompositionHelper.keydown` 이 방향키를 보면 `_finalizeComposition(false)` 로 조합을 **즉시** 확정하는데, 그때 쓰는 `_compositionPosition.end` 는 compositionupdate 의 `setTimeout(0)` 으로 갱신돼 아직 낡은 값이라 **이미 보낸 글자를 다시 보낸다**(중복 방지 보정 `_dataAlreadySent`(xterm #3191)는 `waitForPropagation=true` 경로 전용). 신고: "가나다라마바사"→"사사사", "입력"→"입력력".
+
+- **물리 방향키·Home 은 IME 가 먼저 조합을 확정해 무사하고, ⌥+방향키는 `macOptionIsMeta` 가 조합 처리에서 제외한다** — 그래서 **키를 합성해 보내는 환경**(Karabiner 로 ⌘U/⌘J 를 방향키로 리맵)에서만 재현된다. 원인을 Karabiner·IME·Claude Code 쪽에서 찾지 말 것(그 경로로 반나절 헤맸다).
+- 대응은 `return false` 로 보류(= `CoreBrowserTerminal._keyDown` 이 즉시 반환해 CompositionHelper 를 안 탄다) → compositionend 뒤 `setTimeout(0)` 에 시퀀스 전송. 이 타이머가 조합 글자보다 뒤에 실행되는 근거는 **리스너 등록이 `term.open()` 이후**라는 것 — 리스너를 open 앞으로 옮기면 순서가 뒤집힌다.
+
+### ⚠️ `return false` 하는 키는 `ev.preventDefault()` 도 (2026-08-26)
+xterm 은 커스텀 핸들러에서 false 를 받으면 `cancel()` 없이 빠져나가, 브라우저 편집 명령(⌘← `moveToBeginningOfLine` 등)이 **숨은 textarea** 에 적용된다. `CompositionHelper` 는 조합 위치를 `textarea.value.length`(끝에 붙는다는 가정)로만 계산하므로 캐럿이 앞으로 가면 **이후 한글 조합이 전부 textarea 끝 글자로 치환**된다('가나다라' → ⌘←(Karabiner ⌘U) → '라라라라 가나다라'). textarea 는 Enter/^C 때만 비워져 그 줄 내내 반복된다. 안전망으로 keydown(비조합)마다 캐럿을 끝으로 재정렬한다(`rehomeCaret`).
+
+- ⚠️ 단 **조합 중 방향키 보류 분기는 preventDefault 하지 말 것** — 편집 명령이 캐럿을 옮기며 조합을 끝내 주는 것이 보류 시퀀스를 내보내는 방아쇠다(막으면 이동이 다음 글자까지 지연된다, 실측).
+
+### ⚠️ 조합 중 단독 수정키 keydown 은 xterm 에 넘기지 말 것 (2026-08-26)
+조합 중(또는 compositionend 직후 xterm 의 setTimeout(0) 전송 전)의 경우다. `CompositionHelper.keydown` 면제 목록은 CapsLock·229·Shift/Ctrl/Alt 만이라 **Meta(⌘) 는 조합 확정 키로 취급**돼 글자를 즉시 보내고, 진짜 compositionend 가 같은 글자를 다시 보낸다. Karabiner 가 `⌘J → ←` 로 리맵하면 `⌘ up → ← → ⌘ down` 으로 합성해 **이동 직후 ⌘ keydown 이 조합 중에 도착**한다("입력중"→"입력중중" — 물리 화살표엔 ⌘ 재누름이 없어 무사). 단독 수정키 keydown 은 xterm 이 아무 일도 안 하므로 막아도 잃는 게 없다.
+
+### ⚠️ 커스텀 핸들러가 직접 보내는 제어 시퀀스는 `writeKeySeq` 로 (2026-08-26)
+⌘←/→·⌘⌫·Shift+Enter 처럼 핸들러가 직접 PTY 에 보내는 시퀀스를 compositionend 직후 xterm 의 setTimeout(0) 전송 전 창(`compositionSettling`)에 즉시 쏘면 **조합 글자보다 먼저 도착**한다('사과' 조합 중 ⌘U → "과사"). 그 창이면 같은 setTimeout(0) 으로 미뤄 xterm 타이머 뒤에 보낸다. xterm 의 자체 flush(`CompositionHelper.keydown`)는 커스텀 핸들러가 `return false` 하면 타지 않는다.
+
+## 세션 패널 (좌측)
+
+### 워크스페이스는 git 저장소가 아니어도 된다 (2026-09-03)
+등록 검사는 "존재하는 폴더"만 본다(`store.saveWorkspace`). 일반 폴더는 `git worktree list` 가 실패하면 `parseWorktrees`(workspaces/git.ts)가 **그 폴더 하나를 `plain: true` 항목으로 합성**한다 — 트리·세션 배치(`allPaths`)·알림 위치 라벨·changes 대상 해석·MO 트리가 전부 그 목록만 보므로 다른 곳은 손대지 않았다.
+
+- 렌더러는 `plain` 이면 [새 워크트리] 버튼을 숨기고 브랜치 자리에 '일반 폴더'를 쓴다 — 참조 텍스트는 **`worktreeRef`/`worktreeLabel`(shared/types.ts, Jira 작업 시작 모달도 공유)**, 아이콘은 `worktreeIcon`(terminal lib).
+- 저장소인지는 **저장하지 않고 조회마다 판정**한다 — 나중에 `git init` 하면 워크트리 모드로 바뀐다.
+- ⚠️ `.git` 이 있는데 git 이 실패하면 일반 폴더로 위장하지 않고 throw 한다(진짜 오류).
+- ⚠️ 저장소 **하위 폴더**를 등록하면 git 이 저장소 루트를 돌려줘 행 경로가 등록 경로와 달라진다(예전부터 같은 동작).
+
+### 선택 보정 effect 무한 루프
+`TerminalSection` 의 선택 보정 effect 는 폴백 선택이 지금 선택과 같으면 set 하지 않는다 — 첫 워크스페이스의 목록이 `[]`(git 실패·폴더 삭제)면 폴백 `repoPath` 도 무효로 판정돼, 가드 없이는 set → 재판정 → set 무한 루프였다.
+
+### 작업중(에이전트) 표시
+펼침 모드는 행 우측 `spinner spinner--xs`, 축소 모드는 타일 둘레를 도는 SVG 아크(`BusyArc` + `terminal__sq-arc`). 집계는 `byCwd` 같은 루프에 얹는다(행마다 filter 금지).
+
+- ⚠️ **`status === 'busy'` 가 아니라 `working` 을 본다** — busy 는 출력 한 프레임에도 켜지므로 완료된 세션을 스크롤·클릭하거나 프롬프트에 타이핑하는 것만으로 2.5초 로딩이 떴다(2026-08-19 신고). `working` 은 main 이 "출력이 `WORKING_MIN_MS`(1.2초) 이상 이어졌고 그동안 키 입력·마우스 리포트가 없었다"를 확인해 켜는 필드다('상태 휴리스틱·알림' 절). 셸 세션도 함께 제외한다(`ls` 한 번에도 busy).
+- ⚠️ 축소 아크를 **원형 border 링이나 회전하는 conic-gradient 로 바꾸지 말 것** — 사각 타일과 기하가 안 맞아 타일을 관통하거나 코너가 밖으로 튄다. dash 합 = 둘레, 이동량은 음수를 인라인 변수로 준다(키프레임의 `calc` 은 보간되지 않는다). 근거는 `_terminal.scss`·`WorkspaceNav.tsx` 주석.
+
+### 세션 목록은 상단 탭바에 있다
+예전의 '세션 행'(위 '세션 패널은 드래그 리사이즈' 절의 행 더블클릭 이름 편집)은 없어졌고, 세션 목록은 **상단 탭바(`SessionTabs`)** 에 있다. 이름 변경은 탭 **우클릭 메뉴 [이름 변경]** → 인라인 편집(`Input bare`, `terminal:rename` → sidecar 영속), 진입 시 `select()`. 워크스페이스 이름도 같은 방식(타일 우클릭).
+
+- ⚠️ 인라인 편집은 공용 `.input` 의 `min-height: var(--control-h)` 하한을 `bare` 가 지워야 한다 — 안 지우면 감싸는 행·탭이 부푼다(2026-09-02).
+
+## 스크롤 (tmux 위임)
+
+### MO 터치 스크롤도 같은 판정·같은 경로다 (2026-09-10)
+위 '휠 스크롤은 tmux copy-mode 로 위임한다' 절 끝의 "MO 는 이 경로를 쓰지 않는다 — 합성 WheelEvent 그대로"는 이때 바뀌었다. 지금은 마우스 트래킹 ON 이면 합성 WheelEvent 를 `.xterm-screen` 에 디스패치하고(xterm 이 좌표까지 리포트로 인코딩), 아니면 WS `scroll` 메시지로 **서버에 위임**한다(`scrollSession` 재사용, 24ms 묶음·응답 대기 중 겹침 금지). `scrollLines()` 직접 호출은 claude(대체 화면)에서 안 된다.
+
+- ⚠️ **마우스가 꺼진 상태의 휠을 xterm 에 넘기지 말 것** — 대체 화면에서 xterm 이 휠을 방향키(↑↓)로 바꿔 보낸다(xterm 6 `bindMouse` 의 상시 wheel 리스너). claude 의 모드 껐다 켜기 틈에 이게 걸려 **폰에서 프롬프트 히스토리가 롤링됐다**(2026-09-09 신고). tmux 위임이 전제인지의 세션 판정은 `attached` 응답의 `tmux` 필드로 한다.
+- `[맨 아래로]` 는 위임 스크롤에서 xterm 버퍼로 알 수 없다 — 서버가 `scrolled`(scrolledUp)로 알려주고, 입력이 나가면(`sendMsg` 관문) copy-mode 자동 종료에 맞춰 함께 내린다.
+
+## 상태 휴리스틱·알림
+> 기본 상태 정의(busy/waiting/idle)·바이트 문턱·SIGWINCH grace 의 초기 기록은 위 '상태 휴리스틱' 절.
+
+### 알림 강도·토스트 (2026-08-14)
+알림 = 입력대기 뱃지 상시 + **토스트 기본 표시**(우측 아래 sticky, **백그라운드여도 발신돼 복귀 시 떠 있다**(`sendToast`), 세션당 `dedupeKey` 1장, [이동] = `openTerminalSession` 으로 그 세션 포커스) + 강도 `terminal.json` `notifyLevel`(badge/sound/alert — 환경설정 → 터미널 Segment): sound 는 +알림음, alert 는 +백그라운드일 때 알럿 폴백(`notifyToast`). 생성 20초·직전 입력 5초 내 전이는 알림을 생략한다.
+
+- 토스트 제목에 **위치 라벨**(`입력 대기 — 작업영역명 · 워크트리폴더명`) — `sessionLocationLabel`(ipc.ts)이 워크스페이스별 `worktreePaths`(경량 `git worktree list`)로 cwd 를 대조하고, **cwd 별 영구 캐시**(세션 수명 동안 불변)를 둔다. 중첩 매치는 더 깊은 경로 우선, 워크스페이스 밖(홈 등)이면 라벨 생략. ⚠️ `listWorktrees` 는 워크트리마다 `git status`+`diff` 가 돌아 알림용으로는 무겁다.
+- **보고 있는 세션은 토스트 생략** — TerminalSection 이 `sectionNav.setSessionVisibilityCheck` 로 "화면 세션(활성 섹션 + activeGroupIds/activeId)" 판정을 등록하고, App 의 `AppToastBridge` 가 발신 전에 확인한다.
+- ⚠️ **세션이 죽으면 그 세션의 입력대기 토스트도 거둔다** — `App.tsx` 의 `AppToastBridge` 가 `terminal:exit` 에서 `dismissToast(termWaitToastKey(id))`. 죽은 세션은 '화면에 올라오면 닫는다' 경로에 영영 안 걸려 sticky 토스트가 남았고, 그 [이동]을 누르면 없는 세션을 열려다 **터미널 섹션이 빈 화면으로 고착**됐다('데스크톱 pane 관리' 절의 대기 플래그).
+- **이미 떠 있던 토스트는 그 세션이 화면에 올라오면 거둔다**(2026-08-19) — 입력대기 토스트는 sticky 라 스스로 안 사라져서, 알림을 보고 세션에 가도 ✕ 를 눌러야 했다. TerminalSection 의 effect 가 화면 세션마다 `useToastDismiss()(termWaitToastKey(id))`. **보고 있는 세션만** 닫는다 — 터미널 섹션 진입만으로 전부 닫으면 아직 확인 안 한 다른 세션 알림까지 사라진다. dedupeKey 문자열은 `shared/types.ts` 의 `termWaitToastKey()` 한 곳 — main(발신)과 렌더러(닫기)가 갈라지면 조용히 안 닫힌다.
+
+### ⚠️ 제출(Enter)이 오면 생성 grace 를 즉시 푼다 (2026-08-19)
+`noteInput` 의 `suppressNotifyUntil = 0`. grace 는 초기 프롬프트·복원 redraw 의 소음을 막자는 것인데, `create-grace` 분기는 알림 기회까지 소진하므로 안 풀면 **grace 창(20초) 안에 끝난 사용자 턴이 통째로 무음**이 된다.
+
+- 2026-08-19 신고 "FO-JB 작업영역만 완료 토스트가 안 뜬다"의 원인이 이것 — **작업영역과 무관한 타이밍 문제**였다: 앱 재시작 복원 grace 가 끝나기 0.5초 전에 waiting 이 온 세션은 삼켜지고, 1.5초 뒤에 전이한 옆 세션은 정상 발화했다.
+- ⚠️ 복원(`restoreSessions`)도 grace 를 새로 걸므로 **생성 시각만 보고 "grace 는 끝났을 것"이라 추정하지 말 것** — `[skip] why=create-grace` 로그의 `graceLeft` 를 본다.
+
+### 알림 기회는 턴(입력)당 1회 (2026-08-14)
+입력 후 5초(입력 게이트) 안의 waiting 전이는 ①**제출(Enter — `\x1b\r` Shift+Enter 제외)로 시작한 턴이면 소진하지 않고 게이트 해제 시점에 재판정**해 그때도 waiting 이면 알림(짧은 턴 미탐 방지, `notifyRecheck` 타이머 — finalizeExit 에서 정리) ②제출 없는 입력(타이핑 멈춤)이면 기존대로 조용히 소진.
+
+### ⚠️ xterm 자동 응답은 입력으로 치지 않는다 (`AUTO_REPLY_RE`)
+포커스 이벤트 ESC[I/O·CPR·DSR·DA·OSC 색 응답 등(PTY 전달은 그대로). 이걸 입력으로 집계하면 알림 기회가 재장전돼 **끝난 세션이 한참 뒤 스스로 그린 출력(상태줄 갱신 등)에 소리가 울린다**(2026-08-14 사용자 신고로 수정). 렌더러 `DA_REPLY_RE` 는 DA 만 거른다 — 새 자동 응답 유형이 생기면 main 쪽 목록에 더한다.
+
+- **실측 근거**(2026-08-14, 실제 claude 세션): ①claude 는 기동 시 `ESC[?1004h`(포커스 리포팅)를 켠다 — probe 캡처에서 `?1000h ?1002h ?1003h ?1004h ?1006h ?2004h ?2026h ?2031h` 확인 ②앱 tmux conf 가 `focus-events on` 이라 그 모드가 클라이언트 터미널(xterm)까지 전달된다(실제 `terminal:data` 스트림에서 `?1004h` 관측) ③xterm 소스의 `_handleTextAreaFocus` → `sendFocus` 면 `ESC[I`/`ESC[O` 전송 ④진단 로그의 **`[auto]` 기록으로 `ESC[O` 와 OSC 10/11 색 응답이 실제로 `writeSession` 에 도달함을 확인**. 재현·회귀 확인은 이 로그를 본다.
+- ⚠️ **마우스 리포트도 자동 응답이다**(2026-08-19 재발 수정) — claude 는 마우스 트래킹을 켜므로 `TerminalView` 의 휠 핸들러가 `mouseTrackingMode ≠ 'none'` 이면 휠·클릭을 xterm 에 그대로 위임하고, xterm 이 만든 SGR 리포트(`ESC[<64;1;1M` 등)가 `terminal:write` 로 올라온다. 즉 **끝난 세션을 눈으로 확인하려고 클릭·스크롤하는 것만으로** 알림 기회가 재장전돼, 이어지는 claude 리렌더 출력 한 번에 토스트가 다시 떴다("완료된 터미널에 자꾸 토스트"). 마우스는 "보고 있음"이지 "새 턴 시작"이 아니다. 현재 목록은 포커스·CPR·DSR·DA·**DECRPM(`$y`)·마우스 3종(SGR/urxvt/X10)·OSC 전체·DCS 응답**까지 — 전부 키보드로 만들 수 없어 사람 입력을 삼킬 위험이 없다.
+- ⚠️ **BEL 은 판정에 한 번 쓰면 소비한다**(`statusTick` 끝에서 `bellAt = 0`) — 예전엔 다음 입력까지 남아, 완료 시의 BEL 하나가 이후 모든 출력에 '0.3초 침묵 + 바이트 면제'를 계속 발급했다. 끝난 세션이 busy↔waiting 을 쉼 없이 왕복하며 알림 게이트를 반복해 두드린 원인.
+
+### '실작업'(sustained) 판정이 상태 전이의 축이다 (2026-08-19)
+`noteOutput` 한 곳에서 잰다: ①출력이 `OUTPUT_RUN_GAP_MS`(1.5초) 이내 간격으로 `WORKING_MIN_MS`(1.2초) 이상 **이어졌고** ②마지막 키 입력, ③마지막 **마우스 리포트**가 그만큼 조용할 때. ②③은 "사용자가 화면을 만지는 중" 신호다 — claude 는 타이핑·휠에 화면을 다시 그리므로 그 리렌더를 작업으로 세면 완료된 세션을 확인하는 것만으로 작업중이 된다.
+
+- **`working`**(= LNB 로딩 표시, `TerminalSessionInfo.working`)은 sustained 일 때 켜고, busy 를 벗어나면 `setStatus` 가 내린다. 한 번 켜지면 busy 인 동안 유지 — 작업 중 스크롤에 꺼지면 안 된다.
+- **`waiting`(초록) → busy 전이도 sustained 를 요구한다** — 초록은 '아직 해소되지 않은 완료' 표시라, 단발 리렌더나 대기 화면의 분 단위 갱신(실측: 60초마다 4.5KB)에 내리면 훑어볼 표시가 수시로 사라진다. ⚠️ **`idle`→busy 는 즉시 그대로 둔다** — 늦추면 세션 생성 직후 첫 렌더가 통째로 먹혀 영영 idle 에 갇힌다.
+- ⚠️ 판정을 `statusTick` 으로 옮기지 말 것 — 출력이 끊긴 뒤에도 시간만으로 문턱을 넘어 리렌더가 통과한다.
+- **`waiting`(초록)은 제출(Enter)로만 내린다** — 타이핑 도중에 내리면 답을 쓰다 다른 세션을 보러 간 사용자가 '아직 답 안 보낸 세션'을 목록에서 잃는다(2026-08-19 신고). `noteInput` 은 `lastInputSubmit` 일 때만 `waiting → idle`. 알림 기회 리셋(`notifiedSinceInput`)은 종전대로 모든 입력에서 한다.
+
+### 진단 로그 (`terminal/debug.ts`)
+알림 오탐은 재현 시점을 잡기 어려워 콘솔이 아니라 파일에 쌓는다.
+
+- 켜는 법: `touch ~/Library/Application\ Support/One\ App/term-debug.on` — **앱 재시작 불필요**(10초 캐시로 스위치 파일을 다시 본다). 로그는 같은 폴더 `term-debug.log`(개발 인스턴스는 `-dev`). `ONEAPP_TERM_DEBUG=1` 이면 콘솔에도 나온다.
+- 태그: `[input]`(사람 입력으로 집계 = 알림 기회 재장전) · `[auto]`(걸러짐) · `[status]`(전이+근거) · `[notify]`(발화, 직전 입력 종류 포함) · `[skip]`(억제 이유) · `[life]`(세션 수명).
+- **토스트가 떴는데 `[notify]` 가 없으면 원인은 렌더러 쪽**이라 절반이 갈린다. 입력 본문은 `«12»` 처럼 개수로만 남고 ESC 시퀀스만 원문 보존한다.

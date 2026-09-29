@@ -12,6 +12,8 @@ export default defineConfig({
       'standalone/lite/src/**/*.test.ts',
       // lite 도달 그래프 불변식(외부 패키지 누출·버전 불일치) — standalone/lite/scripts/reach.test.ts
       'standalone/lite/scripts/**/*.test.ts',
+      // 커밋·빌드 가드 훅 판정 케이스(우회·오탐) — .claude/hooks/hooks.test.mjs
+      '.claude/hooks/**/*.test.mjs',
     ],
     environment: 'node',
   },
