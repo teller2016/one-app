@@ -373,6 +373,12 @@ export async function connectVpn(ovpnPath: string, manualOtp?: string): Promise<
   // 앱 재시작 등으로 데몬이 살아있으면 재실행하지 않고 재접속
   if (await tryReattachVpn()) {
     if (getVpnStatus().state === 'connected') return;
+    // ⚠️ 붙었는데 connected 가 아니면 데몬은 **살아 있다**(재연결 중이거나, 다른 인스턴스가
+    // management 를 잡고 있어 state 응답이 안 오는 경우). 여기서 새로 띄우면 root 데몬이 두 개가
+    // 되고, session.json·mgmt.pw 를 덮어써 옛 데몬은 앱에서 해제할 수 없는 고아가 된다.
+    throw new Error(
+      '이미 실행 중인 OpenVPN 이 있습니다 (재연결 중이거나 다른 One App 이 관리 중). 잠시 후 다시 시도하거나 먼저 해제하세요.',
+    );
   }
   const bin = findOpenvpnBinary();
   if (!bin) {
