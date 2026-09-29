@@ -65,8 +65,30 @@ export function readUserJson<T>(filename: string, fallback: T): T {
   if (raw === null) return fallback;
   try {
     return JSON.parse(raw) as T;
-  } catch {
+  } catch (err) {
+    backupCorrupt(filename, target, st?.mtimeMs ?? 0, err);
     return fallback;
+  }
+}
+
+/** 이미 백업한 깨진 파일(이름@mtime) — 읽을 때마다 백업을 또 만들지 않는다 */
+const backedUpCorrupt = new Set<string>();
+
+/**
+ * 깨진 JSON 을 옆에 `.corrupt-<시각>` 으로 떠 둔다.
+ * ⚠️ fallback 을 돌려준 뒤 읽고-고쳐-쓰기 경로(saveTheme 등)가 **fallback 기준으로 파일 전체를
+ * 덮어쓰면** 암호화된 비밀번호·토큰이 영구히 사라진다. 덮어쓰기는 막을 수 없어도 원본은 남긴다.
+ */
+function backupCorrupt(filename: string, target: string, mtimeMs: number, err: unknown): void {
+  const key = `${filename}@${mtimeMs}`;
+  if (backedUpCorrupt.has(key)) return;
+  backedUpCorrupt.add(key);
+  const backup = `${target}.corrupt-${Date.now()}`;
+  try {
+    fs.copyFileSync(target, backup);
+    console.error(`[store] ${filename} 이 깨져 기본값을 씁니다 — 원본을 ${backup} 에 보관했습니다:`, err);
+  } catch (copyErr) {
+    console.error(`[store] ${filename} 이 깨졌고 백업도 실패했습니다:`, err, copyErr);
   }
 }
 
@@ -78,8 +100,17 @@ export function readUserJson<T>(filename: string, fallback: T): T {
 export function writeUserJson(filename: string, value: unknown): void {
   const json = JSON.stringify(value, null, 2);
   const target = userJsonPath(filename);
-  const tmp = `${target}.tmp`;
-  fs.writeFileSync(tmp, json, 'utf8');
+  // ⚠️ 임시 파일 이름에 pid 를 넣는다 — dev 인스턴스와 설치본이 userData 를 공유하므로, 고정 이름이면
+  // 두 프로세스가 같은 .tmp 를 동시에 써서 rename 이 ENOENT 로 던지거나 반쯤 쓴 내용이 옮겨진다.
+  const tmp = `${target}.${process.pid}.tmp`;
+  // fsync 후 rename — 안 하면 전원 차단·커널 패닉(발열 강제 종료 사례) 뒤 0바이트 파일이 남을 수 있다
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, json, null, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   fs.renameSync(tmp, target);
   // 방금 쓴 내용의 mtime·size 로 캐시를 채운다 — 이걸 빠뜨리면 바로 다음 읽기가
   // 캐시를 무효로 보고 파일을 다시 읽는다(동작은 맞지만 캐시 이득이 사라진다)

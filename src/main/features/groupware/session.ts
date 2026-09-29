@@ -67,6 +67,23 @@ const credFingerprint = (cred: { id: string; password: string }): string =>
   createHash('sha256').update(`${cred.id}\0${cred.password}`).digest('hex');
 
 let cached: GroupwareSession | null = null;
+/**
+ * `cached` 를 만든 계정의 지문 — 환경설정에서 계정을 바꿔 저장하면 캐시를 버린다.
+ * ⚠️ 이걸 안 보면 ID 를 A→B 로 바꿔도 TTL(20분) 동안 근태·결재가 A 로 돌고, TTL 을 안 보는
+ * 메일(peek)은 서버가 끊을 때까지 A 의 메일함을 보여준다. (settings 에서 무효화를 부르면
+ * settings ↔ groupware import 가 순환하므로 여기서 지문으로 판정한다)
+ */
+let cachedFingerprint: string | null = null;
+
+/** 캐시가 지금 계정의 것인가 — 계정이 없거나 바뀌었으면 캐시를 비우고 false */
+function cacheMatchesCredentials(): boolean {
+  if (!cached) return false;
+  const cred = getCredentials();
+  if (cred && credFingerprint(cred) === cachedFingerprint) return true;
+  cached = null;
+  cachedFingerprint = null;
+  return false;
+}
 // 로그인은 무거우니 동시 요청이 겹치면 하나의 로그인을 공유한다
 let inFlight: Promise<GroupwareSession> | null = null;
 
@@ -199,6 +216,7 @@ export async function getGroupwareSession(
 ): Promise<GroupwareSession> {
   if (
     !force &&
+    cacheMatchesCredentials() &&
     cached &&
     Date.now() - cached.establishedAt < GROUPWARE_CONFIG.sessionTtlMs
   ) {
@@ -225,6 +243,7 @@ export async function getGroupwareSession(
   inFlight = login(cred, AUTOMATION_PARTITION.login)
     .then((s) => {
       cached = s;
+      cachedFingerprint = fingerprint;
       authFails = 0;
       return s;
     })
@@ -262,6 +281,7 @@ export async function loginWithAccount(cred: {
 /** 세션 무효화 — 서버에서 만료됐다고 판단되면 호출해 다음 요청에 재로그인 */
 export function invalidateGroupwareSession(): void {
   cached = null;
+  cachedFingerprint = null;
 }
 
 /**
@@ -272,7 +292,7 @@ export function invalidateGroupwareSession(): void {
  * 불필요한 재로그인을 반복하던 낭비를 없앤다(2026-08-07 성능 감사).
  */
 export function peekGroupwareSession(): GroupwareSession | null {
-  return cached;
+  return cacheMatchesCredentials() ? cached : null;
 }
 
 /** 세션 쿠키를 자동화 창(BrowserWindow)의 파티션에 주입 */
