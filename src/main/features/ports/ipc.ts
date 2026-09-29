@@ -59,16 +59,51 @@ function isAlive(pid: number): boolean {
 }
 
 /**
+ * 종료 직전 재확인 — 목록을 받은 뒤 시간이 지났으면 그 PID 가 **다른 프로세스로 재사용**됐을 수 있다
+ * (목록은 자동 갱신되지 않는다). 이름이 목록 때와 같아야 하고, 첫 종료(SIGTERM)는 아직 리스닝 중이어야
+ * 한다. 강제 종료는 SIGTERM 을 받고 정리 중이라 리스닝을 먼저 놓았을 수 있어 이름만 본다.
+ * 이름은 목록과 같은 lsof `c` 필드라 잘림 규칙도 같다 — 그대로 비교한다.
+ */
+async function verifyTarget(
+  pid: number,
+  expectCommand: string,
+  requireListening: boolean,
+): Promise<string | null> {
+  const args = requireListening
+    ? ['-a', '-p', String(pid), '-iTCP', '-sTCP:LISTEN', '-F', 'pcn']
+    : ['-a', '-p', String(pid), '-d', 'cwd', '-F', 'pc'];
+  const found = parseListeners(await runLsof(args)).find((p) => p.pid === pid);
+  if (!found) {
+    return requireListening
+      ? '그 프로세스는 이제 포트를 쓰고 있지 않습니다 — 목록을 새로고침하세요.'
+      : '이미 종료된 프로세스입니다.';
+  }
+  if (found.command !== expectCommand) {
+    return `프로세스 번호 ${pid} 가 다른 프로그램(${found.command})으로 바뀌었습니다 — 목록을 새로고침하세요.`;
+  }
+  return null;
+}
+
+/**
  * 프로세스 종료 — 기본은 SIGTERM(정리할 기회를 준다), `force` 면 SIGKILL.
  * 보낸 뒤 잠깐 기다렸다가 생존 여부를 돌려줘서, 화면이 [강제 종료]를 이어서 제안할 수 있게 한다.
  */
-async function killPort(pid: number, force: boolean): Promise<PortKillResult> {
+async function killPort(
+  pid: number,
+  force: boolean,
+  expectCommand: unknown,
+): Promise<PortKillResult> {
   if (!Number.isInteger(pid) || pid <= 1) {
     return { ok: false, alive: true, message: '잘못된 프로세스 번호입니다.' };
   }
   if (pid === process.pid) {
     return { ok: false, alive: true, message: 'One App 자신은 여기서 종료할 수 없습니다.' };
   }
+  if (typeof expectCommand !== 'string' || !expectCommand) {
+    return { ok: false, alive: true, message: '종료할 프로세스 이름이 없습니다.' };
+  }
+  const mismatch = await verifyTarget(pid, expectCommand, !force);
+  if (mismatch) return { ok: false, alive: false, message: mismatch };
   try {
     process.kill(pid, force ? 'SIGKILL' : 'SIGTERM');
   } catch (err) {
@@ -96,7 +131,7 @@ async function killPort(pid: number, force: boolean): Promise<PortKillResult> {
 /** 포트 관련 IPC 등록 (데스크톱 전용 — 폰에서 프로세스를 죽일 이유가 없다) */
 export function registerPortsIpc() {
   ipcMain.handle('ports:list', async () => listPorts());
-  ipcMain.handle('ports:kill', async (_e, pid: number, force = false) =>
-    killPort(pid, force === true),
+  ipcMain.handle('ports:kill', async (_e, pid: number, force = false, expectCommand?: string) =>
+    killPort(pid, force === true, expectCommand),
   );
 }

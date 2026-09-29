@@ -453,7 +453,8 @@ declare global {
       // 리스닝 포트 관리 (main features/ports). ?. 옵셔널 — 구 preload·폰 셸에는 없다
       ports?: {
         list: () => Promise<PortProcess[]>;
-        kill: (pid: number, force?: boolean) => Promise<PortKillResult>;
+        /** command — 목록의 프로세스 이름 (main 이 종료 직전 PID 재사용을 대조한다) */
+        kill: (pid: number, force: boolean, command: string) => Promise<PortKillResult>;
       };
       getAutostart: () => Promise<{ enabled: boolean }>;
       setAutostart: (enabled: boolean) => Promise<{ enabled: boolean }>;

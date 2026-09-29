@@ -72,14 +72,16 @@ export function PortsSection() {
     }
     setBusyPid(e.pid);
     try {
-      const res = await window.oneApp!.ports!.kill(e.pid, false);
+      const res = await window.oneApp!.ports!.kill(e.pid, false, e.command);
       if (res.ok) {
         toast(`${e.ports.join(', ')} 포트를 정리했습니다 (${e.command})`, 'ok');
         await reload();
         return;
       }
       if (!res.alive) {
+        // 이미 종료됐거나 대상이 바뀌었다(PID 재사용) — 옛 목록을 보고 또 누르지 않게 새로 불러온다
         toast(res.message, 'fail');
+        await reload();
         return;
       }
       // SIGTERM 을 무시했다 — 강제 종료를 물어본다
@@ -90,7 +92,7 @@ export function PortsSection() {
         danger: true,
       });
       if (!force) return;
-      const forced = await window.oneApp!.ports!.kill(e.pid, true);
+      const forced = await window.oneApp!.ports!.kill(e.pid, true, e.command);
       toast(forced.message, forced.ok ? 'ok' : 'fail');
       await reload();
     } catch (err) {
