@@ -27,6 +27,7 @@ import {
 } from './ProjectForm';
 import type { DetailState } from './BuildDetailPanel';
 import { errMsg } from '../../../lib/errMsg';
+import { onDeployRequest, takeDeployRequest } from '../lib/deployRequest';
 
 /** 배포 섹션 — 프로젝트별 젠킨스 잡을 버튼 한 번으로 배포한다. */
 export function DeploySection() {
@@ -216,6 +217,26 @@ export function DeploySection() {
         });
       });
   };
+
+  // ⌘K 팔레트의 배포 요청 — 목록이 뜬 뒤에 확인 모달을 연다(없는 대상이면 조용히 버린다).
+  // 섹션 밖에서 온 요청은 마운트 전에 도착해 있고, 섹션 안에서 연 팔레트는 구독으로 받는다.
+  const openConfirmRef = useRef(openDeployConfirm);
+  useEffect(() => {
+    openConfirmRef.current = openDeployConfirm;
+  });
+  useEffect(() => {
+    if (loading) return;
+    const consume = () => {
+      const req = takeDeployRequest();
+      if (!req) return;
+      const p = projects.find((x) => x.id === req.projectId);
+      if (p?.targets.some((t) => t.id === req.targetId)) {
+        openConfirmRef.current(req.projectId, req.targetId);
+      }
+    };
+    consume();
+    return onDeployRequest(consume);
+  }, [loading, projects]);
 
   const doDeploy = async (projectId: string, targetId: string) => {
     setConfirm(null);

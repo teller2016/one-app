@@ -6,13 +6,16 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { StatusWidget } from '../../../components/StatusWidget';
 import { StatusDot } from '../../../components/StatusDot';
+import { useRegisterCommands } from '../../../lib/commands';
 
 /** 상태바 VPN 위젯 — OpenVPN 연결 상태 표시 + 연결/해제 (본체는 상태바 팝오버) */
 export function VpnWidget() {
   const [settings, setSettings] = useState<VpnSettingsView | null>(null);
   const [status, setStatus] = useState<VpnStatus>({ state: 'disconnected' });
   // 어느 버튼이 진행 중인지 — 연결됨 상태엔 [재연결]·[연결 해제] 두 버튼이 나란히 있다
-  const [busy, setBusy] = useState<'connect' | 'reconnect' | 'disconnect' | null>(null);
+  const [busy, setBusy] = useState<
+    'connect' | 'reconnect' | 'disconnect' | null
+  >(null);
   const [error, setError] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [otp, setOtp] = useState('');
@@ -150,6 +153,42 @@ export function VpnWidget() {
     </>
   );
 
+  // ⌘K 팔레트 명령 — 위젯 버튼과 같은 핸들러(같은 상태·오류 표시)를 그대로 쓴다
+  useRegisterCommands('vpn', () => {
+    if (busy || st === 'connecting') return [];
+    if (st === 'connected')
+      return [
+        {
+          id: 'vpn-reconnect',
+          group: '명령',
+          label: 'VPN 재연결',
+          hint: statusText,
+          keywords: 'vpn reconnect',
+          icon: 'lock',
+          run: () => void reconnect(),
+        },
+        {
+          id: 'vpn-disconnect',
+          group: '명령',
+          label: 'VPN 연결 해제',
+          keywords: 'vpn disconnect',
+          icon: 'lock',
+          run: () => void disconnect(),
+        },
+      ];
+    return [
+      {
+        id: 'vpn-connect',
+        group: '명령',
+        label: 'VPN 연결',
+        hint: statusText,
+        keywords: 'vpn connect',
+        icon: 'lock',
+        run: () => void connect(),
+      },
+    ];
+  });
+
   return (
     // 상태바에는 한 줄 요약만 — 조작은 누르면 뜨는 팝오버가 맡는다
     <StatusWidget icon={icon} dot={dot} label={label} tooltip={tooltip}>
@@ -165,7 +204,11 @@ export function VpnWidget() {
             </span>
           </span>
           <span className="sbw__actions">
-            <button className="icon-btn" title="VPN 설정" onClick={toggleConfig}>
+            <button
+              className="icon-btn"
+              title="VPN 설정"
+              onClick={toggleConfig}
+            >
               <Icon name="settings" size={12} />
             </button>
           </span>
@@ -226,7 +269,9 @@ export function VpnWidget() {
               small
               type="password"
               placeholder={
-                settings.hasTotpSecret ? 'OTP 시크릿 키 (저장됨)' : 'OTP 시크릿 키'
+                settings.hasTotpSecret
+                  ? 'OTP 시크릿 키 (저장됨)'
+                  : 'OTP 시크릿 키'
               }
               value={formSecret}
               onChange={(e) => setFormSecret(e.target.value)}
@@ -246,7 +291,11 @@ export function VpnWidget() {
           <div className="sbw__sub">
             <Input
               small
-              placeholder={st === 'connected' && !stale ? 'Google OTP 6자리 (재연결 시)' : 'Google OTP 6자리'}
+              placeholder={
+                st === 'connected' && !stale
+                  ? 'Google OTP 6자리 (재연결 시)'
+                  : 'Google OTP 6자리'
+              }
               inputMode="numeric"
               maxLength={6}
               value={otp}

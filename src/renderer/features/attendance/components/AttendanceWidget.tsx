@@ -1,4 +1,11 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
@@ -9,12 +16,13 @@ import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
 import { publishAttendance } from '../lib/shared';
+import { useRegisterCommands, type Command } from '../../../lib/commands';
 
 // ⚠️ lazy — 상태바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
 // 초기 번들에 그대로 딸려온다(App.tsx 의 ApprovalSection lazy 가 무의미해진다).
 // 모달은 열 때만 필요하니 그때 받는다.
 const OvertimeModal = lazy(() =>
-  import('../../approval').then((m) => ({ default: m.OvertimeModal }))
+  import('../../approval').then((m) => ({ default: m.OvertimeModal })),
 );
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
@@ -22,7 +30,8 @@ type Busy = 'fetch' | 'come' | 'leave' | null;
 // 날짜 바뀜 확인 주기 — 네트워크 없이 조회 시각의 날짜만 비교하므로 촘촘해도 싸다
 const DAY_CHECK_MS = 60_000;
 
-const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 /** 상태바 출퇴근 위젯 — 항상 표시되며 원클릭으로 출근/퇴근을 찍는다 (본체는 상태바 팝오버). */
 export function AttendanceWidget() {
@@ -166,6 +175,30 @@ export function AttendanceWidget() {
         <Icon name="check" size={12} />
       </span>
     ) : null;
+
+  // ⌘K 팔레트 명령 — 출퇴근은 위젯과 같은 stamp(확인창 포함)를 거친다
+  useRegisterCommands('attendance', () => {
+    const cmds: Command[] = [];
+    if (nextAction && busy === null)
+      cmds.push({
+        id: 'attendance-stamp',
+        group: '명령',
+        label: nextAction === 'come' ? '출근하기' : '퇴근하기',
+        hint: info?.comeTime ? `출근 ${info.comeTime}` : undefined,
+        keywords: 'attendance 근태 출퇴근',
+        icon: 'building',
+        run: () => void stamp(nextAction),
+      });
+    cmds.push({
+      id: 'attendance-overtime',
+      group: '명령',
+      label: '야근 결재 상신',
+      keywords: 'overtime 연장근무 결재',
+      icon: 'moon',
+      run: () => setOvertimeOpen(true),
+    });
+    return cmds;
+  });
 
   return (
     // 상태바 항목에는 조회 실패를 점으로 알린다 — 팝오버를 열기 전엔 아래 에러 문구가 보이지 않는다

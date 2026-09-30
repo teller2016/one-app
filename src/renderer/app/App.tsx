@@ -3,6 +3,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
 import { StatusBar } from "../components/StatusBar";
+import { CommandPalette } from "./CommandPalette";
 import { ToastProvider, useToast, useToastDismiss } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
@@ -323,6 +324,21 @@ export function App() {
     };
   }, [goBack, goForward]);
 
+  // ⌘K 명령 팔레트 — 어느 화면에서든(터미널 포함) 연다. capture 로 받아 xterm 보다 먼저 잡는다
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (e.key.toLowerCase() !== "k" || e.isComposing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPaletteOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
+
   const [jiraCount, setJiraCount] = useState(0);
   const [jiraUnread, setJiraUnread] = useState(0);
   const [jiraOpenKeys, setJiraOpenKeys] = useState<string[] | null>(null);
@@ -424,6 +440,7 @@ export function App() {
             })}
             activeId={activeId}
             onSelect={navigate}
+            onOpenPalette={() => setPaletteOpen(true)}
           />
 
           {/* 오른쪽 콘텐츠 영역 */}
@@ -495,6 +512,14 @@ export function App() {
               )}
             </main>
           </section>
+
+          {paletteOpen && (
+            <CommandPalette
+              sections={SECTIONS}
+              onNavigate={navigate}
+              onClose={closePalette}
+            />
+          )}
 
           {/* 하단 상태바 — 상주 위젯. 위젯은 각자 격리한다(하나가 죽어도 나머지·셸은 산다) */}
           <StatusBar

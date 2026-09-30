@@ -134,6 +134,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |
 | `StatusDot` | `<StatusDot status md>` | `.status-dot` | `busy`·`ok`·`fail`·`idle` / `md` |
 | `StatusBar` · `StatusBarItem` | `<StatusBar left right>` · `<StatusBarItem icon dot label count title onClick>` | `.statusbar` | 하단 상태바와 그 항목(모달을 바로 여는 메일·MO) |
+| `CommandPalette` (app/) | `⌘K` · 사이드바 '이동 · 명령' | `.palette` | 섹션 이동 · 상태바 위젯 명령(`lib/commands` 등록소) · 배포 확인 모달 열기. ↑↓ ↵ Esc |
 | `StatusWidget` | `<StatusWidget icon dot label tooltip>` | `.statusbar__pop` | 상태바 위젯 셸 — 항목 + 위로 뜨는 팝오버(본체 항상 마운트). 상태바 밖에선 본체 인라인 |
 | `Banner` | `<Banner variant>` | `.banner` | `warning`(기본)·`danger`·`info` |
 | `Collapsible` | `<Collapsible title icon storageKey defaultOpen>` | `.collapsible` | — |
@@ -193,7 +194,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 ### 셸 (Signal — 불투명 패널 + 프로스트 탑바 + 하단 상태바)
 - **구조**: `.app` 은 2행 그리드 — 위 `사이드바 | 콘텐츠`, 아래 창 전체 폭 **상태바**(`--statusbar-h: 28px`). 사이드바·상태바는 **불투명 패널 면(`--surface-1`)**, 콘텐츠는 그라운드(`--bg`). 창의 `vibrancy: 'sidebar'` 재질은 로드 전 배경으로만 남고 어디서도 비치지 않는다(2026-09-30 — 배경화면 색에 따라 틴트가 돌던 것을 걷었다).
-- **사이드바**: 브랜드(앱 아이콘과 같은 도형 — 색은 토큰) → **개발 / 리소스 / 업무 그룹 라벨**(캡션, `SECTIONS` 의 `group`) → 하단 환경설정. 항목 hover 는 surface-2, 활성은 **surface-2 + 1px 윤곽 + 아이콘 액센트**. 카운트 뱃지는 모노 캡슐(새 티켓·입력 대기는 액센트 면).
+- **사이드바**: 브랜드(앱 아이콘과 같은 도형 — 색은 토큰) → **'이동 · 명령' 버튼(⌘K 팔레트, 축소 시 돋보기만)** → **개발 / 리소스 / 업무 그룹 라벨**(캡션, `SECTIONS` 의 `group`) → 하단 환경설정. 항목 hover 는 surface-2, 활성은 **surface-2 + 1px 윤곽 + 아이콘 액센트**. 카운트 뱃지는 모노 캡슐(새 티켓·입력 대기는 액센트 면).
 - **프로스트 타이틀바**(`.topbar`): 창 전체 폭 fixed 바(z-index 10, `--titlebar-h: 44px`) — `.main`·`.sidebar` 가 `padding-top: var(--titlebar-h)` 로 바 밑까지 차지한다. `var(--frost)` + `backdrop-filter`. 뒤로/앞으로 + **경로 표시 `그룹 / 섹션`**. 드래그 영역 유지 필수(.sidebar·탑바 drag / nav no-drag).
   - ⚠️ 좌측 여백은 `--titlebar-safe: 84px`(신호등 예약폭) — 사이드바를 접어도 컨트롤이 신호등 바로 오른쪽에서 시작한다.
   - ⚠️ **사이드바 우측 경계선은 `border-right` 가 아니라 `.sidebar::after`**(`top: var(--titlebar-h)`) — 보더면 신호등이 이음선에 걸친다(2026-08-06). grip 도 같은 이유로 `top: var(--titlebar-h)`.
@@ -260,7 +261,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 1. **토대** ✅ — `_base.scss` 토큰 값 교체(역할 이름 유지) · IBM Plex Sans KR 번들 · 앱 아이콘(`npm run icon`)
 2. **공용 컴포넌트** ✅ — 버튼 6px 각형·500 · 배지 작은 사각 · 세그 `--seg-on` · 커스텀 체크 · 떠 있는 레이어 surface-2 · 모달 `--r-xl` · `--scrim`
 3. **셸** ✅ — 사이드바 개발/리소스/업무 3그룹 + 축소 · 탑바(뒤로/앞으로 + 경로) · 위젯 4종 + MO → 하단 상태바 + 팝오버 · 사이드바·상태바 불투명
-4. **⌘K 명령 팔레트** (신규)
+4. **⌘K 명령 팔레트** ✅ — 섹션 이동 + 상태바 명령(출퇴근·VPN·메일·MO·미러링) + 배포(확인 모달까지만)
 5. **섹션별 재구성** — 목업 보드와 대조하며 한 섹션씩(기능 SCSS 의 `--r-full` 필 잔재도 이때 정리)
 - 매 단계: `tsc` · `lint` · `test` · lite `typecheck` · 개발 인스턴스 확인 · `chartTheme.ts` FALLBACK 을 토큰과 동기화
 

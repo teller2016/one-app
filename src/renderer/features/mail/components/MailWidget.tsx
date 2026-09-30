@@ -5,6 +5,7 @@ import { StatusDot } from '../../../components/StatusDot';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
 import { MailModal } from './MailModal';
+import { useRegisterCommands } from '../../../lib/commands';
 
 // 폴링 간격 — 비즈박스는 실시간 푸시가 없어 폴링이 유일. 창이 활성일 땐 30초,
 // 백그라운드(가려짐·포커스 아웃)면 usePolling 이 6배(3분)로 늘린다.
@@ -72,7 +73,8 @@ export function MailWidget() {
 
   const hasUnread = configured && unread != null && unread > 0;
   // 상태바 카운트 — 세 자리는 항목 폭을 늘리므로 클램프한다
-  const unreadBadge = unread != null && unread > 99 ? '99+' : String(unread ?? 0);
+  const unreadBadge =
+    unread != null && unread > 99 ? '99+' : String(unread ?? 0);
   // 값이 한 번도 안 온 채 실패했으면 "새 메일 없음"이 아니라 실패라고 말한다
   // (조회에 성공한 뒤의 실패는 마지막 값을 유지하고 아래 오류 줄로만 알린다)
   const status = !configured
@@ -84,6 +86,23 @@ export function MailWidget() {
         : hasUnread
           ? `새 메일 ${unread}통`
           : '새 메일 없음';
+
+  // ⌘K 팔레트 명령
+  useRegisterCommands('mail', () =>
+    configured
+      ? [
+          {
+            id: 'mail-open',
+            group: '명령',
+            label: '메일 열기',
+            hint: status,
+            keywords: 'mail 비즈박스',
+            icon: 'mail',
+            run: () => setOpen(true),
+          },
+        ]
+      : [],
+  );
 
   return (
     <>

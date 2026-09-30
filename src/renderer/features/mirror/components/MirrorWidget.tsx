@@ -10,6 +10,7 @@ import { RefreshButton } from '../../../components/RefreshButton';
 import { StatusWidget } from '../../../components/StatusWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { errMsg } from '../../../lib/errMsg';
+import { useRegisterCommands } from '../../../lib/commands';
 
 /** 상태바 폰 미러링 위젯 — scrcpy 로 USB 폰 화면을 미러링한다 (본체는 상태바 팝오버). */
 export function MirrorWidget() {
@@ -57,7 +58,9 @@ export function MirrorWidget() {
 
   const running = status?.running ?? null;
   // 기기가 붙어 있으나 쓸 수 없는 상태(승인 대기 등) — 원인을 그대로 보여준다
-  const issue = status?.deviceIssue ? MIRROR_DEVICE_ISSUE_TEXT[status.deviceIssue] : null;
+  const issue = status?.deviceIssue
+    ? MIRROR_DEVICE_ISSUE_TEXT[status.deviceIssue]
+    : null;
   const statusText = !status
     ? '확인 중...'
     : !status.installed
@@ -76,6 +79,43 @@ export function MirrorWidget() {
     />
   );
   const tooltip = `폰 미러링 — ${statusText}`;
+
+  // ⌘K 팔레트 명령 — 위젯 버튼과 같은 핸들러
+  useRegisterCommands('mirror', () => {
+    if (busy) return [];
+    if (running)
+      return [
+        {
+          id: 'mirror-stop',
+          group: '명령',
+          label: running === 'mirror' ? '폰 미러링 종료' : '폰 제어 종료',
+          keywords: 'scrcpy mirror',
+          icon: 'smartphone',
+          run: () => void stop(),
+        },
+      ];
+    if (!canStart) return [];
+    return [
+      {
+        id: 'mirror-start',
+        group: '명령',
+        label: '폰 미러링 시작',
+        hint: status?.device ?? undefined,
+        keywords: 'scrcpy mirror',
+        icon: 'smartphone',
+        run: () => void start('mirror'),
+      },
+      {
+        id: 'mirror-control',
+        group: '명령',
+        label: '폰 제어 시작 (화면 없음)',
+        hint: status?.device ?? undefined,
+        keywords: 'scrcpy control',
+        icon: 'smartphone',
+        run: () => void start('control'),
+      },
+    ];
+  });
 
   return (
     // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
