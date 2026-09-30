@@ -116,6 +116,8 @@ async function handleReminder(type: 'come' | 'leave', key: string, repeating: bo
   if (cred) {
     const info = await fetchStatusWithRetry();
     if (info) {
+      // 조회한 김에 위젯에도 반영 — 아침 출근 알림 때 어제의 '완료' 표시가 남지 않게
+      pushAttendanceChanged(info);
       comeTime = info.comeTime;
       leaveTime = info.leaveTime;
     } else {

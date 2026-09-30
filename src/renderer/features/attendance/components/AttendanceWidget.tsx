@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
@@ -7,6 +7,7 @@ import { SidebarWidget } from '../../../components/SidebarWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
+import { usePolling } from '../../../lib/usePolling';
 import { publishAttendance } from '../lib/shared';
 
 // ⚠️ lazy — 사이드바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
@@ -17,6 +18,11 @@ const OvertimeModal = lazy(() =>
 );
 
 type Busy = 'fetch' | 'come' | 'leave' | null;
+
+// 날짜 바뀜 확인 주기 — 네트워크 없이 조회 시각의 날짜만 비교하므로 촘촘해도 싸다
+const DAY_CHECK_MS = 60_000;
+
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
 /** 사이드바 하단 출퇴근 위젯 — 항상 표시되며 원클릭으로 출근/퇴근을 찍는다. */
 export function AttendanceWidget() {
@@ -53,6 +59,18 @@ export function AttendanceWidget() {
       setBusy(null);
     }
   };
+
+  // 날짜가 바뀌면 다시 조회한다 — 위젯은 마운트 때만 조회하므로, 앱을 켜 둔 채 밤을 넘기면
+  // 아침에도 어제의 '출퇴근 완료'가 그대로 남았다. 잠자기 복귀도 usePolling 이 즉시 따라잡는다.
+  // (조회는 헤드리스 브라우저라 비싸다 — 조회 시각이 오늘이 아닐 때만, 하루 한 번 꼴로 돈다)
+  const latest = useRef({ info, busy, refresh });
+  latest.current = { info, busy, refresh };
+  const checkDayChange = useCallback(() => {
+    const { info: cur, busy: nowBusy, refresh: run } = latest.current;
+    if (!cur || nowBusy !== null) return;
+    if (dayKey(new Date(cur.checkedAt)) !== dayKey(new Date())) void run();
+  }, []);
+  usePolling(checkDayChange, DAY_CHECK_MS, { immediate: false });
 
   useEffect(() => {
     void refresh();
