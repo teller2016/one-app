@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Project } from '../../../../shared/types';
+import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
@@ -21,16 +22,24 @@ export function ProjectsSection() {
   const toast = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [form, setForm] = useState<ProjectFormState | null>(null); // null 이면 목록 화면
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
     let mounted = true;
-    void window.oneApp.projects.list().then((list) => {
-      if (!mounted) return;
-      setProjects(list);
-      setLoading(false);
-    });
+    // 실패를 삼키면 '불러오는 중...' 에서 영영 멈춘다 — 에러로 끝내 배너를 띄운다
+    window.oneApp.projects
+      .list()
+      .then((list) => {
+        if (mounted) setProjects(list);
+      })
+      .catch((e: unknown) => {
+        if (mounted) setLoadError(errMsg(e, '프로젝트 목록을 불러오지 못했습니다.'));
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
     // 다른 경로(향후 소비 기능·다른 창)의 저장도 즉시 반영
     const off = window.oneApp.projects.onChanged((list) => setProjects(list));
     return () => {
@@ -115,6 +124,8 @@ export function ProjectsSection() {
 
       {loading ? (
         <p className="hint">불러오는 중...</p>
+      ) : loadError ? (
+        <Banner variant="danger">{loadError}</Banner>
       ) : projects.length === 0 ? (
         <EmptyState
           icon="folder"

@@ -45,6 +45,8 @@ const defaultDays = (): DayReminderConfig[] =>
 /** 환경설정 섹션 — 비즈박스 계정 · 알림 · 출퇴근 리마인더를 관리한다. */
 export function SettingsSection() {
   const [bizboxId, setBizboxId] = useState('');
+  // 계정·연동 조회가 성공했는지 — 실패한 채 [저장] 하면 빈 기본값이 저장된 값을 전부 덮는다
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [password, setPassword] = useState('');
   const [hasPassword, setHasPassword] = useState(false);
   const [approvalDept, setApprovalDept] = useState('');
@@ -114,6 +116,7 @@ export function SettingsSection() {
         // 정본(settings.json)과 미러가 어긋나 있으면 정본 기준으로 맞춘다
         setTheme(s.theme);
         applyThemePref(s.theme);
+        setSettingsLoaded(true);
       })
       .catch((err) => {
         // 안 잡으면 loading 이 영영 true 라 모든 입력이 조용히 disabled 로 남는다
@@ -318,7 +321,7 @@ export function SettingsSection() {
       <SectionHeader
         title="환경설정"
         icon={<Icon name="settings" size={18} />}
-        sub="계정 · 알림 · 출퇴근 리마인더를 관리합니다."
+        sub="계정 · 알림 · 터미널 · 연동 · 출퇴근 리마인더 · 일정 등록을 관리합니다."
       />
 
       {/* 키체인을 못 쓰는 상태 — 비밀 값 저장이 거부된다(평문으로 떨어뜨리지 않는다).
@@ -516,8 +519,8 @@ export function SettingsSection() {
           label="로그인 시 One App 자동 시작"
         />
         <p className="note">
-          메뉴바 아이콘은 항상 표시됩니다 — 창을 닫아도 메뉴바에서 열기·출퇴근
-          찍기를 할 수 있어요. (자동 시작은 패키징된 앱에서 동작)
+          창을 닫아도 앱은 계속 실행되고, Dock 아이콘을 누르면 다시 열립니다.
+          (자동 시작은 패키징된 앱에서 동작)
         </p>
       </Collapsible>
 
@@ -761,7 +764,7 @@ export function SettingsSection() {
           variant="primary"
           onClick={save}
           loading={saving}
-          disabled={loading || !bizboxId}
+          disabled={loading || !settingsLoaded}
         >
           저장
         </Button>

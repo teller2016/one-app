@@ -10,6 +10,7 @@ import { TimePicker } from '../../../components/TimePicker';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
+import { errMsg } from '../../../lib/errMsg';
 import { pad2, toMinutes } from '../../../../shared/date';
 import {
   SCHEDULE_DEFAULT_START_TIME,
@@ -70,6 +71,14 @@ const buildNotionText = (items: WorkItem[]): string =>
     .filter((it) => it.title.trim())
     .map((it) => `${timeToDecimal(it.end)} ${it.title.trim()}`)
     .join('\n');
+
+/** schedule:run 의 실패 코드 → 토스트 문구 (main/features/schedule/ipc.ts) */
+const RUN_FAIL_MSG: Record<string, string> = {
+  already_running: '이미 실행 중입니다. 잠시 후 다시 시도하세요',
+  no_credentials: '환경설정에서 비즈박스 아이디·비밀번호를 먼저 저장하세요',
+  empty: '등록할 일정이 없습니다',
+  bad_date: '날짜가 올바르지 않습니다 — 아래 로그를 확인하세요',
+};
 
 /** 일정 등록 섹션 — 하루 작업을 타임라인으로 기록해 두고, 버튼 한 번으로 매크로 등록한다. */
 export function ScheduleSection() {
@@ -330,17 +339,25 @@ export function ScheduleSection() {
     setLog('');
     setDone(false);
     setRunning(true);
-    const res = await window.oneApp.schedule.run({
-      scheduleText,
-      startTime: timeToDecimal(startTime),
-      dateOption:
-        dateType === 'date'
-          ? { type: 'date', date: customDate }
-          : { type: dateType },
-      testMode,
-    });
-    if (!res.ok) {
+    try {
+      const res = await window.oneApp.schedule.run({
+        scheduleText,
+        startTime: timeToDecimal(startTime),
+        dateOption:
+          dateType === 'date'
+            ? { type: 'date', date: customDate }
+            : { type: dateType },
+        testMode,
+      });
+      if (!res.ok) {
+        setRunning(false);
+        // 상세 사유는 main 이 로그에 쓴다 — 로그가 화면 아래라 놓치기 쉬워 토스트로도 알린다
+        toast(RUN_FAIL_MSG[res.error ?? ''] ?? '일정 등록을 시작하지 못했습니다 — 아래 로그를 확인하세요', 'fail');
+      }
+    } catch (e) {
+      // IPC 자체가 실패하면 running 이 풀리지 않아 버튼이 계속 잠긴다
       setRunning(false);
+      toast(errMsg(e, '일정 등록을 시작하지 못했습니다.'), 'fail');
     }
   };
 

@@ -9,6 +9,7 @@ import { Collapsible } from '../../../components/Collapsible';
 import { TextLink } from '../../../components/TextLink';
 import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
+import { errMsg } from '../../../lib/errMsg';
 
 type Made = { url: string; canonicalUrl: string };
 
@@ -54,14 +55,22 @@ export function ApplinkSection() {
     }
     setCreating(true);
     setError('');
-    const res = await window.oneApp.applink.create({
-      canonicalUrl,
-      ogTitle,
-      ogDescription,
-      ogImageUrl,
-      desktopUrl,
-    });
-    setCreating(false);
+    let res: Awaited<ReturnType<typeof window.oneApp.applink.create>>;
+    try {
+      res = await window.oneApp.applink.create({
+        canonicalUrl,
+        ogTitle,
+        ogDescription,
+        ogImageUrl,
+        desktopUrl,
+      });
+    } catch (e) {
+      // 예외로 끝나면 creating 이 풀리지 않아 버튼이 로딩에 갇힌다
+      setError(errMsg(e, '딥링크 생성에 실패했습니다.'));
+      return;
+    } finally {
+      setCreating(false);
+    }
     if (!res.ok || !res.url) {
       setError(res.error ?? '딥링크 생성에 실패했습니다.');
       return;
