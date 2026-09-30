@@ -450,7 +450,12 @@ html.mo {
 
   // ── 배포 ──
 
-  // 카드 헤더: 이름·PROD 뱃지·젠킨스 URL + 액션 4개가 한 줄 → 세로로 쌓는다
+  // 카드 그리드는 폰에서 한 열 (데스크톱은 목업 2열)
+  .deploy__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  // 카드 머리: 이름·PROD·젠킨스 URL + 액션 4개가 한 줄 → 세로로 쌓는다
   .deploy__card-head {
     flex-direction: column;
     align-items: stretch;
@@ -461,23 +466,13 @@ html.mo {
     flex-wrap: wrap;
   }
 
-  // 젠킨스 전체 URL 이 이름 옆 inline 이라 ellipsis 없이 넘친다
-  .deploy__project-url {
-    display: block;
-    margin-left: 0;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  // 대상 행: 이름 + [배포] + 상태 뱃지 + [커밋 내역] → 줄바꿈 허용, 이름은 전폭
+  // 대상 행: 이름 + [배포] + 상태 뱃지 + 시각 + [커밋 내역] → 줄바꿈 허용, 이름은 전폭
   .deploy__target-row {
     flex-wrap: wrap;
     row-gap: 6px;
   }
 
   .deploy__target-name {
-    min-width: 100%;
+    flex-basis: 100%;
   }
 }

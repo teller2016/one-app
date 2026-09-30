@@ -200,6 +200,9 @@
   // Nightwatch 오른쪽 설정·실행 로그 열 폭 · 리포트 모달 높이 (목업 400 · 760)
   --nightwatch-side-w: 400px;
   --nightwatch-report-h: 760px;
+  // 배포 빌드 내역 모달 높이 · 그 안 콘솔 로그 높이 (목업 744 · 176)
+  --deploy-detail-h: 744px;
+  --deploy-log-h: 176px;
   // 딥링크 섹션 가운데 단일 열 폭 (목업 760)
   --applink-w: 760px;
   // 섹션 안 패널 머리줄 높이 — 터미널 탭바·워크스페이스 패널 머리처럼 나란히 놓여 줄이 맞아야 하는 바
@@ -598,24 +601,25 @@ body {
     border-radius: var(--r-sm);
   }
 
-  // 초소형 — 툴바 프리셋 칩 등 (목업 .btn-sm 24px)
   &--lg {
     height: var(--control-h-lg);
     padding: 0 16px;
   }
 
-  // 아이콘만 있는 정사각 — 폭은 높이를 따른다(크기 변형과 함께 쓴다)
-  &--icon {
-    aspect-ratio: 1;
-    padding: 0;
-  }
-
+  // 초소형 — 툴바 프리셋 칩 등 (목업 .btn-sm 24px)
   &--xs {
     height: var(--control-h-xs);
     padding: 0 8px;
     gap: 5px;
     font-size: var(--fs-small);
     border-radius: var(--r-sm);
+  }
+
+  // 아이콘만 있는 정사각 — 폭은 높이를 따른다(크기 변형과 함께 쓴다).
+  // ⚠️ 크기 변형들 **뒤에** 둘 것 — 앞에 두면 --xs 의 padding 이 덮어 24 가 30×24 로 벌어진다
+  &--icon {
+    aspect-ratio: 1;
+    padding: 0;
   }
 
   &--primary {

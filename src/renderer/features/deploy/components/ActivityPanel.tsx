@@ -1,8 +1,9 @@
 import type { DeployActivity } from '../../../../shared/types';
 import { formatRelative, formatDuration, formatTime } from '../lib/format';
 import { Badge } from '../../../components/Badge';
-import { StatusDot } from '../../../components/StatusDot';
-import { RefreshButton } from '../../../components/RefreshButton';
+import { Button } from '../../../components/Button';
+import { Icon } from '../../../components/Icon';
+import { DeployLink } from './DeployLink';
 
 type ActivityPanelProps = {
   activity: DeployActivity | null;
@@ -13,8 +14,9 @@ type ActivityPanelProps = {
 };
 
 /**
- * 젠킨스 서버 현황(실행 중 + 대기) — 프로젝트 카드의 [현황] 팝업 본문.
+ * 젠킨스 서버 현황(실행 중 + 대기) — 프로젝트 카드의 [현황] 모달 본문.
  * "다른 빌드에 밀려 대기 중인지"를 판단하기 위한 목록.
+ * 목업 JenkinsActivityModal.dc.html: 개수 줄 + 새로고침 → 라벨 + 패널(행 padding 10 14 · 점 · 모노 잡 이름 · 메타 11.5).
  */
 export function ActivityPanel({
   activity,
@@ -33,15 +35,30 @@ export function ActivityPanel({
         <span className="deploy__activity-counts">
           실행 {running.length} · 대기 {queued.length}
         </span>
-        <RefreshButton spinning={loading} onClick={onRefresh} />
+        <Button
+          size="xs"
+          variant="plain"
+          icon
+          onClick={onRefresh}
+          aria-label="새로고침"
+          title="새로고침"
+        >
+          <Icon
+            name="refresh"
+            size={12}
+            className={loading ? 'deploy__spin' : undefined}
+          />
+        </Button>
       </div>
 
       {error ? (
-        <p className="hint deploy__activity-error">{error}</p>
+        <p className="deploy__hint deploy__hint--warn">{error}</p>
       ) : loading && !activity ? (
-        <p className="hint">불러오는 중…</p>
+        <p className="deploy__hint">불러오는 중…</p>
       ) : empty ? (
-        <p className="hint">지금 실행 중이거나 대기 중인 빌드가 없습니다.</p>
+        <p className="deploy__hint">
+          지금 실행 중이거나 대기 중인 빌드가 없습니다.
+        </p>
       ) : (
         <>
           {running.length > 0 && (
@@ -50,17 +67,17 @@ export function ActivityPanel({
               <ul className="deploy__activity-list">
                 {running.map((b, i) => (
                   <li key={`r-${i}`} className="deploy__activity-row">
-                    <StatusDot status="busy" />
+                    <span className="deploy__dot deploy__dot--run" />
                     <div className="deploy__activity-main">
                       {b.url ? (
-                        <button
-                          type="button"
-                          className="deploy__activity-name deploy__activity-name--link"
+                        <DeployLink
+                          mono
+                          className="deploy__activity-name"
                           onClick={() => onOpen(b.url as string)}
                           title="젠킨스에서 열기"
                         >
                           {b.name}
-                        </button>
+                        </DeployLink>
                       ) : (
                         <span className="deploy__activity-name">{b.name}</span>
                       )}
@@ -73,7 +90,9 @@ export function ActivityPanel({
                         {b.estimatedMs != null && (
                           <span>예상 {formatDuration(b.estimatedMs)}</span>
                         )}
-                        {b.node && <span>{b.node}</span>}
+                        {b.node && (
+                          <span className="deploy__mono">{b.node}</span>
+                        )}
                       </span>
                     </div>
                   </li>
@@ -88,7 +107,7 @@ export function ActivityPanel({
               <ul className="deploy__activity-list">
                 {queued.map((q) => (
                   <li key={`q-${q.id}`} className="deploy__activity-row">
-                    <StatusDot status="idle" />
+                    <span className="deploy__dot" />
                     <div className="deploy__activity-main">
                       <span className="deploy__activity-name">{q.name}</span>
                       <span className="deploy__activity-meta">
@@ -102,7 +121,11 @@ export function ActivityPanel({
                             {q.why}
                           </span>
                         )}
-                        {q.stuck && <Badge variant="fail">정체</Badge>}
+                        {q.stuck && (
+                          <Badge variant="fail" dot={false}>
+                            정체
+                          </Badge>
+                        )}
                       </span>
                     </div>
                   </li>

@@ -1,345 +1,490 @@
-// 배포 섹션 — 룩(뱃지·링크·패널·버튼)은 _base.scss 공용 클래스가 담당,
-// 여기는 배치(레이아웃)와 커밋 패널 내부 타이포만 남긴다.
+// 배포 — 젠킨스 잡 트리거·상태·빌드 내역.
+// Signal 목업(Deploy · DeployConfirmModal · BuildDetailModal · JenkinsActivityModal · DeployProjectForm, 2026-09-30)을
+// 그대로 옮긴 배치: 섹션 제목 없음 · [프로젝트 추가]는 탑바 오른쪽 끝 → 본문 padding 20 → 카드 2열 그리드.
 @use './base' as *;
 
 .deploy {
-  &__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
+  // .section 의 여백·폭 제한을 목업 값으로 — 목록 20, 폼 28 32 (폭은 안쪽이 제한한다)
+  max-width: none;
+  padding: 20px;
+
+  &--form {
+    padding: 28px 32px;
   }
 
-  &__card {
-    @include card-surface;
-    margin-bottom: 16px;
-    padding: 14px 16px;
-
-    &-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    &-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-  }
-
-  &__project-name {
-    @include type-title;
-  }
-
-  // 젠킨스 URL 링크 배치 — 룩은 공용 .textlink(small·external)
-  &__project-url {
-    margin-left: 8px;
-  }
-
-  // 대상 = 세로 컨테이너: 1줄(이름·배포·상태·커밋내역) + 빌드중일 때 2줄(진행바·중지)
-  &__target {
-    padding: 8px 4px;
-    border-top: 1px solid var(--border);
-
-    &-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    // 대상명 열 정렬용 최소폭 — 배포 버튼 시작 위치를 맞춘다 (유지)
-    &-name {
-      min-width: 120px;
-    }
-
-    // 버튼 라벨 줄바꿈 방지
-    .btn {
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    // 빌드중 보조 줄 — 진행바가 남는 폭을 전부 차지
-    &-sub {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 8px;
-      padding-left: 2px;
-    }
-  }
-
-  // 상태 뱃지 + 완료 시각 묶음 — 간격은 gap 으로 (음수 마진 금지)
-  &__status {
+  // 글자 링크 (DeployLink) — 액센트 · 밑줄 없음, hover 에 밑줄.
+  // ⚠️ 맨 앞에 둔다 — `font: inherit` 가 뒤에 오면 쓰임새별 글자 크기(__project-url 등)를 덮는다
+  &__link {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  // 커밋 내역 토글 배치 — 룩은 공용 .btn--sm
-  &__detail-toggle {
-    margin-left: auto;
-  }
-
-  // 빌드중 진행률 — 보조 줄에서 남는 폭을 전부 차지 (트랙은 공용 .progress)
-  &__build-progress {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
+    gap: 4px;
     min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--accent);
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--r-xs);
+    @include focus-ring(1px);
 
-    .progress {
-      flex: 1;
-      min-width: 60px;
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
     }
 
-    .progress__fill {
-      background: var(--warning);
+    &--mono {
+      font-family: var(--font-mono);
     }
 
-    &-text {
-      @include type-caption;
-      color: var(--text-3);
-      white-space: nowrap;
+    svg {
       flex-shrink: 0;
     }
   }
 
-  // 빌드 이력 스트립 (커밋 패널 상단) — 결과별 soft 색, 선택은 테두리
-  &__hist {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
+  // ── 카드 그리드 (목업 repeat(2) · gap 16) ──
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-content: start;
 
-    &-item {
-      padding: 2px 9px;
-      border: 1px solid transparent;
-      border-radius: var(--r-full);
-      cursor: pointer;
-      @include type-caption;
-      font-family: var(--font-mono);
-      // 새 빌드가 끝나면 이력 칩이 하나 더 붙는다 — 색·선택 상태 변화까지 함께
-      transition:
-        background var(--dur-1) var(--ease),
-        border-color var(--dur-1) var(--ease),
-        color var(--dur-1) var(--ease),
-        filter var(--dur-1) var(--ease);
-
-      &--ok {
-        background: var(--ok-soft);
-        color: var(--ok);
-      }
-
-      &--fail {
-        background: var(--danger-soft);
-        color: var(--danger);
-      }
-
-      &--busy {
-        background: var(--warning-soft);
-        color: var(--warning);
-      }
-
-      &:hover {
-        filter: brightness(0.96); // 라이트 테마 hover 는 어둡게 (밝히기 필터 금지 — DESIGN.md 6장)
-      }
-
-      &.is-selected {
-        border-color: currentColor;
-      }
+    // 창이 좁으면 한 열 — 카드 폭 400 아래로는 대상 행(이름·배포·상태·시각·커밋 내역)이 넘친다
+    @media (max-width: 1100px) {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
-  // 콘솔 로그 — 박스 룩은 공용 .panel-sunken--log
-  &__log-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 10px;
+  // 카드 — 목업 .panel (패널 면 + 헤어라인 + 모서리 10). 머리·대상 행의 선이 모서리에 닿는다
+  &__card {
+    @include card-surface;
+    overflow: hidden;
   }
 
-  &__log {
-    margin-top: 8px;
-    max-height: 280px;
-  }
-
-  // 폼: 배포 대상 표시명 입력 고정폭 — 잡 이름 입력과 구분 (유지)
-  &__form-target-name {
-    max-width: 180px;
-  }
-
-  // 빌드 상세(커밋 내역) — 공통 Modal 안에 렌더된다 (배치·내부 타이포만)
-  &__detail {
-    @include type-small;
-
-    // 로딩·에러·빈 3상태 (DESIGN.md 중첩 패널 스펙)
-    &--loading {
-      color: var(--text-3);
-    }
-
-    &--error {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--danger);
-    }
-
-    &-head {
-      margin-bottom: 4px;
-    }
-
-    &-git {
-      margin-bottom: 8px;
-      color: var(--text-2);
-      word-break: break-all;
-
-      code {
-        color: var(--accent);
-        font-family: var(--font-mono);
-      }
-    }
-
-    &-empty {
-      margin: 6px 0 0;
-      color: var(--text-3);
-    }
-  }
-
-  &__commit {
-    padding: 8px 0;
-    border-top: 1px solid var(--border);
-
-    &-title {
-      @include type-body;
-      font-weight: 600;
-    }
-
-    &-body {
-      margin: 6px 0 0;
-      @include type-small;
-      color: var(--text-2);
-      font-family: var(--font-mono);
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    &-meta {
-      margin-top: 4px;
-      @include type-caption;
-      color: var(--text-3);
-    }
-
-    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (:disabled 와 같은 수준)
-    &--merge {
-      opacity: 0.45;
-    }
-  }
-}
-
-// 상태 뱃지 + 완료 시각 묶음 (StatusBadge)
-.deploy__status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-// 운영(PROD) 프로젝트 표시·확인
-.deploy__prod-badge {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: var(--danger-soft);
-  color: var(--danger);
-  @include type-caption;
-}
-
-// 프로젝트 폼 — 운영 체크박스 행 (룩은 공용 Checkbox danger, 여기선 배치만)
-.deploy__prod-check {
-  margin: 4px 0 14px;
-}
-
-// 젠킨스 서버 현황 (ActivityPanel) — 카드 [현황] 팝업 본문. 실행 중 + 대기
-.deploy__activity {
-  &-head {
+  // 머리 — 목업 .panel-head (min 54 · padding 10 14 · gap 10 · 바닥선)
+  &__card-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 4px;
+    min-height: 54px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
   }
 
-  &-counts {
-    @include type-caption;
-    color: var(--text-3);
-    margin-right: auto; // 새로고침 버튼을 오른쪽 끝으로 밀기
-  }
-
-  &-error {
-    color: var(--warning);
-  }
-
-  &-group {
-    margin-top: 14px;
-  }
-
-  &-label {
-    margin: 0 0 8px;
-    @include type-caption;
-    color: var(--text-3);
-  }
-
-  &-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  &-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    min-width: 0;
-
-    .status-dot {
-      margin-top: 6px; // 첫 줄 텍스트 중앙에 맞춤
-      flex: none;
-    }
-  }
-
-  &-main {
-    min-width: 0;
+  &__card-titles {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
 
-  &-name {
-    @include type-body;
-    color: var(--text);
-    text-align: left;
-    word-break: break-all;
+  &__card-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
 
-    &--link {
-      background: none;
-      border: 0;
-      padding: 0;
-      cursor: pointer;
+  &__project-name {
+    @include type-title; // 15 / 600 (목업 .h2)
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 젠킨스 URL — 모노 11.5 액센트 + 외부 아이콘
+  &__project-url {
+    align-self: flex-start;
+    max-width: 100%;
+    font-size: var(--fs-ui-sm);
+  }
+
+  &__card-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  // 계정 미저장 띠 — 목업 margin 12 14 0
+  &__card-banner {
+    margin: 12px 14px 0;
+
+    .banner {
+      margin: 0;
+    }
+  }
+
+  // ── 배포 대상 행 (목업: 세로 gap 10 · padding 12 14 · 바닥선) ──
+  &__target {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+
+    // 마지막 행의 바닥선은 카드 테두리와 겹쳐 2px 로 보인다 — 뺀다
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    // 목업 빌드중·대기 = 액센트(b-accent). 공용 busy 는 경고색이라 대상 행 안에서만 바꾼다
+    // (카드 머리의 PROD 는 경고색 그대로)
+    .badge--busy {
+      background: var(--accent-soft);
       color: var(--accent);
 
-      &:hover {
-        text-decoration: underline;
+      .status-dot {
+        background: var(--accent);
       }
+    }
+  }
+
+  &__target-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  // 대상명 — 13/500 본문 잉크, 폭 64 고정으로 [배포] 시작점을 맞춘다. 누르면 젠킨스 잡 페이지
+  &__target-name {
+    flex: 0 0 64px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    color: var(--text);
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    border-radius: var(--r-xs);
+    transition: color var(--dur-1) var(--ease);
+    @include focus-ring(1px);
+
+    &:hover {
+      color: var(--accent);
+    }
+  }
+
+  // 배지 옆 시각 — 11.5 메타 잉크 (한글이 섞여 모노 대신 등폭 숫자)
+  &__time {
+    flex-shrink: 0;
+    font-size: var(--fs-ui-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
+  &__detail-toggle {
+    margin-left: auto;
+  }
+
+  // 빌드중 보조 줄 — 진행바가 남는 폭을 전부 차지
+  &__target-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  // 진행바 — 목업 .bar (6px · 모서리 3 · bg-4 트랙 · 액센트 채움)
+  &__bar {
+    flex: 1;
+    min-width: 60px;
+    height: 6px;
+    border-radius: var(--r-xs);
+    background: var(--surface-3);
+    overflow: hidden;
+
+    > i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      // 폭은 인라인 %로 들어온다(5초 틱) — 전환이 없으면 막대가 계단처럼 뛴다
+      transition: width var(--dur-3) var(--ease);
+    }
+  }
+
+  &__bar-text {
+    flex-shrink: 0;
+    font-size: var(--fs-ui-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+
+  // 새로고침 아이콘 회전 (카드·현황 모달)
+  &__spin {
+    animation: spin 0.9s linear infinite;
+  }
+
+  // ── 공통 조각 ──
+
+  &__ellipsis {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 식별자(빌드 번호·시각·해시·노드) — 모노
+  &__mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 상태 문구 — 목업 .hint (11.5 · 메타 잉크), 실패는 경고색
+  &__hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: var(--fs-ui-sm);
+    line-height: 1.55;
+    color: var(--text-3);
+
+    b {
+      color: var(--text-2);
+    }
+
+    &--warn {
+      color: var(--warning);
+    }
+
+    &--error {
+      color: var(--danger);
+    }
+  }
+
+  &__divider {
+    flex-shrink: 0;
+    height: 1px;
+    background: var(--border);
+  }
+
+  // 모달 제목 + PROD 뱃지 한 줄 (목업 gap 8)
+  &__modal-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+// ── 배포 확인 모달 (목업 600 · 본문 gap 14 · 하단 바 [취소][운영 배포 실행]) ──
+.deploy__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  .banner {
+    margin: 0;
+  }
+}
+
+.deploy__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  // "마지막 빌드 이후 새 커밋 N개 (develop)" + [작업 내용 복사][Gitea 에서 비교]
+  &-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &-count {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+
+    b {
+      color: var(--text);
+      font-weight: 600;
+    }
+  }
+
+  &-branch {
+    font-family: var(--font-mono);
+    color: var(--text-3);
+  }
+
+  // 포함 티켓 요약 — 12 메타 잉크 + 티켓 칩
+  &-issues {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-small);
+    color: var(--text-3);
+  }
+
+  // 커밋 목록 — 목업 .panel (행 padding 9 12 · gap 3 · 바닥선). 길면 안에서 스크롤
+  &-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    @include card-surface;
+    max-height: 260px;
+    overflow-y: auto;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+
+      &:last-child {
+        border-bottom: 0;
+      }
+    }
+
+    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (목업 .55)
+    li.deploy__preview-item--merge {
+      opacity: 0.55;
+    }
+  }
+
+  // 커밋 제목(한 줄 말줄임) + 티켓 칩
+  &-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &-msg {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-body);
+    color: var(--text);
+  }
+
+  &-meta {
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+  }
+}
+
+// 운영 대상 이름 타이핑 — 목업 .field (라벨 12/500 · gap 6), 입력 포커스는 경고색 링
+.deploy__prod-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--text-2);
+  }
+
+  .input:focus {
+    outline: 3px solid var(--warning-soft);
+    border-color: var(--warning);
+  }
+}
+
+.deploy__prod-name {
+  font-family: var(--font-mono);
+  color: var(--warning);
+}
+
+// ── 젠킨스 현황 모달 (목업 520 · 머리 바닥선 · 본문 padding 14 20 20 · gap 16) ──
+// (Modal 에 머리 선·본문 여백 옵션이 없어 본문 래퍼를 :has 후크로 쓴다 — Nightwatch 리포트 모달과 같은 방식)
+.modal:has(.deploy__activity) {
+  .modal__head {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal__body {
+    padding: 14px 20px 20px;
+  }
+}
+
+.deploy__activity {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  // "실행 1 · 대기 2" — 12.5 보조 잉크 (한글이 섞여 모노 대신 등폭 숫자)
+  &-counts {
+    margin-right: auto;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+
+  &-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  // 목업 .label — 한글이라 모노·대문자 대신 본문 서체 11/500
+  &-label {
+    margin: 0;
+    font-size: var(--fs-caption);
+    font-weight: 500;
+    color: var(--text-3);
+  }
+
+  &-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    @include card-surface;
+    overflow: hidden;
+  }
+
+  &-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 14px;
+
+    + li {
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  // 잡 이름 — 모노 12.5 (실행 중은 젠킨스로 가는 액센트 링크)
+  &-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    word-break: break-all;
+
+    &:not(.deploy__link) {
+      color: var(--text);
     }
   }
 
@@ -349,126 +494,317 @@
     flex-wrap: wrap;
     gap: 4px 10px;
     min-width: 0;
-    @include type-caption;
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
   }
 
+  // 대기 사유 — 한 줄 말줄임, 전체는 툴팁
   &-why {
-    color: var(--text-2);
-    word-break: break-word;
-    text-transform: none; // 사유는 문장이라 대문자 변환 해제
-    letter-spacing: normal;
-    font-weight: 500;
-  }
-}
-
-// 배포 확인 모달 — 미리보기·타이핑 확인
-.deploy__preview-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0 14px;
-  @include type-small;
-  color: var(--text-3);
-
-  &--warn {
-    color: var(--warning);
-  }
-}
-
-.deploy__preview {
-  margin-bottom: 14px;
-
-  &-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-    @include type-small;
-    color: var(--text-2);
-
-    b {
-      color: var(--text);
-    }
-  }
-
-  // 헤더 우측 액션 묶음 — [작업 내용 복사] · [Gitea 에서 비교]
-  &-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  &-list {
-    margin: 0;
-    padding: 4px 14px;
-    list-style: none;
-    border: 1px solid;
-    @include panel-dark; // 커밋 미리보기 — 다크 코드 패널 (내부 토큰 자동 치환)
-    border-radius: var(--r-md);
-    max-height: 260px;
-    overflow-y: auto;
-
-    li {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 8px 0;
-
-      + li {
-        border-top: 1px solid var(--border);
-      }
-    }
-
-    // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (:disabled 와 같은 수준)
-    li.deploy__preview-item--merge {
-      opacity: 0.45;
-    }
-  }
-
-  // 이번 배포에 포함된 티켓 요약 — 목록 위 한 줄
-  &-issues {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-    @include type-small;
-    color: var(--text-3);
-  }
-
-  // 커밋 제목 + 티켓 칩 한 줄
-  &-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// 현황 점 — 목업 .dot 7px (실행 중은 액센트 + 옅은 링, 대기는 메타 잉크). 첫 줄 가운데에 맞춘다
+.deploy__dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+
+  &--run {
+    background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+}
+
+// ── 빌드 내역 모달 (목업 880×744 · 머리 바닥선 · 본문 padding 16 20 20 · gap 14) ──
+.modal:has(.deploy__detail) {
+  height: min(var(--deploy-detail-h), calc(100vh - 96px));
+
+  .modal__head {
+    border-bottom: 1px solid var(--border);
   }
 
-  &-msg {
-    @include type-body;
+  .modal__body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 20px 20px;
+  }
+}
+
+.deploy__detail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+// 빌드 이력 스트립 — 목업: 26 높이 · padding 0 9 · 모서리 6 · 모노 12, 결과별 soft 면, 선택은 결과색 테두리
+.deploy__hist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  &-item {
+    height: 26px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    cursor: pointer;
+    // 새 빌드가 끝나면 이력 칩이 하나 더 붙는다 — 색·선택 상태 변화까지 함께
+    transition:
+      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease),
+      filter var(--dur-1) var(--ease);
+    @include focus-ring(1px);
+
+    &--ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+
+    &--fail {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    &--busy {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    &:hover {
+      filter: brightness(0.96); // 라이트 테마 hover 는 어둡게 (밝히기 필터 금지 — DESIGN.md 6장)
+    }
+
+    &.is-selected {
+      border-color: currentColor;
+    }
+  }
+}
+
+// 선택 빌드 머리 — "#482 · 시작 09/30 14:02 (4분 38초 소요) · sbjung" 13 + git 줄 모노 12
+.deploy__detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deploy__detail-head {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+
+  b {
+    color: var(--text);
     font-weight: 600;
+  }
+}
+
+.deploy__detail-git {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-3);
+  word-break: break-all;
+}
+
+// 커밋 패널 — 남는 높이를 채우고 안에서 스크롤 (목업 .panel flex 1)
+.deploy__commits {
+  flex: 1;
+  min-height: 0;
+  @include card-surface;
+  overflow-y: auto;
+
+  &-empty {
+    padding: 10px 14px;
+  }
+}
+
+.deploy__commit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+
+  // 마지막 줄 바닥선은 패널 테두리와 겹쳐 2px 로 보인다
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &-title {
+    font-size: var(--fs-body);
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  &-body {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
+    line-height: 1.56; // 목업 18px / 11.5
+    color: var(--text-2);
+    white-space: pre-wrap;
     word-break: break-word;
   }
 
   &-meta {
-    @include type-caption;
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
+  }
+
+  // 머지 커밋 — 실제 작업 커밋이 도드라지게 행 전체를 가라앉힘 (목업 .5)
+  &--merge {
+    opacity: 0.5;
   }
 }
 
-.deploy__prod-confirm {
-  margin-bottom: 4px;
+// 커밋 제목 속 이슈 키 — 모노 12.5 액센트
+.deploy__key {
+  font-size: var(--fs-ui);
+}
 
-  code {
+// 로그 바 — [콘솔 로그 ⌄] [새로고침] 젠킨스에서 열기
+.deploy__log-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deploy__log-open {
+  font-size: var(--fs-small);
+}
+
+// 콘솔 로그 — 목업 .term: 터미널 면 · 176 고정 · 모서리 8 · padding 10 12 · 모노 11.5/18
+.deploy__log {
+  flex-shrink: 0;
+  height: var(--deploy-log-h);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid;
+  @include panel-dark; // 로그는 테마와 무관하게 터미널 면 (내부 토큰 자동 치환)
+  border-radius: var(--r-tab);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-sm);
+  line-height: 1.56;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  &--error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     color: var(--danger);
-    font-family: var(--font-mono);
   }
 
-  .form-label {
-    margin-top: 4px;
+  // 파이프라인 단계 줄은 흐리게, 최종 결과 줄은 결과색 (목업)
+  .deploy__log-line--dim {
+    color: var(--text-3);
   }
+
+  .deploy__log-line--ok {
+    color: var(--ok);
+  }
+
+  .deploy__log-line--fail {
+    color: var(--danger);
+  }
+}
+
+// ── 프로젝트 추가/편집 폼 (목업 DeployProjectForm — 프로젝트 섹션 폼과 같은 문법) ──
+.deploy__form {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  .banner {
+    margin: 0;
+  }
+
+  &-title {
+    margin: 0;
+    @include type-h2; // 20 / 600
+  }
+
+  // 패널 안 2열 그리드 — 라벨 120 · 입력 나머지 (목업 column-gap 16 · row-gap 14)
+  &-grid {
+    @include card-surface;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    column-gap: 16px;
+    row-gap: 14px;
+    align-items: center;
+  }
+
+  &-label {
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+
+  // 젠킨스 URL·잡 이름 — 식별자라 모노 12.5
+  &-mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+  }
+
+  // 토큰 안내 — 목업 .hint 11.5 / 1.6
+  &-note {
+    margin: 0;
+    font-size: var(--fs-ui-sm);
+    line-height: 1.6;
+    color: var(--text-3);
+
+    b {
+      color: var(--text-2);
+    }
+  }
+
+  &-targets {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &-targets-label {
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    color: var(--text-2);
+  }
+
+  // 대상 한 줄 — 표시명 180 · 잡 이름 · 삭제(정사각 32)
+  &-target {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr) var(--control-h);
+    gap: 8px;
+  }
+
+  &-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+// 운영(PROD) 체크 — 목업: 위험 soft 띠 전체가 라벨(padding 12 14 · 모서리 8 · 13px). 체크 색은 공용 danger
+.deploy__prod-check {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger-soft);
+  border-radius: var(--r-tab);
+  background: var(--danger-soft);
 }

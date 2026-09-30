@@ -121,6 +121,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 - **컨트롤 높이**: `--control-h: 32px` / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
 - **섹션 레이아웃 치수**(목업): `--panel-head-h` 42(카드형 패널 머리) · `--row-h-ticket` 56(두 줄 티켓 행) · `--nightwatch-side-w` 400 · `--nightwatch-report-h` 760(Nightwatch 설정 열·리포트 모달).
 - 딥링크: `--applink-w` 760(가운데 단일 열 — 목업 Applink)
+- 배포: `--deploy-detail-h` 744 · `--deploy-log-h` 176(빌드 내역 모달 높이·그 안 콘솔 로그 — 목업 BuildDetailModal)
 - **결재 폼 치수**(목업): `--control-h-lg` 36(`Button size="lg"` — 폼의 [작성 시작]) · `--fs-heading` 16(완료 화면 제목) · 시맨틱 `--info`/`--info-soft`(청록 — 정보 배너·작성 완료 아이콘, 액센트와 구분).
 - **라운드**: `--r-xs 3`(인라인 마크) · `--r-sm 5`(칩·작은 버튼) · `--r-md 6`(버튼·입력) · `--r-tile 7`(축소 레일 타일·워크트리 칸) · `--r-tab 8`(세션 탭 윗모서리) · `--r-rail 9`(축소 레일 워크스페이스 칸) · `--r-lg 10`(카드·패널) · `--r-xl 14`(모달) · `--r-full`(카운트 뱃지·진행 바·스위치만 — **버튼은 필이 아니다**).
 - **그림자**: 카드·버튼에 금지. `--shadow-1` 은 세그 선택 칩, `--shadow-2` 는 모달·토스트·팝오버(그림자 + 1px 윤곽).

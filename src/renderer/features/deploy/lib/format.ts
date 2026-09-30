@@ -2,6 +2,7 @@
 import type { DeployStatus } from '../../../../shared/types';
 import { ownerRepoPartsFromUrl } from '../../../../shared/types';
 import { JIRA_KEY_RE } from '../../../../shared/jira-url';
+import { pad2 } from '../../../../shared/date';
 
 /** 상태/패널 맵의 키 (projectId:targetId) */
 export const statusKey = (projectId: string, targetId: string) =>
@@ -20,6 +21,13 @@ export const jenkinsJobUrl = (baseUrl: string, jobPath: string) =>
 
 export const formatTime = (ts?: number) =>
   ts ? new Date(ts).toLocaleString('ko-KR') : '';
+
+/** 목록 안 짧은 시각 "09/30 14:02" — 숫자만이라 모노로 그려도 된다(목업 표기) */
+export const formatStamp = (ts?: number) => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
 
 /** 소요 시간 — "22분 47초" / "45초" / "1시간 3분" */
 export const formatDuration = (ms: number) => {

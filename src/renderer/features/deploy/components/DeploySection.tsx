@@ -12,7 +12,7 @@ import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { useToast } from '../../../components/Toast';
-import { SectionHeader } from '../../../components/SectionHeader';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
 import { ActivityPanel } from './ActivityPanel';
@@ -136,9 +136,9 @@ export function DeploySection() {
                 // (watchBuild 가 갱신하므로 주기 조회가 직전 빌드 완료로 덮지 않게).
                 // 서버 감지 대기중(다른 빌드에 밀림)은 조회 결과로 계속 갱신해야
                 // 빌드 시작 시 '대기중 → 빌드중'으로 자연스럽게 넘어간다.
-                if (
-                  !(optimistic.current.has(key) && next[key]?.state === 'queued')
-                )
+                if (!(
+                  optimistic.current.has(key) && next[key]?.state === 'queued'
+                ))
                   next[key] = status;
               }
               return next;
@@ -271,7 +271,8 @@ export function DeploySection() {
     const seq = (detailSeq.current[key] = (detailSeq.current[key] ?? 0) + 1);
     setDetails((prev) => {
       const next: Record<string, DetailState> = {};
-      for (const [k, v] of Object.entries(prev)) next[k] = { ...v, open: false };
+      for (const [k, v] of Object.entries(prev))
+        next[k] = { ...v, open: false };
       next[key] = {
         ...prev[key], // 이력·로그 상태는 유지
         open: true,
@@ -290,7 +291,7 @@ export function DeploySection() {
         buildNumber,
       );
       detail = res.detail;
-      error = res.ok ? undefined : res.error ?? '조회 실패';
+      error = res.ok ? undefined : (res.error ?? '조회 실패');
     } catch (err) {
       // invoke 거부까지 잡는다 — 안 잡으면 loading 스피너가 영영 남는다
       error = errMsg(err, '조회 실패');
@@ -321,7 +322,7 @@ export function DeploySection() {
     try {
       const res = await window.oneApp.deploy.getHistory(projectId, targetId);
       builds = res.builds;
-      historyError = res.ok ? undefined : res.error ?? '이력 조회 실패';
+      historyError = res.ok ? undefined : (res.error ?? '이력 조회 실패');
     } catch (err) {
       // invoke 거부도 잡는다 — unhandled rejection 없이 이력 자리에 오류를 표시
       historyError = errMsg(err, '이력 조회 실패');
@@ -385,7 +386,7 @@ export function DeploySection() {
       );
       text = res.text;
       truncated = res.truncated;
-      error = res.ok ? undefined : res.error ?? '로그 조회 실패';
+      error = res.ok ? undefined : (res.error ?? '로그 조회 실패');
     } catch (err) {
       // invoke 거부도 잡는다 — 안 잡으면 로그 스피너가 영영 남는다
       error = errMsg(err, '로그 조회 실패');
@@ -410,7 +411,10 @@ export function DeploySection() {
     if (cur.log?.open) {
       setDetails((prev) => ({
         ...prev,
-        [key]: { ...cur, log: { ...(cur.log as NonNullable<typeof cur.log>), open: false } },
+        [key]: {
+          ...cur,
+          log: { ...(cur.log as NonNullable<typeof cur.log>), open: false },
+        },
       }));
       return;
     }
@@ -430,7 +434,10 @@ export function DeploySection() {
     if (n == null) return;
     setDetails((prev) => ({
       ...prev,
-      [key]: { ...prev[key], log: { ...prev[key]?.log, open: true, loading: true } },
+      [key]: {
+        ...prev[key],
+        log: { ...prev[key]?.log, open: true, loading: true },
+      },
     }));
     void fetchLogInto(projectId, targetId, n);
   };
@@ -494,15 +501,20 @@ export function DeploySection() {
   // ── 프로젝트 저장/삭제 ──
   const saveForm = async () => {
     if (!form) return;
-    const targets = form.targets.filter((t) => t.name.trim() && t.jobPath.trim());
+    const targets = form.targets.filter(
+      (t) => t.name.trim() && t.jobPath.trim(),
+    );
     if (!form.name.trim()) return setFormError('프로젝트 이름을 입력하세요.');
     if (!/^https?:\/\//.test(form.jenkinsUrl.trim()))
       return setFormError('젠킨스 URL 을 http(s):// 형태로 입력하세요.');
-    if (!form.username.trim()) return setFormError('젠킨스 아이디를 입력하세요.');
+    if (!form.username.trim())
+      return setFormError('젠킨스 아이디를 입력하세요.');
     if (!form.hasSecret && !form.secret)
       return setFormError('API 토큰(또는 비밀번호)을 입력하세요.');
     if (targets.length === 0)
-      return setFormError('배포 대상을 1개 이상 입력하세요. (표시명 + 잡 이름)');
+      return setFormError(
+        '배포 대상을 1개 이상 입력하세요. (표시명 + 잡 이름)',
+      );
 
     const input: SaveDeployProjectInput = {
       id: form.id,
@@ -559,25 +571,23 @@ export function DeploySection() {
     );
   }
 
-  // ── 프로젝트 목록 ──
+  // ── 프로젝트 목록 ── 목업 Deploy.dc.html: 섹션 제목 없음 · [프로젝트 추가]는 탑바 오른쪽 끝 ·
+  // 본문 padding 20 · 카드 2열 그리드 gap 16
   return (
-    <div className="section">
-      <div className="deploy__head">
-        <SectionHeader
-          icon={<Icon name="rocket" size={18} />}
-          title="배포"
-          sub="프로젝트별 젠킨스 잡을 버튼 한 번으로 배포합니다."
-        />
-        <Button variant="primary" onClick={() => setForm(emptyForm())}>
-          <Icon name="plus" size={14} />
-          프로젝트 추가
-        </Button>
-      </div>
+    <div className="section deploy">
+      <TopbarSlot
+        right={
+          <Button variant="primary" onClick={() => setForm(emptyForm())}>
+            <Icon name="plus" size={14} />
+            프로젝트 추가
+          </Button>
+        }
+      />
 
       {loadError ? (
         <Banner variant="danger">{loadError}</Banner>
       ) : loading ? (
-        <p className="hint">불러오는 중...</p>
+        <p className="deploy__hint">불러오는 중...</p>
       ) : projects.length === 0 ? (
         <EmptyState
           icon="rocket"
@@ -585,23 +595,25 @@ export function DeploySection() {
           hint="[프로젝트 추가] 를 눌러 젠킨스 정보와 배포 대상을 등록하세요."
         />
       ) : (
-        projects.map((p) => (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            statuses={statuses}
-            refreshing={refreshingIds.has(p.id)}
-            onDeploy={(targetId) => openDeployConfirm(p.id, targetId)}
-            onStop={(targetId, buildNumber) =>
-              void stopBuild(p.id, targetId, buildNumber)
-            }
-            onOpenDetail={(targetId) => openDetail(p.id, targetId)}
-            onOpenActivity={() => openActivity(p.id)}
-            onRefresh={() => refreshProject(p)}
-            onEdit={() => setForm(toForm(p))}
-            onDelete={() => removeProject(p)}
-          />
-        ))
+        <div className="deploy__grid">
+          {projects.map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              statuses={statuses}
+              refreshing={refreshingIds.has(p.id)}
+              onDeploy={(targetId) => openDeployConfirm(p.id, targetId)}
+              onStop={(targetId, buildNumber) =>
+                void stopBuild(p.id, targetId, buildNumber)
+              }
+              onOpenDetail={(targetId) => openDetail(p.id, targetId)}
+              onOpenActivity={() => openActivity(p.id)}
+              onRefresh={() => refreshProject(p)}
+              onEdit={() => setForm(toForm(p))}
+              onDelete={() => removeProject(p)}
+            />
+          ))}
+        </div>
       )}
 
       {/* 커밋 내역 모달 — 열린 대상(details.open)이 있을 때만 렌더 */}
@@ -617,14 +629,17 @@ export function DeploySection() {
         const title = [project?.name, target?.name].filter(Boolean).join(' — ');
         return (
           <Modal
-            wide
+            width={880}
             title={`${title} 빌드 내역`}
             onClose={() => closeDetail(key)}
           >
             <BuildDetailPanel
               state={st}
               links={{
-                commitBase: giteaCommitBase(linkCfg.giteaUrl, st.detail?.repoUrl),
+                commitBase: giteaCommitBase(
+                  linkCfg.giteaUrl,
+                  st.detail?.repoUrl,
+                ),
                 jiraUrl: linkCfg.jiraUrl,
               }}
               onSelectBuild={(n) => selectBuild(projectId, targetId, n)}
@@ -645,7 +660,9 @@ export function DeploySection() {
       {confirm &&
         (() => {
           const project = projects.find((p) => p.id === confirm.projectId);
-          const target = project?.targets.find((t) => t.id === confirm.targetId);
+          const target = project?.targets.find(
+            (t) => t.id === confirm.targetId,
+          );
           if (!project || !target) return null;
           return (
             <DeployConfirmModal
@@ -653,7 +670,9 @@ export function DeploySection() {
               target={target}
               preview={preview}
               jiraUrl={linkCfg.jiraUrl}
-              onConfirm={() => void doDeploy(confirm.projectId, confirm.targetId)}
+              onConfirm={() =>
+                void doDeploy(confirm.projectId, confirm.targetId)
+              }
               onClose={() => setConfirm(null)}
             />
           );
@@ -665,6 +684,7 @@ export function DeploySection() {
           const project = projects.find((p) => p.id === activityFor);
           return (
             <Modal
+              width={520}
               title={`${project?.name ?? '젠킨스'} 현황`}
               onClose={() => setActivityFor(null)}
             >
