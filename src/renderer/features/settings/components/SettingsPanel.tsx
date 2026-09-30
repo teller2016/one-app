@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from 'react';
+import type { ReactNode } from 'react';
 import { Icon } from '../../../components/Icon';
 
 /**
@@ -26,7 +26,11 @@ export function SettingsPanel({
   selected: boolean;
   onToggle: (open: boolean) => void;
   onSelect: () => void;
-  panelRef: Ref<HTMLDetailsElement>;
+  /**
+   * 패널 요소 등록 (콜백) — React `Ref` 타입을 쓰지 않는다: 단독판(Lite)은 자기 node_modules 의
+   * @types/react 로 JSX 를 검사해 두 사본의 `Ref` 가 서로 맞지 않는다고 거부한다.
+   */
+  panelRef: (el: HTMLDetailsElement | null) => void;
   children: ReactNode;
 }) {
   return (

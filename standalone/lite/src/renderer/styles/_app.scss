@@ -1,5 +1,6 @@
-// 단독 앱 셸 — 제목바(제목·화면 전환·환경설정) · 본문 · 하단 안내 · 환경설정 화면
-// 결재 폼·티켓 보고 스타일은 본체 `_approval.scss`·`_jira.scss` 를 그대로 쓴다.
+// 단독 앱 셸 — 제목바(제목·화면 전환·환경설정) · 본문 · 하단 안내줄
+// Signal 셸 문법을 따른다(.claude/rules/signal-style.md): 제목바 = 본체 탑바(44 · 패널 면 · 바닥선),
+// 하단 안내줄 = 본체 상태바(28 · 패널 면 · 윗선 · 11.5 메타). 결재·티켓 보고·환경설정 스타일은 본체 것을 그대로 쓴다.
 @use '../../../../../src/renderer/styles/base' as *;
 
 .app {
@@ -13,9 +14,11 @@
   &__head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 20px;
+    gap: 10px;
+    height: var(--pane-head-h);
+    padding: 0 16px 0 20px;
     border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
     flex-shrink: 0;
   }
 
@@ -24,14 +27,17 @@
     color: var(--accent);
   }
 
+  // 제목 — 본체 탑바 경로의 굵은 칸과 같은 13/600
   &__title {
     margin: 0;
-    @include type-title;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text);
     white-space: nowrap;
   }
 
   &__nav {
-    margin-left: 8px;
+    margin-left: 10px;
   }
 
   &__gap {
@@ -56,6 +62,13 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+
+    // 티켓 보고 — 목록 섹션 여백(signal-style 페이지 골격)으로. `.section`(28 32 40)·와이드 폭
+    // 그대로면 기본 창에서 표가 5행밖에 안 보였다(2026-09-30 /test)
+    > .jira--report {
+      max-width: none;
+      padding: 20px 24px;
+    }
   }
 
   // 새 버전 알림 — 제목바와 본문 사이. 배너 자체의 아래 여백(16px)은 셸이 대신 준다
@@ -103,41 +116,39 @@
     }
   }
 
-  // 제목 옆 현재 버전 — 하단 안내줄과 같은 캡션 톤(대문자·자간 변환은 끈다)
+  // 제목 옆 현재 버전 — 숫자만이라 모노 11.5 메타 톤
   &__version {
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
     white-space: nowrap;
   }
 
+  // 하단 안내줄 — 본체 상태바 자리·모양 (한 줄, 넘치면 말줄임)
   &__foot {
     flex-shrink: 0;
-    padding: 8px 20px 12px;
+    height: var(--statusbar-h);
+    line-height: var(--statusbar-h);
+    padding: 0 20px;
     border-top: 1px solid var(--border);
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: 0;
+    background: var(--surface-1);
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
-// 환경설정 화면 — 여백은 공통 .section, 여기서는 그룹 간격만
-.settings-view {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-
-  .form-actions {
-    margin-top: 4px;
-  }
-}
-
-// 버전 그룹 — 현재 버전과 [업데이트 확인] 을 한 줄에
+// 환경설정 버전 행 — 버전 값(모노) + [업데이트 확인]
 .settings-version {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+
+  &__value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    color: var(--text);
+  }
 }

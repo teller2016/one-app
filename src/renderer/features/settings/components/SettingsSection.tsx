@@ -298,14 +298,17 @@ export function SettingsSection() {
   // 왼쪽 목록에서 그룹을 고르면 — 접혀 있으면 펼치고, 패널 머리가 본문 위쪽에 오게 스크롤
   const goGroup = (id: GroupId) => {
     setSelected(id);
-    if (!openMap[id]) setGroupOpen(id, true);
-    // 펼친 높이가 반영된 다음 프레임에 스크롤해야 위치가 맞는다
-    requestAnimationFrame(() =>
+    const wasOpen = openMap[id];
+    if (!wasOpen) setGroupOpen(id, true);
+    const scroll = () =>
       panelRefs.current[id]?.scrollIntoView({
         block: 'start',
         behavior: 'smooth',
-      }),
-    );
+      });
+    // 접혀 있던 그룹은 펼침 애니메이션(--dur-3 .28s)이 끝난 뒤에 — 도중에 재면 펼친 높이가 덜 반영돼
+    // 목록 끝 그룹(버전)이 화면 밖에 남는다(2026-09-30 /test). 열려 있으면 다음 프레임에 바로
+    if (wasOpen) requestAnimationFrame(scroll);
+    else window.setTimeout(scroll, 300);
   };
 
   // 그룹 패널 공통 props

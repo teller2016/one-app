@@ -1294,9 +1294,8 @@
     margin-left: auto;
   }
 
-  // 목업: 모노 12 · fg-2
+  // 목업: 12 · fg-2 ("538건" — 한글이 섞여 모노 대신 등폭 숫자)
   &__count {
-    font-family: var(--font-mono);
     font-size: var(--fs-small);
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
@@ -1397,10 +1396,9 @@
     white-space: nowrap;
   }
 
-  // 템플릿이 실제로 어떻게 찍히는지 — 첫 줄만
+  // 템플릿이 실제로 어떻게 찍히는지 — 첫 줄만 (티켓 제목이 들어가 한글이 늘 섞인다 — 모노 금지)
   &__preview {
     margin: -4px 0 0;
-    font-family: var(--font-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

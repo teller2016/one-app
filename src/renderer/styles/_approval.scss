@@ -55,8 +55,10 @@
     flex-wrap: wrap;
   }
 
+  // 설명은 제목 글줄에 맞춰 들여쓴다 — [목록으로](icon-btn 24) + 간격 8
   &__head-desc {
     flex-basis: 100%;
+    padding-left: calc(24px + 8px);
     font-size: var(--fs-small);
     color: var(--text-3);
   }
@@ -75,6 +77,9 @@
 .approval-pick {
   display: flex;
   flex-direction: column;
+  // ⚠️ 줄어들지 않게 — 가운데 열이 창 높이에 맞춰 늘어나는 flex 라, 창이 낮으면(Lite 최소 560)
+  //    이 패널이 줄어들며 overflow:hidden 에 셋째 카드가 잘렸다(2026-09-30 /test). 넘치면 .approval 이 스크롤한다
+  flex-shrink: 0;
   overflow: hidden;
   background: var(--surface-1);
   border: 1px solid var(--border);

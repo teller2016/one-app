@@ -224,7 +224,7 @@ function Shell() {
     <div className="app">
       <header className="app__head">
         <span className="app__head-icon">
-          <Icon name="layout-grid" size={17} />
+          <Icon name="layout-grid" size={16} />
         </span>
         <h1 className="app__title">One App Lite</h1>
         {/* 현재 버전 — 항상 보이는 자리. 새 버전 확인이 실패해도 current 는 채워져 있다 */}

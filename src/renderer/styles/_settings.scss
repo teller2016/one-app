@@ -133,6 +133,7 @@ $label-gap: 16px;
     .hint {
       margin: 0;
       line-height: 1.6;
+      word-break: keep-all; // 한글이 음절 중간(바뀝니|다)에서 꺾이지 않게
 
       b {
         color: var(--text-2);

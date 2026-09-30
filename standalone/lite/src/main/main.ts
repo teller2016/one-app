@@ -67,7 +67,7 @@ const createWindow = () => {
     // Windows·Linux 개발 인스턴스의 창·작업표시줄 아이콘 (macOS 는 아래 app.dock 으로)
     ...(app.isPackaged ? {} : { icon: DEV_ICON }),
     // 본체와 달리 비브런시를 쓰지 않으므로 로드 전 배경을 직접 칠한다 — _base.scss 의 --bg 와 같은 값
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#f5f5f7',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0c0e' : '#f4f5f7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // ⚠️ 본체(src/main/main.ts)와 같은 이유로 기본값을 명시한다 — 격리가 조용히
