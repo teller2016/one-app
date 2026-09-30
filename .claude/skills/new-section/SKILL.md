@@ -1,6 +1,6 @@
 ---
 name: new-section
-description: One App 에 새 기능(사이드바 섹션 또는 사이드바 위젯)을 추가하는 절차. 렌더러 컴포넌트·SECTIONS 등록·SCSS·IPC·preload·타입까지 빠짐없이 연결한다. 사용법 - /new-section 또는 /new-section "기능 이름"
+description: One App 에 새 기능(사이드바 섹션 또는 상태바 위젯)을 추가하는 절차. 렌더러 컴포넌트·SECTIONS 등록·SCSS·IPC·preload·타입까지 빠짐없이 연결한다. 사용법 - /new-section 또는 /new-section "기능 이름"
 argument-hint: [기능 이름]
 ---
 
@@ -10,7 +10,7 @@ One App 에 기능을 하나 추가할 때 손대야 할 곳을 순서대로 처
 
 ## 0. 먼저 확인
 - 기능 이름(kebab-case 폴더명)을 정한다. 인자로 주어졌으면 그것을 쓰고, 없으면 사용자에게 묻는다.
-- **섹션**(메인 영역 화면)인지 **사이드바 위젯**인지 확인한다 — 위젯이면 2번(SECTIONS 등록) 대신 사이드바 배치를 손댄다.
+- **섹션**(메인 영역 화면)인지 **상태바 위젯**인지 확인한다 — 위젯이면 2번(SECTIONS 등록) 대신 `App.tsx` 의 `<StatusBar>` 배치를 손대고 `StatusWidget` 셸로 감싼다. 섹션이면 `SECTIONS` 에 `group`(개발·리소스·업무)도 단다.
 - 파일·프로세스·네이티브 작업이 필요한지(= main 쪽이 필요한지) 확인한다. 순수 UI 면 4번을 건너뛴다.
 
 ## 1. 렌더러 컴포넌트

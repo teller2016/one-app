@@ -48,10 +48,11 @@ paths:
 - `mobile-app/styles/mo.scss` 가 `_base.scss` 를 `@use` 하므로 **폰 셸도 같은 폰트를 받는다**(MO 서버 MIME 맵에 `.woff2` 가 이미 있다). `src/mobile` 의 MO 터미널 페이지는 별도 CSS 라 해당 없음.
 
 ## 공통 레이아웃 클래스 (`_base.scss`)
-섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **사이드바 위젯 `.sbw`**(VPN·미러링·근태 공용 — `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
+섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **상주 위젯 본체 `.sbw`**(VPN·미러링·근태 공용 — 상태바 팝오버 안에서 `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
 
-## 비브런시 셸 주의
-창은 `vibrancy: 'sidebar'` — html/body/.sidebar 는 **투명 유지**, 불투명 채색은 `.content`(--bg)에서만. **BrowserWindow 에 backgroundColor 지정 금지**(재질이 가려진다). 탑바는 `.content` 위 absolute 프로스트 오버레이(--frost + backdrop-blur)라 높이(44px) 변경 시 `.main` padding-top 을 동기화해야 한다.
+## 셸 (사이드바 · 탑바 · 상태바) — 정본은 `DESIGN.md` §4 셸
+`.app` 은 2행 그리드(위 `사이드바 | 콘텐츠`, 아래 전체 폭 `.statusbar` — `--statusbar-h`). 사이드바·상태바는 **불투명 `--surface-1`**, 콘텐츠는 `--bg`. 창의 `vibrancy: 'sidebar'` 는 로드 전 배경으로만 남는다 — **BrowserWindow 에 backgroundColor 지정 금지**(그 재질이 로드 전 배경이다). 탑바는 창 전체 폭 fixed 프로스트 바라 높이(44px) 변경 시 `.main` padding-top 을 동기화해야 한다.
+- ⚠️ 상태바 팝오버(`.statusbar__pop`)에 `display` 를 주지 말 것 — 닫힘이 `hidden` 속성이라 UA 의 `[hidden]{display:none}` 에 기대고 있다.
 
 ## 다크 테마
 다크 토큰은 `_base.scss` 의 `:root[data-theme='dark']` 블록. main 은 창 생성 시 `theme`+`nativeTheme` 으로 backgroundColor 를 선택한다.

@@ -2,6 +2,7 @@ import { ConfirmProvider } from "../components/ConfirmDialog";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
+import { StatusBar } from "../components/StatusBar";
 import { ToastProvider, useToast, useToastDismiss } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
 import { AttendanceWidget } from "../features/attendance";
@@ -14,7 +15,7 @@ import { PortsSection } from "../features/ports";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
-import { TerminalSection } from "../features/terminal";
+import { MoStatusItem, TerminalSection } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -53,6 +54,7 @@ const ApprovalSection = lazy(() =>
 );
 
 // 섹션 = 사이드바 항목 + 메인 영역 렌더 — 새 섹션은 이 배열에만 추가하면 된다.
+// `group`(개발·리소스·업무)은 사이드바 라벨·탑바 경로에 쓰인다 — 같은 그룹은 붙여 둘 것.
 // ⚠️ 배열 첫 항목이 앱을 열었을 때의 화면이다(activeId 초기값 = SECTIONS[0].id).
 type AppSection = SidebarSection & {
   render: () => ReactNode;
@@ -61,6 +63,7 @@ type AppSection = SidebarSection & {
 const SECTIONS: AppSection[] = [
   {
     id: "terminal",
+    group: "개발",
     label: "터미널",
     icon: <Icon name="terminal" size={16} />,
     // 터미널은 keep-alive — <main> 이 직접 상주 마운트한다 (App 렌더의 main__keep 참고)
@@ -68,60 +71,70 @@ const SECTIONS: AppSection[] = [
   },
   {
     id: "jira",
+    group: "개발",
     label: "Jira",
     icon: <Icon name="clipboard-list" size={16} />,
     render: () => <JiraSection />,
   },
   {
     id: "nightwatch",
+    group: "개발",
     label: "Nightwatch",
     icon: <Icon name="moon" size={16} />,
     render: () => <NightwatchSection />,
   },
   {
     id: "prs",
+    group: "개발",
     label: "PR",
     icon: <Icon name="git-pull-request" size={16} />,
     render: () => <PrSection />,
   },
   {
     id: "ports",
+    group: "개발",
     label: "포트",
     icon: <Icon name="network" size={16} />,
     render: () => <PortsSection />,
   },
   {
     id: "deploy",
+    group: "개발",
     label: "배포",
     icon: <Icon name="rocket" size={16} />,
     render: () => <DeploySection />,
   },
   {
     id: "projects",
+    group: "리소스",
     label: "프로젝트",
     icon: <Icon name="folder" size={16} />,
     render: () => <ProjectsSection />,
   },
   {
     id: "applink",
+    group: "리소스",
     label: "딥링크",
     icon: <Icon name="link" size={16} />,
     render: () => <ApplinkSection />,
   },
   {
     id: "approval",
+    group: "업무",
     label: "결재",
     icon: <Icon name="pencil" size={16} />,
     render: () => <ApprovalSection />,
   },
   {
     id: "schedule",
+    group: "업무",
     label: "일정 등록",
     icon: <Icon name="calendar" size={16} />,
     render: () => <ScheduleSection />,
   },
   {
     id: "weekly",
+    group: "업무",
     label: "주간보고",
     icon: <Icon name="bar-chart" size={16} />,
     render: () => <WeeklySection />,
@@ -411,25 +424,6 @@ export function App() {
             })}
             activeId={activeId}
             onSelect={navigate}
-            header={
-              <ErrorBoundary label="메일" compact>
-                <MailWidget />
-              </ErrorBoundary>
-            }
-            footer={
-              <>
-                {/* 위젯은 각자 격리한다 — 하나가 죽어도 나머지 위젯과 사이드바는 살아 있다 */}
-                <ErrorBoundary label="폰 미러링" compact>
-                  <MirrorWidget />
-                </ErrorBoundary>
-                <ErrorBoundary label="VPN" compact>
-                  <VpnWidget />
-                </ErrorBoundary>
-                <ErrorBoundary label="근태" compact>
-                  <AttendanceWidget />
-                </ErrorBoundary>
-              </>
-            }
           />
 
           {/* 오른쪽 콘텐츠 영역 */}
@@ -462,6 +456,15 @@ export function App() {
                 {active.icon}
               </span>
               <span className="topbar__title" key={`title-${active.id}`}>
+                {/* 경로 표시 — 그룹 / 섹션 (환경설정처럼 그룹이 없으면 섹션만) */}
+                {active.group && (
+                  <span className="topbar__group">
+                    {active.group}
+                    <span className="topbar__sep" aria-hidden="true">
+                      /
+                    </span>
+                  </span>
+                )}
                 {active.label}
               </span>
             </header>
@@ -492,6 +495,31 @@ export function App() {
               )}
             </main>
           </section>
+
+          {/* 하단 상태바 — 상주 위젯. 위젯은 각자 격리한다(하나가 죽어도 나머지·셸은 산다) */}
+          <StatusBar
+            left={
+              <>
+                <ErrorBoundary label="VPN" compact>
+                  <VpnWidget />
+                </ErrorBoundary>
+                <ErrorBoundary label="메일" compact>
+                  <MailWidget />
+                </ErrorBoundary>
+                <ErrorBoundary label="폰 미러링" compact>
+                  <MirrorWidget />
+                </ErrorBoundary>
+                <ErrorBoundary label="MO" compact>
+                  <MoStatusItem />
+                </ErrorBoundary>
+              </>
+            }
+            right={
+              <ErrorBoundary label="근태" compact>
+                <AttendanceWidget />
+              </ErrorBoundary>
+            }
+          />
         </div>
       </ConfirmProvider>
     </ToastProvider>

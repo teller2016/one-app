@@ -1,135 +1,5 @@
-// 메일 — 사이드바 위젯(.sbw 재사용) + 리더 모달(전체폭 목록 + 오른쪽 슬라이드 본문 패널)
+// 메일 — 리더 모달(전체폭 목록 + 오른쪽 슬라이드 본문 패널). 진입점은 상태바 항목(StatusBarItem)
 @use './base' as *;
-
-// ===== 사이드바 최상단 메일 진입점 =====
-.mail-nav {
-  &__row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 44px;
-  }
-
-  // 아이콘 타일 — 액센트 소프트 라운드 사각 (앱 아이콘 느낌). 클릭 = 브라우저로 메일함
-  &__tile {
-    position: relative;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    padding: 0;
-    border: none;
-    border-radius: var(--r-md);
-    background: var(--accent-soft);
-    color: var(--accent);
-    cursor: pointer;
-    transition:
-      background var(--dur-1) var(--ease),
-      transform var(--dur-1) var(--ease);
-    @include focus-ring(2px);
-
-    &:not(:disabled):hover {
-      background: var(--accent-btn);
-      color: var(--on-accent);
-    }
-
-    &:not(:disabled):active {
-      transform: scale(0.94);
-    }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.55;
-    }
-  }
-
-  // 안읽음 점 — 타일 우상단 (테두리로 배경과 분리)
-  &__dot {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent-btn);
-    border: 2px solid var(--bg);
-  }
-
-  // 안읽음 개수 — 사이드바가 접혔을 때 점을 대신한다.
-  // 접히면 상태 텍스트('새 메일 3통')가 사라져 개수를 알 방법이 없으므로,
-  // 사이드바 섹션 뱃지와 같은 규칙(아이콘 우상단 액센트 필)으로 숫자를 띄운다.
-  &__count {
-    position: absolute;
-    top: -5px;
-    right: -6px;
-    min-width: 16px;
-    padding: 0 4px;
-    border-radius: var(--r-full);
-    background: var(--accent-btn);
-    border: 2px solid var(--bg);
-    color: var(--on-accent);
-    font-size: var(--fs-caption);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.5;
-    text-align: center;
-  }
-
-  // 제목 + 상태 2줄 — 클릭 = 앱 내 리더 모달
-  &__main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding: 4px 2px;
-    border: none;
-    border-radius: var(--r-sm);
-    background: transparent;
-    text-align: left;
-    cursor: pointer;
-    font-family: inherit;
-    transition: color var(--dur-1) var(--ease);
-    @include focus-ring(2px);
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.7;
-    }
-  }
-
-  &__title {
-    @include type-body;
-    color: var(--text);
-    line-height: 1.25;
-  }
-
-  &__status {
-    @include type-small;
-    color: var(--text-3);
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &--accent {
-      color: var(--accent);
-    }
-  }
-
-  &__main:not(:disabled):hover &__title {
-    color: var(--accent);
-  }
-
-  &__error {
-    margin: 4px 0 2px;
-    @include type-small;
-    color: var(--danger);
-    word-break: break-word;
-  }
-}
 
 // ===== 리더 모달 =====
 .mail-modal__title {
@@ -162,13 +32,17 @@
   &__list-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 4px;
     margin-bottom: 10px;
+
+    // 세그먼트는 왼쪽, 새로고침·브라우저 열기는 오른쪽에 붙인다
+    > :first-child {
+      margin-right: auto;
+    }
   }
 
   // 세그먼트 라벨 뒤 안읽음 개수 — 탭을 전환하기 전에 어느 편지함에 안읽은 메일이
-  // 있는지 알린다(0 이면 렌더하지 않는다). 사이드바 위젯 뱃지(mail-nav__count)와 같은 규칙.
+  // 있는지 알린다(0 이면 렌더하지 않는다). 상태바 카운트(statusbar__count)와 같은 규칙.
   &__seg-count {
     min-width: 16px;
     padding: 0 5px;

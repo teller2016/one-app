@@ -4,10 +4,10 @@ import { Button } from '../../../components/Button';
 import { FileTrigger } from '../../../components/FileTrigger';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
-import { SidebarWidget } from '../../../components/SidebarWidget';
+import { StatusWidget } from '../../../components/StatusWidget';
 import { StatusDot } from '../../../components/StatusDot';
 
-/** 사이드바 하단 VPN 위젯 — OpenVPN 연결 상태 표시 + 연결/해제 */
+/** 상태바 VPN 위젯 — OpenVPN 연결 상태 표시 + 연결/해제 (본체는 상태바 팝오버) */
 export function VpnWidget() {
   const [settings, setSettings] = useState<VpnSettingsView | null>(null);
   const [status, setStatus] = useState<VpnStatus>({ state: 'disconnected' });
@@ -131,14 +131,28 @@ export function VpnWidget() {
           : '연결 안 됨';
   const errorMsg = st === 'error' ? (status.error ?? error) : error;
   const ovpnName = formOvpn ? formOvpn.split('/').pop() : '';
-  // 아이콘·상태점은 축소 타일에도 그대로 쓴다 (SidebarWidget 이 팝오버 진입점으로 삼는다)
+  // 아이콘·상태점은 상태바 항목에도 그대로 쓴다 (StatusWidget 이 팝오버 진입점으로 삼는다)
   const icon = <Icon name="lock" size={12} />;
   const dot = <StatusDot status={dotStatus} />;
   const tooltip = `VPN — ${statusText}`;
+  // 상태바 한 줄 — 연결되면 IP 만, 아니면 짧은 상태 (전체 문구는 툴팁)
+  const barText =
+    st === 'connected'
+      ? stale
+        ? '응답 없음'
+        : (status.vpnIp ?? '연결됨')
+      : st === 'connecting'
+        ? '연결 중'
+        : '연결 안 됨';
+  const label = (
+    <>
+      VPN <span className="statusbar__meta">{barText}</span>
+    </>
+  );
 
   return (
-    // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
-    <SidebarWidget icon={icon} dot={dot} tooltip={tooltip}>
+    // 상태바에는 한 줄 요약만 — 조작은 누르면 뜨는 팝오버가 맡는다
+    <StatusWidget icon={icon} dot={dot} label={label} tooltip={tooltip}>
       <div className="sbw" title={tooltip}>
         {/* 한 줄: 아이콘 · 상태 · 우측 액션 (설정 ⚙ + 연결/해제) */}
         <div className="sbw__row">
@@ -243,6 +257,6 @@ export function VpnWidget() {
 
         {errorMsg && <p className="sbw__error">{errorMsg}</p>}
       </div>
-    </SidebarWidget>
+    </StatusWidget>
   );
 }

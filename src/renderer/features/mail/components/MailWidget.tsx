@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/Icon';
-import { RefreshButton } from '../../../components/RefreshButton';
-import { useSidebarCollapsed } from '../../../components/Sidebar';
+import { StatusBarItem } from '../../../components/StatusBar';
+import { StatusDot } from '../../../components/StatusDot';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
 import { MailModal } from './MailModal';
@@ -11,11 +11,10 @@ import { MailModal } from './MailModal';
 const POLL_ACTIVE_MS = 30_000;
 
 /**
- * 사이드바 최상단 메일 진입점 — 안읽은 메일 수를 보여준다.
- *  · 아이콘 타일 클릭 → 브라우저로 비즈박스 메일함 열기
- *  · 제목/상태 클릭 → 앱 내 리더 모달 열기
+ * 상태바 메일 항목 — 안읽은 메일 수를 보여주고, 누르면 앱 내 리더 모달을 바로 연다.
+ * (브라우저로 메일함 열기·목록 새로고침은 모달 안에 있다)
  * 안읽은 수는 경량 count 폴링으로 갱신 — 활성 시 30초, 비활성 시 3분, 창 복귀 시 즉시.
- * 백그라운드 폴링은 스피너 없이 조용히 갱신한다.
+ * 백그라운드 폴링은 조용히 갱신한다.
  */
 export function MailWidget() {
   const [unread, setUnread] = useState<number | null>(null);
@@ -23,7 +22,6 @@ export function MailWidget() {
   const [spinning, setSpinning] = useState(false); // 스피너 — 수동/초기 로드에서만
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
-  const collapsed = useSidebarCollapsed();
   // 리더에서 읽음 처리한 누적 횟수 — 폴링 요청이 나간 뒤에 읽은 메일은 그 응답에 반영돼
   // 있지 않으므로, 응답값에서 "요청 중에 읽은 수"만큼 빼서 반영한다(안 빼면 읽기 전 값이
   // 방금 한 −1 을 되돌려 카운트가 남는다 — 2026-09-08 사용자 신고)
@@ -51,10 +49,6 @@ export function MailWidget() {
     }
   }, []);
 
-  const refresh = useCallback((): void => {
-    void load(true);
-  }, [load]);
-
   // 적응형 폴링은 공용 usePolling 에 맡긴다 — 활성 30초/비활성 6배(3분) 비율이 원래 이 위젯에서
   // 승격된 것이라 주기는 같고, 여기에 **잠자기(다크웨이크 포함) 중 건너뛰기**가 더해진다.
   // 직접 굴리던 setTimeout 루프는 덮개를 닫은 뒤 다크웨이크마다 HTTP·재로그인까지 돌았다.
@@ -77,7 +71,7 @@ export function MailWidget() {
   const handleCount = useCallback((n: number) => setUnread(n), []);
 
   const hasUnread = configured && unread != null && unread > 0;
-  // 접힌 사이드바의 뱃지용 — 세 자리는 72px 폭을 넘치게 하므로 클램프한다
+  // 상태바 카운트 — 세 자리는 항목 폭을 늘리므로 클램프한다
   const unreadBadge = unread != null && unread > 99 ? '99+' : String(unread ?? 0);
   // 값이 한 번도 안 온 채 실패했으면 "새 메일 없음"이 아니라 실패라고 말한다
   // (조회에 성공한 뒤의 실패는 마지막 값을 유지하고 아래 오류 줄로만 알린다)
@@ -92,73 +86,22 @@ export function MailWidget() {
           : '새 메일 없음';
 
   return (
-    <div className="mail-nav">
-      <div className="mail-nav__row">
-        {/* 아이콘 타일 — 평소엔 브라우저로 메일함, 사이드바가 접혀 있으면 앱 안에서 연다.
-            접힌 상태에선 이 아이콘이 유일한 진입점이라, 화면을 좁게 쓰려고 접어 둔 사람을
-            브라우저로 내보내는 건 앞뒤가 맞지 않는다. */}
-        <button
-          type="button"
-          className="mail-nav__tile"
-          onClick={() =>
-            collapsed ? setOpen(true) : void window.oneApp.mail.openWeb()
-          }
-          disabled={!configured}
-          title={
-            collapsed
-              ? hasUnread
-                ? `메일 열기 (${status})`
-                : '메일 열기'
-              : '비즈박스 메일함 열기 (브라우저)'
-          }
-          aria-label={
-            collapsed
-              ? hasUnread
-                ? `메일 열기 — ${status}`
-                : '메일 열기'
-              : '비즈박스 메일함 열기'
-          }
-        >
-          <Icon name="mail" size={18} />
-          {/* 접힌 상태에선 개수 뱃지, 펼친 상태에선 점 (개수는 옆 상태 텍스트가 말한다) */}
-          {hasUnread &&
-            (collapsed ? (
-              <span className="mail-nav__count">{unreadBadge}</span>
-            ) : (
-              <span className="mail-nav__dot" aria-hidden="true" />
-            ))}
-        </button>
-
-        {/* 제목 + 상태 — 클릭 시 앱 내 리더 모달 */}
-        <button
-          type="button"
-          className="mail-nav__main"
-          onClick={() => setOpen(true)}
-          disabled={!configured}
-          title={configured ? '앱에서 메일 열기' : '환경설정에서 비즈박스 계정을 입력하세요'}
-        >
-          <span className="mail-nav__title">메일</span>
-          <span
-            className={
-              'mail-nav__status' +
-              (hasUnread ? ' mail-nav__status--accent' : '')
-            }
-          >
-            {status}
-          </span>
-        </button>
-
-        {/* 우측 — 새로고침 (안읽음 수는 상태 텍스트 + 타일 점으로 표시) */}
-        <RefreshButton
-          size={13}
-          spinning={spinning}
-          onClick={refresh}
-          disabled={!configured}
-          title="안읽은 메일 새로고침"
-        />
-      </div>
-
-      {error && <p className="mail-nav__error">{error}</p>}
+    <>
+      <StatusBarItem
+        icon={<Icon name="mail" size={12} />}
+        // 값이 한 번도 안 온 채 실패하면 점으로 알린다 (성공 뒤 실패는 마지막 값 유지 — 툴팁에 사유)
+        dot={unread === null && error ? <StatusDot status="fail" /> : undefined}
+        label="메일"
+        count={hasUnread ? unreadBadge : undefined}
+        title={
+          configured
+            ? `메일 — ${status}${error && unread !== null ? ` (갱신 실패: ${error})` : ''}`
+            : '메일 — 환경설정에서 비즈박스 계정을 입력하세요'
+        }
+        active={open}
+        disabled={!configured}
+        onClick={() => setOpen(true)}
+      />
 
       {open && (
         <MailModal
@@ -167,6 +110,6 @@ export function MailWidget() {
           onCount={handleCount}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -627,14 +627,12 @@ function PopoutBody({
           draggingId={dragSession}
           canCreate={false}
           changesOpen={false}
-          moRunning={false}
           editorName={editorName}
           canOpenEditor={false}
           onSelect={selectTab}
           onClose={closeSessionFromTab}
           onNew={NOOP}
           onToggleChanges={NOOP}
-          onOpenMo={NOOP}
           onOpenEditor={NOOP}
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}

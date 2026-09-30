@@ -19,6 +19,7 @@ const GAP = 6; // 트리거와 팝오버 사이 간격 (예전 `top: calc(100% +
  *
  * `side: 'bottom'`(기본)은 트리거 아래에 놓고 공간이 모자라면 위로 flip,
  * `side: 'right'` 는 트리거 오른쪽에 놓고 모자라면 왼쪽으로 flip 한다(세로는 중앙 정렬).
+ * `side: 'top'` 은 트리거 위에 놓고(왼쪽 모서리 정렬) 모자라면 아래로 flip — 하단 상태바 위젯.
  * 어느 쪽이든 뷰포트 안으로 클램프한다.
  * `fixed` 는 조상 스크롤을 따라오지 않으므로 scroll(capture)·resize 에서 재배치한다.
  */
@@ -35,8 +36,8 @@ export function usePopover(
     matchWidth?: boolean;
     /** 남은 공간이 좁으면 max-height 로 줄인다 (내부 스크롤이 있는 리스트만) */
     fitHeight?: boolean;
-    /** 트리거의 어느 쪽에 붙일지 — 'right' 는 접힌 사이드바 위젯처럼 옆으로 펼칠 때 */
-    side?: 'bottom' | 'right';
+    /** 트리거의 어느 쪽에 붙일지 — 'right' 는 옆으로, 'top' 은 하단 상태바처럼 위로 펼칠 때 */
+    side?: 'bottom' | 'right' | 'top';
   } = {},
 ): CSSProperties {
   const [style, setStyle] = useState<CSSProperties | null>(null);
@@ -74,6 +75,27 @@ export function usePopover(
 
     const below = window.innerHeight - r.bottom - GAP - MARGIN;
     const above = r.top - GAP - MARGIN;
+
+    // 위로 펼치는 배치 — 하단 상태바 위젯. 오른쪽 끝 항목은 clampX 가 화면 안으로 민다
+    if (side === 'top') {
+      const up = h <= above || above >= below; // 위가 모자라고 아래가 더 넓을 때만 아래로
+      const room = Math.max(up ? above : below, 120);
+      const left = clampX(r.left);
+      // 오른쪽 끝 항목(근태)은 화면 안으로 밀려 팝오버의 오른쪽이 트리거 쪽이 된다 —
+      // 진입 모션이 트리거에서 자라나게 기준점도 따라 옮긴다
+      const hx = left < r.left - 1 ? 'right' : 'left';
+      setStyle({
+        position: 'fixed',
+        top: up ? Math.max(MARGIN, r.top - GAP - Math.min(h, room)) : r.bottom + GAP,
+        left,
+        transformOrigin: `${up ? 'bottom' : 'top'} ${hx}`,
+        // 창이 낮으면 넘치지 않게 줄인다 — 팝오버는 overflow-y:auto 라 안에서 스크롤된다
+        ...(h > room ? { maxHeight: room } : null),
+        ...(matchWidth ? { width: r.width } : null),
+      });
+      return;
+    }
+
     const flip = h > below && above > below; // 아래가 모자라고 위가 더 넓으면 위로
     const room = Math.max(flip ? above : below, 120); // 아주 좁을 때도 최소 높이는 확보
     const maxHeight = fitHeight && h > room ? room : undefined;
@@ -100,13 +122,13 @@ export function usePopover(
     place();
   }, [open, place]);
 
-  // 내용이 자라면 다시 배치한다 — 옆 배치는 세로 중앙 정렬이라 높이가 바뀌면 위치가 어긋나고,
-  // 열린 뒤 펼쳐지는 폼(VPN 설정)이 화면 밖으로 넘어간다.
+  // 내용이 자라면 다시 배치한다 — 옆 배치는 세로 중앙 정렬, 위 배치는 아래 모서리 기준이라
+  // 높이가 바뀌면 위치가 어긋나고, 열린 뒤 펼쳐지는 폼(VPN 설정)이 화면 밖으로 넘어간다.
   // ⚠️ bottom 배치에는 걸지 않는다 — fitHeight 가 max-height 를 걸어 줄인 높이를 되재면
   //    위/아래 판단이 스스로 진동한다(축소 → 아래도 충분 → 확대 → …).
   useEffect(() => {
     const pop = popRef.current;
-    if (!open || side !== 'right' || !pop) return;
+    if (!open || side === 'bottom' || !pop) return;
     const ro = new ResizeObserver(() => {
       naturalH.current = pop.offsetHeight;
       place();

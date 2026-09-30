@@ -13,9 +13,9 @@ paths:
 
 # 시스템·위젯 기능 (환경설정 · VPN · 미러링 · 알림 · 딥링크)
 
-> **사이드바 위젯(VPN·미러링·근태)은 공용 `SidebarWidget` 셸로 감싼다** — 사이드바가 접히면
-> 아이콘 타일만 남고, 누르면 위젯 본체가 오른쪽 팝오버로 펼쳐져 접은 채로 전부 조작된다.
-> 새 위젯을 만들 때도 이 셸을 쓸 것. 상세·함정은 `renderer-ui` 규칙의 '축소 사이드바' 절.
+> **상주 위젯(VPN·미러링·근태)은 창 하단 상태바에 있고 공용 `StatusWidget` 셸로 감싼다** — 상태바엔
+> 한 줄 요약만, 누르면 위젯 본체가 위로 뜨는 팝오버로 펼쳐진다. 새 위젯도 이 셸을 쓸 것.
+> 상세·함정은 `renderer-ui` 규칙의 '상태바 위젯' 절.
 
 ## 환경설정
 `renderer/features/settings` + `main/features/settings`
@@ -52,7 +52,7 @@ paths:
 ## VPN
 `renderer/features/vpn` + `main/features/vpn`
 
-사이드바 하단 위젯. Homebrew `openvpn` CLI(**필수 의존성**, `/opt/homebrew/sbin/openvpn`)를 osascript 관리자 인증으로 root 데몬 실행하고, management 인터페이스(127.0.0.1 TCP + 비밀번호 파일)로 자격증명 전달·상태 추적·해제(SIGTERM).
+상태바 위젯(왼쪽 첫 항목). Homebrew `openvpn` CLI(**필수 의존성**, `/opt/homebrew/sbin/openvpn`)를 osascript 관리자 인증으로 root 데몬 실행하고, management 인터페이스(127.0.0.1 TCP + 비밀번호 파일)로 자격증명 전달·상태 추적·해제(SIGTERM).
 
 비밀번호는 Google OTP — 위젯 설정에 TOTP 시크릿 키를 저장하면 자동 생성(`totp.ts`, RFC 6238), 없으면 매번 수동 입력. 계정·시크릿은 `safeStorage` 암호화로 `userData/vpn.json` 에 저장.
 
@@ -71,7 +71,7 @@ paths:
 ## 폰 미러링
 `renderer/features/mirror` + `main/features/mirror`
 
-사이드바 하단 위젯(맨 위 — 미러링→VPN→근태 순). Homebrew `scrcpy`(선택 의존성)를 spawn — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
+상태바 위젯(VPN·메일 다음). Homebrew `scrcpy`(선택 의존성)를 spawn — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
 
 **두 모드**: `미러링`(`-d --turn-screen-off` — 화면 미러+폰 화면 끔) / `제어`(`-d --no-video --no-audio --keyboard=uhid --mouse=uhid` — 화면 없이 맥 키보드·마우스로 폰 조작). 한 번에 한 모드만.
 

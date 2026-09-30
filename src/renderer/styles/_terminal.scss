@@ -1524,22 +1524,6 @@
   &__changes-btn--on {
     color: var(--accent);
   }
-
-  // MO 접속 버튼 — 서버 켜짐이면 액센트 점 표시
-  &__mo-btn {
-    position: relative;
-
-    &--on::after {
-      content: '';
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      width: 6px;
-      height: 6px;
-      border-radius: var(--r-full);
-      background: var(--ok);
-    }
-  }
 }
 
 // MO(모바일) 접속 모달 내용

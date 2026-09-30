@@ -3,14 +3,14 @@ import type { AttendanceInfo } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
-import { SidebarWidget } from '../../../components/SidebarWidget';
+import { StatusWidget } from '../../../components/StatusWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
 import { publishAttendance } from '../lib/shared';
 
-// ⚠️ lazy — 사이드바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
+// ⚠️ lazy — 상태바 위젯은 앱이 뜨는 순간부터 상주하므로 정적 import 하면 결재 청크가
 // 초기 번들에 그대로 딸려온다(App.tsx 의 ApprovalSection lazy 가 무의미해진다).
 // 모달은 열 때만 필요하니 그때 받는다.
 const OvertimeModal = lazy(() =>
@@ -24,7 +24,7 @@ const DAY_CHECK_MS = 60_000;
 
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
-/** 사이드바 하단 출퇴근 위젯 — 항상 표시되며 원클릭으로 출근/퇴근을 찍는다. */
+/** 상태바 출퇴근 위젯 — 항상 표시되며 원클릭으로 출근/퇴근을 찍는다 (본체는 상태바 팝오버). */
 export function AttendanceWidget() {
   const confirm = useConfirm();
   const [info, setInfo] = useState<AttendanceInfo | null>(null);
@@ -146,7 +146,7 @@ export function AttendanceWidget() {
       </>
     );
 
-  // 사이드바를 접으면 위 요약이 감춰지므로 툴팁이 상태를 대신한다 (근태는 상태점이 없다)
+  // 상태바 요약에 다 담기지 않는 상태는 툴팁이 대신한다 (근태는 상태점이 없다)
   const summaryTitle =
     busy === 'fetch' && !info
       ? '근태 확인 중'
@@ -159,7 +159,7 @@ export function AttendanceWidget() {
             : `근태 — ${info.comeTime} → ${info.leaveTime} (완료)`;
 
   const icon = <Icon name="building" size={12} />;
-  // 출퇴근 완료 체크 — 근태는 상태점 없이 글자로 말하므로, 이것만은 축소 타일에도 남긴다
+  // 출퇴근 완료 체크 — 근태는 상태점 없이 글자로 말하므로, 이것만은 상태바 항목에도 남긴다
   const okMark =
     info && !nextAction ? (
       <span className="sbw__ok" title="오늘 출퇴근 완료">
@@ -168,10 +168,11 @@ export function AttendanceWidget() {
     ) : null;
 
   return (
-    // 축소 타일에는 조회 실패를 점으로 알린다 — 접힌 채로는 아래 에러 문구가 보이지 않는다
-    <SidebarWidget
+    // 상태바 항목에는 조회 실패를 점으로 알린다 — 팝오버를 열기 전엔 아래 에러 문구가 보이지 않는다
+    <StatusWidget
       icon={icon}
       dot={error ? <StatusDot status="fail" /> : okMark}
+      label={<span className="statusbar__meta">{summary}</span>}
       tooltip={error ? `근태 — ${error}` : summaryTitle}
     >
       <div className="sbw" title={summaryTitle}>
@@ -227,6 +228,6 @@ export function AttendanceWidget() {
           </Suspense>
         )}
       </div>
-    </SidebarWidget>
+    </StatusWidget>
   );
 }

@@ -7,11 +7,11 @@ import {
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
-import { SidebarWidget } from '../../../components/SidebarWidget';
+import { StatusWidget } from '../../../components/StatusWidget';
 import { StatusDot } from '../../../components/StatusDot';
 import { errMsg } from '../../../lib/errMsg';
 
-/** 사이드바 하단 미러링 위젯 — scrcpy 로 USB 폰 화면을 미러링한다. */
+/** 상태바 폰 미러링 위젯 — scrcpy 로 USB 폰 화면을 미러링한다 (본체는 상태바 팝오버). */
 export function MirrorWidget() {
   const [status, setStatus] = useState<MirrorStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,7 +68,7 @@ export function MirrorWidget() {
           : '제어 중 (화면 없음)'
         : (status.device ?? issue?.label ?? 'USB 기기 없음');
   const canStart = !!status?.installed && !!status?.device;
-  // 아이콘·상태점은 축소 타일에도 그대로 쓴다 (SidebarWidget 이 팝오버 진입점으로 삼는다)
+  // 아이콘·상태점은 상태바 항목에도 그대로 쓴다 (StatusWidget 이 팝오버 진입점으로 삼는다)
   const icon = <Icon name="smartphone" size={12} />;
   const dot = (
     <StatusDot
@@ -79,7 +79,12 @@ export function MirrorWidget() {
 
   return (
     // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
-    <SidebarWidget icon={icon} dot={dot} tooltip={tooltip}>
+    <StatusWidget
+      icon={icon}
+      dot={dot}
+      label={<span className="statusbar__meta">{statusText}</span>}
+      tooltip={tooltip}
+    >
       <div className="sbw" title={tooltip}>
         {/* 한 줄: 아이콘 · 기기/상태 · 우측 액션 — 기기 없으면 새로고침만, 있으면 모드 버튼 */}
         <div className="sbw__row">
@@ -143,6 +148,6 @@ export function MirrorWidget() {
           <p className="hint">{issue.hint}</p>
         )}
       </div>
-    </SidebarWidget>
+    </StatusWidget>
   );
 }

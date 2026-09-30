@@ -63,14 +63,12 @@ export const SessionTabs = memo(function SessionTabs({
   draggingId,
   canCreate,
   changesOpen,
-  moRunning,
   editorName,
   canOpenEditor,
   onSelect,
   onClose,
   onNew,
   onToggleChanges,
-  onOpenMo,
   onOpenEditor,
   onDragStartSession,
   onDragEndSession,
@@ -94,7 +92,6 @@ export const SessionTabs = memo(function SessionTabs({
   /** 워크트리가 선택돼 있을 때만 새 세션을 만들 수 있다 ('기타'는 위치가 없다) */
   canCreate: boolean;
   changesOpen: boolean;
-  moRunning: boolean;
   /** 워크트리를 열 IDE 이름 — 미설치면 null 이고 버튼 자체를 그리지 않는다 */
   editorName: string | null;
   /** 워크트리가 선택돼 있을 때만 열 수 있다 (canCreate 와 같은 조건) */
@@ -103,7 +100,6 @@ export const SessionTabs = memo(function SessionTabs({
   onClose: (s: TerminalSessionInfo) => void;
   onNew: () => void;
   onToggleChanges: () => void;
-  onOpenMo: () => void;
   onOpenEditor: () => void;
   onDragStartSession: (id: string) => void;
   onDragEndSession: () => void;
@@ -768,18 +764,6 @@ export const SessionTabs = memo(function SessionTabs({
                 onClick={onToggleChanges}
               >
                 <Icon name="git-branch" size={16} />
-              </button>
-            </Tooltip>
-            <Tooltip
-              label={`모바일(MO) 접속${moRunning ? ' — 서버 켜짐' : ' — 서버 꺼짐'}`}
-            >
-              <button
-                type="button"
-                className={`icon-btn terminal__mo-btn${moRunning ? ' terminal__mo-btn--on' : ''}`}
-                aria-label="모바일(MO) 접속"
-                onClick={onOpenMo}
-              >
-                <Icon name="smartphone" size={16} />
               </button>
             </Tooltip>
           </>

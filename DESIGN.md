@@ -55,13 +55,13 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 > 무드: **Signal** — 흑연 바탕 위 단 하나의 인디고 액센트. 정보는 조밀하게, 상태는 **색 + 모양(점·아이콘) + 문구**로 함께, 티켓 키·빌드 번호·포트·경로 같은 식별자는 모노로.
 > 테마: **다크가 기본 무드**, 라이트는 같은 역할의 대비만 뒤집은 것. 설정은 시스템/라이트/다크.
 > 목업(정본 시안): https://claude.ai/artifact/D6HFb87Zfa5MiJpEt3oSdB — 화면·모달·상태 화면이 모두 여기 있다. 새 UI 는 목업과 이 문서를 함께 본다.
-> ⚠️ 2026-09-30 리디자인 진행 중 — §0~§4(공용 컴포넌트)까지 Signal 기준으로 갱신됨. **§4 '셸' 과 §5 레이아웃은 3단계(사이드바 3그룹·상태바·탑바)에서 갱신한다** — 그 전까지 비브런시·위젯 서술은 현행 구조 설명이다.
+> ⚠️ 2026-09-30 리디자인 진행 중 — §0~§4(공용 컴포넌트·셸)까지 Signal 기준. 섹션별 화면은 5단계에서 목업 기준으로 재구성한다.
 
 ## 0. 디자인 원칙
 
 1. **액센트는 하나** — 링크·primary 버튼·포커스·활성 표시는 `--accent`(인디고) 단일. 두 번째 액센트 금지. 앱 아이콘의 켜진 타일도 같은 색이다.
 2. **상태 = 색 + 모양 + 문구** — 색만으로 구분하지 않는다. 배지는 점 + 문구, 경고는 아이콘 + 문구.
-3. **식별자는 모노** — 티켓 키(`BBJ-2924`)·빌드 번호(`#482`)·해시·포트·경로·시각·IP 는 `--font-mono`.
+3. **식별자는 모노** — 티켓 키(`BBJ-2924`)·빌드 번호(`#482`)·해시·포트·경로·시각·IP 는 `--font-mono`. ⚠️ **한글이 섞이는 문구엔 모노 금지** — JetBrains Mono 에 한글이 없어 폴백 글꼴이 셀 폭으로 벌어진다(숫자 폭만 맞추려면 `tabular-nums`).
 4. **조밀하되 숨 쉬게** — 목록 행 38px 안팎, 컨트롤 32px, 4px 그리드. 섹션 설명 문장은 빈 상태에서만.
 5. **크롬은 물러난다** — 깊이는 표면 단계(bg → surface-1 → surface-2)와 1px 헤어라인으로. 그림자는 떠 있는 레이어에만.
 6. **모든 값은 토큰에서** — hex·px 매직넘버 금지. 새 값이 필요하면 토큰을 추가한다.
@@ -133,7 +133,8 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **`--seg-on` 칩 + shadow-1** (다크에선 트랙보다 한 단 밝게) |
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |
 | `StatusDot` | `<StatusDot status md>` | `.status-dot` | `busy`·`ok`·`fail`·`idle` / `md` |
-| `SidebarWidget` | `<SidebarWidget icon dot tooltip>` | `.sbwx` | 축소 사이드바 위젯 셸 — 아이콘 타일(`__mini`) + 오른쪽 팝오버(`__body--pop`). 펼침 시엔 개입 없음(`display: contents`) |
+| `StatusBar` · `StatusBarItem` | `<StatusBar left right>` · `<StatusBarItem icon dot label count title onClick>` | `.statusbar` | 하단 상태바와 그 항목(모달을 바로 여는 메일·MO) |
+| `StatusWidget` | `<StatusWidget icon dot label tooltip>` | `.statusbar__pop` | 상태바 위젯 셸 — 항목 + 위로 뜨는 팝오버(본체 항상 마운트). 상태바 밖에선 본체 인라인 |
 | `Banner` | `<Banner variant>` | `.banner` | `warning`(기본)·`danger`·`info` |
 | `Collapsible` | `<Collapsible title icon storageKey defaultOpen>` | `.collapsible` | — |
 | `SectionHeader` | `<SectionHeader icon title sub>` | `.section-head` | 제목은 `type-h2`(600·타이트 자간) |
@@ -190,21 +191,23 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 ### Spinner (`.spinner`) — 보더 스피너(accent) / ProgressBar — 트랙 --overlay-track + --r-full, 채움은 시맨틱 색
 ### 중첩 패널 (`.panel-sunken` — 로그·커밋 패널 공용) — **panel-dark** + --r-md. 로그: --font-mono type-small + --text-2(→on-dark-2 자동). 커밋 항목: 제목 type-body 600 / 본문 --font-mono type-small / 메타 type-caption --text-3. 로딩·에러·빈 3상태 정의(에러는 --danger + alert-triangle — 다크 안에선 danger-on-dark 자동)
 
-### 셸 (macOS 네이티브 시그니처 — 비브런시 + 프로스트)
-- **비브런시 사이드바**: 기본 220px(가변 — 아래 '폭 조절' 참조), `BrowserWindow vibrancy: 'sidebar'` 재질이 그대로 비치도록 **배경 transparent**(Finder 류). html/body 도 투명 유지, **불투명 채색은 `.content`(--bg)에서만** — 다른 곳을 불투명하게 칠하면 재질이 가려진다. 항목 hover 는 표면 승격이 아니라 `--overlay-hover`(재질 위 은은한 오버레이), 활성은 **accent-soft + 아이콘 --accent 틴트**. `nativeTheme.themeSource` 를 테마 설정과 연동해 재질·신호등이 앱 테마를 따른다(main.ts·settings ipc).
-- **프로스트 타이틀바**(`.topbar`): **창 전체 폭을 가로지르는 fixed 바**(z-index 10, 높이 `--titlebar-h: 44px`) — `.main`·`.sidebar` 가 `padding-top: var(--titlebar-h)` 로 바 밑까지 차지해 **콘텐츠가 블러 뒤로 스크롤돼 지나간다**. `background: var(--frost)` + `backdrop-filter: blur(20px) saturate(180%)` (macOS 통합 툴바). **드래그 영역 유지 필수**(.sidebar drag / nav·footer no-drag / 탑바 drag)
-  - ⚠️ **좌측 여백은 `max(var(--titlebar-safe), calc(var(--sidebar-w) + 16px))`** — `--titlebar-safe: 84px` 는 macOS 신호등(`hiddenInset`, 창 좌상단 고정) 예약폭이다. 접으면 신호등 오른쪽에서, 펼치면 콘텐츠 컬럼에 맞춰 컨트롤이 시작한다.
-  - ⚠️ **사이드바 우측 경계선은 `border-right` 가 아니라 `.sidebar::after`**(`top: var(--titlebar-h)`) — 보더로 두면 상단 44px 에서도 선이 프로스트 바 밑으로 비쳐 통짜 스트립이 갈라지고, **신호등이 그 이음선에 걸친 모양이 된다**(2026-08-06 사용자 지적 — 접힌 60px 레일에서 초록 버튼이 경계선 위에 놓였다). grip 도 같은 이유로 `top: var(--titlebar-h)`.
-- **사이드바 폭 조절 / 축소 모드** (`Sidebar.tsx` + `.sidebar__grip`): 우측 테두리를 끌어 **180~320px** 로 조절하고, **150px 아래로 끌면 60px 축소 모드**로 스냅한다(더블클릭·Enter 로도 토글). 폭·접힘은 `localStorage`(`sidebar:width`·`sidebar:collapsed`)에 남는다.
-  - 실제 폭은 **`--sidebar-w`** 로 노출된다 — 사이드바 폭에 기대는 레이아웃(`.jira-view` 의 `calc(100vw - var(--sidebar-w) - 48px)`)은 반드시 이 변수를 봐야 한다. **px 하드코딩 금지.**
-  - 축소 폭 60px = 좌우 패딩(8) + 아이콘 필 44. 신호등은 전체폭 타이틀바가 흡수하므로 이 폭과 무관하다(예전엔 신호등 침범 때문에 72px 하한이 있었다).
-  - ⚠️ grip 에 **`-webkit-app-region: no-drag` 필수** — `.sidebar` 가 `drag` 라 이게 없으면 창 드래그가 pointerdown 을 가로채 리사이즈가 시작조차 안 된다.
-  - 축소 시엔 **글자만 감추고 상태를 나르는 점은 남긴다**(StatusDot·메일 안읽음 점·근태 완료 체크). 위젯 루트의 `title` 이 감춰진 글자를 대신한다.
-  - ⚠️ **축소 상태에서도 조작 경로는 반드시 남긴다** — 사이드바 위젯(VPN·미러링·근태)은 공용 `SidebarWidget` 셸이 아이콘 타일(`.sbwx__mini`)만 남기고, 타일을 누르면 위젯 본체가 **오른쪽 팝오버**(`.sbwx__body--pop`, 232px · usePopover `side: 'right'`)로 펼쳐진다(macOS 메뉴바 위젯). 접은 채로 미러링·VPN 연결·출퇴근·야근 결재까지 다 된다. 메일 위젯은 예외로 타일 자신이 진입점(접혀 있으면 브라우저가 아니라 앱 내 모달).
-  - ⚠️ **조작 버튼을 `display:none` 으로 감추지 말 것** — 예전엔 축소 모드에서 `.sbw__actions`·`.sbw__buttons` 를 지웠고, 그래서 접은 채로는 아이콘을 눌러도 아무 일도 일어나지 않았다(2026-08-05 사용자 지적).
+### 셸 (Signal — 불투명 패널 + 프로스트 탑바 + 하단 상태바)
+- **구조**: `.app` 은 2행 그리드 — 위 `사이드바 | 콘텐츠`, 아래 창 전체 폭 **상태바**(`--statusbar-h: 28px`). 사이드바·상태바는 **불투명 패널 면(`--surface-1`)**, 콘텐츠는 그라운드(`--bg`). 창의 `vibrancy: 'sidebar'` 재질은 로드 전 배경으로만 남고 어디서도 비치지 않는다(2026-09-30 — 배경화면 색에 따라 틴트가 돌던 것을 걷었다).
+- **사이드바**: 브랜드(앱 아이콘과 같은 도형 — 색은 토큰) → **개발 / 리소스 / 업무 그룹 라벨**(캡션, `SECTIONS` 의 `group`) → 하단 환경설정. 항목 hover 는 surface-2, 활성은 **surface-2 + 1px 윤곽 + 아이콘 액센트**. 카운트 뱃지는 모노 캡슐(새 티켓·입력 대기는 액센트 면).
+- **프로스트 타이틀바**(`.topbar`): 창 전체 폭 fixed 바(z-index 10, `--titlebar-h: 44px`) — `.main`·`.sidebar` 가 `padding-top: var(--titlebar-h)` 로 바 밑까지 차지한다. `var(--frost)` + `backdrop-filter`. 뒤로/앞으로 + **경로 표시 `그룹 / 섹션`**. 드래그 영역 유지 필수(.sidebar·탑바 drag / nav no-drag).
+  - ⚠️ 좌측 여백은 `--titlebar-safe: 84px`(신호등 예약폭) — 사이드바를 접어도 컨트롤이 신호등 바로 오른쪽에서 시작한다.
+  - ⚠️ **사이드바 우측 경계선은 `border-right` 가 아니라 `.sidebar::after`**(`top: var(--titlebar-h)`) — 보더면 신호등이 이음선에 걸친다(2026-08-06). grip 도 같은 이유로 `top: var(--titlebar-h)`.
+- **하단 상태바**(`StatusBar` · `.statusbar`): 왼쪽 **VPN · 메일 · 폰 미러링 · MO**, 오른쪽 **근태**. 항목은 `[아이콘][상태점][짧은 문구(값은 tabular-nums)][카운트]` 한 줄, 세로 구분선으로 나눈다.
+  - VPN·미러링·근태는 **`StatusWidget`** 셸 — 누르면 위젯 본체가 **위로 뜨는 팝오버**(`.statusbar__pop`, 280px · `usePopover side: 'top'`). 본체는 항상 마운트(닫힘은 `hidden`) — 근태 초기 조회가 headless 그룹웨어라 재마운트 금지.
+  - 메일은 누르면 **바로 리더 모달**, MO 는 **접속 모달**(터미널 탭바의 MO 버튼은 없앴다 — 여기가 유일한 진입점). 브라우저 메일함 열기는 메일 모달 목록 머리에 있다.
+  - 상태바 밖(폰 셸의 근태 화면)에서는 `StatusWidget` 이 본체를 그대로 인라인으로 그린다.
+- **사이드바 폭 조절 / 축소 모드** (`Sidebar.tsx` + `.sidebar__grip`): 우측 테두리를 끌어 **180~320px**, **150px 아래로 끌면 60px 축소**(더블클릭·Enter 로도 토글). `localStorage`(`sidebar:width`·`sidebar:collapsed`).
+  - 실제 폭은 **`--sidebar-w`** — 사이드바 폭에 기대는 레이아웃(`.jira-view`)은 이 변수를 볼 것. px 하드코딩 금지.
+  - 축소하면 라벨은 title 툴팁, **그룹 라벨은 24px 짧은 구분선**, 뱃지는 아이콘 우상단으로. 상주 위젯은 상태바에 있어 축소와 무관하다.
+  - ⚠️ grip 에 **`-webkit-app-region: no-drag` 필수** — 없으면 창 드래그가 pointerdown 을 가로챈다.
 - **스크롤바**: thumb --border-strong, hover --scrollbar-hover
-- **macOS 신호등**: `hiddenInset` 보존 + `trafficLightPosition: { x: 20, y: 16 }` (44px 타이틀바 세로 중앙 정렬 — 기본값은 28px 타이틀바 기준이라 위로 떠 보인다). 렌더러 쪽 여백은 `--titlebar-h`/`--titlebar-safe` 가 담당
-- ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질이 가려짐(로드 전 배경도 재질이라 플래시 없음)
+- **macOS 신호등**: `hiddenInset` + `trafficLightPosition: { x: 20, y: 16 }` (44px 타이틀바 세로 중앙).
+- ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질을 로드 전 배경으로 쓰므로 플래시가 없다.
 
 ### Icon (`Icon.tsx`)
 - **Lucide path 이식**(ISC — 파일 상단 라이선스 고지 주석, 의존성 추가 없음). viewBox 24 / stroke-width 2 / `currentColor`
@@ -256,7 +259,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 1. **토대** ✅ — `_base.scss` 토큰 값 교체(역할 이름 유지) · IBM Plex Sans KR 번들 · 앱 아이콘(`npm run icon`)
 2. **공용 컴포넌트** ✅ — 버튼 6px 각형·500 · 배지 작은 사각 · 세그 `--seg-on` · 커스텀 체크 · 떠 있는 레이어 surface-2 · 모달 `--r-xl` · `--scrim`
-3. **셸** — 사이드바 개발/리소스/업무 3그룹 + 축소 · 탑바(뒤로/앞으로 + 경로) · 위젯 4종 → 하단 상태바 + 팝오버
+3. **셸** ✅ — 사이드바 개발/리소스/업무 3그룹 + 축소 · 탑바(뒤로/앞으로 + 경로) · 위젯 4종 + MO → 하단 상태바 + 팝오버 · 사이드바·상태바 불투명
 4. **⌘K 명령 팔레트** (신규)
 5. **섹션별 재구성** — 목업 보드와 대조하며 한 섹션씩(기능 SCSS 의 `--r-full` 필 잔재도 이때 정리)
 - 매 단계: `tsc` · `lint` · `test` · lite `typecheck` · 개발 인스턴스 확인 · `chartTheme.ts` FALLBACK 을 토큰과 동기화

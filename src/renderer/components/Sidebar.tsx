@@ -1,15 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { beginPointerDrag } from '../lib/pointerDrag';
-
-/**
- * 사이드바가 접혀 있는지 — 안쪽 위젯이 축소 상태에 맞춰 동작을 바꿀 때 쓴다.
- * (접히면 글자가 사라져 아이콘이 유일한 진입점이 되므로, 그 아이콘의 역할이 달라질 수 있다)
- * 사이드바 밖(예: MO 셸)에서 호출하면 항상 false — 기존 동작 그대로다.
- */
-const CollapsedContext = createContext(false);
-
-export const useSidebarCollapsed = () => useContext(CollapsedContext);
 
 export interface SidebarSection {
   id: string;
@@ -18,6 +9,8 @@ export interface SidebarSection {
   icon: ReactNode;
   /** true 면 메뉴 하단 그룹으로 분리 (환경설정 등) */
   bottom?: boolean;
+  /** 메뉴 그룹 라벨 (개발·리소스·업무) — 같은 값이 연속된 항목끼리 묶고, 값이 바뀌는 자리에 라벨을 그린다 */
+  group?: string;
   /** 항목 우측 카운트 뱃지 (0 이거나 없으면 숨김 — Jira 미해결 수 등) */
   badge?: number;
   /** true 면 뱃지를 액센트 필로 강조 (확인 안 한 새 티켓 등) */
@@ -46,14 +39,10 @@ export function Sidebar({
   sections,
   activeId,
   onSelect,
-  header,
-  footer,
 }: {
   sections: SidebarSection[];
   activeId: string;
   onSelect: (id: string) => void;
-  header?: ReactNode; // 최상단 고정 영역 (메일 위젯 등) — 브랜드와 메뉴 사이에 분리 표시
-  footer?: ReactNode; // 하단 고정 영역 (근태 위젯 등)
 }) {
   const [width, setWidth] = useState(savedWidth);
   const [collapsed, setCollapsed] = useState(
@@ -105,7 +94,10 @@ export function Sidebar({
           setWidth(keepW);
         }
         localStorage.setItem('sidebar:width', String(widthRef.current));
-        localStorage.setItem('sidebar:collapsed', collapsedRef.current ? '1' : '0');
+        localStorage.setItem(
+          'sidebar:collapsed',
+          collapsedRef.current ? '1' : '0',
+        );
       },
     });
   };
@@ -143,65 +135,104 @@ export function Sidebar({
     </button>
   );
 
-  return (
-    <CollapsedContext.Provider value={collapsed}>
-      <aside
-        className={
-          'sidebar' +
-          (collapsed ? ' sidebar--collapsed' : '') +
-          (dragging ? ' sidebar--dragging' : '')
-        }
-        style={{ width: applied, minWidth: applied }}
-      >
-        <div className="sidebar__brand">
-          <span className="sidebar__brand-mark">
-            {/* 브랜드 로고 마크 — 2×2 타일 그리드, 왼위 타일만 채움 (앱 아이콘과 통일) */}
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <rect x="14" y="14" width="7" height="7" rx="1.5" />
-            </svg>
-          </span>
-          <span className="sidebar__brand-name">One App</span>
+  // 그룹 라벨 — 앞 항목과 group 이 달라지는 자리에만 (축소 모드에선 짧은 구분선이 된다)
+  const main = sections.filter((s) => !s.bottom);
+  const grouped = main.map((s, i) => (
+    <Fragment key={s.id}>
+      {s.group && s.group !== main[i - 1]?.group && (
+        <div className="sidebar__group" role="presentation">
+          <span className="sidebar__group-label">{s.group}</span>
         </div>
-        {header && <div className="sidebar__header">{header}</div>}
-        <nav className="sidebar__nav">
-          {sections.filter((s) => !s.bottom).map(item)}
-        </nav>
-        {/* 하단 분리 그룹 (환경설정 등) — 메인 메뉴와 뚝 떨어져 위젯 바로 위 */}
-        <nav className="sidebar__nav sidebar__nav--bottom">
-          {sections.filter((s) => s.bottom).map(item)}
-        </nav>
-        {footer && <div className="sidebar__footer">{footer}</div>}
+      )}
+      {item(s)}
+    </Fragment>
+  ));
 
-        {/* 우측 테두리 손잡이 — 끌어서 폭 조절, 더블클릭·Enter 로 접기/펴기 */}
-        <div
-          className="sidebar__grip"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
-          tabIndex={0}
-          onPointerDown={onGripDown}
-          onDoubleClick={toggle}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              toggle();
-            }
-          }}
-        />
-      </aside>
-    </CollapsedContext.Provider>
+  return (
+    <aside
+      className={
+        'sidebar' +
+        (collapsed ? ' sidebar--collapsed' : '') +
+        (dragging ? ' sidebar--dragging' : '')
+      }
+      style={{ width: applied, minWidth: applied }}
+    >
+      <div className="sidebar__brand">
+        <span className="sidebar__brand-mark">
+          {/* 브랜드 마크 — 앱 아이콘(assets/icon.png)과 같은 도형: 스퀘클 + 2×2 타일, 왼위만 켜짐.
+                색은 SCSS 토큰이 칠한다(테마를 따라간다 — 다크: 흑연, 라이트: 밝은 회색) */}
+          <svg
+            width="22"
+            height="22"
+            viewBox="100 100 824 824"
+            aria-hidden="true"
+          >
+            <rect
+              className="sidebar__brand-bg"
+              x="100"
+              y="100"
+              width="824"
+              height="824"
+              rx="190"
+            />
+            <rect
+              className="sidebar__brand-on"
+              x="248"
+              y="248"
+              width="240"
+              height="240"
+              rx="64"
+            />
+            <rect
+              className="sidebar__brand-off"
+              x="536"
+              y="248"
+              width="240"
+              height="240"
+              rx="64"
+            />
+            <rect
+              className="sidebar__brand-off"
+              x="248"
+              y="536"
+              width="240"
+              height="240"
+              rx="64"
+            />
+            <rect
+              className="sidebar__brand-off"
+              x="536"
+              y="536"
+              width="240"
+              height="240"
+              rx="64"
+            />
+          </svg>
+        </span>
+        <span className="sidebar__brand-name">One App</span>
+      </div>
+      <nav className="sidebar__nav">{grouped}</nav>
+      {/* 하단 분리 그룹 (환경설정) — 위젯은 하단 상태바로 옮겼다(StatusBar) */}
+      <nav className="sidebar__nav sidebar__nav--bottom">
+        {sections.filter((s) => s.bottom).map(item)}
+      </nav>
+
+      {/* 우측 테두리 손잡이 — 끌어서 폭 조절, 더블클릭·Enter 로 접기/펴기 */}
+      <div
+        className="sidebar__grip"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
+        tabIndex={0}
+        onPointerDown={onGripDown}
+        onDoubleClick={toggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+      />
+    </aside>
   );
 }

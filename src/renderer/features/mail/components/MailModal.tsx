@@ -12,6 +12,7 @@ import { Modal } from '../../../components/Modal';
 import { Pagination } from '../../../components/Pagination';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { Segment } from '../../../components/Segment';
+import { Tooltip } from '../../../components/Tooltip';
 import { mailTime, senderName } from '../lib/format';
 import { AuthCodePanel } from './AuthCodePanel';
 
@@ -235,6 +236,17 @@ export function MailModal({
                 title="목록 새로고침"
               />
             )}
+            {/* 브라우저로 메일함 — 예전 사이드바 메일 아이콘 타일의 동작(상태바로 옮기며 여기로) */}
+            <Tooltip label="비즈박스 메일함 열기 (브라우저)">
+              <button
+                type="button"
+                className="icon-btn mail-modal__web"
+                aria-label="비즈박스 메일함 열기 (브라우저)"
+                onClick={() => void window.oneApp.mail.openWeb()}
+              >
+                <Icon name="arrow-up-right" size={14} />
+              </button>
+            </Tooltip>
           </div>
 
           {tab === 'authcode' ? (

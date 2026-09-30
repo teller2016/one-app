@@ -46,7 +46,6 @@ import {
   worktreeLabel,
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
-import { MoAccessModal } from './MoAccessModal';
 import { NewSessionModal } from './NewSessionModal';
 import { PresetBar } from './PresetBar';
 import { PresetsModal } from './PresetsModal';
@@ -145,8 +144,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const [worktreeFor, setWorktreeFor] = useState<TerminalWorkspace | null>(null);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
   const [presetsOpen, setPresetsOpen] = useState(false);
-  const [moOpen, setMoOpen] = useState(false);
-  const [moRunning, setMoRunning] = useState(false);
   // 변경사항 드로어 — 열림 여부는 세션과 무관한 화면 취향이라 localStorage 로 기억
   const [changesOpen, setChangesOpen] = useState(
     () => localStorage.getItem('terminal:changesOpen') === '1'
@@ -166,7 +163,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     setWorktreeFor(null);
     setNewSessionOpen(false);
     setPresetsOpen(false);
-    setMoOpen(false);
     setChangesFullOpen(false);
     const el = document.activeElement;
     if (el instanceof HTMLElement && rootRef.current?.contains(el)) el.blur();
@@ -325,14 +321,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   }, [cwdKey, presets, workspaceIdOf]);
 
   // MO 서버 실행 여부 — 아이콘에 상태 점 표시
-  useEffect(() => {
-    const api = terminalApi();
-    if (!api) return;
-    const refreshMo = async () => setMoRunning((await api.server.status()).running);
-    void refreshMo();
-    return api.server.onChanged(() => void refreshMo());
-  }, []);
-
   // ── 파생값 — 선택된 워크트리의 세션들(탭), 어디에도 안 속한 세션들(기타) ──
   const allPaths = useMemo(() => {
     const set = new Set<string>();
@@ -1061,7 +1049,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
 
   const openNewWorkspace = useCallback(() => setNewWsOpen(true), []);
   const openNewSession = useCallback(() => setNewSessionOpen(true), []);
-  const openMoModal = useCallback(() => setMoOpen(true), []);
 
   // 변경사항 대상 — 워크트리 선택이면 그 경로(세션 불필요), '기타'면 활성 세션의 cwd
   const changesTarget: ChangesTarget | null =
@@ -1161,14 +1148,12 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           draggingId={dragSession}
           canCreate={canCreate}
           changesOpen={changesOpen}
-          moRunning={moRunning}
           editorName={editorName}
           canOpenEditor={canCreate}
           onSelect={selectTab}
           onClose={closeSessionFromTab}
           onNew={openNewSession}
           onToggleChanges={toggleChanges}
-          onOpenMo={openMoModal}
           onOpenEditor={openInEditor}
           onDragStartSession={onDragStartSession}
           onDragEndSession={onDragEndSession}
@@ -1393,7 +1378,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onClose={() => setPresetsOpen(false)}
         />
       )}
-      {moOpen && <MoAccessModal onClose={() => setMoOpen(false)} />}
     </div>
   );
 }

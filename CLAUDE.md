@@ -45,8 +45,8 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 
 **기능 목록**
 - **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 포트 · 배포 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
-- **사이드바 위젯**: 메일(상단) · 폰 미러링 · VPN · 출퇴근(하단 — 야근 결재 모달 진입점 포함)
-- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용)
+- **상태바 위젯**(창 하단 — `components/StatusBar`): VPN · 메일 · 폰 미러링 · MO(모바일 접속) · 출퇴근(오른쪽 — 야근 결재 모달 진입점 포함)
+- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용) · 메일 리더·MO 접속 모달(상태바 항목)
 - **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리)
 
 ## ⚠️ 반드시 지킬 것
@@ -94,7 +94,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `main-process.md` | `src/main/**` · `src/preload/**` · `src/shared/**` | 공통 유틸·IPC 등록·`handleShared`(MO 화이트리스트) |
 | `standalone-lite.md` | `standalone/**` | 단독 배포판 — `@one` alias·preload 부분집합·아이콘·pkill 패턴 |
 | `renderer-ui.md` | `src/renderer/**` · `src/mobile-app/**` (ts·tsx) | 공용 컴포넌트 목록·피커 팝오버·공통 훅 |
-| `styles.md` | `**/*.scss` · `DESIGN.md` | SCSS 작성법·공통 클래스·비브런시 셸·폰 스타일 |
+| `styles.md` | `**/*.scss` · `DESIGN.md` | SCSS 작성법·공통 클래스·셸(상태바)·폰 스타일 |
 | `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |
 | `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
 | `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
