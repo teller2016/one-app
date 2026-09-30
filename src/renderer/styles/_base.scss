@@ -1343,19 +1343,27 @@ input.input--bare {
     background: var(--surface-2);
   }
 
+  // 목업 면 없는 아이콘 버튼(.btn-ghost.btn-icon — 탑바 뒤로/앞으로 등)의 비활성은 .35
   &:disabled {
-    opacity: 0.45;
+    opacity: 0.35;
     cursor: default;
   }
 
+  // 목업 .btn.btn-icon — 기본 버튼과 같은 면·테두리의 30 정사각 (포트 탑바 새로고침 등)
   &--bordered {
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border);
+    width: var(--control-h-btn);
+    height: var(--control-h-btn);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    color: var(--text);
 
     &:hover:not(:disabled) {
-      background: transparent;
-      border-color: var(--accent);
+      background: var(--surface-3);
+    }
+
+    &:disabled {
+      opacity: 0.45;
     }
   }
 

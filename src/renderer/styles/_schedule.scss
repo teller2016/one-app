@@ -108,9 +108,15 @@
     padding: 0 16px;
     border-bottom: 1px solid var(--border);
 
-    // 종료 시각 피커는 칸 폭을 채운다 (피커 자체 크기는 공용 그대로)
+    // 종료 시각 피커는 칸 폭을 채운다
     .picker--time {
       width: 100%;
+    }
+
+    // 행 안 입력(종료 시각·일정명)은 목업 30 — 환경설정 그리드와 같은 방식
+    input.input {
+      height: var(--control-h-field);
+      min-height: var(--control-h-field);
     }
   }
 
@@ -200,6 +206,12 @@
 
     .picker--time {
       width: 100%;
+    }
+
+    // 추가 행 입력도 목업 30
+    input.input {
+      height: var(--control-h-field);
+      min-height: var(--control-h-field);
     }
   }
 
