@@ -29,7 +29,7 @@ paths:
 
 **서비스는 두 곳에 나눠 정의한다** — 표시 이름·코드 유효시간(분)은 렌더러와 main 이 함께 봐야 해서 `shared/types.ts` 의 `AUTH_CODE_SERVICES`(+`authCodeService()`)에, 발신자·제목·본문 정규식은 main 의 `config.ts` `authCode.services` 에 둔다. **서비스를 추가하려면 두 곳에 같은 키로 넣으면 UI 버튼까지 따라온다**(패널이 목록을 그대로 렌더한다). 조회 채널은 `mail:authcode:fetch(loginId, service?)` — **service 를 생략하면 피그마**라서 유데미가 붙기 전(2026-09-11) 호출 형태와 호환되고, 폰에서 모르는 문자열이 와도 `patternsOf`·`authCodeService` 가 피그마로 떨어뜨린다(둘 다 검증 완료).
 
-**계정 등록은 환경설정 → [추가 비즈박스 계정]**(`AltAccountsCard` — mail 기능이 `index.ts` 로 공개하고 `SettingsSection` 이 렌더한다). 조회 화면과 등록 화면을 가른 이유는 계정 관리가 다른 계정 설정과 한자리에 있어야 찾기 쉽기 때문이다. 비밀번호는 `safeStorage` 로 암호화해 `userData/alt-mail-accounts.json` 에 두고 렌더러로는 `loginId` 만 나간다. 같은 아이디를 다시 추가하면 비밀번호만 갱신하며, **빈 비밀번호로는 덮어쓰지 않는다**(실수로 로그인이 깨지지 않게). 채널은 둘로 가른다 — **등록·삭제는 `ipcMain.handle`**(비밀번호를 받는 쓰기라 MO(폰)에 열지 않는다), **목록·코드 조회(`mail:authcode:accounts`·`fetch`)는 `handleShared`**(2026-09-10 — 폰 메일 탭의 [인증코드] 가 같은 패널을 마운트하는데 채널이 닫혀 있어 탭 전체가 오류 카드였다. loginId 와 코드 문자열만 오간다).
+**계정 등록은 환경설정 → [추가 비즈박스 계정]**(`AltAccountsCard` — mail 기능이 `index.ts` 로 공개하고 `SettingsSection` 이 그룹 패널 안에 렌더한다. 카드는 본문만 그린다). 조회 화면과 등록 화면을 가른 이유는 계정 관리가 다른 계정 설정과 한자리에 있어야 찾기 쉽기 때문이다. 비밀번호는 `safeStorage` 로 암호화해 `userData/alt-mail-accounts.json` 에 두고 렌더러로는 `loginId` 만 나간다. 같은 아이디를 다시 추가하면 비밀번호만 갱신하며, **빈 비밀번호로는 덮어쓰지 않는다**(실수로 로그인이 깨지지 않게). 채널은 둘로 가른다 — **등록·삭제는 `ipcMain.handle`**(비밀번호를 받는 쓰기라 MO(폰)에 열지 않는다), **목록·코드 조회(`mail:authcode:accounts`·`fetch`)는 `handleShared`**(2026-09-10 — 폰 메일 탭의 [인증코드] 가 같은 패널을 마운트하는데 채널이 닫혀 있어 탭 전체가 오류 카드였다. loginId 와 코드 문자열만 오간다).
 
 내 계정 경로와 갈라지는 지점:
 - 로그인은 **`loginWithAccount()`** — 공용 세션 캐시와 분리되고 전용 파티션(`AUTOMATION_PARTITION.altLogin`)을 쓴다. ⚠️ `login` 파티션을 재사용하면 `openPage` 가 쿠키를 비워 **메일 위젯·근태의 공용 세션이 통째로 날아간다**.

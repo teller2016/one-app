@@ -1,94 +1,352 @@
-// 환경설정 섹션 — 체크박스 옵션 · 출퇴근 리마인더 표 · 테스트 알림
-// (기존 _schedule.scss 에 동거하던 블록을 분리)
-
 @use './base' as *;
 
-// 출퇴근 리마인더 요일별 표 (Collapsible 그룹 안이라 자체 박스 없음)
-.settings__reminders {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 6px;
-}
+// 환경설정 — Signal 목업(Settings·SettingsAccount·SettingsMore.dc.html, 2026-09-30)을 그대로 옮긴 배치:
+// 왼쪽 그룹 목록(224 · 패널 면) | 가운데 패널 열(padding 20 32 · gap 14 · 패널 max 760, 이 열만 스크롤) ·
+// 아래 저장 바(56 · 패널 면 · 윗선).
 
-// 헤더·행이 같은 grid 셀 구조를 공유 — 별도 들여쓰기 핵 없이 컬럼으로 정렬
-.settings__rem-head,
-.settings__rem-row {
-  display: grid;
-  grid-template-columns: 32px 180px 180px; // 요일 | 출근 슬롯 | 퇴근 슬롯
-  gap: 12px;
-  align-items: center;
-}
+// 라벨 열 — 입력칸 설명(--indent)이 이만큼 들여써 그 입력과 묶인다 (목업 112 + 간격 16 = 128)
+$label-w: 112px;
+$label-gap: 16px;
 
-.settings__rem-head {
-  @include type-caption;
-  padding-bottom: 2px;
-}
-
-.settings__rem-day {
-  @include type-body;
-  font-weight: 600;
-  text-align: center;
-  color: var(--text-2);
-}
-
-.settings__rem-slot {
+.settings {
+  // .section 의 여백·폭 제한을 푼다 — 목록·본문·저장 바가 각자 여백을 갖는다
+  max-width: none;
+  padding: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
+  height: 100%;
+  min-height: 0;
 
-// 반복 알림 행 (안 찍었으면 N분마다)
-.settings__repeat-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  @include type-body;
-  color: var(--text);
-}
+  // ── 왼쪽 그룹 목록 (목업 nav — 224 · padding 14 10 · gap 1) ──
+  &__nav {
+    flex-shrink: 0;
+    width: 224px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 14px 10px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface-1);
+  }
 
-// 반복 알림 분 입력 — 룩은 공용 Input(small), 여기선 배치만
-.settings__minutes {
-  flex: 0 0 auto;
-  width: 64px;
-  text-align: center;
-}
+  // 그룹 항목 — 목업 .nav (30 · padding 0 8 0 10 · 모서리 6 · 13/500 · 아이콘 간격 10)
+  &__nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 30px;
+    padding: 0 8px 0 10px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+    @include focus-ring;
 
-// 테스트 알림 버튼 행 — 버튼 크기는 Button size=sm 사용 (오버라이드 금지)
-.settings__test-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-}
+    &:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
 
-// 체크박스 여러 개를 세로로 쌓는다 — 공용 `.checkbox` 는 `inline-flex` 라
-// 감싸지 않으면 같은 줄에 흘러 붙는다(2026-09-16 알림 그룹).
-.settings__checks {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: flex-start;
-  margin-bottom: 14px; // 아래 form-row 와 같은 간격 (form-row 는 margin-top 이 없다)
-}
+    // 고른 그룹 — 한 단 올라온 면 + 안쪽 윤곽 + 액센트 아이콘 (목업 .nav.on)
+    &--on {
+      background: var(--surface-2);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
 
-// 알림음 드롭다운 — 폭을 고정한다. `.select` 는 `width:100%` 라 부모가 정해 주는데,
-// form-row 의 flex 아이템으로 들어가면 내용 폭(≈69px)까지 줄어 음원 이름이 잘렸다.
-// 가장 긴 이름(Submarine) 기준 + 다른 그룹의 Segment 와 비슷한 무게로 180px.
-.settings__sound {
-  flex: 0 0 auto;
-  width: 180px;
-}
+      svg {
+        color: var(--accent);
+      }
+    }
+  }
 
-// Collapsible 그룹 첫머리 설명 (TSX 인라인 스타일 대체)
-.settings__group-desc {
-  margin: 0 0 12px;
-}
+  &__nav-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-// 일정 등록 — 재택 요일 체크박스 행 (월~금 가로 나열)
-.settings__days-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  // ── 가운데: 스크롤 열 + 저장 바 ──
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  &__scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px 32px;
+  }
+
+  // 상단 배너(키체인 불가·조회 실패) — 패널 열과 같은 폭
+  &__banner {
+    max-width: 760px;
+  }
+
+  // ── 그룹 패널 (목업 .panel — padding 14 20 · gap 10 · max 760) ──
+  &__panel {
+    flex-shrink: 0;
+    max-width: 760px;
+    padding: 14px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+    // 목록에서 골라 스크롤해 올 때 본문 위 여백(20)만큼 띄워 멈춘다
+    scroll-margin-top: 20px;
+    transition: border-color var(--dur-1) var(--ease);
+
+    // 펼침 애니메이션 — 공용 .collapsible 과 같은 방식(::details-content 높이 보간)
+    &::details-content {
+      block-size: 0;
+      overflow: hidden;
+      transition:
+        block-size var(--dur-3) var(--ease),
+        content-visibility var(--dur-3) var(--ease) allow-discrete;
+    }
+
+    &[open]::details-content {
+      block-size: auto;
+    }
+
+    // 고른 그룹 — 윤곽 한 단 (목업 border-color: line-2)
+    &--on {
+      border-color: var(--border-strong);
+    }
+
+    // 본문 설명·강조 — 설명 안의 굵은 글자는 한 단 밝게 (목업 b color fg-2)
+    .hint {
+      margin: 0;
+      line-height: 1.6;
+
+      b {
+        color: var(--text-2);
+      }
+    }
+  }
+
+  // 머리 — 화살표(fg-3) + h2 15/600. 열리면 아래, 접히면 오른쪽
+  &__panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none; // 기본 ▶ 마커 제거
+    border-radius: var(--r-sm);
+    @include focus-ring(2px);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  &__chev {
+    display: inline-flex;
+    color: var(--text-3);
+    transform: rotate(-90deg);
+    transition:
+      transform var(--dur-2) var(--ease),
+      color var(--dur-1) var(--ease);
+  }
+
+  &__panel-head:hover &__chev {
+    color: var(--text);
+  }
+
+  &__panel[open] > &__panel-head &__chev {
+    transform: none;
+  }
+
+  &__panel-title {
+    margin: 0;
+    font-size: var(--fs-title);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  // 본문 — 머리 아래 간격 10 · 항목 사이 10 (목업 panel gap 10)
+  &__panel-body {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-top: 10px;
+
+    // 체크박스 줄은 라벨 폭만 차지한다 (늘어나면 빈 곳을 눌러도 토글된다)
+    > .checkbox {
+      align-self: flex-start;
+    }
+  }
+
+  // ── 라벨 | 입력 그리드 (목업 112 1fr · column 16 · row 8 · 가운데 정렬) ──
+  &__grid {
+    display: grid;
+    grid-template-columns: $label-w minmax(0, 1fr);
+    column-gap: $label-gap;
+    row-gap: 8px;
+    align-items: center;
+
+    // 한 줄 입력은 목업 30 (공용 32) — 소형(28: 피커·반복 분)은 그대로
+    input.input:not(.input--sm) {
+      height: var(--control-h-field);
+      min-height: var(--control-h-field);
+    }
+
+    // 일반 그룹 — 세그와 체크 사이가 조금 넓다 (목업 row-gap 10)
+    &--loose {
+      row-gap: 10px;
+    }
+  }
+
+  &__label {
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+
+  // 입력칸 설명 — 라벨 열만큼 들여쓴다
+  &__hint--indent {
+    padding-left: $label-w + $label-gap;
+  }
+
+  // 그리드 안에서 입력 바로 아래 붙는 경고(http 주소) — 입력 열에만 걸친다
+  &__grid-note {
+    grid-column: 2;
+  }
+
+  // 식별자 입력(Gitea 주소) — 모노 12.5
+  &__mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+  }
+
+  // 알림음 드롭다운 — 목업 160×28. `.select` 는 width:100% 라 래퍼(.picker)에 폭을 준다
+  &__sound {
+    flex: 0 0 auto;
+    width: 160px;
+  }
+
+  // 시각 피커 — 목업 92×28 · 값은 모노 12.5 (소형 피커는 부모 폭을 따라가므로 여기서 폭을 준다)
+  &__time {
+    display: flex;
+    width: 92px;
+
+    .picker__time-input {
+      font-family: var(--font-mono);
+      font-size: var(--fs-ui);
+    }
+  }
+
+  // 테스트 알림 줄 — 버튼 + 설명 (목업 gap 10)
+  &__test-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  // 토큰 보관 안내 띠 — 가라앉은 면 · padding 8 10 · 모서리 6 · 12 (목업)
+  &__secure {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--r-md);
+    background: var(--bg-sunken);
+    font-size: var(--fs-small);
+    color: var(--text-2);
+
+    svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+
+    b {
+      color: var(--text);
+    }
+  }
+
+  // ── 출퇴근 리마인더 표 (목업 40 140 140 · column 16 · row 6) ──
+  &__reminders {
+    display: grid;
+    grid-template-columns: 40px 140px 140px;
+    column-gap: 16px;
+    row-gap: 6px;
+    align-items: center;
+    justify-content: start;
+  }
+
+  // 요일 행은 셀만 부모 그리드에 흘려 넣는다 (행 요소는 key 를 달 자리)
+  &__rem-row {
+    display: contents;
+  }
+
+  // 머리 라벨 — 10.5 캡션 (목업 .label)
+  &__rem-head {
+    @include type-caption;
+    font-size: var(--fs-micro);
+    font-weight: 500;
+    color: var(--text-3); // ⚠️ 믹스인 뒤에 — type-caption 이 --text-2 로 덮는다
+  }
+
+  &__rem-slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  // 반복 알림 줄 (안 찍었으면 N분마다 — 목업 gap 8 · 13)
+  &__repeat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-body);
+    color: var(--text);
+  }
+
+  // 반복 간격 입력 — 목업 60×28 모노 가운데
+  &__minutes {
+    flex: 0 0 auto;
+    width: 60px;
+    font-family: var(--font-mono);
+    text-align: center;
+  }
+
+  // 일정 등록 — 재택 요일 체크 (목업 gap 14 · 라벨 안 6)
+  &__days-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+
+    .checkbox {
+      gap: 6px;
+    }
+  }
+
+  // ── 아래 저장 바 (목업 56 · padding 0 32 · 윗선 · 패널 면) ──
+  &__bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 56px;
+    padding: 0 32px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-1);
+  }
 }

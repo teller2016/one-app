@@ -359,45 +359,53 @@
     color: var(--text-3);
     font-size: var(--fs-small);
   }
-
 }
 
 // ===== 환경설정의 '추가 비즈박스 계정' 카드 =====
 .alt-accounts {
+  // 목업 SettingsAccount — 등록된 계정 줄 + 추가 줄이 한 상자(선 · 모서리 8)에 담긴다
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-tab);
+  overflow: hidden;
 
+  // 계정 줄 — 36 · padding 0 8 0 12 · 바닥선
   &__row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
-    padding-bottom: 6px;
+    height: 36px;
+    padding: 0 8px 0 12px;
     border-bottom: 1px solid var(--border);
   }
 
-  // 서비스 버튼(피그마·유데미) — 계정 줄이 좁아지면 아래로 흐른다
-  &__actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
+  // 아이디 — 열쇠(fg-3) + 모노 12.5
   &__id {
+    flex: 1;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
     color: var(--text);
-    font-size: var(--fs-body);
+
+    svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
   }
 
+  // 추가 줄 — 가라앉은 면 · padding 8 · gap 8 · 입력 28
   &__form {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    padding: 8px;
+    background: var(--bg-sunken);
   }
 }

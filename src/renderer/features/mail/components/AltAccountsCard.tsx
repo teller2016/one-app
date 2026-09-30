@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { AltMailAccount } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
-import { Collapsible } from '../../../components/Collapsible';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
@@ -13,6 +12,8 @@ import { Input } from '../../../components/Input';
  *
  * 비밀번호는 main 이 `safeStorage` 로 암호화해 보관하며 화면으로 다시 내려오지 않는다.
  * (환경설정에 두는 이유 — 계정 관리는 다른 계정 설정과 한자리에 있어야 찾기 쉽다)
+ *
+ * **패널 본문만** 그린다 — 테두리·제목·접기는 환경설정의 그룹 패널이 두른다(목업 SettingsAccount).
  */
 export function AltAccountsCard() {
   const [accounts, setAccounts] = useState<AltMailAccount[] | null>(null);
@@ -52,17 +53,13 @@ export function AltAccountsCard() {
   };
 
   return (
-    <Collapsible
-      title="추가 비즈박스 계정"
-      icon={<Icon name="key" size={14} />}
-      storageKey="settings:group:alt-accounts"
-      defaultOpen={false}
-    >
-      <p className="hint">
+    <>
+      <span className="hint">
         팀 공용 계정 등 위 계정 외의 그룹웨어 계정 — 메일 리더의{' '}
         <b>[인증코드]</b> 탭에서 피그마 로그인 코드를 받아옵니다.
-      </p>
+      </span>
 
+      {/* 등록된 계정 줄 + 맨 아래 추가 줄이 한 상자(선·모서리 8)에 담긴다 */}
       <div className="alt-accounts">
         {accounts?.map((a) => (
           <div key={a.loginId} className="alt-accounts__row">
@@ -71,11 +68,11 @@ export function AltAccountsCard() {
               {a.loginId}
             </span>
             <Button
-              variant="ghost"
-              size="sm"
+              variant="plain"
+              size="xs"
               onClick={() => void removeAccount(a.loginId)}
             >
-              <Icon name="x" size={13} />
+              <Icon name="x" size={12} />
               삭제
             </Button>
           </div>
@@ -85,6 +82,7 @@ export function AltAccountsCard() {
           <Input
             small
             placeholder="계정 아이디"
+            aria-label="계정 아이디"
             value={newId}
             onChange={(e) => setNewId(e.target.value)}
           />
@@ -92,27 +90,28 @@ export function AltAccountsCard() {
             small
             type="password"
             placeholder="비밀번호"
+            aria-label="비밀번호"
             value={newPw}
             onChange={(e) => setNewPw(e.target.value)}
           />
           <Button
-            size="sm"
+            size="xs"
             loading={saving}
             disabled={!newId.trim() || !newPw}
             onClick={() => void addAccount()}
           >
-            <Icon name="plus" size={13} />
+            <Icon name="plus" size={12} />
             추가
           </Button>
         </div>
-
-        {error && <Banner variant="danger">{error}</Banner>}
       </div>
 
-      <p className="note">
+      {error && <Banner variant="danger">{error}</Banner>}
+
+      <span className="hint">
         이미 등록한 아이디를 다시 추가하면 <b>비밀번호만 갱신</b>됩니다.
         비밀번호는 macOS 키체인으로 <b>암호화</b>되어 이 기기에만 저장됩니다.
-      </p>
-    </Collapsible>
+      </span>
+    </>
   );
 }
