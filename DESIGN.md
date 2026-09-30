@@ -21,7 +21,7 @@ colors:            # 라이트 / 다크
   text-3:          ["#69717c", "#858c96"]
   accent:          ["#4353d6", "#8c9bff"]   # 링크·primary·포커스·앱 아이콘 켜진 타일
   on-accent:       ["#ffffff", "#0b0c0e"]   # 다크의 밝은 액센트 위는 어두운 글자
-  ok:              ["#17804f", "#4ccb8d"]
+  ok:              ["#136b44", "#4ccb8d"]
   warning:         ["#a55f00", "#f2a53a"]
   danger:          ["#c4323a", "#f2676d"]
   ot:              ["#b45309", "#ff8f4d"]
@@ -55,7 +55,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 > 무드: **Signal** — 흑연 바탕 위 단 하나의 인디고 액센트. 정보는 조밀하게, 상태는 **색 + 모양(점·아이콘) + 문구**로 함께, 티켓 키·빌드 번호·포트·경로 같은 식별자는 모노로.
 > 테마: **다크가 기본 무드**, 라이트는 같은 역할의 대비만 뒤집은 것. 설정은 시스템/라이트/다크.
 > 목업(정본 시안): https://claude.ai/artifact/D6HFb87Zfa5MiJpEt3oSdB — 화면·모달·상태 화면이 모두 여기 있다. 새 UI 는 목업과 이 문서를 함께 본다.
-> ⚠️ 2026-09-30 리디자인 진행 중 — **§0~§3 은 Signal 기준으로 갱신됨. §4 이후 컴포넌트 스펙은 2단계(공용 컴포넌트)에서 갱신한다.** 그 전까지 §4 의 "필 버튼·애플" 서술은 옛 기준이다.
+> ⚠️ 2026-09-30 리디자인 진행 중 — §0~§4(공용 컴포넌트)까지 Signal 기준으로 갱신됨. **§4 '셸' 과 §5 레이아웃은 3단계(사이드바 3그룹·상태바·탑바)에서 갱신한다** — 그 전까지 비브런시·위젯 서술은 현행 구조 설명이다.
 
 ## 0. 디자인 원칙
 
@@ -81,7 +81,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | 잉크 | `--text` / `-2` / `-3` | `#15171a` / `#4a515b` / `#69717c` | `#e8eaed` / `#aeb4bc` / `#858c96` | 본문 / 보조 / 메타 |
 | 액센트 | `--accent` | `#4353d6` | `#8c9bff` | 링크·활성·포커스 (bg 위 5.9 / 7.9:1) |
 | 버튼 글자 | `--on-accent` | `#ffffff` | `#0b0c0e` | ⚠️ 다크는 액센트가 밝아 **어두운 글자** — 흰 글자는 2.4:1 |
-| 성공 | `--ok` | `#17804f` | `#4ccb8d` | 성공·연결됨·작업 중 아크 |
+| 성공 | `--ok` | `#136b44` | `#4ccb8d` | 성공·연결됨·작업 중 아크 |
 | 주의 | `--warning` | `#a55f00` | `#f2a53a` | 입력 대기·PROD·미달/초과 |
 | 위험 | `--danger` | `#c4323a` | `#f2676d` | 실패·종료·삭제 |
 | 초과근무 | `--ot` | `#b45309` | `#ff8f4d` | OT 전용 |
@@ -122,15 +122,15 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 | 컴포넌트 | React API | 루트 클래스 | variant / size |
 |---|---|---|---|
-| `Button` | `<Button variant size loading>` | `.btn` | **필 캡슐**. variant: `primary`(액션 블루)·`ghost`(기본)·`danger` / size: `md`(기본)·`sm` |
+| `Button` | `<Button variant size loading>` | `.btn` | **6px 각형**(필 아님). variant: `primary`(액센트 면)·`ghost`(기본 — surface-2 면)·`danger`(soft 면) / size: `md` 32px·`sm` 28px |
 | `IconButton` | (클래스 직접) | `.icon-btn` | 24×24 / bordered 28×28 |
 | `TextLink` | `<TextLink small external>` | `.textlink` | `small` · 외부링크 arrow-up-right |
-| `Input` | `<Input small>` | `.input` | `small` → `.input--sm` (11px 라운드 사각 — 필 아님) |
+| `Input` | `<Input small>` | `.input` | `small` → `.input--sm` (6px 라운드) |
 | `Textarea` | `<Textarea code>` | `.input` | `code` → `.input--code`(모노·**다크 패널**) |
-| `Checkbox` | `<Checkbox label danger>` | `.checkbox` | 라벨 클릭 토글 · accent 체크 / `danger`(운영 확인 등 — danger 체크) |
+| `Checkbox` | `<Checkbox label danger>` | `.checkbox` | 네이티브 input 유지 + `appearance:none` 커스텀 체크(16px · --r-xs · 체크 시 액센트 면) / `danger` |
 | `Select` | `<Select options value onChange small>` | `.select` | 커스텀 팝오버(picker 계열 재사용 — 네이티브 드롭다운 아님). 트리거 `.input` 실루엣·`--control-h`, ↑↓/Enter/Escape 키보드 / `small` |
 | `FileTrigger` | `<FileTrigger>` | `.filetrigger` | — |
-| `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **흰 칩 + shadow-1** (macOS 세그먼트) |
+| `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **`--seg-on` 칩 + shadow-1** (다크에선 트랙보다 한 단 밝게) |
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |
 | `StatusDot` | `<StatusDot status md>` | `.status-dot` | `busy`·`ok`·`fail`·`idle` / `md` |
 | `SidebarWidget` | `<SidebarWidget icon dot tooltip>` | `.sbwx` | 축소 사이드바 위젯 셸 — 아이콘 타일(`__mini`) + 오른쪽 팝오버(`__body--pop`). 펼침 시엔 개입 없음(`display: contents`) |
@@ -159,33 +159,34 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 ```
 적용처: `.panel-sunken`(로그) · `.input--code`(코드 textarea) · `.deploy__preview-list`(배포 커밋 미리보기) · `.prs__create-files`(PR 변경 파일). **새 로그·코드성 UI 는 반드시 이 믹스인을 사용**하고, 내부 텍스트는 평소처럼 `--text-2` 등을 쓰면 된다(on-dark 직접 참조 금지).
 
-### Button (`.btn`) — 필 캡슐 (`--r-full`)
-- **variant**: `primary`(--accent-btn 블루 + --on-accent) · `ghost`(surface-1 + --border, hover: surface-2 + border-strong) · `danger`(danger-soft 배경 + --danger 글자 + rgba 보더)
-- **size**: `md`(8px 16px / 13px) · `sm`(6px 12px / 12px)
-- **상태**: hover(배경 한 단계 어둡게) / **active: `transform: scale(0.97)`**(애플 시그니처 마이크로 인터랙션 — reduced-motion 시 제거) / focus-ring / disabled(opacity **0.45**) / **loading**(12px 스피너 + 라벨 유지 + disabled)
-- 라벨 웨이트 **400** (애플 필 버튼 웨이트 — 600·500 금지)
+### Button (`.btn`) — 6px 각형 (`--r-md`, sm 은 `--r-sm`)
+- **variant**: `primary`(--accent-btn 면 + --on-accent 글자 600 — 다크는 밝은 인디고라 **어두운 글자**) · `ghost`(기본 — surface-2 면 + --border-strong, hover surface-3) · `danger`(danger-soft 면 + --danger 글자 + 35% 보더, hover soft-strong)
+- **size**: `md`(높이 `--control-h` 32 · 좌우 12 · 13px) · `sm`(`--control-h-sm` 28 · 좌우 10 · 12px)
+- **상태**: hover(면 한 단계) / focus-ring / disabled(opacity 0.45) / **loading**(12px 스피너 — 트랙은 글자색 25% 틴트). 누를 때 수축(scale) 없음 — 도구는 즉시 반응한다
+- 라벨 웨이트 **500** (primary 만 600)
 
 ### IconButton (`.icon-btn`) — 24×24 / bordered 28×28, --r-sm, SVG 전용
 ### TextLink — --accent 글자, hover: --accent-hover(더 어둡게) + underline, 외부 링크는 arrow-up-right 아이콘. 크기 body/small
 ### Input (`.input`)
-- 배경 **surface-1(흰색)**, 보더 **--border-strong**, radius **--r-md(11px — 필 아님)**, placeholder --text-3, disabled opacity 0.45
+- 배경 surface-1, 보더 --border-strong, radius --r-md(6px), placeholder --text-3, disabled opacity 0.45
 - **size sm**(6px 10px / 12px). date/time/number/textarea 동일 계열. 코드 textarea 는 `.input--code` = **panel-dark + --font-mono**
 - focus: border accent + focus-ring(offset 0). ※ 비포커스 경계는 AA 3:1 미달을 보더 상향+라벨 병행으로 절충(라이트 테마 공통의 알려진 한계)
 ### FileTrigger — Input 룩의 트리거 버튼. ellipsis, hover: border-strong→accent
-### Segment (`.seg`) — 트랙: --bg-sunken + --border, radius --r-md. on: **--surface-1(흰 칩) + --border-strong + --text + shadow-1** (macOS 세그먼트 컨트롤 — 유일하게 그림자 허용되는 컨트롤). off 글자 --text-2, hover --text. disabled 0.45
-### Badge — 필(pill): soft 배경 + 시맨틱 글자 + StatusDot. variant: `busy`(warning + 점 pulse) · `ok` · `fail`(danger) · `idle` · `pill`(점 없는 정보형). 글자 400. 부속 타임스탬프는 type-caption + --text-3, 간격은 gap(음수 마진 금지)
+### Segment (`.seg`) — 트랙: --bg-sunken + --border, radius --r-md. 칩: 12px · 500. on: **--seg-on + --border-strong + --text + shadow-1**(유일하게 그림자 허용되는 컨트롤). off 글자 --text-2, hover --text. disabled 0.45
+### Badge — **작은 사각**(높이 20 · --r-sm · 12px 500): soft 배경 + 시맨틱 글자 + StatusDot. variant: `busy`(warning + 점 pulse) · `ok` · `fail`(danger) · `idle` · `pill`(점 없는 정보형 — surface-2). 부속 타임스탬프는 type-caption + --text-3, 간격은 gap(음수 마진 금지)
 ### StatusDot — sm 6px(뱃지 내) / md 8px(VPN 위젯). busy=--warning+pulse, ok=--ok, fail/error=--danger, idle=--idle. **VPN error 는 --danger 점**으로 disconnected 와 시각 구분
-### Chip — `<button>`(접근성). surface-1 + --border, hover surface-2, excluded: opacity+line-through 유지
-### Card 패턴 (`@mixin card-surface`) — **surface-1(흰색) + --border 헤어라인 + --r-lg(18px). 그림자 없음**(하이라이트 인셋은 no-op 토큰으로 무효화). 인터랙티브 카드(roster): hover **surface-2 + border-strong만**(translateY 금지). selected: **accent 보더 + accent-soft 배경**(이중 링 금지)
+### Chip — `<button>`(접근성). surface-2 + --border-strong + --r-md, 높이 28, hover surface-3. excluded: **점선 윤곽 + 투명 면 + opacity 0.55 + 취소선**(색만으로 구분하지 않는다)
+### Card 패턴 (`@mixin card-surface`) — **surface-1 + --border 헤어라인 + --r-lg(10px). 그림자 없음**(하이라이트 인셋은 no-op 토큰으로 무효화). 인터랙티브 카드(roster): hover **surface-2 + border-strong만**(translateY 금지). selected: **accent 보더 + accent-soft 배경**(이중 링 금지)
 ### Collapsible — 바깥 --r-lg, head 화살표 SVG chevron-right(open 시 rotate 90°, --dur-2)
 ### Banner — variant `warning`(기본, alert-triangle)·`danger`(alert-triangle)·`info`(info, accent). soft 배경 + 시맨틱 보더/글자 + 아이콘 16px
 ### Confirm (전역 `.confirm` + ConfirmProvider·useConfirm — window.confirm 대체)
 - **promise 기반**: `if (!(await confirm({ title, message?, confirmLabel?, danger? }))) return;` — 호출부가 async 면 그대로 치환된다.
-- 룩: surface-1 + --border + --r-lg + shadow-2, max-width 420px, **중앙(광학 중심 살짝 위)** 배치 — macOS 알럿. 액션은 우측 정렬 [취소(ghost)] [확인(primary / danger)].
+- 룩: surface-1 + --border-strong + **--r-xl(14px)** + shadow-2, max-width 420px, **중앙(광학 중심 살짝 위)** 배치 — macOS 알럿. 액션은 우측 정렬 [취소(ghost)] [확인(primary / danger)].
 - 키보드: **Escape=취소·Enter=확인**(capture 로 아래 깔린 Modal 의 Escape 닫힘 차단), 확인 버튼 autoFocus. 오버레이 클릭 = 취소. z-index 95(모달 90 위·토스트 100 아래).
 - ⚠️ DeploySection 처럼 `confirm` 이름이 이미 쓰이는 곳에선 `const confirmDialog = useConfirm()` 로 받는다.
-### Toast (전역 `.toast` + ToastProvider) — surface-2 + --border + --r-md + **shadow-2**, 하단 중앙, 지속 2s, 진입 slide-up --dur-2
-### EmptyState (`.empty-state`) — surface-1 카드 + 아이콘 + --text-3, 중앙 정렬
+### 떠 있는 레이어 공통 — 팝오버(`.picker__pop`)·컨텍스트 메뉴(`.ctx`)는 **surface-2 + --border-strong + --r-lg + shadow-2**, 툴팁(`.tip__pop`)은 surface-3 + --text. 모달·확인창은 surface-1 + --r-xl. 딤은 `--scrim`. 전부 body portal (모달 `overflow: hidden` 에 잘리지 않는다)
+### Toast (전역 `.toast` + ToastProvider) — 떠 있는 면: surface-2 + --border-strong + --r-lg + **shadow-2**, 우측 아래 스택, 진입 rise-in
+### EmptyState (`.empty-state`) — surface-1 카드 **점선 윤곽** + 아이콘 + --text-3, 중앙 정렬 (빈 칸이라는 뜻을 모양으로)
 ### Spinner (`.spinner`) — 보더 스피너(accent) / ProgressBar — 트랙 --overlay-track + --r-full, 채움은 시맨틱 색
 ### 중첩 패널 (`.panel-sunken` — 로그·커밋 패널 공용) — **panel-dark** + --r-md. 로그: --font-mono type-small + --text-2(→on-dark-2 자동). 커밋 항목: 제목 type-body 600 / 본문 --font-mono type-small / 메타 type-caption --text-3. 로딩·에러·빈 3상태 정의(에러는 --danger + alert-triangle — 다크 안에선 danger-on-dark 자동)
 
@@ -224,43 +225,41 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 ### ✅ Do
 - **값은 토큰·믹스인에서만** — 색은 `var(--*)`, 타이포는 `type-*` 믹스인, 크기는 `--fs-*`. 새 값이 필요하면 토큰을 먼저 추가한다.
-- **파치먼트 그라운드 + 흰 카드 + 헤어라인** — 깊이는 표면 색 전환으로. 코드·로그는 **panel-dark**(니어블랙 타일).
-- **인터랙티브 = 액션 블루 하나** — 링크·버튼·포커스·활성 전부 `--accent` 계열만.
-- **필은 버튼에, 11px 는 입력에, 18px 는 카드에** — 라디우스 문법 준수.
-- **버튼 active 는 scale(0.97)** — 애플 마이크로 인터랙션(reduced-motion 시 제거).
-- **웨이트는 300/400/600/700** — 본문·버튼 400, 강조·제목 600. **500 금지.**
+- **그라운드 → 패널 → 떠 있는 면 + 헤어라인** — 깊이는 표면 단계로. 코드·로그는 **panel-dark**.
+- **인터랙티브 = 인디고 하나** — 링크·버튼·포커스·활성 전부 `--accent` 계열만.
+- **버튼·입력 6px, 카드·패널 10px, 모달 14px, 필(`--r-full`)은 카운트·바·스위치만** — 라디우스 문법 준수.
+- **웨이트는 400/500/600/700** — 본문 400, UI 라벨·버튼 500, 제목·강조 600.
 - **5상태 정의** — hover / active / focus-visible / disabled(opacity 0.45) / loading 모두.
 - **아이콘은 공용 `Icon`(Lucide)만** — 크기는 12·14·16·18·20 5단계 안에서.
 - **다크 패널 내부 텍스트는 평소 토큰 그대로** — panel-dark 스코프가 on-dark 로 자동 치환(on-dark 직접 참조 금지).
 - **공용 컴포넌트 + variant/size prop 사용**(§4 레지스트리). 숫자 정렬은 `tabular-nums`.
-- **떠오르는 레이어·화면 전환에는 진입 모션** — `rise-in`/`fade-in`/`pop-in` 믹스인(§3). 이동은 `--lift`(6px)까지, `opacity`·`transform` 만.
+- **떠오르는 레이어·화면 전환에는 진입 모션** — `rise-in`/`fade-in`/`pop-in` 믹스인(§3). 이동은 `--lift`(4px)까지, `opacity`·`transform` 만.
+- **식별자는 모노** — 티켓 키·빌드 번호·해시·포트·경로·시각·IP.
 - **폭·높이를 드래그로 바꾸는 곳은 드래그 중 transition 을 끈다** — 손끝을 뒤따라오면 조작감이 무너진다(`--dragging` 클래스).
 
 ### ⛔ Don't
 - ❌ **hex·px 매직넘버**, `.btn`/`.input` 등 루트 클래스 직접 사용, 기능 SCSS 에서 공용 클래스 크기 오버라이드.
 - ❌ **이모지·텍스트 글리프**(▸ ↗ ✕ ◀ ⚙️). 유일 예외: 비밀번호 마스킹 `●`.
 - ❌ **카드·버튼·텍스트에 그림자** — 그림자는 shadow-2(떠 있는 레이어)와 shadow-1(세그 칩)뿐.
-- ❌ **두 번째 액센트 색** — 블루 외 인터랙티브 색 금지(차트 카테고리컬은 예외).
-- ❌ **웨이트 500** · **제목 700** · **11px 이하 음수 자간**.
-- ❌ **`#0071e3`·`#2997ff` 를 라이트 표면 텍스트로** — 대비 미달. 스카이 블루는 다크 패널 전용.
-- ❌ **그라디언트 장식** — 애플은 그라디언트 토큰이 없다.
+- ❌ **두 번째 액센트 색** — 인디고 외 인터랙티브 색 금지(차트 카테고리컬은 예외).
+- ❌ **11px 이하 음수 자간** · **다크의 액센트 면 위 흰 글자**(2.4:1 — `--on-accent` 를 쓴다).
+- ❌ **그라디언트 장식** — 앱 아이콘 외에는 쓰지 않는다.
 - ❌ **box-shadow 포커스 링** — outline 사용. **`--accent-glow` 를 포커스 링에** — 장식 전용.
 - ❌ **카드 hover 에 `translateY`** — hover 는 `surface-2 + border-strong` 만. **selected 에 이중 링** 금지.
-- ❌ **hover 에 brightness(1.n) 밝히기 필터** — 라이트 테마에선 씻겨 보임. hover 는 어둡게.
+- ❌ **hover 에 brightness 필터** — 면 토큰(surface-2 → surface-3)을 한 단계 올린다.
 - ❌ **색 단독으로 정보 전달**(차트 범례·툴팁은 텍스트 병기) · **라운드 임의값** · **아이콘 임의 크기**.
-- ❌ **reduced-motion 에서 `animation: none`** — 진입 모션은 `fill-mode: both` 라 시작 상태(`opacity: 0`)에 갇혀 요소가 사라진다. `animation-duration: .01ms` 로 즉시 끝낼 것(§3).
+- ❌ **reduced-motion 에서 `animation: none`** — 진입 모션의 fill-mode 때문에 상태가 어긋난다. `animation-duration: .01ms` 로 즉시 끝낼 것(§3).
 - ❌ **진입 모션에 `--ease-out` 아닌 곡선**, **퇴장에 `--ease-out`** · **`width`/`height`/`top` 애니메이션**(레이아웃 속성 — 펼침·패널 폭처럼 불가피한 곳만).
 - ❌ **목록 항목(카드·행)에 진입 모션·계단(stagger)** — 조회 결과는 즉시 보여야 한다(§3).
 
-## 7. 마이그레이션 절차 (순서 준수 — 2026-07 애플 전환에 적용)
+## 7. 마이그레이션 절차 (2026-09-30 Signal 리디자인 — 브랜치 `feat/redesign-signal`)
 
-1. `_base.scss` 토큰 전면 교체(파치먼트·액션블루·애플 시맨틱·차트) + `--font-display` SF 스택 + `type-h2` 600 타이트 + `type-metric` 600 + 라디우스(8/11/18/full)
-2. 버튼 필화: `.btn` radius → `--r-full`, 웨이트 400, active `scale(0.97)` / **웨이트 500 전수 제거**(sidebar__item·seg·badge → 400, form-label·deploy rem-why → 600)
-3. `src/main/main.ts` backgroundColor → `#f5f5f7` (주석: --bg와 동기화)
-4. 무그림자화: `card-surface` 에서 shadow-1 제거(헤어라인만), `--highlight` no-op / 세그 선택 칩은 **--surface-1 흰 칩 + shadow-1**
-5. `chartTheme.ts` FALLBACK 맵을 새 토큰 값과 동기화(주석 규칙: _base.scss 와 동일 유지)
-6. 다크 패널·ptag 구조는 웜 크림 전환에서 확립된 것 유지(panel-dark 4곳·O쌍 글자) — 값만 애플로
-7. 검증: `npx tsc --noEmit` → sass 컴파일 → 앱 실행 후 전 섹션 육안 확인(특히 필 버튼·세그 칩·다크 패널·차트)
+1. **토대** ✅ — `_base.scss` 토큰 값 교체(역할 이름 유지) · IBM Plex Sans KR 번들 · 앱 아이콘(`npm run icon`)
+2. **공용 컴포넌트** ✅ — 버튼 6px 각형·500 · 배지 작은 사각 · 세그 `--seg-on` · 커스텀 체크 · 떠 있는 레이어 surface-2 · 모달 `--r-xl` · `--scrim`
+3. **셸** — 사이드바 개발/리소스/업무 3그룹 + 축소 · 탑바(뒤로/앞으로 + 경로) · 위젯 4종 → 하단 상태바 + 팝오버
+4. **⌘K 명령 팔레트** (신규)
+5. **섹션별 재구성** — 목업 보드와 대조하며 한 섹션씩(기능 SCSS 의 `--r-full` 필 잔재도 이때 정리)
+- 매 단계: `tsc` · `lint` · `test` · lite `typecheck` · 개발 인스턴스 확인 · `chartTheme.ts` FALLBACK 을 토큰과 동기화
 
 ## 8. 백로그 (이번 범위 밖)
 

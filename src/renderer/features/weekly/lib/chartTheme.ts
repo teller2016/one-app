@@ -7,23 +7,24 @@
 
 /** 토큰을 읽지 못했을 때의 폴백 — _base.scss 값과 동일하게 유지할 것 */
 const FALLBACK: Record<string, string> = {
-  '--text': '#1d1d1f',
-  '--text-2': '#515154',
-  '--border': '#e0e0e0',
+  '--text': '#15171a',
+  '--text-2': '#4a515b',
+  '--border': '#e3e6ea',
   '--surface-1': '#ffffff',
   '--fs-caption': '11px',
-  '--fs-metric': '24px',
-  // 차트 카테고리컬 팔레트 (T/OT 쌍 — 애플 시스템 컬러, O쌍은 ptag 글자용 대비 검증됨)
-  '--chart-1t': '#007aff',
-  '--chart-1o': '#0064d1',
-  '--chart-2t': '#34c759',
-  '--chart-2o': '#207b37',
-  '--chart-3t': '#ff9500',
-  '--chart-3o': '#9e5c00',
-  '--chart-4t': '#af52de',
-  '--chart-4o': '#9345ba',
-  '--chart-5t': '#30b0c7',
-  '--chart-5o': '#207483',
+  '--fs-metric': '22px',
+  '--font-mono': 'ui-monospace, Menlo, monospace',
+  // 차트 카테고리컬 팔레트 (T/OT 쌍 — 1~5 Signal 팔레트, O쌍은 ptag 글자용 대비 보정) — 라이트 값
+  '--chart-1t': '#6674f0',
+  '--chart-1o': '#4353d6',
+  '--chart-2t': '#2fa8cf',
+  '--chart-2o': '#0a6e92',
+  '--chart-3t': '#f0a13a',
+  '--chart-3o': '#9a5a00',
+  '--chart-4t': '#d86aa6',
+  '--chart-4o': '#a8336f',
+  '--chart-5t': '#3fbf82',
+  '--chart-5o': '#17804f',
   '--chart-6t': '#ff2d55',
   '--chart-6o': '#c72342',
   '--chart-7t': '#5856d6',
@@ -57,7 +58,7 @@ export type ChartTheme = {
   fontFamily: string;
   /** 도넛 중앙 큰 숫자 색 (--text) */
   centerTextColor: string;
-  /** 도넛 중앙 큰 숫자 폰트 — '700 24px <본문 폰트>' */
+  /** 도넛 중앙 큰 숫자 폰트 — '500 22px <고정폭 폰트>' (숫자는 모노) */
   centerTextFont: string;
   /** 도넛 중앙 보조 라벨 색 (--text-2) */
   centerSubColor: string;
@@ -98,6 +99,7 @@ export function readChartTheme(): ChartTheme {
     getComputedStyle(document.body).fontFamily.trim() || 'sans-serif';
   const captionSize = readSize(styles, '--fs-caption');
   const metricSize = readSize(styles, '--fs-metric');
+  const monoFamily = readVar(styles, '--font-mono');
   const text = readVar(styles, '--text');
   const text2 = readVar(styles, '--text-2');
 
@@ -109,7 +111,7 @@ export function readChartTheme(): ChartTheme {
     captionSize,
     fontFamily,
     centerTextColor: text,
-    centerTextFont: `700 ${metricSize}px ${fontFamily}`,
+    centerTextFont: `500 ${metricSize}px ${monoFamily}`,
     centerSubColor: text2,
     centerSubFont: `400 ${captionSize}px ${fontFamily}`,
     segmentBorder: {
