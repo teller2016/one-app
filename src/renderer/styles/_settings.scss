@@ -241,15 +241,10 @@ $label-gap: 16px;
     width: 160px;
   }
 
-  // 시각 피커 — 목업 92×28 · 값은 모노 12.5 (소형 피커는 부모 폭을 따라가므로 여기서 폭을 준다)
+  // 시각 피커 — 목업 92×28 (값 모노 12.5 는 공용. 소형 피커는 부모 폭을 따라가므로 여기서 폭을 준다)
   &__time {
     display: flex;
     width: 92px;
-
-    .picker__time-input {
-      font-family: var(--font-mono);
-      font-size: var(--fs-ui);
-    }
   }
 
   // 테스트 알림 줄 — 버튼 + 설명 (목업 gap 10)

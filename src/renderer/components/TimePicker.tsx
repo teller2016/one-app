@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePopover } from '../lib/usePopover';
+import { Icon } from './Icon';
 import { fromMinutes, pad2 as pad } from '../../shared/date';
 
 /** 자유 입력을 "HH:MM" 으로 정규화 — 19 · 19:5 · 1930 · 19:30 허용, 실패 시 null */
@@ -31,6 +32,9 @@ const normalizeTime = (raw: string): string | null => {
  * 팝오버는 body 로 portal + fixed 배치(usePopover) — 모달 본문 안에 갇혀 잘리지 않게.
  * small: 좁은 그리드(설정 리마인더 등)용 — 입력이 작아지고 컨테이너 폭을 따라간다.
  * step: 리스트 간격(분) — 기본 30. 리마인더처럼 세밀한 등록이 필요하면 5 등으로.
+ * adorn: 트리거 아이콘 (목업 그대로) — 'clock-end'(값 + 오른쪽 시계 — 설정 리마인더) ·
+ *   'clock-start'(시계 + 값 — 일정 툴바 '시작') · 'chevron'(값 + 오른쪽 ∨ — 일정 행 종료 시각).
+ *   없으면 값만 가운데(결재·야근).
  */
 export function TimePicker({
   value,
@@ -38,12 +42,14 @@ export function TimePicker({
   disabled = false,
   small = false,
   step = 30,
+  adorn,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   small?: boolean;
   step?: number;
+  adorn?: 'clock-start' | 'clock-end' | 'chevron';
 }) {
   // step 분 간격 옵션 (00:00 ~ 자정 직전)
   const options = useMemo(() => {
@@ -109,7 +115,13 @@ export function TimePicker({
 
   return (
     <div
-      className={'picker picker--time' + (small ? ' picker--time-sm' : '')}
+      className={
+        'picker picker--time' +
+        (small ? ' picker--time-sm' : '') +
+        (adorn
+          ? ` picker--adorn-${adorn === 'clock-start' ? 'start' : 'end'}`
+          : '')
+      }
       ref={rootRef}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && open) {
@@ -121,7 +133,9 @@ export function TimePicker({
     >
       <input
         ref={inputRef}
-        className={'input' + (small ? ' input--sm' : '') + ' picker__time-input'}
+        className={
+          'input' + (small ? ' input--sm' : '') + ' picker__time-input'
+        }
         value={text}
         disabled={disabled}
         onFocus={() => setOpen(true)}
@@ -137,10 +151,20 @@ export function TimePicker({
         placeholder="HH:MM"
         autoComplete="off"
       />
+      {adorn && (
+        <span className="picker__adorn" aria-hidden="true">
+          <Icon
+            name={adorn === 'chevron' ? 'chevron-down' : 'clock'}
+            size={12}
+          />
+        </span>
+      )}
       {open &&
         createPortal(
           <div
-            className={'picker__pop picker__list' + (small ? ' picker__pop--sm' : '')}
+            className={
+              'picker__pop picker__list' + (small ? ' picker__pop--sm' : '')
+            }
             style={popStyle}
             ref={listRef}
             role="listbox"

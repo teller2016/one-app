@@ -50,7 +50,7 @@
   --surface-2: #eef0f3; // hover 표면·팝오버·토스트
   --bg-sunken: #f7f8fa; // 가라앉은 웰(세그 트랙·코드 패널 틀) — 목업 bg-2. ⚠️ #e4e7eb 로 두면 --border 와 같아져 테두리가 사라진다
   --surface-3: #e4e7eb; // 기본 버튼 hover — surface-2 보다 한 단 더
-  --seg-on: #ffffff; // 세그먼트 선택 칩 (트랙 위로 떠오르는 면)
+  --seg-on: #e4e7eb; // 세그먼트 선택 칩 (목업 bg-4)
   --scrim: rgba(20, 22, 26, 0.38); // 모달 뒤 딤
 
   // ===== 다크 패널 (로그·코드·커밋 — 흑연 타일, panel-dark 믹스인이 소비) =====
@@ -85,7 +85,8 @@
   --accent-soft: rgba(67, 83, 214, 0.1);
   --accent-glow: rgba(67, 83, 214, 0.3); // 장식 전용 — 포커스 링 금지
   --on-accent: #ffffff; // --accent-btn 배경 위에서만
-  --on-strong: #ffffff; // 진한 채움(차트 7 인디고 타일 등) 위 글자 — 두 테마 공용
+  --on-strong: #ffffff; // 진한 채움(차트 7 인디고 타일·danger 버튼 등) 위 글자 — 두 테마 공용
+  --on-warn: #111111; // 채운 경고색(warn 버튼) 위 글자 — 두 테마 공용 (목업 .btn-warn)
   --accent-on-dark: #8c9bff; // 다크 패널 안 링크 (8:1)
   --accent-hover-on-dark: #a9b4ff;
 
@@ -145,6 +146,7 @@
   --r-full: 999px; // 카운트 뱃지·진행 바·스위치 (버튼은 필 아님 — --r-md)
   --control-h: 32px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
   --control-h-sm: 28px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
+  --control-h-btn: 30px; // 기본 버튼·세그 트랙 (목업 .btn · .seg)
   --control-h-field: 30px; // 드로어 커밋 입력 한 줄 (목업)
   --control-h-lg: 36px; // 큰 버튼 Button size="lg" (목업 .btn-lg — 결재 [작성 시작])
   --control-h-xs: 24px; // 초소형 버튼 Button size="xs" (목업 .btn-sm — 툴바 프리셋·탭 [+])
@@ -227,7 +229,7 @@
   --surface-2: #1e2227;
   --bg-sunken: #171a1e;
   --surface-3: #262b31;
-  --seg-on: #2a3037;
+  --seg-on: #262b31; // 목업 bg-4
   --scrim: rgba(5, 6, 8, 0.62);
 
   // 다크 패널 — 배경보다 한 단 더 어둡게 (터미널과 같은 면)
@@ -566,20 +568,22 @@ body {
 
 // ===== 버튼 =====
 // Signal: 필이 아니라 6px 각형. 기본(ghost)은 떠 있는 면(surface-2) + 강한 헤어라인,
-// primary 는 액센트 면, danger 는 soft 면 + 위험 글자(다크의 밝은 빨강 위 흰 글자는 대비 미달).
+// primary 는 액센트 면, danger·warn 은 채운 위험·경고 면(목업 .btn-danger·.btn-warn 그대로).
+// ⚠️ 대비: 다크 danger(흰 글자/#f2676d)는 3.0:1, 라이트 warn(#111/#a55f00)은 3.8:1 로 AA(4.5) 미달 —
+//    목업 결정을 따른 것이다(2026-09-30 사용자 "맞춰"). 바꾸려면 목업부터 고칠 것.
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: var(--control-h);
+  height: var(--control-h-btn);
   padding: 0 12px;
   // 좁은 flex 줄에서 버튼이 압축되면 글자가 세로로 쪼개진다(2026-09-04 실측) — 줄을 넘기게 둔다
   flex-shrink: 0;
   white-space: nowrap;
   border-radius: var(--r-md);
   border: 1px solid transparent;
-  font-size: var(--fs-body);
+  font-size: var(--fs-ui);
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
@@ -604,6 +608,7 @@ body {
   &--lg {
     height: var(--control-h-lg);
     padding: 0 16px;
+    font-size: var(--fs-body);
   }
 
   // 초소형 — 툴바 프리셋 칩 등 (목업 .btn-sm 24px)
@@ -656,13 +661,27 @@ body {
     }
   }
 
+  // 목업 .btn-danger — 채운 위험색 + 흰 글자 600
   &--danger {
-    background: var(--danger-soft);
-    color: var(--danger);
-    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--on-strong);
+    font-weight: 600;
 
     &:hover:not(:disabled) {
-      background: var(--danger-soft-strong);
+      filter: brightness(1.08);
+    }
+  }
+
+  // 목업 .btn-warn — 채운 경고색 + 어두운 글자 600 (운영 배포 실행)
+  &--warn {
+    background: var(--warning);
+    border-color: var(--warning);
+    color: var(--on-warn);
+    font-weight: 600;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.08);
     }
   }
 
@@ -787,7 +806,7 @@ body {
 
   &--sm {
     padding: 6px 10px;
-    font-size: var(--fs-small);
+    font-size: var(--fs-body); // 목업 .input 은 높이만 줄고 글자는 13 그대로
   }
 
   // 코드성 텍스트에어리어 (일정 입력 등) — 다크 코드 패널 (크림↔다크 리듬)
@@ -876,7 +895,7 @@ input.input--bare {
   &--sm {
     height: var(--control-h-sm);
     min-height: var(--control-h-sm);
-    font-size: var(--fs-small);
+    font-size: var(--fs-body); // 목업 — 작은 셀렉트도 글자는 13
   }
 
   &__value {
@@ -1017,12 +1036,12 @@ input.input--bare {
 // ===== 세그먼트 토글 (오늘/어제 등) — 배경 승격 방식 =====
 .seg-group {
   display: inline-flex;
-  height: var(--control-h); // 폼 컨트롤 공통 높이 — 칩은 flex stretch 로 채움
+  height: var(--control-h-btn); // 목업 .seg 30 (칩 24 + padding 2 ×2 + 테두리) — 칩은 flex stretch 로 채움
   gap: 2px;
   padding: 2px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-tile);
 }
 
 .seg {
@@ -1033,7 +1052,7 @@ input.input--bare {
   justify-content: center;
   gap: 5px;
   padding: 0 10px;
-  border: 1px solid transparent;
+  border: 0; // 목업 .seg button — 테두리가 있으면 칩이 2px 넓어진다
   background: transparent;
   color: var(--text-2);
   border-radius: var(--r-sm);
@@ -1056,7 +1075,6 @@ input.input--bare {
   &--on {
     // 트랙에서 한 단 밝은 칩이 떠오름 (shadow-1 은 이 컨트롤 전용)
     background: var(--seg-on);
-    border-color: var(--border-strong);
     color: var(--text);
     box-shadow: var(--shadow-1);
   }
@@ -2222,10 +2240,50 @@ input.input--bare {
     min-width: 0;
   }
 
+  // 값은 모노 12.5 (목업 — 결재·야근·설정·일정 모두)
   &__time-input {
     width: 100%;
     text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
     font-variant-numeric: tabular-nums;
+  }
+
+  // 트리거 아이콘 (TimePicker adorn — 시계·∨) — 입력 위에 겹쳐 그린다. 클릭은 입력으로 통과시킨다
+  &__adorn {
+    position: absolute;
+    top: 50%;
+    display: inline-flex;
+    color: var(--text-3);
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+
+  // 값 왼쪽 + 오른쪽 아이콘 (목업 설정 리마인더·일정 행: space-between)
+  // 위치는 입력 테두리 1px + 목업 padding 10 — .picker 자신은 테두리가 없다
+  &--adorn-end {
+    .picker__time-input {
+      text-align: left;
+      padding-right: 28px;
+    }
+
+    .picker__adorn {
+      right: 11px;
+    }
+  }
+
+  // 아이콘 + 값 (목업 일정 툴바 [◷ 09:00] — .btn 폭 약 85). 기본 폭 76 이면 값이 잘린다
+  &--adorn-start {
+    width: 88px;
+
+    .picker__time-input {
+      text-align: left;
+      padding-left: 31px;
+    }
+
+    .picker__adorn {
+      left: 13px;
+    }
   }
 
   // 30분 단위 시간 리스트

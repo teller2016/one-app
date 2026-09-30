@@ -47,13 +47,13 @@ typography:
 
 radius: { xs: 3px, sm: 5px, md: 6px, tile: 7px, tab: 8px, rail: 9px, lg: 10px, xl: 14px, full: 999px }   # 모달만 lg 보다 한 단 더 (컴포넌트에서)
 spacing: [4, 8, 12, 16, 20, 24, 32]
-control-height: { md: 32px, field: 30px, sm: 28px, xs: 24px }
+control-height: { input: 32px, button: 30px, field: 30px, sm: 28px, xs: 24px }
 shadow:
   "1": "세그 선택 칩 전용"
   "2": "떠 있는 레이어(모달·토스트·팝오버) — 그림자 + 1px 윤곽"
 motion: { dur-1: .12s, dur-2: .18s, dur-3: .28s, lift: 4px, list-items: "진입 모션 금지" }
 focus: "outline 2px solid accent, offset 2px (box-shadow 링 금지)"
-icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
+icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 1.7 }
 ---
 
 # One App 디자인 가이드 — Signal
@@ -118,7 +118,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 ## 3. 스페이싱 · 라운드 · 그림자 · 모션 · 포커스
 
 - **스페이싱**: 4px 그리드 `4/8/12/16/20/24/32`.
-- **컨트롤 높이**: `--control-h: 32px` / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
+- **컨트롤 높이**: `--control-h: 32px`(입력·셀렉트) / `--control-h-btn: 30px`(기본 버튼·세그 트랙 — 목업 .btn·.seg) / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
 - **섹션 레이아웃 치수**(목업): `--panel-head-h` 42(카드형 패널 머리) · `--row-h-ticket` 56(두 줄 티켓 행) · `--nightwatch-side-w` 400 · `--nightwatch-report-h` 760(Nightwatch 설정 열·리포트 모달).
 - 딥링크: `--applink-w` 760(가운데 단일 열 — 목업 Applink)
 - 배포: `--deploy-detail-h` 744 · `--deploy-log-h` 176(빌드 내역 모달 높이·그 안 콘솔 로그 — 목업 BuildDetailModal)
@@ -134,13 +134,13 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 | 컴포넌트 | React API | 루트 클래스 | variant / size |
 |---|---|---|---|
-| `Button` | `<Button variant size loading icon>` | `.btn` | **6px 각형**(필 아님). variant: `primary`(액센트 면)·`ghost`(기본 — surface-2 면, 목업 .btn)·`plain`(면 없음 — 목업 .btn-ghost)·`danger`(soft 면) / size: `md` 32·`sm` 28·`xs` 24(목업 .btn-sm) |
+| `Button` | `<Button variant size loading icon>` | `.btn` | **6px 각형**(필 아님). variant: `primary`(액센트 면)·`ghost`(기본 — surface-2 면, 목업 .btn)·`plain`(면 없음 — 목업 .btn-ghost)·`danger`(채운 위험 면)·`warn`(채운 경고 면 — 운영 배포 실행) / size: `lg` 36·`md` 30·`sm` 28·`xs` 24(목업 .btn-sm) |
 | `IconButton` | (클래스 직접) | `.icon-btn` | 24×24 / bordered 28×28 |
 | `TextLink` | `<TextLink small external>` | `.textlink` | `small` · 외부링크 arrow-up-right |
 | `Input` | `<Input small>` | `.input` | `small` → `.input--sm` (6px 라운드) |
 | `Textarea` | `<Textarea code>` | `.input` | `code` → `.input--code`(모노·**다크 패널**) |
 | `Checkbox` | `<Checkbox label danger>` | `.checkbox` | 네이티브 input 유지 + `appearance:none` 커스텀 체크(16px · --r-xs · 체크 시 액센트 면) / `danger` |
-| `Select` | `<Select options value onChange small>` | `.select` | 커스텀 팝오버(picker 계열 재사용 — 네이티브 드롭다운 아님). 트리거 `.input` 실루엣·`--control-h`, ↑↓/Enter/Escape 키보드 / `small` |
+| `Select` | `<Select options value onChange small>` | `.select` | 커스텀 팝오버(picker 계열 재사용 — 네이티브 드롭다운 아님). 트리거 `.input` 실루엣·`--control-h`, ↑↓/Enter/Escape 키보드 / `small`(높이만 28 — 글자는 13 그대로) |
 | `FileTrigger` | `<FileTrigger>` | `.filetrigger` | — |
 | `Segment` | `<Segment options value onChange>` | `.seg-group` | on = **`--seg-on` 칩 + shadow-1** (다크에선 트랙보다 한 단 밝게) |
 | `Badge` | `<Badge variant>` | `.badge` | `busy`·`ok`·`fail`·`idle`·`pill` |
@@ -175,8 +175,8 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 적용처: `.panel-sunken`(로그) · `.input--code`(코드 textarea) · `.deploy__preview-list`(배포 커밋 미리보기) · `.prs__create-files`(PR 변경 파일). **새 로그·코드성 UI 는 반드시 이 믹스인을 사용**하고, 내부 텍스트는 평소처럼 `--text-2` 등을 쓰면 된다(on-dark 직접 참조 금지).
 
 ### Button (`.btn`) — 6px 각형 (`--r-md`, sm 은 `--r-sm`)
-- **variant**: `primary`(--accent-btn 면 + --on-accent 글자 600 — 다크는 밝은 인디고라 **어두운 글자**) · `ghost`(기본 — surface-2 면 + --border-strong, hover surface-3) · `danger`(danger-soft 면 + --danger 글자 + 35% 보더, hover soft-strong)
-- **size**: `lg`(`--control-h-lg` 36 · 좌우 16 — 폼의 주 액션) · `md`(높이 `--control-h` 32 · 좌우 12 · 13px) · `sm`(`--control-h-sm` 28 · 좌우 10 · 12px)
+- **variant**: `primary`(--accent-btn 면 + --on-accent 글자 600 — 다크는 밝은 인디고라 **어두운 글자**) · `ghost`(기본 — surface-2 면 + --border-strong, hover surface-3) · `danger`(--danger 면 + --on-strong 흰 글자 600, hover brightness 1.08 — 목업 .btn-danger) · `warn`(--warning 면 + --on-warn 어두운 글자 600 — 목업 .btn-warn)
+- **size**: `lg`(`--control-h-lg` 36 · 좌우 16 — 폼의 주 액션) · `md`(높이 `--control-h-btn` 30 · 좌우 12 · 12.5px — 목업 .btn) · `sm`(`--control-h-sm` 28 · 좌우 10 · 12px) · `xs`(24 · 좌우 8 · 12px). 입력(`--control-h` 32)과 버튼(30)은 목업대로 높이가 다르다
 - **상태**: hover(면 한 단계) / focus-ring / disabled(opacity 0.45) / **loading**(12px 스피너 — 트랙은 글자색 25% 틴트). 누를 때 수축(scale) 없음 — 도구는 즉시 반응한다
 - 라벨 웨이트 **500** (primary 만 600)
 
@@ -187,7 +187,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 - **size sm**(6px 10px / 12px). date/time/number/textarea 동일 계열. 코드 textarea 는 `.input--code` = **panel-dark + --font-mono**
 - focus: border accent + focus-ring(offset 0). ※ 비포커스 경계는 AA 3:1 미달을 보더 상향+라벨 병행으로 절충(라이트 테마 공통의 알려진 한계)
 ### FileTrigger — Input 룩의 트리거 버튼. ellipsis, hover: border-strong→accent
-### Segment (`.seg`) — 트랙: --bg-sunken + --border, radius --r-md. 칩: 12px · 500. on: **--seg-on + --border-strong + --text + shadow-1**(유일하게 그림자 허용되는 컨트롤). off 글자 --text-2, hover --text. disabled 0.45
+### Segment (`.seg`) — 트랙: 높이 30(`--control-h-btn`) · --bg-sunken + --border, radius --r-tile 7. 칩: 24 · --r-sm · 12px · 500. on: **--seg-on(목업 bg-4) + --text + shadow-1**(테두리 없음)(유일하게 그림자 허용되는 컨트롤). off 글자 --text-2, hover --text. disabled 0.45
 ### Badge — **작은 사각**(높이 20 · --r-sm · 11.5px 500): soft 배경 + 시맨틱 글자 + StatusDot. variant: `busy`(warning + 점 pulse) · `ok` · `fail`(danger) · `idle` · `pill`(점 없는 정보형 — surface-2) · `accent`(점 없는 액센트 틴트 — 프로젝트 이름 등). 부속 타임스탬프는 type-caption + --text-3, 간격은 gap(음수 마진 금지)
 ### StatusDot — sm 6px(뱃지 내) / md 8px(VPN 위젯). busy=--warning+pulse, ok=--ok, fail/error=--danger, idle=--idle. **VPN error 는 --danger 점**으로 disconnected 와 시각 구분
 ### Chip — `<button>`(접근성). surface-2 + --border-strong + --r-md, 높이 28, hover surface-3. excluded: **점선 윤곽 + 투명 면 + opacity 0.55 + 취소선**(색만으로 구분하지 않는다)
@@ -224,7 +224,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 - ⚠️ **backgroundColor 를 창에 지정하지 말 것** — 비브런시 재질을 로드 전 배경으로 쓰므로 플래시가 없다.
 
 ### Icon (`Icon.tsx`)
-- **Lucide path 이식**(ISC — 파일 상단 라이선스 고지 주석, 의존성 추가 없음). viewBox 24 / stroke-width 2 / `currentColor`
+- **Lucide path 이식**(ISC — 파일 상단 라이선스 고지 주석, 의존성 추가 없음). viewBox 24 / stroke-width 1.7(목업 .ico) / `currentColor`
 - 크기 스케일(이 5단계 외 임의 크기 금지): **12**(위젯 캡션·버튼/아이콘 버튼 안) · **14**(인라인·md 버튼 안) · **16**(기본 — 사이드바·배너) · **18**(섹션 제목) · **20**(빈 상태)
 - 세트: calendar, bar-chart, rocket, settings, lock, building, key, bell, clock, refresh-cw, chevron-right/down/left, arrow-up-right, x, check, plus, copy, circle, alert-triangle, info
 

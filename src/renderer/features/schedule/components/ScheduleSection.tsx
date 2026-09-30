@@ -424,6 +424,7 @@ export function ScheduleSection() {
             value={startTime}
             onChange={setStartTime}
             disabled={running}
+            adorn="clock-start"
           />
         </div>
 
@@ -474,6 +475,7 @@ export function ScheduleSection() {
                   value={row.item.end}
                   onChange={(v) => updateItem(row.item.id, { end: v })}
                   disabled={running}
+                  adorn="chevron"
                 />
                 <span
                   className={
@@ -518,7 +520,12 @@ export function ScheduleSection() {
               {minutesToTime(nextStartMin)} <span className="sched__arrow">→</span>
             </span>
             <span />
-            <TimePicker value={newTime} onChange={setNewTime} disabled={running} />
+            <TimePicker
+              value={newTime}
+              onChange={setNewTime}
+              disabled={running}
+              adorn="chevron"
+            />
             <Input
               className="sched__title"
               value={newTitle}

@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
  * 2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are
  * held by Lucide Contributors 2022.
  *
- * viewBox 24 · stroke-width 2 · 크기 스케일(DESIGN.md 4장):
+ * viewBox 24 · stroke-width 1.7(목업 .ico) · 크기 스케일(DESIGN.md 4장):
  *   12(위젯 캡션·버튼/아이콘 버튼 안) · 14(인라인·md 버튼 안) ·
  *   16(기본 — 사이드바·배너) · 18(섹션 제목) · 20(빈 상태)
  */
@@ -492,7 +492,7 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

@@ -817,6 +817,7 @@ export function SettingsSection() {
                       <span className="settings__time">
                         <TimePicker
                           small
+                          adorn="clock-end"
                           step={5}
                           value={d[type].time}
                           onChange={(time) => updateSlot(d.day, type, { time })}
@@ -873,6 +874,7 @@ export function SettingsSection() {
               <span className="settings__time">
                 <TimePicker
                   small
+                  adorn="clock-end"
                   value={schedStart.remoteStart}
                   onChange={(remoteStart) =>
                     setSchedStart((prev) => ({ ...prev, remoteStart }))
@@ -884,6 +886,7 @@ export function SettingsSection() {
               <span className="settings__time">
                 <TimePicker
                   small
+                  adorn="clock-end"
                   value={schedStart.officeStart}
                   onChange={(officeStart) =>
                     setSchedStart((prev) => ({ ...prev, officeStart }))

@@ -91,7 +91,7 @@ export function DeployConfirmModal({
         <>
           <Button onClick={onClose}>취소</Button>
           <Button
-            variant={project.production ? 'danger' : 'primary'}
+            variant={project.production ? 'warn' : 'primary'}
             onClick={onConfirm}
             disabled={!prodOk}
           >

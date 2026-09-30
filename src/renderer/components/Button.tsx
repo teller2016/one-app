@@ -1,9 +1,9 @@
 import type { ButtonHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  /** 색상 변형 — primary(액센트) · ghost(표면+테두리) · plain(면 없는 글자 버튼 — 목업 .btn-ghost) · danger(위험) */
-  variant?: 'primary' | 'ghost' | 'plain' | 'danger';
-  /** 크기 — md(기본 32) · sm(28 — 위젯·카드 액션) · xs(24 — 툴바 칩·탭바 [+]) */
+  /** 색상 변형 — primary(액센트) · ghost(표면+테두리) · plain(면 없는 글자 버튼 — 목업 .btn-ghost) · danger(채운 위험) · warn(채운 경고 — 운영 배포 실행) */
+  variant?: 'primary' | 'ghost' | 'plain' | 'danger' | 'warn';
+  /** 크기 — lg(36) · md(기본 30 · 12.5 — 목업 .btn) · sm(28 — 위젯·카드 액션) · xs(24 — 목업 .btn-sm, 툴바 칩·탭바 [+]) */
   size?: 'lg' | 'md' | 'sm' | 'xs';
   /** 로딩 중 — 스피너 표시 + 자동 disabled */
   loading?: boolean;
