@@ -454,6 +454,22 @@
     margin: 0 7px;
     color: var(--border-strong);
   }
+
+  // 셋째 칸이 있으면 가운데 칸(섹션)은 경로의 중간 단계 — 그룹처럼 가볍게, 마지막 칸만 굵게 (목업)
+  &:has(.topbar__crumb-sub) .topbar__title {
+    font-weight: 400;
+    color: var(--text-3);
+  }
+
+  // 경로 셋째 칸(하위 화면) — TopbarSlot crumb. 섹션 제목(__title)과 같은 굵기·색으로 이어진다
+  &__crumb-sub {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    white-space: nowrap;
+    @include fade-in;
+  }
 }
 
 // ===== 하단 상태바 (components/StatusBar.tsx) =====

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { DatePicker } from '../../../components/DatePicker';
-import { FormRow } from '../../../components/FormRow';
 import { Input } from '../../../components/Input';
 import { Select } from '../../../components/Select';
 import { TimePicker } from '../../../components/TimePicker';
@@ -37,7 +36,11 @@ const REASON_OPTIONS = DOC_REASONS.map((n) => ({ value: n, label: n }));
 
 type HandoverRow = VacationHandover & { key: number };
 let rowSeq = 1;
-const newHandover = (): HandoverRow => ({ key: rowSeq++, project: '', members: '' });
+const newHandover = (): HandoverRow => ({
+  key: rowSeq++,
+  project: '',
+  members: '',
+});
 
 /**
  * 휴가신청서 — 근태 신청 화면을 채우고 [내역추가] 후 [결재상신]까지 누른다.
@@ -60,7 +63,9 @@ export function VacationForm() {
   const [reason, setReason] = useState(DOC_REASONS[0]);
   const [reasonEtc, setReasonEtc] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
-  const [handovers, setHandovers] = useState<HandoverRow[]>(() => [newHandover()]);
+  const [handovers, setHandovers] = useState<HandoverRow[]>(() => [
+    newHandover(),
+  ]);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState('');
   const [error, setError] = useState('');
@@ -138,7 +143,8 @@ export function VacationForm() {
   );
 
   const reasonOk = reason !== '기타' || !!reasonEtc.trim();
-  const timeOk = !timed || (!!useStartTime && !!useEndTime && useStartTime < useEndTime);
+  const timeOk =
+    !timed || (!!useStartTime && !!useEndTime && useStartTime < useEndTime);
   const valid =
     !!fromDate &&
     !!toDate &&
@@ -198,7 +204,10 @@ export function VacationForm() {
         emergencyContact: emergencyContact.trim(),
         handovers: handovers
           .filter((h) => h.project.trim() || h.members.trim())
-          .map((h) => ({ project: h.project.trim(), members: h.members.trim() })),
+          .map((h) => ({
+            project: h.project.trim(),
+            members: h.members.trim(),
+          })),
       });
       if (res.ok) {
         setDone(res);
@@ -243,17 +252,24 @@ export function VacationForm() {
     );
   }
 
+  // 라벨 열 + 칸 한 줄 (목업 grid 112px / 1fr)
+  const row = (label: string, cell: React.ReactNode) => (
+    <>
+      <label className="approval-grid__label">{label}</label>
+      <div className="approval-grid__cell">{cell}</div>
+    </>
+  );
+
   return (
     <div className="approval-form">
       {error && <Banner variant="danger">{error}</Banner>}
       {!dept && <Banner variant="warning">{NO_DEPT_HINT}</Banner>}
 
-      <div className="vacation-status">
+      <div className="approval-panel vacation-status">
         {status ? (
           <>
-            <span>
-              잔여연차 <strong>{status.rest}</strong>
-            </span>
+            <span className="vacation-status__label">잔여연차</span>
+            <span className="vacation-status__value">{status.rest}</span>
             <span className="vacation-status__sub">
               총 {status.total} · 사용 {status.used} · 결재중 {status.progress}
             </span>
@@ -267,204 +283,252 @@ export function VacationForm() {
         )}
         {/* 진입할 때 자동으로 조회하므로 평상시엔 버튼이 없다 — 실패했을 때만 다시 시도 */}
         {!status && !statusBusy && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void loadStatus()}
-            disabled={busy}
-          >
+          <Button size="xs" onClick={() => void loadStatus()} disabled={busy}>
             다시 시도
           </Button>
         )}
       </div>
 
-      <FormRow label="근태구분">
-        <Select
-          className="vacation-kind"
-          options={KIND_OPTIONS}
-          value={attDivName}
-          onChange={setAttDivName}
-          disabled={busy}
-          aria-label="근태구분"
-        />
-      </FormRow>
+      <div className="approval-panel">
+        <div className="approval-grid">
+          {row(
+            '근태구분',
+            <Select
+              className="approval-select"
+              options={KIND_OPTIONS}
+              value={attDivName}
+              onChange={setAttDivName}
+              disabled={busy}
+              aria-label="근태구분"
+            />,
+          )}
 
-      <FormRow label="신청일자">
-        <div className="approval-form__stack">
-          <div className="approval-form__times">
-            <DatePicker value={fromDate} onChange={setFromDate} disabled={busy} />
-            {!singleDay && (
+          {row(
+            '신청일자',
+            <>
+              <div className="approval-form__times">
+                <div className="approval-date">
+                  <DatePicker
+                    value={fromDate}
+                    onChange={setFromDate}
+                    disabled={busy}
+                  />
+                </div>
+                {!singleDay && (
+                  <>
+                    <span className="approval-form__tilde">~</span>
+                    <div className="approval-date">
+                      <DatePicker
+                        value={toDate}
+                        onChange={setToDate}
+                        disabled={busy}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="hint">
+                {singleDay
+                  ? `${attDivName}는 하루만 신청합니다 — 예상 신청일수 ${expectedDays}일.`
+                  : fromDate > toDate
+                    ? '종료일이 시작일보다 빠릅니다.'
+                    : `예상 신청일수 ${expectedDays ?? '-'}일 (주말 제외) — 확정은 그룹웨어가 공휴일까지 반영해 계산합니다.`}
+              </p>
+            </>,
+          )}
+
+          {timed &&
+            row(
+              '사용 시간대',
               <>
-                <span className="approval-form__tilde">~</span>
-                <DatePicker value={toDate} onChange={setToDate} disabled={busy} />
-              </>
+                <div className="approval-form__times">
+                  <span className="approval-time">
+                    <TimePicker
+                      value={useStartTime}
+                      onChange={setUseStartTime}
+                      disabled={busy}
+                    />
+                  </span>
+                  <span className="approval-form__tilde">~</span>
+                  <span className="approval-time">
+                    <TimePicker
+                      value={useEndTime}
+                      onChange={setUseEndTime}
+                      disabled={busy}
+                    />
+                  </span>
+                </div>
+                <p className="hint">
+                  {timeOk
+                    ? '표기 표준 — 제목에 (시작~종료) 로 들어갑니다.'
+                    : '종료 시각이 시작 시각보다 빠릅니다.'}
+                </p>
+              </>,
             )}
-          </div>
-          <p className="hint">
-            {singleDay
-              ? `${attDivName}는 하루만 신청합니다 — 예상 신청일수 ${expectedDays}일.`
-              : fromDate > toDate
-                ? '종료일이 시작일보다 빠릅니다.'
-                : `예상 신청일수 ${expectedDays ?? '-'}일 (주말 제외) — 확정은 그룹웨어가 공휴일까지 반영해 계산합니다.`}
-          </p>
-        </div>
-      </FormRow>
 
-      {timed && (
-        <FormRow label="사용 시간대">
-          <div className="approval-form__stack">
-            <div className="approval-form__times">
-              <TimePicker value={useStartTime} onChange={setUseStartTime} disabled={busy} />
-              <span className="approval-form__tilde">~</span>
-              <TimePicker value={useEndTime} onChange={setUseEndTime} disabled={busy} />
-            </div>
-            <p className="hint">
-              {timeOk
-                ? '표기 표준 — 제목에 (시작~종료) 로 들어갑니다.'
-                : '종료 시각이 시작 시각보다 빠릅니다.'}
-            </p>
-          </div>
-        </FormRow>
-      )}
+          {substitute &&
+            row(
+              '휴일근무일',
+              <>
+                <div className="approval-date">
+                  <DatePicker
+                    value={holidayWorkDate}
+                    onChange={setHolidayWorkDate}
+                    disabled={busy}
+                  />
+                </div>
+                <p className="hint">
+                  대체휴가의 근거가 된 휴일근무일 — 제목에 (휴일근무일: 00/00)
+                  로 들어갑니다.
+                </p>
+              </>,
+            )}
 
-      {substitute && (
-        <FormRow label="휴일근무일">
-          <div className="approval-form__stack">
-            <DatePicker
-              value={holidayWorkDate}
-              onChange={setHolidayWorkDate}
-              disabled={busy}
-            />
-            <p className="hint">
-              대체휴가의 근거가 된 휴일근무일 — 제목에 (휴일근무일: 00/00) 로 들어갑니다.
-            </p>
-          </div>
-        </FormRow>
-      )}
+          {row(
+            '제목',
+            <>
+              <Input
+                value={titleEdited ? title : titlePreview}
+                onChange={(e) => {
+                  setTitleEdited(true);
+                  setTitle(e.target.value);
+                }}
+                disabled={busy}
+              />
+              <p className="hint">
+                {titleEdited
+                  ? '직접 입력한 제목으로 상신합니다.'
+                  : status
+                    ? '이대로 상신합니다. 고치면 그 제목을 씁니다.'
+                    : `${APPLICANT_PLACEHOLDER} 자리는 상신할 때 채워집니다 — 이름은 그룹웨어에서만 읽을 수 있습니다(소속은 환경설정의 '결재 소속').`}
+              </p>
+            </>,
+          )}
 
-      <FormRow label="제목">
-        <div className="approval-form__stack">
-          <Input
-            value={titleEdited ? title : titlePreview}
-            onChange={(e) => {
-              setTitleEdited(true);
-              setTitle(e.target.value);
-            }}
-            disabled={busy}
-          />
-          <p className="hint">
-            {titleEdited
-              ? '직접 입력한 제목으로 상신합니다.'
-              : status
-                ? '이대로 상신합니다. 고치면 그 제목을 씁니다.'
-                : `${APPLICANT_PLACEHOLDER} 자리는 상신할 때 채워집니다 — 이름은 그룹웨어에서만 읽을 수 있습니다(소속은 환경설정의 '결재 소속').`}
-          </p>
-        </div>
-      </FormRow>
-
-      <FormRow label="비고">
-        <Input
-          value={remark}
-          onChange={(e) => setRemark(e.target.value)}
-          placeholder="선택 — 비워 두어도 됩니다"
-          disabled={busy}
-        />
-      </FormRow>
-
-      {/* 아래 세 항목은 전자결재 본문(휴가신청서 서식)에 채워진다 */}
-      <p className="approval-form__group">전자결재 본문</p>
-
-      <FormRow label="사유">
-        <div className="approval-form__times">
-          <Select
-            className="vacation-kind"
-            options={REASON_OPTIONS}
-            value={reason}
-            onChange={setReason}
-            disabled={busy}
-            aria-label="휴가 사유"
-          />
-          {reason === '기타' && (
+          {row(
+            '비고',
             <Input
-              value={reasonEtc}
-              onChange={(e) => setReasonEtc(e.target.value)}
-              placeholder="기타 사유를 적어 주세요"
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              placeholder="선택 — 비워 두어도 됩니다"
               disabled={busy}
-            />
+            />,
           )}
         </div>
-      </FormRow>
+      </div>
 
-      <FormRow label="비상연락망">
-        <div className="approval-form__stack">
-          <Input
-            value={emergencyContact}
-            onChange={(e) => setEmergencyContact(e.target.value)}
-            placeholder="예: 010-1234-5678"
-            disabled={busy}
-          />
-          <p className="hint">한 번 입력하면 다음부터 자동으로 채워집니다.</p>
-        </div>
-      </FormRow>
+      {/* 아래 세 항목은 전자결재 본문(휴가신청서 서식)에 채워진다 */}
+      <div className="approval-panel">
+        <p className="approval-panel__group">전자결재 본문</p>
+        <div className="approval-grid">
+          {row(
+            '사유',
+            <div className="approval-form__inline">
+              <Select
+                className="approval-select"
+                options={REASON_OPTIONS}
+                value={reason}
+                onChange={setReason}
+                disabled={busy}
+                aria-label="휴가 사유"
+              />
+              {reason === '기타' && (
+                <Input
+                  value={reasonEtc}
+                  onChange={(e) => setReasonEtc(e.target.value)}
+                  placeholder="기타 사유를 적어 주세요"
+                  disabled={busy}
+                />
+              )}
+            </div>,
+          )}
 
-      <FormRow label="인수인계">
-        <div className="approval-form__stack">
-          {handovers.map((row) => (
-            <div className="handover-row" key={row.key}>
+          {row(
+            '비상연락망',
+            <>
               <Input
-                value={row.project}
-                onChange={(e) =>
-                  setHandovers((rows) =>
-                    rows.map((r) =>
-                      r.key === row.key ? { ...r, project: e.target.value } : r,
-                    ),
-                  )
-                }
-                placeholder="프로젝트명"
+                className="approval-input--phone"
+                value={emergencyContact}
+                onChange={(e) => setEmergencyContact(e.target.value)}
+                placeholder="예: 010-1234-5678"
                 disabled={busy}
               />
-              <span className="handover-row__colon">:</span>
-              <Input
-                value={row.members}
-                onChange={(e) =>
-                  setHandovers((rows) =>
-                    rows.map((r) =>
-                      r.key === row.key ? { ...r, members: e.target.value } : r,
-                    ),
-                  )
-                }
-                placeholder="팀원1, 팀원2"
-                disabled={busy}
-              />
-              <Tooltip label="행 삭제">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="행 삭제"
-                  disabled={busy || handovers.length === 1}
+              <p className="hint">
+                한 번 입력하면 다음부터 자동으로 채워집니다.
+              </p>
+            </>,
+          )}
+
+          {row(
+            '인수인계',
+            <>
+              {handovers.map((h) => (
+                <div className="handover-row" key={h.key}>
+                  <Input
+                    value={h.project}
+                    onChange={(e) =>
+                      setHandovers((rows) =>
+                        rows.map((r) =>
+                          r.key === h.key
+                            ? { ...r, project: e.target.value }
+                            : r,
+                        ),
+                      )
+                    }
+                    placeholder="프로젝트명"
+                    disabled={busy}
+                  />
+                  <span className="handover-row__colon">:</span>
+                  <Input
+                    value={h.members}
+                    onChange={(e) =>
+                      setHandovers((rows) =>
+                        rows.map((r) =>
+                          r.key === h.key
+                            ? { ...r, members: e.target.value }
+                            : r,
+                        ),
+                      )
+                    }
+                    placeholder="팀원1, 팀원2"
+                    disabled={busy}
+                  />
+                  <Tooltip label="행 삭제">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="행 삭제"
+                      disabled={busy || handovers.length === 1}
+                      onClick={() =>
+                        setHandovers((rows) =>
+                          rows.filter((r) => r.key !== h.key),
+                        )
+                      }
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  </Tooltip>
+                </div>
+              ))}
+              <div className="handover-add">
+                <Button
+                  size="xs"
                   onClick={() =>
-                    setHandovers((rows) => rows.filter((r) => r.key !== row.key))
+                    setHandovers((rows) => [...rows, newHandover()])
                   }
+                  disabled={busy}
                 >
-                  <Icon name="x" size={14} />
-                </button>
-              </Tooltip>
-            </div>
-          ))}
-          <div className="handover-add">
-            <Button
-              size="sm"
-              onClick={() => setHandovers((rows) => [...rows, newHandover()])}
-              disabled={busy}
-            >
-              프로젝트 추가
-            </Button>
-            <span className="hint">
-              본문에 &quot;프로젝트명: 팀원1, 팀원2&quot; 로 한 줄씩 들어갑니다
-            </span>
-          </div>
+                  프로젝트 추가
+                </Button>
+                <span className="hint">
+                  본문에 &quot;프로젝트명: 팀원1, 팀원2&quot; 로 한 줄씩
+                  들어갑니다
+                </span>
+              </div>
+            </>,
+          )}
         </div>
-      </FormRow>
+      </div>
 
       {busy && (
         <ProgressLine
@@ -473,9 +537,10 @@ export function VacationForm() {
         />
       )}
 
-      <div className="form-actions">
+      <div className="approval-actions">
         <Button
           variant="primary"
+          size="lg"
           onClick={() => void run()}
           disabled={!valid || busy || committed}
           loading={busy}
@@ -483,7 +548,8 @@ export function VacationForm() {
           작성 시작
         </Button>
         <span className="hint">
-          전자결재 창까지 만들어 둡니다 — [상신]은 직접 (일정등록: 부재공유 캘린더)
+          전자결재 창까지 만들어 둡니다 — [상신]은 직접 (일정등록: 부재공유
+          캘린더)
         </span>
       </div>
     </div>

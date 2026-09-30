@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { OvertimeForm } from './OvertimeForm';
 
@@ -12,12 +13,20 @@ export function OvertimeModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal
-      title="야근 결재 상신"
+      width={560}
+      title={
+        <span className="approval-mtitle">
+          <span className="approval-mtitle__icon" aria-hidden="true">
+            <Icon name="moon" size={15} />
+          </span>
+          야근 결재 상신
+        </span>
+      }
       onClose={() => {
         if (!busy) onClose();
       }}
     >
-      <OvertimeForm onBusyChange={setBusy} />
+      <OvertimeForm onBusyChange={setBusy} layout="modal" />
     </Modal>
   );
 }

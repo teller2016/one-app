@@ -24,12 +24,17 @@ export function DoneCard({
   return (
     <div className={`approval-done approval-done--${tone}`}>
       <span className="approval-done__icon">
-        <Icon name={icon} size={28} />
+        {/* 목업: 정상 완료는 크게(56·28), 누락 안내(warn)는 한 단 작게(44·22) */}
+        <Icon name={icon} size={tone === 'warn' ? 22 : 28} />
       </span>
       {title && <p className="approval-done__title">{title}</p>}
       <p className="approval-done__hint">{hint}</p>
-      <div className="form-actions">
-        <Button variant="primary" loading={opening} onClick={() => void openEaBox()}>
+      <div className="approval-done__actions">
+        <Button
+          variant="primary"
+          loading={opening}
+          onClick={() => void openEaBox()}
+        >
           전자결재 상신함 열기
         </Button>
       </div>

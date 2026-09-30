@@ -61,3 +61,10 @@ Jira 버그 티켓을 골라 **headless `claude` CLI 미션으로 읽기 전용 
 - ⚠️ 미션 도중 사용자가 같은 저장소를 직접 편집·커밋해도 변조로 찍힌다(오탐, 알려진 한계).
 
 산출물은 `userData/nightwatch/` — `reports/{key}.md`(마크다운 렌더)·`{key}.prompt.md`(복사용)·`work/{key}/`·`logs/`, 원장 `state.json`, 자동 순회 진행 `auto-state.json`, 설정 `config.json`(Claude 계정·타임아웃 기본 40분·자동 분석 대상 저장소 `auto.repoIds` — 저장소 정보 자체는 프로젝트 레지스트리가 출처). 비용은 stream-json 의 `total_cost_usd` 를 기록해 처리한 티켓 행에 표시. 숨김·[재분석]·30일 자동 정리·앱 시작 시 좀비 정리 포함. 1분 자동 새로고침.
+
+## 화면 구조 (2026-09-30 Signal 리디자인 — 목업 Nightwatch.dc.html)
+- 섹션 제목 없음 · 상태 새로고침은 `TopbarSlot` right. 본문 = 왼쪽 목록 열(padding 16 20 · gap 14, 스크롤) + **오른쪽 400px 설정·실행 로그 열**(패널 면 + 왼쪽 경계선, 접이식 머리 44).
+- 목록은 패널 두 개(머리 42 · 제목 15/600): '작업 가능한 티켓'(실행 중이면 미션 로그 118px 코드 면) · '처리한 티켓'(남는 높이 채움). 행 56px · padding 0 14 · 메타 11.5 + 제목 13 **한 줄 말줄임**(예전 2줄 clamp 폐기) · 키 모노 12/500 액센트. 행 버튼은 `Button xs` — 프롬프트 복사만 primary, 나머지 plain, 중지 danger.
+- 설정·로그 접힘은 예전 Collapsible 과 **같은 localStorage 키·형식**(`nightwatch:settings`·`nightwatch:log`, '1'/'0')을 쓴다 — 키를 바꾸면 사용자의 접힘 상태가 초기화된다.
+- '분석 중' 뱃지는 `Badge accent` + 섹션 전용 점(`__run-dot`) — 공용 accent 변형은 점이 없다.
+- 리포트 모달 840×760(머리 바닥선 · 본문 20 28 · 13/1.75), 코드 블록은 **가라앉은 면**(공용 .md pre 의 다크 패널을 이 모달에서만 되돌림). 분석 설정 모달 520.

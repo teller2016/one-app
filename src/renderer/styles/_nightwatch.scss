@@ -1,181 +1,462 @@
-// Nightwatch — 야간 무인 버그 분석 (후보 목록 + 처리 원장 + 리포트 모달)
+// Nightwatch — 야간 무인 버그 분석 (후보 목록 + 처리 원장 + 설정·로그 + 리포트 모달)
+// Signal 목업(Nightwatch.dc.html, 2026-09-30)을 그대로 옮긴 배치:
+//   탑바 슬롯(상태 새로고침) → 본문 = 왼쪽 목록 열(padding 16 20 · gap 14, 패널 두 개)
+//   + 오른쪽 400px 설정·실행 로그 열(패널 면 + 왼쪽 경계선, 접이식 머리 44).
 @use './base' as *;
 
 .nightwatch {
-  &__head {
+  // .section 의 여백·폭 제한을 풀고 높이를 채운다 — 왼쪽 목록 열·오른쪽 설정 열이 각자 스크롤한다
+  max-width: none;
+  padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  &__body {
+    flex: 1;
+    min-height: 0;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    background: var(--bg);
   }
 
-  // 목록 상단 헤더 — 라벨 + (실행 중 뱃지·중지·새로고침)
-  &__list-head {
+  // ── 왼쪽 목록 열 ──
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 20px;
+    overflow-y: auto;
+
+    // 배너는 열 gap 이 간격을 맡는다 (공용 배너의 아래 여백을 겹치지 않게)
+    > .banner {
+      margin: 0;
+    }
+  }
+
+  // 패널 — 목업 .panel (패널 면 · 헤어라인 · 모서리 10)
+  &__panel {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+
+    // 처리한 티켓 — 남는 높이를 채운다(목업 flex 1)
+    &--done {
+      flex: 1 0 auto;
+    }
+  }
+
+  // 패널 머리 — 목업 .panel-head (높이 42 · padding 0 14 · 바닥선 · gap 8)
+  &__panel-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
-    margin: 16px 0 8px;
+    height: var(--panel-head-h);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
-  &__list-actions {
+  // 목업 .h2 — 15px 600
+  &__panel-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    @include type-title;
+    color: var(--text);
+  }
+
+  &__panel-actions {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
   }
 
-  // 분석 설정 모달 — 저장소 셀렉트 (룩은 공용 Select, 여기선 배치만)
-  &__repo-select {
-    width: 100%;
-  }
+  &__panel-note {
+    padding: 10px 14px 0;
 
-  &__repo-hint {
-    margin-top: 6px;
-  }
-
-  // 자동 분석 대상 저장소 체크박스 — 프로젝트가 늘어도 설정이 세로로 길어지지 않게 다열 배치
-  &__auto-repos {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 4px 12px;
-  }
-
-  // 분석 설정 모달 — 저장소·모델·부가설명 입력 묶음
-  &__pick-opts {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  // 실행 중 미션 진행 로그 — 라이브 tail 패널 (자동 스크롤)
-  &__mission {
-    margin-bottom: 16px;
-
-    pre {
+    .banner {
       margin: 0;
-      font-family: var(--font-mono);
-      @include type-small;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 220px;
-      overflow: auto;
     }
   }
 
-  // 티켓 목록 카드 — 행들을 담는 카드 (jira 그룹 카드와 동일한 문법)
-  &__list {
-    @include card-surface;
-    margin-bottom: 16px;
+  // 실행 중 미션 진행 로그 — 목업 .term 블록 (margin 10 14 4 · 높이 118 · 모서리 8 · 11.5/19)
+  &__mission {
+    @include panel-dark;
+    margin: 10px 14px 4px;
+    height: 118px;
+    overflow: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-tab);
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
+    line-height: 19px;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
-  // 빈 상태는 목록 카드의 대체물 — 뒤따르는 설정·로그 접이식과의 여백을 같게
-  // (공용 .empty-state 에 마진을 넣으면 중앙 배치로 쓰는 곳이 어긋난다)
+  // '분석 중' 뱃지 점 — 공용 accent 뱃지는 점이 없어 여기서만 붙인다(목업 .b-accent + .dot)
+  &__run-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 5px;
+    border-radius: var(--r-full);
+    background: currentColor;
+    vertical-align: middle;
+  }
+
   &__empty {
-    margin-bottom: 16px;
+    margin: 12px 14px 14px;
   }
 
-  // 티켓 행 — 2단 구조: 왼쪽(메타 줄 + 요약 줄) + 오른쪽(액션 버튼)
+  // ── 티켓 행 — 목업 .row-item (높이 56 · padding 0 14 · gap 12 · 바닥선 · hover 가라앉은 면) ──
   &__row {
     display: flex;
     align-items: center;
     gap: 12px;
-    width: 100%;
-    padding: 10px 16px;
+    min-height: var(--row-h-ticket);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
     color: var(--text);
-
-    & + & {
-      border-top: 1px solid var(--border);
-    }
-
-    &:first-child {
-      border-radius: var(--r-lg) var(--r-lg) 0 0;
-    }
+    transition: background var(--dur-1) var(--ease);
 
     &:last-child {
-      border-radius: 0 0 var(--r-lg) var(--r-lg);
+      border-bottom: 0;
     }
 
-    &:only-child {
-      border-radius: var(--r-lg);
+    &:hover {
+      background: var(--bg-sunken);
+    }
+
+    // 처리한 티켓 행은 버튼이 많아 간격이 좁다(목업 gap 8)
+    &--done {
+      gap: 8px;
     }
   }
 
+  // 왼쪽 두 줄 — 메타 줄(11.5) + 제목 줄(13, 한 줄 말줄임) · gap 3
   &__row-main {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
 
   &__row-meta {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  // 요약 — 전문을 두 줄까지 감싸 보여주고 넘치면 말줄임
-  &__row-title {
-    @include type-body;
-    color: var(--text);
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    min-width: 0;
+    font-size: var(--fs-ui-sm);
+    white-space: nowrap;
     overflow: hidden;
-    word-break: break-all;
   }
 
-  &__row-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
+  &__row-title {
+    font-size: var(--fs-body);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  // 티켓번호 — 클릭하면 Jira 를 브라우저에서 열기
+  // 티켓 키 — 목업 .key (모노 12 · 500 · 액센트) · 누르면 Jira 를 브라우저에서 연다
   &__key {
     flex-shrink: 0;
     padding: 0;
     border: none;
     background: transparent;
     font-family: var(--font-mono);
-    @include type-small;
-    color: var(--text-3);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--accent);
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition: color var(--dur-1) var(--ease);
     @include focus-ring(2px);
 
     &:hover {
-      color: var(--accent);
+      color: var(--accent-hover);
       text-decoration: underline;
     }
   }
 
-  // 우선순위·확신도 같은 보조 텍스트
+  // 유형·상태·우선순위 같은 보조 텍스트 — 목업 .faint
   &__dim {
     flex-shrink: 0;
-    @include type-small;
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
   }
 
-  // 실행 로그 본문 — 모노스페이스 프리포맷
-  &__log {
-    margin: 0;
+  &__pin {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  // 소요·비용 — 숫자라 모노 (목업 .faint.mono)
+  &__cost {
     font-family: var(--font-mono);
-    @include type-small;
+  }
+
+  // ── 오른쪽 설정·실행 로그 열 (목업: 폭 400 · 패널 면 · 왼쪽 경계선) ──
+  &__side {
+    width: var(--nightwatch-side-w);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--surface-1);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  // 접이식 머리 — 높이 44 · padding 0 16 · gap 8 · 바닥선 (로그 머리는 윗선)
+  &__side-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: var(--pane-head-h);
+    padding: 0 16px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    flex-shrink: 0;
+    @include focus-ring(-2px);
+
+    > :first-child {
+      color: var(--text-3);
+    }
+
+    &:hover {
+      background: var(--bg-sunken);
+    }
+
+    &--log {
+      border-top: 1px solid var(--border);
+      margin-top: auto; // 설정이 짧으면 열 바닥에 붙는다(목업)
+    }
+
+    // 설정이 접혀 있고 로그가 **열려 있으면** 두 머리가 붙는다 — 위아래 선이 겹치지 않게 윗선을 뺀다.
+    // ⚠️ 로그가 닫혀 있으면 margin-top:auto 로 열 바닥에 떨어져 있으니 윗선이 필요하다 — DOM 인접(+)만
+    //    보고 빼면 둘 다 접었을 때 바닥 머리가 선 없이 뜬다(2026-09-30 /test)
+    &--log:first-child,
+    .nightwatch__side-head + &[aria-expanded='true'] {
+      border-top: 0;
+    }
+  }
+
+  // 설정 본문 — padding 14 16 · gap 14, 넘치면 안에서 스크롤
+  &__settings {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px 16px;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 0 1 auto;
+  }
+
+  // 목업 .field — 라벨 위 · gap 6
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  // 목업 .field > label — 12px 500 fg-2
+  &__label {
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--text-2);
+  }
+
+  // 목업 .hint — 11.5 fg-3 (긴 안내는 행간 1.6)
+  &__hint {
+    margin: 0;
+    font-size: var(--fs-ui-sm);
+    line-height: 1.6;
+    color: var(--text-3);
+
+    b {
+      color: var(--text-2);
+      font-weight: 600;
+    }
+  }
+
+  // 자동 분석 현황 한 줄 — 목업 .hint.mono(fg-2). ⚠️ 한글이 섞여 모노는 쓰지 않고 숫자 폭만 고정
+  &__auto-state {
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 하루 최대 건수 · 타임아웃 — 2열 grid · gap 12
+  &__field-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  // 숫자 입력 — 목업 .input.mono
+  &__num {
+    font-family: var(--font-mono);
+  }
+
+  // 자동 분석 대상 저장소 체크박스 — 목업: 가로로 흘러 줄바꿈 · gap 14
+  &__auto-repos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+
+  &__save {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  // 실행 로그 본문 — 로그 머리 아래를 채우고 안에서 스크롤 (코드 면)
+  &__log {
+    @include panel-dark;
+    flex: 1 1 0;
+    min-height: 120px;
+    margin: 0;
+    padding: 12px 16px;
+    overflow: auto;
+    border: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
+    line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;
   }
 
+  // ── 모달 ──
+  // 제목의 티켓 키 — 목업 .key 15px (제목 서체 크기 그대로, 모노 액센트)
+  &__modal-key {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  // 분석 설정 모달 본문 — 목업 gap 16
+  &__pick {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 2px; // 목업 본문 padding-top 6 (공용 4 + 2)
+  }
+
+  &__repo-select {
+    width: 100%;
+  }
+
+  // 로컬 경로 — 식별자라 모노
+  &__path {
+    font-family: var(--font-mono);
+    color: var(--text-2);
+  }
 }
 
-// 분석 리포트 모달 — 문서를 한눈에 보도록 가로·세로 최대 확장
-// (Modal 에 size prop 이 없어 메일 모달과 같은 :has 선택자 방식, 래퍼 .nightwatch__report 가 후크)
-.modal--wide:has(.nightwatch__report) {
-  max-width: 1600px;
-  width: 96vw;
-  height: calc(100vh - 96px); // 오버레이 위아래 여백(48px)까지 꽉 채움 — 상단 치우침 해소
+// ── 분석 리포트 모달 — 목업 840×760 · 머리 바닥선 · 본문 padding 20 28 · 13/1.75 ──
+// (Modal 에 높이·머리 선 옵션이 없어 래퍼 .nightwatch__report 를 :has 후크로 쓴다 — 메일 모달과 같은 방식)
+.modal:has(.nightwatch__report) {
+  height: min(var(--nightwatch-report-h), calc(100vh - 96px));
+
+  .modal__head {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+  }
+
+  .modal__body {
+    flex: 1;
+    padding: 20px 28px;
+  }
+}
+
+// 리포트 타이포 — 목업: 본문 13/1.75 fg-2 · h1 20/600 · h2 15/600(선 없음) · 인라인 코드 surface-2 칩 ·
+// 코드 블록은 가라앉은 면 + 선 + 모서리 8 (코드 다크 패널 아님)
+.nightwatch__report .md {
+  font-size: var(--fs-body);
+  line-height: 1.75;
+  color: var(--text-2);
+
+  h1 {
+    margin: 0 0 14px;
+    font-size: var(--fs-h2);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+
+  h2 {
+    margin: 18px 0 14px;
+    padding: 0;
+    border: 0;
+    font-size: var(--fs-title);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  h3 {
+    color: var(--text);
+  }
+
+  p,
+  ul,
+  ol {
+    margin: 0 0 14px;
+  }
+
+  ul,
+  ol {
+    padding-left: 20px;
+  }
+
+  code {
+    font-size: var(--fs-small);
+    background: var(--surface-2);
+    border-radius: var(--r-mark);
+    padding: 1px 5px;
+    color: var(--text);
+  }
+
+  pre {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-tab);
+    color: var(--text-2);
+    // panel-dark 스코프를 되돌린다 (공용 .md pre 가 다크 패널을 건다 — 목업은 밝은 가라앉은 면)
+    --text: inherit;
+    --text-2: inherit;
+    --text-3: inherit;
+    --border: inherit;
+    --accent: inherit;
+    --accent-hover: inherit;
+
+    code {
+      background: none;
+      padding: 0;
+      font-size: var(--fs-small);
+      line-height: 20px;
+      color: var(--text-2);
+    }
+  }
 }

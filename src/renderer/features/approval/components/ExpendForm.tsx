@@ -24,7 +24,11 @@ import type { ExpendResult } from '../../../../shared/types';
 type DinnerRow = { key: number; date: string; amount: string };
 
 let rowSeq = 1;
-const newRow = (date: string): DinnerRow => ({ key: rowSeq++, date, amount: '' });
+const newRow = (date: string): DinnerRow => ({
+  key: rowSeq++,
+  date,
+  amount: '',
+});
 
 /**
  * 지출결의서(개인) — 주차요금·석식대 항목을 채워 넣는다.
@@ -60,7 +64,8 @@ export function ExpendForm() {
 
   const parkingValid = !parkingOn || (man + half > 0 && parkingTotal > 0);
   const dinnerValid =
-    !dinnerOn || (dinnerRows.length > 0 && dinnerRows.every((d) => !!d.date && d.won > 0));
+    !dinnerOn ||
+    (dinnerRows.length > 0 && dinnerRows.every((d) => !!d.date && d.won > 0));
   const anySection = parkingOn || dinnerOn;
   const valid = anySection && parkingValid && dinnerValid;
 
@@ -73,7 +78,9 @@ export function ExpendForm() {
       const res = await window.oneApp.approval.runExpend({
         month,
         parking: parkingOn ? { manCount: man, halfCount: half } : null,
-        dinners: dinnerOn ? dinnerRows.map((d) => ({ date: d.date, amount: d.won })) : [],
+        dinners: dinnerOn
+          ? dinnerRows.map((d) => ({ date: d.date, amount: d.won }))
+          : [],
       });
       if (res.ok) setDone(res);
       else {
@@ -103,8 +110,8 @@ export function ExpendForm() {
       {error && (
         <Banner variant="danger">
           {error}
-          {done?.added ? ` (${done.added}건까지 작성됨)` : ''} — 지출결의서 창은 열어
-          두었습니다.
+          {done?.added ? ` (${done.added}건까지 작성됨)` : ''} — 지출결의서 창은
+          열어 두었습니다.
         </Banner>
       )}
 
@@ -112,6 +119,7 @@ export function ExpendForm() {
       <section className="expend-sec">
         <div className="expend-sec__head">
           <Checkbox
+            className="expend-sec__check"
             label="주차요금"
             checked={parkingOn}
             onChange={(e) => setParkingOn(e.target.checked)}
@@ -153,6 +161,7 @@ export function ExpendForm() {
                   type="number"
                   min={0}
                   small
+                  className="expend-count__input"
                   value={manCount}
                   onChange={(e) => setManCount(e.target.value)}
                   disabled={busy}
@@ -165,6 +174,7 @@ export function ExpendForm() {
                   type="number"
                   min={0}
                   small
+                  className="expend-count__input"
                   value={halfCount}
                   onChange={(e) => setHalfCount(e.target.value)}
                   disabled={busy}
@@ -184,13 +194,16 @@ export function ExpendForm() {
       <section className="expend-sec">
         <div className="expend-sec__head">
           <Checkbox
+            className="expend-sec__check"
             label="석식대 (연장근로)"
             checked={dinnerOn}
             onChange={(e) => setDinnerOn(e.target.checked)}
             disabled={busy}
           />
           {dinnerOn && dinnerSum > 0 && (
-            <span className="expend-sec__sum">합계 {formatWon(dinnerSum)}원</span>
+            <span className="expend-sec__sum">
+              합계 <strong>{formatWon(dinnerSum)}원</strong>
+            </span>
           )}
         </div>
 
@@ -198,31 +211,40 @@ export function ExpendForm() {
           <div className="expend-sec__body">
             {dinners.map((row) => (
               <div className="expend-row" key={row.key}>
-                <DatePicker
-                  value={row.date}
-                  onChange={(v) =>
-                    setDinners((rows) =>
-                      rows.map((r) => (r.key === row.key ? { ...r, date: v } : r)),
-                    )
-                  }
-                  disabled={busy}
-                />
+                <div className="approval-date approval-date--dinner">
+                  <DatePicker
+                    value={row.date}
+                    onChange={(v) =>
+                      setDinners((rows) =>
+                        rows.map((r) =>
+                          r.key === row.key ? { ...r, date: v } : r,
+                        ),
+                      )
+                    }
+                    disabled={busy}
+                  />
+                </div>
                 <Input
                   type="number"
                   min={0}
                   step={100}
+                  className="expend-row__amount"
                   placeholder="금액"
                   value={row.amount}
                   onChange={(e) =>
                     setDinners((rows) =>
                       rows.map((r) =>
-                        r.key === row.key ? { ...r, amount: e.target.value } : r,
+                        r.key === row.key
+                          ? { ...r, amount: e.target.value }
+                          : r,
                       ),
                     )
                   }
                   disabled={busy}
                 />
-                <span className="expend-row__note">{dinnerNote(row.date) || ''}</span>
+                <span className="expend-row__note">
+                  {dinnerNote(row.date) || ''}
+                </span>
                 <Tooltip label="행 삭제">
                   <button
                     type="button"
@@ -230,7 +252,9 @@ export function ExpendForm() {
                     aria-label="행 삭제"
                     disabled={busy || dinners.length === 1}
                     onClick={() =>
-                      setDinners((rows) => rows.filter((r) => r.key !== row.key))
+                      setDinners((rows) =>
+                        rows.filter((r) => r.key !== row.key),
+                      )
                     }
                   >
                     <Icon name="x" size={14} />
@@ -239,7 +263,7 @@ export function ExpendForm() {
               </div>
             ))}
             <Button
-              size="sm"
+              size="xs"
               onClick={() =>
                 setDinners((rows) => [
                   ...rows,
@@ -261,9 +285,10 @@ export function ExpendForm() {
         />
       )}
 
-      <div className="form-actions">
+      <div className="approval-actions">
         <Button
           variant="primary"
+          size="lg"
           onClick={() => void run()}
           disabled={!valid || busy}
           loading={busy}

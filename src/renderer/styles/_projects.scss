@@ -1,71 +1,190 @@
-// 프로젝트 레지스트리 — 룩(카드·뱃지·링크)은 _base.scss 공용이 담당, 여기는 배치만
+// 프로젝트 레지스트리 — 목업 Projects.dc.html(카드 목록) · ProjectForm.dc.html(추가/편집 폼)
+// 섹션 제목은 없다 — [프로젝트 추가]는 탑바 오른쪽 끝(TopbarSlot)
 @use './base' as *;
 
 .projects {
-  &__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
+  // .section 의 여백·폭 제한을 목업 값으로 — 목록 24 28, 폼 28 32 (폭은 안쪽이 제한한다)
+  max-width: none;
+  padding: 24px 28px;
+
+  &--form {
+    padding: 28px 32px;
   }
 
+  // ── 목록 ──
+  &__list {
+    max-width: 920px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  // 카드 — 목업 .card (패널 면 + 헤어라인 + r-lg, hover 윤곽만 한 단)
   &__card {
     @include card-surface;
-    margin-bottom: 12px;
     padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color var(--dur-1) var(--ease);
+
+    &:hover {
+      border-color: var(--border-strong);
+    }
 
     &-head {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    &-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      gap: 10px;
       min-width: 0;
     }
+  }
 
-    &-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
+  &__spacer {
+    flex: 1;
   }
 
   &__name {
-    @include type-title;
-  }
-
-  // 로컬 경로 — 모노 폰트 + 보조 톤, 길면 말줄임
-  &__path {
-    @include type-small;
-    font-family: var(--font-mono);
-    color: var(--text-2);
-    margin-top: 6px;
+    @include type-title; // 15 / 600 (목업 .h2)
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  // 원격 주소·브랜치·Jira 키 메타 행
+  // 로컬 경로 — 모노 12 · 보조 잉크, 길면 말줄임
+  &__path {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 원격 주소·브랜치·Jira 키 메타 행 — 12px · gap 14, 값은 모노 보조 잉크
   &__meta {
-    @include type-small;
-    color: var(--text-3);
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 4px 12px;
-    margin-top: 6px;
+    gap: 4px 14px;
+    min-width: 0;
+    font-size: var(--fs-small);
+    color: var(--text-3);
+  }
+
+  &__meta-val {
+    font-family: var(--font-mono);
+    color: var(--text-2);
+  }
+
+  // 원격 주소 — 모노 액센트 + 외부 링크 아이콘 (목업 a.mono.accent)
+  &__remote {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--accent);
+    cursor: pointer;
+    @include focus-ring(1px);
+
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+
+    // http(s) 가 아닌 주소(git@…)는 열 수 없다 — 글자만
+    &--plain {
+      color: var(--text-2);
+      cursor: default;
+
+      &:hover {
+        color: var(--text-2);
+        text-decoration: none;
+      }
+    }
+  }
+
+  // ── 추가/편집 폼 ──
+  &__form {
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  &__form-title {
+    margin: 0;
+    @include type-h2; // 20 / 600
+  }
+
+  // 패널 안 2열 그리드 — 라벨 120 · 입력 나머지 (목업 column-gap 16 · row-gap 14)
+  &__form-grid {
+    @include card-surface;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    column-gap: 16px;
+    row-gap: 14px;
+    align-items: center;
+  }
+
+  &__form-label {
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+
+  &__form-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
   }
 
-  // 폼 — 원격 종류 Select 폭 고정 (주소 Input 이 나머지를 차지)
+  // 경로·주소·브랜치·키 — 식별자라 모노 12.5
+  &__mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+  }
+
+  // 원격 종류 Select 폭 고정 (styles.md: Select 의 className 은 .picker 래퍼 — flex none + width)
   &__form-remote {
-    flex: 0 0 128px;
+    flex: 0 0 auto;
+    width: 132px;
+  }
+
+  &__form-branch {
+    max-width: 240px;
+  }
+
+  &__form-jira {
+    max-width: 160px;
+  }
+
+  &__form-note {
+    margin: 0;
+    @include type-small;
+    line-height: 1.6;
+    color: var(--text-3);
+
+    b {
+      color: var(--text-2);
+    }
+  }
+
+  &__form-divider {
+    height: 1px;
+    background: var(--border);
+  }
+
+  &__form-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 }

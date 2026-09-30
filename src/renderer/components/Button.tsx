@@ -4,7 +4,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   /** 색상 변형 — primary(액센트) · ghost(표면+테두리) · plain(면 없는 글자 버튼 — 목업 .btn-ghost) · danger(위험) */
   variant?: 'primary' | 'ghost' | 'plain' | 'danger';
   /** 크기 — md(기본 32) · sm(28 — 위젯·카드 액션) · xs(24 — 툴바 칩·탭바 [+]) */
-  size?: 'md' | 'sm' | 'xs';
+  size?: 'lg' | 'md' | 'sm' | 'xs';
   /** 로딩 중 — 스피너 표시 + 자동 disabled */
   loading?: boolean;
 };
@@ -25,7 +25,13 @@ export function Button({
 }: ButtonProps) {
   const cls =
     `btn btn--${variant}` +
-    (size === 'sm' ? ' btn--sm' : size === 'xs' ? ' btn--xs' : '') +
+    (size === 'sm'
+      ? ' btn--sm'
+      : size === 'xs'
+        ? ' btn--xs'
+        : size === 'lg'
+          ? ' btn--lg'
+          : '') +
     (className ? ` ${className}` : '');
   return (
     <button

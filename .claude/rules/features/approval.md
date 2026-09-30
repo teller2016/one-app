@@ -47,7 +47,7 @@ paths:
 1. **완료 화면**(`DoneCard`) — 결재 3종이 공용이라 버튼도 그 안에 한 번만.
 2. **결재 홈**(`ApprovalSection` 종류 선택 화면) — 카드 목록 아래 `.approval-eabox`.
    작성하지 않고 **진행 상태만 볼 때**의 경로다(2026-08-13 사용자 요청). 작성 카드와
-   성격이 달라 카드 목록에 넣지 않고 ghost 버튼만 아래에 뒀다(설명 문구는 사용자가 불필요하다고 뺐다).
+   성격이 달라 카드 목록에 넣지 않고 면 없는(`plain`) 버튼만 아래에 뒀다(설명 문구는 사용자가 불필요하다고 뺐다).
 
 같은 창을 재사용하므로 홈에서 열어 둔 뒤 완료 화면에서 다시 눌러도 새 창이 생기지 않는다.
 
@@ -65,14 +65,31 @@ paths:
 - 로그인 직후 그룹웨어가 **공지 팝업**(`gwpOpenNoticePopup.do`)을 띄우므로 `releasePage()` 의
   기본 동작(자식 창 정리)을 그대로 쓴다. 사용자가 이후 문서를 눌러 여는 팝업은 release 뒤라 무관.
 
+## 화면 구조 (리디자인 목업 Approval*.dc.html · OvertimeModal.dc.html, 2026-09-30)
+- **홈**: 가운데 열 720(padding 40 0) — 제목 20/600 + 설명, 종류 카드는 **한 패널 안의 행 목록**
+  (행 padding 16 18 · 아이콘 40 · 행 사이 헤어라인), 그 아래 면 없는 [전자결재 상신함 열기], 정보 배너.
+- **폼**: 가운데 열 780(padding 20 0). 입력은 패널(padding 8 20) 안 **라벨 열 112 그리드**
+  (`.approval-grid` — 라벨 padding-top 14, 칸 padding 8 0). 날짜 200 · 시각 92 · 셀렉트 200 폭 틀
+  (`.approval-date`·`.approval-time`·`.approval-select`)을 피커가 채운다. [작성 시작]은 `Button size="lg"`(36).
+- **야근 모달**(`OvertimeForm layout="modal"`): `Modal width={560}`, 라벨이 위(`.field`), 날짜·시간
+  두 칸, 진행 중 입력 opacity .6, 하단 바(`.approval-mform__foot`)는 모달 본문 여백을 음수 마진으로
+  상쇄해 가장자리까지 간다 — 공용 `Modal footer` 를 안 쓰는 이유는 [작성 시작]·진행 상태가 폼 state 라서다.
+- **완료 화면**(`DoneCard`): 정상 56 아이콘·16 제목, 누락 안내(`warn`)는 44·14 로 한 단 작게.
+
 ## 섹션 내부 뒤로가기
 결재는 **목록 → 폼** 2단이라, 폼에서 뒤로가기를 누르면 섹션을 떠나는 게 아니라 목록으로 돌아가야 한다.
 `renderer/lib/sectionBack.ts` 에 핸들러를 등록해 App 의 `goBack` 이 **섹션 내부를 먼저 소비**한다
 (⌘[ · 탑바 버튼 · 마우스 뒤로 · 스와이프 전부 같은 경로). 탑바 뒤로 버튼은 히스토리가 비어 있어도
 `useHasSectionBack()` 으로 살려 둔다. 하위 화면이 있는 다른 섹션도 이 훅을 쓰면 된다.
 
-목록으로 돌아가는 눈에 보이는 경로는 **제목 앞의 공용 `.icon-btn`(chevron-left)** 이다.
-`SectionHeader` 의 `icon` 슬롯에 [버튼 + 결재 종류 아이콘] 을 나란히 넣는다.
+목록으로 돌아가는 눈에 보이는 경로는 **탑바의 뒤로 버튼**이다(2026-09-30 리디자인 — 섹션 제목을
+없애고 폼 화면은 `<TopbarSlot crumb={종류}>` 로 경로 셋째 칸을 채운다). **탑바가 없는 셸(One App
+Lite·폰)** 은 뒤로 버튼도 경로도 없으므로 `useHasTopbar() === false` 일 때만 폼 위에
+`.approval__head`([chevron-left 공용 `.icon-btn`] + 제목 + 설명)를 직접 그린다.
+
+- ⚠️ `TopbarSlot` 을 **`hasTopbar &&` 로 감쌀 것** — 탑바 없는 셸에서 슬롯은 제자리 `.topbar-inline`
+  으로 그려지는데 crumb 는 거기서 안 그리므로, 오른쪽 설명만 떠 있는 빈 툴바 줄이 생긴다.
+  `useHasTopbar()` 는 첫 렌더에 `null` 이고 layout effect 에서 정해진다(페인트 전이라 깜빡임 없음) — `null` 동안엔 머리도 슬롯도 그리지 않는다.
 
 - ⚠️ **버튼에 공용 클래스를 붙이지 않으면 UA 기본 회색 배경이 그대로 나온다** — 이 프로젝트에는
   전역 `button` 리셋이 없고 `.btn`·`.icon-btn` 같은 클래스가 각자 `border:none; background:transparent`

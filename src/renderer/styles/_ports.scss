@@ -1,129 +1,214 @@
 @use './base' as *;
 
-// 포트 — 리스닝 포트 목록 + 프로세스 종료
+// 포트 — 리스닝 포트 목록 + 프로세스 종료.
+// Signal 목업(Ports.dc.html, 2026-09-30)을 그대로 옮긴 배치: 탑바 슬롯(세그먼트 · 검색 · 새로고침) →
+// 본문 padding 20 → 패널 면 안의 표(목업 .tbl — 머리 30 · 행 38 · 바닥선 · hover 가라앉은 면).
 .ports {
+  // .section 의 여백·폭 제한을 푼다 — 본문(__body)이 목업 padding 20 을 갖는다
+  max-width: none;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-height: 0;
-  // ⚠️ 높이를 채워 **목록만** 스크롤시킨다. 안 그러면 목록이 길어질 때 `.main` 전체에
+  // ⚠️ 높이를 채워 **표 패널만** 스크롤시킨다. 안 그러면 목록이 길어질 때 `.main` 전체에
   // 스크롤바가 생기면서 콘텐츠 폭이 10px 줄어 **툴바가 좌우로 밀린다**(2026-09-23 사용자 지적,
   // '개발'↔'전체' 전환 때 새로고침 버튼이 5px 이동). 덤으로 검색창이 항상 보인다.
   height: 100%;
 
-  // ── 검색 + 건수 + 새로고침 ──
-  &__toolbar {
+  // ── 탑바 슬롯: 검색칸 (목업 340×30, 가라앉은 면 + 돋보기 — PR 검색칸과 같은 문법) ──
+  &__search {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
+    width: 340px;
+    height: var(--control-h-field);
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--bg-sunken);
+    color: var(--text-3);
+    cursor: text;
+    -webkit-app-region: no-drag;
+    transition: border-color var(--dur-1) var(--ease);
+
+    &:focus-within {
+      border-color: var(--accent);
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: var(--fs-body);
+      outline: none;
+
+      &::placeholder {
+        color: var(--text-3);
+      }
+    }
   }
 
-  &__search {
-    flex: 1;
-    min-width: 0;
-  }
-
-  // 세그먼트 라벨 안의 개수 — 자릿수가 바뀌어도 흔들리지 않게 등폭 숫자
+  // 세그먼트 라벨 안의 개수 — 자릿수가 바뀌어도 흔들리지 않게 등폭 숫자(모노)
   &__n {
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     color: var(--text-3);
   }
 
-  // ── 목록 ──
-  &__list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  // ── 본문 (목업 padding 20, 그라운드 면) ──
+  &__body {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
   }
 
-  &__row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    border-radius: var(--r-md);
-    background: var(--surface-2);
+  // 표 패널 — 패널 면 + 헤어라인 + 모서리 10. 표만 안에서 스크롤한다
+  &__panel {
+    min-height: 0;
+    overflow: auto;
+    background: var(--surface-1);
     border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+  }
 
-    &:hover {
-      border-color: var(--border-strong);
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+
+    // 머리 줄 — 30px · 바닥선 · 캡션 톤(한글 라벨이라 모노·대문자 대신 본문 서체 600)
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      height: 30px;
+      padding: 0 12px;
+      text-align: left;
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      color: var(--text-3);
+      white-space: nowrap;
+      background: var(--surface-1); // sticky 라 불투명 — 스크롤되는 행이 비치지 않게
+      border-bottom: 1px solid var(--border);
+    }
+
+    // 행 — 38px · 바닥선 (목업 .tbl td)
+    td {
+      height: 38px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      vertical-align: middle;
+      text-overflow: ellipsis;
+      font-size: var(--fs-body);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
     }
   }
 
-  // 포트 칩 — 한 프로세스가 여는 포트들을 나열한다 (Docker 6개·Vite 3개가 흔하다)
+  // 열 폭 (목업 th width)
+  &__col-ports {
+    width: 190px;
+  }
+
+  &__col-proc {
+    width: 150px;
+  }
+
+  &__col-pid {
+    width: 100px;
+  }
+
+  &__col-proj {
+    width: 130px;
+  }
+
+  &__col-act {
+    width: 100px;
+  }
+
+  &__row {
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover td {
+      background: var(--bg-sunken);
+    }
+  }
+
+  // 포트 칩 — 한 프로세스가 여는 포트들 (목업: 모노 12 500 · padding 2 7 · 모서리 5 · 액센트 틴트)
+  // ⚠️ 줄바꿈 — 190px 열에 칩은 3개 남짓만 들어간다. 잘라 버리면 docker 처럼 포트가 6개인 프로세스의
+  //    나머지 포트를 알 길이 없다(2026-09-30 /test). 넘치는 행만 높아지고(td 38 은 하한) 평소 행은 목업과 같다.
   &__ports {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: 4px;
+    align-items: center;
+    gap: 4px 6px;
     min-width: 0;
+    padding-block: 7px;
   }
 
   &__chip {
-    @include type-small;
-    font-family: var(--font-mono);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--text);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
+    flex-shrink: 0;
+    padding: 2px 7px;
     border-radius: var(--r-sm);
-    padding: 1px 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
   }
 
-
-  &__main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  &__title {
+  // 프로세스 — 명령 이름 모노 12.5 + 보호 자물쇠
+  &__proc {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
   }
 
   &__cmd {
-    color: var(--text);
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  &__pid {
-    @include type-small;
     font-family: var(--font-mono);
-    color: var(--text-3);
-    flex-shrink: 0;
+    font-size: var(--fs-ui);
+    color: var(--text);
   }
 
-  // 보호 대상 자물쇠 — 죽이면 곤란한 프로세스 표시
+  // 보호 대상 자물쇠 — 목업은 메타 톤(fg-3). 경고는 종료 때 확인창이 한다
   &__guard {
     display: inline-flex;
     align-items: center;
-    color: var(--warning);
+    color: var(--text-3);
     flex-shrink: 0;
   }
 
-  &__cwd {
-    @include type-small;
+  // PID — 모노 · 보조색 (목업 .mono.muted)
+  &__table &__pid {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2);
+  }
+
+  // 작업 경로 — 모노 · 메타색 (목업 .mono.faint)
+  &__table &__cwd {
     font-family: var(--font-mono);
     color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-left: 4px;
-    min-width: 0;
+  }
+
+  &__table &__act {
+    text-align: right;
   }
 }

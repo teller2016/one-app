@@ -103,6 +103,8 @@
   --idle: #69717c;
   --idle-soft: rgba(105, 113, 124, 0.12);
   // 다크 패널 안 시맨틱 (panel-dark 가 치환)
+  --info: #0a6e92; // 안내(정보) — 목업 --info. 액센트와 다른 청록 계열, 배너·완료 아이콘 전용
+  --info-soft: rgba(10, 110, 146, 0.1);
   --ok-on-dark: #4ccb8d;
   --warning-on-dark: #f2a53a;
   --danger-on-dark: #f2676d;
@@ -144,6 +146,7 @@
   --control-h: 32px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
   --control-h-sm: 28px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
   --control-h-field: 30px; // 드로어 커밋 입력 한 줄 (목업)
+  --control-h-lg: 36px; // 큰 버튼 Button size="lg" (목업 .btn-lg — 결재 [작성 시작])
   --control-h-xs: 24px; // 초소형 버튼 Button size="xs" (목업 .btn-sm — 툴바 프리셋·탭 [+])
   --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
   --shadow-2: 0 16px 48px rgba(20, 22, 26, 0.16), 0 0 0 1px rgba(20, 22, 26, 0.08); // 모달·토스트·팝오버 — 그림자 + 1px 윤곽
@@ -165,6 +168,7 @@
   --fs-body: 13px;
   --fs-emph: 14px;
   --fs-title: 15px;
+  --fs-heading: 16px; // 완료 화면 제목 (결재 — 목업 16/600)
   --fs-week-label: 13.5px; // 주간 화면 주 표시 (목업 — 모노)
   --fs-ui-sm: 11.5px; // 시각·보조 모노 값 (목업 11.5)
   --fs-detail-title: 18px; // 상세 패널 제목 (Jira 이슈 등 — 목업)
@@ -189,6 +193,13 @@
   --jira-detail-w: 440px;
   // 표 행 높이 (Jira 보고 결과 표 등 — 목업 36)
   --row-h-table: 36px;
+  // 카드형 패널 머리 높이 (목업 .panel-head 42 — Nightwatch 목록 패널 등)
+  --panel-head-h: 42px;
+  // 두 줄 티켓 행 높이 (메타 줄 + 제목 줄 — 목업 Nightwatch 56)
+  --row-h-ticket: 56px;
+  // Nightwatch 오른쪽 설정·실행 로그 열 폭 · 리포트 모달 높이 (목업 400 · 760)
+  --nightwatch-side-w: 400px;
+  --nightwatch-report-h: 760px;
   // 섹션 안 패널 머리줄 높이 — 터미널 탭바·워크스페이스 패널 머리처럼 나란히 놓여 줄이 맞아야 하는 바
   --pane-head-h: 44px;
   // 폼 라벨 열 — `.form-row` 의 라벨 최소폭과 라벨↔입력 간격.
@@ -253,6 +264,8 @@
   --danger: #f2676d;
   --danger-soft: rgba(242, 103, 109, 0.14);
   --danger-soft-strong: rgba(242, 103, 109, 0.3);
+  --info: #5bc4e8;
+  --info-soft: rgba(91, 196, 232, 0.13);
   --ot: #ff8f4d;
   --ot-soft: rgba(255, 143, 77, 0.14);
   --idle: #858c96;
@@ -584,6 +597,11 @@ body {
   }
 
   // 초소형 — 툴바 프리셋 칩 등 (목업 .btn-sm 24px)
+  &--lg {
+    height: var(--control-h-lg);
+    padding: 0 16px;
+  }
+
   &--xs {
     height: var(--control-h-xs);
     padding: 0 8px;
@@ -1045,7 +1063,7 @@ input.input--bare {
   height: 20px;
   padding: 0 7px;
   border-radius: var(--r-sm);
-  font-size: var(--fs-small);
+  font-size: var(--fs-ui-sm); // 11.5 — 목업 .badge
   font-weight: 500;
   max-width: 100%;
   min-width: 0;
@@ -1086,6 +1104,12 @@ input.input--bare {
   &--pill {
     background: var(--surface-2);
     color: var(--text-2);
+  }
+
+  // 점 없는 액센트 틴트 — 프로젝트 이름처럼 '이것에 속한다'는 표시 (목업 .b-accent)
+  &--accent {
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 }
 
@@ -1474,10 +1498,13 @@ input.input--bare {
   align-items: flex-start;
   gap: 10px;
   margin: 0 0 16px;
-  padding: 10px 14px;
-  border-radius: var(--r-md);
-  border: 1px solid;
+  padding: 12px 14px;
+  // Signal 목업: 테두리 없는 soft 띠 · 모서리 8 · 12.5/1.6 (2026-09-30 — 결재 홈 안내 띠 기준)
+  border-radius: var(--r-tab);
+  border: 0;
   @include type-body;
+  font-size: var(--fs-ui);
+  line-height: 1.6;
   // 경고·오류는 대개 조작 결과로 뒤늦게 나타난다 — 튀어나오지 않게 띄워 준다
   @include rise-in;
 
@@ -1487,7 +1514,7 @@ input.input--bare {
     flex-shrink: 0;
     // 아이콘을 **첫 글줄의 세로 중앙**에 맞춘다(본문 line-height 1.5) — 고정 margin 으로
     // 밀어 두면 글자 크기나 줄 높이가 달라질 때 어긋난다(2026-09-03 사용자 지적)
-    height: calc(var(--fs-body) * 1.5);
+    height: calc(var(--fs-ui) * 1.6);
   }
 
   &--warning {
@@ -1502,10 +1529,20 @@ input.input--bare {
     color: var(--danger);
   }
 
+  // 안내 — 청록(--info) 아이콘 + 보조 잉크 글자, 강조(strong)만 본문 잉크 (목업)
   &--info {
-    background: var(--accent-soft);
-    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-    color: var(--accent);
+    background: var(--info-soft);
+    color: var(--text-2);
+
+    .banner__icon {
+      color: var(--info);
+    }
+
+    strong,
+    b {
+      color: var(--text);
+      font-weight: 600;
+    }
   }
 }
 

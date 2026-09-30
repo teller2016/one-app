@@ -5,8 +5,8 @@ import { Button } from '../../../components/Button';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
-import { SectionHeader } from '../../../components/SectionHeader';
 import { useToast } from '../../../components/Toast';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { errMsg } from '../../../lib/errMsg';
 import { ProjectCard } from './ProjectCard';
 import {
@@ -35,7 +35,8 @@ export function ProjectsSection() {
         if (mounted) setProjects(list);
       })
       .catch((e: unknown) => {
-        if (mounted) setLoadError(errMsg(e, '프로젝트 목록을 불러오지 못했습니다.'));
+        if (mounted)
+          setLoadError(errMsg(e, '프로젝트 목록을 불러오지 못했습니다.'));
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -54,7 +55,9 @@ export function ProjectsSection() {
     if (!form.localPath.trim()) return setFormError('로컬 경로를 입력하세요.');
     const remoteUrl = form.remoteUrl.trim();
     if (remoteUrl && !/^(https?:\/\/|git@)/.test(remoteUrl))
-      return setFormError('원격 주소를 http(s):// 또는 git@ 형태로 입력하세요.');
+      return setFormError(
+        '원격 주소를 http(s):// 또는 git@ 형태로 입력하세요.',
+      );
 
     // main 이 throw 하는 경로(경로 검증 등)와 invoke 거부를 잡는다 — 안 잡으면
     // 폼이 열린 채 아무 반응이 없어 보인다 (배포 saveForm 과 같은 패턴)
@@ -107,41 +110,40 @@ export function ProjectsSection() {
     );
   }
 
-  // ── 프로젝트 목록 ──
+  // ── 프로젝트 목록 ── (목업 Projects: 섹션 제목 없이 [프로젝트 추가]는 탑바 오른쪽 끝)
   return (
-    <div className="section">
-      <div className="projects__head">
-        <SectionHeader
-          icon={<Icon name="folder" size={18} />}
-          title="프로젝트"
-          sub="배포·PR 등 다른 기능이 참조하는 프로젝트 중앙 관리 지점입니다."
-        />
-        <Button variant="primary" onClick={() => setForm(emptyForm())}>
-          <Icon name="plus" size={14} />
-          프로젝트 추가
-        </Button>
-      </div>
+    <div className="section projects">
+      <TopbarSlot
+        right={
+          <Button variant="primary" onClick={() => setForm(emptyForm())}>
+            <Icon name="plus" size={14} />
+            프로젝트 추가
+          </Button>
+        }
+      />
 
-      {loading ? (
-        <p className="hint">불러오는 중...</p>
-      ) : loadError ? (
-        <Banner variant="danger">{loadError}</Banner>
-      ) : projects.length === 0 ? (
-        <EmptyState
-          icon="folder"
-          message="등록된 프로젝트가 없습니다."
-          hint="[프로젝트 추가] 를 눌러 로컬 경로와 원격 저장소 정보를 등록하세요."
-        />
-      ) : (
-        projects.map((p) => (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            onEdit={() => setForm(toForm(p))}
-            onDelete={() => void removeProject(p)}
+      <div className="projects__list">
+        {loading ? (
+          <p className="hint">불러오는 중...</p>
+        ) : loadError ? (
+          <Banner variant="danger">{loadError}</Banner>
+        ) : projects.length === 0 ? (
+          <EmptyState
+            icon="folder"
+            message="등록된 프로젝트가 없습니다."
+            hint="[프로젝트 추가] 를 눌러 로컬 경로와 원격 저장소 정보를 등록하세요."
           />
-        ))
-      )}
+        ) : (
+          projects.map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onEdit={() => setForm(toForm(p))}
+              onDelete={() => void removeProject(p)}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }

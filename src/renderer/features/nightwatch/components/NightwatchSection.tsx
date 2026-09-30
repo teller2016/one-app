@@ -10,18 +10,16 @@ import { Badge } from "../../../components/Badge";
 import { Banner } from "../../../components/Banner";
 import { Button } from "../../../components/Button";
 import { Checkbox } from "../../../components/Checkbox";
-import { Collapsible } from "../../../components/Collapsible";
 import { useConfirm } from "../../../components/ConfirmDialog";
-import { FormRow } from "../../../components/FormRow";
 import { Icon } from "../../../components/Icon";
 import { Input } from "../../../components/Input";
 import { Markdown } from "../../../components/Markdown";
 import { Modal } from "../../../components/Modal";
 import { RefreshButton } from "../../../components/RefreshButton";
 import { Select } from "../../../components/Select";
-import { SectionHeader } from "../../../components/SectionHeader";
 import { Segment } from "../../../components/Segment";
 import { Textarea } from "../../../components/Textarea";
+import { TopbarSlot } from "../../../components/TopbarSlot";
 import { useToast } from "../../../components/Toast";
 import { EmptyState } from "../../../components/EmptyState";
 import { hhmm } from "../../../../shared/date";
@@ -65,7 +63,7 @@ export function NightwatchSection() {
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [missionLog, setMissionLog] = useState("");
   const [log, setLog] = useState("");
-  const [modal, setModal] = useState<{ title: string; content: string } | null>(
+  const [modal, setModal] = useState<{ key: string; content: string } | null>(
     null
   );
   const [pick, setPick] = useState<{
@@ -233,10 +231,10 @@ export function NightwatchSection() {
   };
 
   const openReport = async (key: string) => {
-    setModal({ title: `${key} 분석 리포트`, content: "불러오는 중..." });
+    setModal({ key, content: "불러오는 중..." });
     const res = await window.oneApp.nightwatch.getReport(key);
     setModal({
-      title: `${key} 분석 리포트`,
+      key,
       content:
         res.ok && res.content
           ? res.content
@@ -360,436 +358,501 @@ export function NightwatchSection() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [missionLog]);
 
+  // 오른쪽 설정·실행 로그 열림 — 예전 Collapsible 과 같은 키·형식('1'/'0')으로 기억한다
+  const [settingsOpen, setSettingsOpen] = useState(
+    () => localStorage.getItem("nightwatch:settings") !== "0"
+  );
+  const [logOpen, setLogOpen] = useState(
+    () => localStorage.getItem("nightwatch:log") === "1"
+  );
+  const toggleSettings = () =>
+    setSettingsOpen((v) => {
+      localStorage.setItem("nightwatch:settings", v ? "0" : "1");
+      return !v;
+    });
+  const toggleLog = () =>
+    setLogOpen((v) => {
+      localStorage.setItem("nightwatch:log", v ? "0" : "1");
+      return !v;
+    });
+
+  const MODEL_OPTIONS = [
+    { value: "", label: "기본" },
+    { value: "fable", label: "Fable" },
+    { value: "opus", label: "Opus" },
+    { value: "sonnet", label: "Sonnet" },
+    { value: "haiku", label: "Haiku" },
+  ];
+
   return (
-    <div className="section">
-      <div className="nightwatch__head">
-        <SectionHeader
-          title="Nightwatch"
-          icon={<Icon name="moon" size={18} />}
-          sub="Jira 버그 티켓을 골라 headless Claude 분석을 돌리고, 결과를 리포트로 확인합니다."
-        />
-        <RefreshButton
-          size={14}
-          spinning={loading}
-          onClick={() => void load()}
-          title="상태 새로고침"
-        />
-      </div>
+    <div className="section nightwatch">
+      {/* 탑바 오른쪽 끝 — 상태 새로고침 (목업: 섹션 제목 없이 경로만) */}
+      <TopbarSlot
+        right={
+          <RefreshButton
+            size={14}
+            spinning={loading}
+            onClick={() => void load()}
+            title="상태 새로고침"
+          />
+        }
+      />
 
-      {error && <Banner variant="danger">{error}</Banner>}
-      {status && !status.jiraConfigured && (
-        <Banner variant="warning">
-          환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하면 동작합니다.
-          (Jira 섹션과 공용)
-        </Banner>
-      )}
-      {status && !status.claudeFound && (
-        <Banner variant="danger">
-          claude 바이너리를 찾을 수 없습니다. Claude Code 설치를 확인해 주세요.
-        </Banner>
-      )}
-
-      {status?.jiraConfigured && projects.length === 0 && (
-        <Banner variant="warning">
-          <b>프로젝트</b> 탭에서 분석 대상 프로젝트(로컬 경로)를 먼저 등록하세요.
-        </Banner>
-      )}
-
-      {status && status.jiraConfigured && (
-        <>
-          <div className="nightwatch__list-head">
-            <span className="form-label">작업 가능한 티켓</span>
-            <div className="nightwatch__list-actions">
-              {hiddenCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void unhideAll()}
-                  title="숨김 처리한 티켓을 모두 다시 표시합니다"
-                >
-                  숨김 {hiddenCount}건 해제
-                </Button>
-              )}
-              {/* 자동 순회 on/off 는 색으로 바로 읽히게 — 켜짐 초록·꺼짐 빨강 */}
-              {!runningKey && (
-                <Badge
-                  variant={status.autoRunning ? "ok" : "fail"}
-                  title={
-                    status.autoRunning
-                      ? "설정 → 자동 분석이 켜져 있습니다 (5분마다 후보 확인)"
-                      : "설정 → 자동 분석이 꺼져 있습니다 (수동 [분석]만 동작)"
-                  }
-                >
-                  자동 분석 {status.autoRunning ? "켜짐" : "꺼짐"}
-                </Badge>
-              )}
-              {runningKey && (
-                <>
-                  <Badge variant="busy">{runningKey} 분석 중</Badge>
-                  {queuedKeys.length > 0 && (
-                    <span className="nightwatch__dim">
-                      대기 {queuedKeys.length}건
-                    </span>
-                  )}
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => void stopAnalyze()}
-                    title={
-                      queuedKeys.length
-                        ? "실행 중 미션을 중지하고 대기열도 비웁니다"
-                        : "실행 중 미션을 중지합니다"
-                    }
-                  >
-                    중지
-                  </Button>
-                </>
-              )}
-              <RefreshButton
-                size={13}
-                spinning={candidatesLoading}
-                onClick={() => void loadCandidates()}
-                title="후보 새로고침"
-              />
-            </div>
-          </div>
-          {runningKey && (
-            <div className="panel-sunken panel-sunken--log nightwatch__mission">
-              <pre ref={missionLogRef}>
-                {missionLog || "미션 시작 중..."}
-              </pre>
-            </div>
+      <div className="nightwatch__body">
+        {/* ── 왼쪽: 배너 + 작업 가능한 티켓 + 처리한 티켓 ── */}
+        <div className="nightwatch__main">
+          {error && <Banner variant="danger">{error}</Banner>}
+          {status && !status.jiraConfigured && (
+            <Banner variant="warning">
+              환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하면 동작합니다.
+              (Jira 섹션과 공용)
+            </Banner>
           )}
-          {candidatesError && <Banner variant="danger">{candidatesError}</Banner>}
-          {candidates &&
-            (candidates.length === 0 ? (
-              <EmptyState
-                className="nightwatch__empty"
-                message={
-                  <>
-                    {status && status.tickets.length > 0
-                      ? "새로 분석할 티켓이 없습니다 — 처리한 티켓은 아래에서 [재분석]할 수 있어요"
-                      : "내게 할당된 미해결 티켓이 없습니다"}
-                    {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
-                  </>
-                }
-              />
-            ) : (
-              <div className="nightwatch__list">
-                {candidates.map((c) => (
-                  <div className="nightwatch__row" key={c.key}>
-                    <div className="nightwatch__row-main">
-                      <div className="nightwatch__row-meta">
-                        <button
-                          type="button"
-                          className="nightwatch__key"
-                          onClick={() => openJira(c.key)}
-                          title={`${c.key} — Jira에서 열기`}
-                        >
-                          {c.key}
-                        </button>
-                        <span className="nightwatch__dim">{c.issueType}</span>
-                        <span className="nightwatch__dim">{c.status}</span>
-                        {/* 직접 추가한 티켓은 내 담당이 아닐 수 있어 출처를 표시한다.
-                            (해결 상태여도 후보에 남는 것은 이 티켓들뿐) */}
-                        {c.pinned && (
-                          <span
-                            className="nightwatch__dim"
-                            title="Jira 섹션에서 직접 추가한 티켓 — 해결된 뒤에도 후보에 남습니다(자동 분석 대상은 아님)"
-                          >
-                            <Icon name="pin" size={11} /> 직접 추가
-                          </span>
-                        )}
-                        {c.priority && (
-                          <span className="nightwatch__dim">{c.priority}</span>
-                        )}
-                        {c.processedStatus && (
-                          <Badge
-                            variant={ticketBadge(c.processedStatus).variant}
-                          >
-                            {ticketBadge(c.processedStatus).label}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="nightwatch__row-title" title={c.summary}>
-                        {c.summary}
-                      </div>
-                    </div>
-                    <div className="nightwatch__row-actions">
+          {status && !status.claudeFound && (
+            <Banner variant="danger">
+              claude 바이너리를 찾을 수 없습니다. Claude Code 설치를 확인해 주세요.
+            </Banner>
+          )}
+          {status?.jiraConfigured && projects.length === 0 && (
+            <Banner variant="warning">
+              <b>프로젝트</b> 탭에서 분석 대상 프로젝트(로컬 경로)를 먼저 등록하세요.
+            </Banner>
+          )}
+
+          {status && status.jiraConfigured && (
+            <section className="nightwatch__panel">
+              <div className="nightwatch__panel-head">
+                <h2 className="nightwatch__panel-title">작업 가능한 티켓</h2>
+                <div className="nightwatch__panel-actions">
+                  {hiddenCount > 0 && (
+                    <Button
+                      variant="plain"
+                      size="xs"
+                      onClick={() => void unhideAll()}
+                      title="숨김 처리한 티켓을 모두 다시 표시합니다"
+                    >
+                      숨김 {hiddenCount}건 해제
+                    </Button>
+                  )}
+                  {/* 자동 순회 on/off 는 색으로 바로 읽히게 — 켜짐 초록·꺼짐 빨강 */}
+                  {!runningKey && (
+                    <Badge
+                      variant={status.autoRunning ? "ok" : "fail"}
+                      title={
+                        status.autoRunning
+                          ? "설정 → 자동 분석이 켜져 있습니다 (5분마다 후보 확인)"
+                          : "설정 → 자동 분석이 꺼져 있습니다 (수동 [분석]만 동작)"
+                      }
+                    >
+                      자동 분석 {status.autoRunning ? "켜짐" : "꺼짐"}
+                    </Badge>
+                  )}
+                  {runningKey && (
+                    <>
+                      {/* 목업: 액센트 틴트 + 점 — 공용 accent 변형은 점이 없어 점만 여기서 붙인다 */}
+                      <Badge variant="accent">
+                        <span className="nightwatch__run-dot" aria-hidden="true" />
+                        {runningKey} 분석 중
+                      </Badge>
+                      {queuedKeys.length > 0 && (
+                        <span className="nightwatch__dim">
+                          대기 {queuedKeys.length}건
+                        </span>
+                      )}
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={
-                          c.key === runningKey || queuedKeys.includes(c.key)
+                        variant="danger"
+                        size="xs"
+                        onClick={() => void stopAnalyze()}
+                        title={
+                          queuedKeys.length
+                            ? "실행 중 미션을 중지하고 대기열도 비웁니다"
+                            : "실행 중 미션을 중지합니다"
                         }
-                        onClick={() => void hideTicket(c.key)}
-                        title="분석이 필요 없는 티켓을 후보에서 제외합니다"
                       >
-                        숨김
+                        중지
                       </Button>
+                    </>
+                  )}
+                  <RefreshButton
+                    size={13}
+                    spinning={candidatesLoading}
+                    onClick={() => void loadCandidates()}
+                    title="후보 새로고침"
+                  />
+                </div>
+              </div>
+
+              {runningKey && (
+                <pre className="nightwatch__mission" ref={missionLogRef}>
+                  {missionLog || "미션 시작 중..."}
+                </pre>
+              )}
+              {candidatesError && (
+                <div className="nightwatch__panel-note">
+                  <Banner variant="danger">{candidatesError}</Banner>
+                </div>
+              )}
+              {candidates &&
+                (candidates.length === 0 ? (
+                  <EmptyState
+                    className="nightwatch__empty"
+                    message={
+                      <>
+                        {status && status.tickets.length > 0
+                          ? "새로 분석할 티켓이 없습니다 — 처리한 티켓은 아래에서 [재분석]할 수 있어요"
+                          : "내게 할당된 미해결 티켓이 없습니다"}
+                        {hiddenCount > 0 ? ` (숨김 ${hiddenCount}건 제외)` : ""}.
+                      </>
+                    }
+                  />
+                ) : (
+                  <div className="nightwatch__rows">
+                    {candidates.map((c) => (
+                      <div className="nightwatch__row" key={c.key}>
+                        <div className="nightwatch__row-main">
+                          <div className="nightwatch__row-meta">
+                            <button
+                              type="button"
+                              className="nightwatch__key"
+                              onClick={() => openJira(c.key)}
+                              title={`${c.key} — Jira에서 열기`}
+                            >
+                              {c.key}
+                            </button>
+                            <span className="nightwatch__dim">{c.issueType}</span>
+                            <span className="nightwatch__dim">{c.status}</span>
+                            {/* 직접 추가한 티켓은 내 담당이 아닐 수 있어 출처를 표시한다.
+                                (해결 상태여도 후보에 남는 것은 이 티켓들뿐) */}
+                            {c.pinned && (
+                              <span
+                                className="nightwatch__dim nightwatch__pin"
+                                title="Jira 섹션에서 직접 추가한 티켓 — 해결된 뒤에도 후보에 남습니다(자동 분석 대상은 아님)"
+                              >
+                                <Icon name="pin" size={11} /> 직접 추가
+                              </span>
+                            )}
+                            {c.priority && (
+                              <span className="nightwatch__dim">{c.priority}</span>
+                            )}
+                            {c.processedStatus && (
+                              <Badge
+                                variant={ticketBadge(c.processedStatus).variant}
+                                dot={false}
+                              >
+                                {ticketBadge(c.processedStatus).label}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="nightwatch__row-title" title={c.summary}>
+                            {c.summary}
+                          </div>
+                        </div>
+                        <Button
+                          variant="plain"
+                          size="xs"
+                          disabled={
+                            c.key === runningKey || queuedKeys.includes(c.key)
+                          }
+                          onClick={() => void hideTicket(c.key)}
+                          title="분석이 필요 없는 티켓을 후보에서 제외합니다"
+                        >
+                          숨김
+                        </Button>
+                        <Button
+                          variant="plain"
+                          size="xs"
+                          loading={analyzing === c.key}
+                          disabled={
+                            c.key === runningKey || queuedKeys.includes(c.key)
+                          }
+                          onClick={() => openPick(c)}
+                          title={
+                            runningKey
+                              ? "저장소를 골라 대기열에 추가합니다 (현재 미션이 끝나면 순서대로 실행)"
+                              : "저장소를 골라 이 티켓 분석을 시작합니다"
+                          }
+                        >
+                          {queuedKeys.includes(c.key) ? "대기 중" : "분석"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </section>
+          )}
+
+          {status && status.tickets.length > 0 && (
+            <section className="nightwatch__panel nightwatch__panel--done">
+              <div className="nightwatch__panel-head">
+                <h2 className="nightwatch__panel-title">처리한 티켓</h2>
+              </div>
+              <div className="nightwatch__rows">
+                {status.tickets.map((t) => {
+                  const badge = ticketBadge(t.status);
+                  return (
+                    <div className="nightwatch__row nightwatch__row--done" key={t.key}>
+                      <div className="nightwatch__row-main">
+                        <div className="nightwatch__row-meta">
+                          <button
+                            type="button"
+                            className="nightwatch__key"
+                            onClick={() => openJira(t.key)}
+                            title={`${t.key} — Jira에서 열기`}
+                          >
+                            {t.key}
+                          </button>
+                          <Badge variant={badge.variant}>{badge.label}</Badge>
+                          {t.repo && (
+                            <span className="nightwatch__dim">{t.repo}</span>
+                          )}
+                          {typeof t.durationMin === "number" && (
+                            <span className="nightwatch__dim nightwatch__cost">
+                              {t.durationMin}분
+                              {typeof t.costUsd === "number"
+                                ? ` · $${t.costUsd.toFixed(2)}`
+                                : ""}
+                            </span>
+                          )}
+                        </div>
+                        {/* 본문은 티켓 명칭 — 분석 요약·에러는 툴팁(전문은 리포트)으로 */}
+                        <div
+                          className="nightwatch__row-title"
+                          title={t.summary ?? t.error ?? undefined}
+                        >
+                          {t.title ?? t.summary ?? t.error ?? "—"}
+                        </div>
+                      </div>
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        loading={analyzing === c.key}
+                        variant="plain"
+                        size="xs"
+                        loading={analyzing === t.key}
                         disabled={
-                          c.key === runningKey || queuedKeys.includes(c.key)
+                          t.key === runningKey || queuedKeys.includes(t.key)
                         }
-                        onClick={() => openPick(c)}
+                        onClick={() => openReanalyze(t)}
                         title={
                           runningKey
                             ? "저장소를 골라 대기열에 추가합니다 (현재 미션이 끝나면 순서대로 실행)"
-                            : "저장소를 골라 이 티켓 분석을 시작합니다"
+                            : "이 티켓을 같은 저장소에서 다시 분석합니다"
                         }
                       >
-                        {queuedKeys.includes(c.key) ? "대기 중" : "분석"}
+                        {queuedKeys.includes(t.key) ? "대기 중" : "재분석"}
+                      </Button>
+                      {t.prompt && (
+                        <Button
+                          variant="primary"
+                          size="xs"
+                          onClick={() => void copyPrompt(t.key)}
+                          title="작업 지시문을 클립보드로 복사 — Claude Code 세션에 붙여넣어 바로 작업 시작"
+                        >
+                          프롬프트 복사
+                        </Button>
+                      )}
+                      {t.report && (
+                        <Button
+                          variant="plain"
+                          size="xs"
+                          onClick={() => void openReport(t.key)}
+                        >
+                          리포트
+                        </Button>
+                      )}
+                      <Button
+                        variant="plain"
+                        size="xs"
+                        disabled={t.key === runningKey}
+                        onClick={() => void removeTicket(t.key)}
+                        title="분석 기록과 산출물 파일을 삭제합니다 (30일 지나면 자동 정리)"
+                      >
+                        삭제
                       </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            ))}
-        </>
-      )}
+            </section>
+          )}
+        </div>
 
-      {status && status.tickets.length > 0 && (
-        <>
-          <div className="nightwatch__list-head">
-            <span className="form-label">처리한 티켓</span>
-          </div>
-          <div className="nightwatch__list">
-            {status.tickets.map((t) => {
-              const badge = ticketBadge(t.status);
-              return (
-                <div className="nightwatch__row" key={t.key}>
-                  <div className="nightwatch__row-main">
-                    <div className="nightwatch__row-meta">
-                      <button
-                        type="button"
-                        className="nightwatch__key"
-                        onClick={() => openJira(t.key)}
-                        title={`${t.key} — Jira에서 열기`}
-                      >
-                        {t.key}
-                      </button>
-                      <Badge variant={badge.variant}>{badge.label}</Badge>
-                      {t.repo && (
-                        <span className="nightwatch__dim">{t.repo}</span>
-                      )}
-                      {typeof t.durationMin === "number" && (
-                        <span className="nightwatch__dim">
-                          {t.durationMin}분
-                          {typeof t.costUsd === "number"
-                            ? ` · $${t.costUsd.toFixed(2)}`
-                            : ""}
-                        </span>
-                      )}
-                    </div>
-                    {/* 본문은 티켓 명칭 — 분석 요약·에러는 툴팁(전문은 리포트)으로 */}
-                    <div
-                      className="nightwatch__row-title"
-                      title={t.summary ?? t.error ?? undefined}
-                    >
-                      {t.title ?? t.summary ?? t.error ?? "—"}
-                    </div>
-                  </div>
-                  <div className="nightwatch__row-actions">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      loading={analyzing === t.key}
-                      disabled={
-                        t.key === runningKey || queuedKeys.includes(t.key)
-                      }
-                      onClick={() => openReanalyze(t)}
-                      title={
-                        runningKey
-                          ? "저장소를 골라 대기열에 추가합니다 (현재 미션이 끝나면 순서대로 실행)"
-                          : "이 티켓을 같은 저장소에서 다시 분석합니다"
-                      }
-                    >
-                      {queuedKeys.includes(t.key) ? "대기 중" : "재분석"}
-                    </Button>
-                    {t.prompt && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => void copyPrompt(t.key)}
-                        title="작업 지시문을 클립보드로 복사 — Claude Code 세션에 붙여넣어 바로 작업 시작"
-                      >
-                        프롬프트 복사
-                      </Button>
-                    )}
-                    {t.report && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void openReport(t.key)}
-                      >
-                        리포트
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={t.key === runningKey}
-                      onClick={() => void removeTicket(t.key)}
-                      title="분석 기록과 산출물 파일을 삭제합니다 (30일 지나면 자동 정리)"
-                    >
-                      삭제
-                    </Button>
-                  </div>
+        {/* ── 오른쪽 400px: 설정 + 실행 로그 (둘 다 접이식 머리) ── */}
+        {form && (
+          <aside className="nightwatch__side">
+            <button
+              type="button"
+              className="nightwatch__side-head"
+              aria-expanded={settingsOpen}
+              onClick={toggleSettings}
+            >
+              <Icon name={settingsOpen ? "chevron-down" : "chevron-right"} size={14} />
+              <Icon name="settings" size={14} />
+              <span className="nightwatch__panel-title">설정</span>
+            </button>
+            {settingsOpen && (
+              <div className="nightwatch__settings">
+                <div className="nightwatch__field">
+                  <span className="nightwatch__label">자동 분석</span>
+                  <Checkbox
+                    label="후보 티켓을 알아서 분석"
+                    checked={form.auto.enabled}
+                    disabled={busy === "auto"}
+                    onChange={(e) => void toggleAuto(e.target.checked)}
+                    title="켜면 저장 없이 바로 적용됩니다"
+                  />
+                  <p className="nightwatch__hint">
+                    켜 두면 5분마다 미처리 후보를 확인해 <b>한 건씩</b> 분석합니다.
+                    저장소는 아래 <b>대상 저장소</b> 안에서 지난 선택(학습값) → claude
+                    자동 선택 → Jira 키 일치 순으로 정하고, 못 정한 티켓은 그날 하루
+                    건너뜁니다. 분석 이력이 생긴
+                    티켓은 후보에서 빠지므로 같은 티켓을 다시 돌리지 않습니다.
+                  </p>
+                  {status && form.auto.enabled && (
+                    <p className="nightwatch__hint nightwatch__auto-state">
+                      오늘 {status.auto.count}건
+                      {form.auto.maxPerDay > 0
+                        ? ` / ${form.auto.maxPerDay}건`
+                        : " (상한 없음)"}
+                      {status.auto.lastCheckAt &&
+                        ` · 마지막 확인 ${hhmm(new Date(status.auto.lastCheckAt))}`}
+                      {status.auto.lastPick && ` · ${status.auto.lastPick}`}
+                      {status.auto.skipped.length > 0 &&
+                        ` · 오늘 건너뜀 ${status.auto.skipped.length}건`}
+                      {status.auto.lastError && ` · ⚠️ ${status.auto.lastError}`}
+                    </p>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {form && (
-        <Collapsible
-          title="설정"
-          icon={<Icon name="settings" size={14} />}
-          storageKey="nightwatch:settings"
-        >
-          <FormRow label="자동 분석" column>
-            <Checkbox
-              label="후보 티켓을 알아서 분석"
-              checked={form.auto.enabled}
-              disabled={busy === "auto"}
-              onChange={(e) => void toggleAuto(e.target.checked)}
-              title="켜면 저장 없이 바로 적용됩니다"
-            />
-            <p className="hint">
-              켜 두면 5분마다 미처리 후보를 확인해 <b>한 건씩</b> 분석합니다.
-              저장소는 아래 <b>대상 저장소</b> 안에서 지난 선택(학습값) → claude
-              자동 선택 → Jira 키 일치 순으로 정하고, 못 정한 티켓은 그날 하루
-              건너뜁니다. 분석 이력이 생긴
-              티켓은 후보에서 빠지므로 같은 티켓을 다시 돌리지 않습니다.
-            </p>
-            {status && form.auto.enabled && (
-              <p className="hint">
-                오늘 {status.auto.count}건
-                {form.auto.maxPerDay > 0
-                  ? ` / ${form.auto.maxPerDay}건`
-                  : " (상한 없음)"}
-                {status.auto.lastCheckAt &&
-                  ` · 마지막 확인 ${hhmm(new Date(status.auto.lastCheckAt))}`}
-                {status.auto.lastPick && ` · ${status.auto.lastPick}`}
-                {status.auto.skipped.length > 0 &&
-                  ` · 오늘 건너뜀 ${status.auto.skipped.length}건`}
-                {status.auto.lastError && ` · ⚠️ ${status.auto.lastError}`}
-              </p>
-            )}
-          </FormRow>
-          <FormRow label="자동 분석 모델">
-            <Segment
-              options={[
-                { value: "", label: "기본" },
-                { value: "fable", label: "Fable" },
-                { value: "opus", label: "Opus" },
-                { value: "sonnet", label: "Sonnet" },
-                { value: "haiku", label: "Haiku" },
-              ]}
-              value={form.auto.model ?? ""}
-              onChange={(v) => patchAuto({ model: v || null })}
-            />
-          </FormRow>
-          <FormRow label="하루 최대 건수">
-            <Input
-              small
-              type="number"
-              value={String(form.auto.maxPerDay)}
-              onChange={(e) => patchAuto({ maxPerDay: Number(e.target.value) })}
-              title="0 이면 상한 없이 후보가 소진될 때까지 돌립니다"
-            />
-          </FormRow>
-          <FormRow label="자동 분석 대상 저장소" column>
-            {projects.length === 0 ? (
-              <p className="hint">
-                등록된 프로젝트가 없습니다 — <b>프로젝트</b> 섹션에서 먼저
-                추가하세요.
-              </p>
-            ) : (
-              <>
-                <div className="nightwatch__auto-repos">
-                  {projects.map((p) => (
-                    <Checkbox
-                      key={p.id}
-                      label={p.name}
-                      checked={form.auto.repoIds.includes(p.id)}
-                      onChange={(e) => toggleAutoRepo(p.id, e.target.checked)}
+                <div className="nightwatch__field">
+                  <span className="nightwatch__label">자동 분석 모델</span>
+                  <div>
+                    <Segment
+                      options={MODEL_OPTIONS}
+                      value={form.auto.model ?? ""}
+                      onChange={(v) => patchAuto({ model: v || null })}
                     />
-                  ))}
+                  </div>
                 </div>
-                <p className="hint">
-                  <b>자동 분석</b>이 고를 수 있는 저장소입니다 — 담당하지 않는
-                  저장소(예: 서버 API)를 빼 두면 지난 선택(학습값)이 그쪽을
-                  가리켜도 무시합니다. 하나도 고르지 않으면{" "}
-                  <b>제한 없음</b>(등록된 프로젝트 전체)으로 동작하고, 수동
-                  [분석]에는 적용되지 않습니다.
-                </p>
+                <div className="nightwatch__field-pair">
+                  <label className="nightwatch__field">
+                    <span className="nightwatch__label">하루 최대 건수</span>
+                    <Input
+                      className="nightwatch__num"
+                      type="number"
+                      value={String(form.auto.maxPerDay)}
+                      onChange={(e) =>
+                        patchAuto({ maxPerDay: Number(e.target.value) })
+                      }
+                      title="0 이면 상한 없이 후보가 소진될 때까지 돌립니다"
+                    />
+                  </label>
+                  <label className="nightwatch__field">
+                    <span className="nightwatch__label">티켓당 타임아웃(분)</span>
+                    <Input
+                      className="nightwatch__num"
+                      type="number"
+                      value={String(form.timeoutMinutes)}
+                      onChange={(e) =>
+                        patch({ timeoutMinutes: Number(e.target.value) })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="nightwatch__field">
+                  <span className="nightwatch__label">자동 분석 대상 저장소</span>
+                  {projects.length === 0 ? (
+                    <p className="nightwatch__hint">
+                      등록된 프로젝트가 없습니다 — <b>프로젝트</b> 섹션에서 먼저
+                      추가하세요.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="nightwatch__auto-repos">
+                        {projects.map((p) => (
+                          <Checkbox
+                            key={p.id}
+                            label={p.name}
+                            checked={form.auto.repoIds.includes(p.id)}
+                            onChange={(e) => toggleAutoRepo(p.id, e.target.checked)}
+                          />
+                        ))}
+                      </div>
+                      <p className="nightwatch__hint">
+                        <b>자동 분석</b>이 고를 수 있는 저장소입니다 — 담당하지 않는
+                        저장소(예: 서버 API)를 빼 두면 지난 선택(학습값)이 그쪽을
+                        가리켜도 무시합니다. 하나도 고르지 않으면{" "}
+                        <b>제한 없음</b>(등록된 프로젝트 전체)으로 동작하고, 수동
+                        [분석]에는 적용되지 않습니다.
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="nightwatch__field">
+                  <span className="nightwatch__label">분석 Claude 계정</span>
+                  <div>
+                    <Segment
+                      options={[
+                        { value: "personal", label: "개인" },
+                        { value: "team", label: "공용" },
+                      ]}
+                      value={isTeamAccount ? "team" : "personal"}
+                      onChange={(v) =>
+                        patch({
+                          claudeConfigDir:
+                            v === "team"
+                              ? form.claudeConfigDir.replace(
+                                  /\.claude(-team)?$/,
+                                  ".claude-team"
+                                )
+                              : form.claudeConfigDir.replace(
+                                  /\.claude(-team)?$/,
+                                  ".claude"
+                                ),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="nightwatch__save">
+                  <Button
+                    variant="primary"
+                    size="xs"
+                    loading={busy === "save"}
+                    onClick={() => void saveForm()}
+                  >
+                    저장
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {status && log && (
+              <>
+                <button
+                  type="button"
+                  className="nightwatch__side-head nightwatch__side-head--log"
+                  aria-expanded={logOpen}
+                  onClick={toggleLog}
+                >
+                  <Icon name={logOpen ? "chevron-down" : "chevron-right"} size={14} />
+                  <Icon name="clock" size={14} />
+                  <span className="nightwatch__panel-title">실행 로그</span>
+                </button>
+                {logOpen && <pre className="nightwatch__log">{log}</pre>}
               </>
             )}
-          </FormRow>
-          <FormRow label="티켓당 타임아웃(분)">
-            <Input
-              small
-              type="number"
-              value={String(form.timeoutMinutes)}
-              onChange={(e) =>
-                patch({ timeoutMinutes: Number(e.target.value) })
-              }
-            />
-          </FormRow>
-          <FormRow label="분석 Claude 계정">
-            <Segment
-              options={[
-                { value: "personal", label: "개인" },
-                { value: "team", label: "공용" },
-              ]}
-              value={isTeamAccount ? "team" : "personal"}
-              onChange={(v) =>
-                patch({
-                  claudeConfigDir:
-                    v === "team"
-                      ? form.claudeConfigDir.replace(
-                          /\.claude(-team)?$/,
-                          ".claude-team"
-                        )
-                      : form.claudeConfigDir.replace(
-                          /\.claude(-team)?$/,
-                          ".claude"
-                        ),
-                })
-              }
-            />
-          </FormRow>
-          <div className="form-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              loading={busy === "save"}
-              onClick={() => void saveForm()}
-            >
-              저장
-            </Button>
-          </div>
-        </Collapsible>
-      )}
-
-      {status && log && (
-        <Collapsible
-          title="실행 로그"
-          icon={<Icon name="clock" size={14} />}
-          storageKey="nightwatch:log"
-        >
-          <pre className="nightwatch__log">{log}</pre>
-        </Collapsible>
-      )}
+          </aside>
+        )}
+      </div>
 
       {modal && (
-        <Modal title={modal.title} onClose={() => setModal(null)} wide>
-          {/* 래퍼 클래스는 모달 확장(:has 선택자) 후크 — 스크롤은 modal__body 가 담당 */}
+        <Modal
+          title={
+            <>
+              <span className="nightwatch__modal-key">{modal.key}</span> 분석 리포트
+            </>
+          }
+          onClose={() => setModal(null)}
+          width={840}
+        >
+          {/* 래퍼 클래스는 모달 높이(:has)·리포트 타이포 후크 — 스크롤은 modal__body 가 담당 */}
           <div className="nightwatch__report">
             <Markdown>{modal.content}</Markdown>
           </div>
@@ -798,13 +861,19 @@ export function NightwatchSection() {
 
       {pick && status && (
         <Modal
-          title={`${pick.key} — 분석 설정`}
+          title={
+            <>
+              <span className="nightwatch__modal-key">{pick.key}</span> — 분석 설정
+            </>
+          }
           onClose={() => setPick(null)}
+          width={520}
         >
-          <div className="nightwatch__pick-opts">
-            <FormRow label="프로젝트" column>
+          <div className="nightwatch__pick">
+            <div className="nightwatch__field">
+              <span className="nightwatch__label">프로젝트</span>
               {projects.length === 0 ? (
-                <p className="hint">
+                <p className="nightwatch__hint">
                   등록된 프로젝트가 없습니다 — <b>프로젝트</b> 탭에서 먼저
                   등록해 주세요.
                 </p>
@@ -824,46 +893,46 @@ export function NightwatchSection() {
                       )
                       .map((p) => ({ value: p.id, label: p.name }))}
                   />
-                  <p className="hint nightwatch__repo-hint">
-                    {projects.find((p) => p.id === pick.repoId)?.localPath ??
-                      "프로젝트를 선택하세요"}
+                  <p className="nightwatch__hint">
+                    <span className="nightwatch__path">
+                      {projects.find((p) => p.id === pick.repoId)?.localPath ??
+                        "프로젝트를 선택하세요"}
+                    </span>
                     {" — "}현재 체크아웃 그대로 분석하며, 선택은 같은
                     프로젝트·말머리 조합에 기억됩니다.
                   </p>
                 </>
               )}
-            </FormRow>
-            <FormRow label="모델" column>
-              <Segment
-                options={[
-                  { value: "", label: "기본" },
-                  { value: "fable", label: "Fable" },
-                  { value: "opus", label: "Opus" },
-                  { value: "sonnet", label: "Sonnet" },
-                  { value: "haiku", label: "Haiku" },
-                ]}
-                value={pick.model}
-                onChange={(v) => setPick({ ...pick, model: v })}
-              />
-            </FormRow>
-            <FormRow label="부가설명 (선택)" column>
+            </div>
+            <div className="nightwatch__field">
+              <span className="nightwatch__label">모델</span>
+              <div>
+                <Segment
+                  options={MODEL_OPTIONS}
+                  value={pick.model}
+                  onChange={(v) => setPick({ ...pick, model: v })}
+                />
+              </div>
+            </div>
+            <label className="nightwatch__field">
+              <span className="nightwatch__label">부가설명 (선택)</span>
               <Textarea
                 rows={3}
                 value={pick.note}
                 placeholder="재현 경로·의심 지점·참고 맥락 등 분석에 참고할 내용"
                 onChange={(e) => setPick({ ...pick, note: e.target.value })}
               />
-            </FormRow>
-          </div>
-          <div className="form-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!pick.repoId}
-              onClick={confirmPick}
-            >
-              분석 시작
-            </Button>
+            </label>
+            <div className="nightwatch__save">
+              <Button
+                variant="primary"
+                size="xs"
+                disabled={!pick.repoId}
+                onClick={confirmPick}
+              >
+                분석 시작
+              </Button>
+            </div>
           </div>
         </Modal>
       )}

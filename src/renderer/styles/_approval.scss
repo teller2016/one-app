@@ -1,101 +1,175 @@
-// 결재 — 야근(연장근무내역서) · 휴가신청서 · 지출결의서(개인)
+// 결재 — 야근(연장근무내역서) · 휴가신청서 · 지출결의서(개인) · 완료 화면 · 야근 결재 모달
 // 섹션 화면과 야근 결재 모달이 같은 폼 컴포넌트를 공유하므로 스타일도 한 파일에 둔다.
+// 수치 정본은 리디자인 목업(ApprovalHome·ApprovalOvertime·Approval·ApprovalExpend·ApprovalDone·
+// OvertimeModal .dc.html, 2026-09-30). One App Lite 도 이 파일을 그대로 싣는다(탑바 없는 셸).
 @use './base' as *;
 
-// 여백·최대폭·가운데 정렬은 공통 `.section` 이 담당한다 (마크업에서 함께 붙인다)
+// ── 섹션 틀 — 그라운드 위 가운데 열 (홈 720 · 폼 780) ──
 .approval {
+  height: 100%;
+  overflow-y: auto;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  justify-content: center;
+  padding: 20px 24px;
 
-  // 제목 줄: [목록으로 버튼] [결재 종류 아이콘] 제목
-  // (SectionHeader 의 icon 슬롯에 둘을 나란히 넣는다 — 버튼은 공용 .icon-btn 그대로)
-  .section-head__icon {
-    display: inline-flex;
+  &--home {
+    padding-top: 40px;
+    padding-bottom: 40px;
+  }
+
+  &__col {
+    width: 100%;
+    max-width: 780px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    &--home {
+      max-width: 720px;
+      gap: 16px;
+    }
+  }
+
+  &__intro {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__h1 {
+    margin: 0;
+    @include type-h2;
+  }
+
+  &__lead {
+    margin: 0;
+    font-size: var(--fs-body);
+    color: var(--text-2);
+  }
+
+  // 탑바가 없는 셸(Lite·폰)의 폼 머리 — [목록으로] + 제목 + 설명 (본체에선 탑바 경로가 대신한다)
+  &__head {
+    display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  &__head-desc {
+    flex-basis: 100%;
+    font-size: var(--fs-small);
+    color: var(--text-3);
   }
 }
 
-// 결재 종류 고르기
+// 탑바 오른쪽 — 결재 종류 설명 (목업: faint 12)
+.approval-topbar-hint {
+  font-size: var(--fs-small);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ── 결재 종류 고르기 — 한 패널 안의 행 목록 ──
 .approval-pick {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
 
   &__card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
+    gap: 14px;
+    width: 100%;
+    padding: 16px 18px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
     text-align: left;
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    background: var(--surface-1);
-    transition:
-      border-color var(--dur-1) var(--ease),
-      background var(--dur-1) var(--ease);
+    cursor: pointer;
+    transition: background var(--dur-1) var(--ease);
+    @include focus-ring(-2px);
+
+    & + & {
+      border-top: 1px solid var(--border);
+    }
 
     &:hover {
-      border-color: var(--accent);
-      background: var(--surface-2);
+      background: var(--bg-sunken);
     }
   }
 
   &__icon {
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     flex: none;
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
     color: var(--accent);
     background: var(--accent-soft);
   }
 
   &__body {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
   }
 
   &__title {
-    @include type-emph;
+    font-size: var(--fs-emph);
+    font-weight: 600;
+    color: var(--text);
   }
 
   &__desc {
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: normal;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
   }
 
   &__chev {
-    margin-left: auto;
+    display: inline-flex;
     color: var(--text-3);
   }
 }
 
-// 상신함 열기 — 작성(카드)과 성격이 다른 보조 액션이라 목록 아래에 따로 둔다
+// 상신함 열기 — 작성(카드)과 성격이 다른 보조 액션이라 목록 아래에 따로 둔다 (목업: 면 없는 버튼, 왼쪽)
 .approval-eabox {
   display: flex;
-  justify-content: center;
 }
 
-// 각 결재 폼 공통
+// ── 폼 공통 ──
 .approval-form {
   display: flex;
   flex-direction: column;
-  gap: 4px; // 행 간격은 .form-row 의 margin-bottom 이 만든다
+  gap: 12px;
+
+  // 배너는 열 gap 이 간격을 맡는다
+  .banner {
+    margin: 0;
+  }
 
   // 시작 ~ 종료 (시간·날짜) + 합계 한 줄
-  &__times {
+  &__times,
+  &__inline {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 1;
     min-width: 0;
     flex-wrap: wrap;
+  }
+
+  // 사유 셀렉트 + 기타 입력 — 입력이 남은 폭을 채운다
+  &__inline > .input {
+    flex: 1;
+    min-width: 0;
   }
 
   &__tilde {
@@ -103,66 +177,134 @@
   }
 
   &__total {
-    @include type-caption;
-    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+    margin-left: 4px;
     white-space: nowrap;
+
+    &--bad {
+      font-family: inherit;
+      color: var(--warning);
+    }
+  }
+}
+
+// 패널 — 입력 줄을 담는 면 (목업 .panel padding 8 20)
+.approval-panel {
+  padding: 8px 20px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+
+  // 패널 안 소제목 — 어디까지가 전자결재 본문 항목인지 (목업 .label padding 10 0 4)
+  &__group {
+    margin: 0;
+    padding: 10px 0 4px;
+    @include type-caption;
+    color: var(--text-3);
+  }
+}
+
+// 라벨 열 112 + 칸 — 라벨은 입력 첫 줄에 맞춰 위에서 14 내려온다
+.approval-grid {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+
+  &__label {
+    padding-top: 14px;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
   }
 
-  // 입력 + 그 아래 힌트를 한 덩어리로 — 라벨은 왼쪽 한 열에 그대로 정렬된다
-  &__stack {
+  &__cell {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    flex: 1;
+    gap: 6px;
     min-width: 0;
+    padding: 8px 0;
 
     .hint {
       margin: 0;
+      font-size: var(--fs-ui-sm); // 목업 11.5
+    }
+
+    .textarea {
+      min-height: 60px;
+      height: auto;
     }
   }
+}
 
-  // 라벨 옆 입력은 남은 폭을 채운다 (라벨 열 정렬 유지).
-  // ⚠️ 직계 자식만 — 지출결의서처럼 자체 레이아웃(좁은 금액칸 등)을 가진 하위 블록까지
-  //    늘리면 그쪽 폭 지정이 flex-basis 에 밀려 무시된다.
-  .form-row > .input,
-  .form-row > .textarea {
-    flex: 1;
-    min-width: 0;
+// 날짜 칸 폭 — 목업 200 (석식대 행은 180). 피커가 이 틀을 채운다
+.approval-date {
+  width: 200px;
+  flex: none;
+
+  .picker,
+  .picker__trigger {
+    width: 100%;
+  }
+
+  &--dinner {
+    width: 180px;
+  }
+
+  &--fill {
+    width: 100%;
   }
 }
 
-// 근태구분·사유 셀렉트 — 라벨 옆에서 내용만큼 좁아지지 않게 폭을 고정한다
-.vacation-kind {
-  width: 220px;
+// 시각 칸 폭 — 목업 92 (모달판은 공용 기본 76 그대로)
+.approval-time {
+  display: inline-flex;
+  width: 92px;
+
+  .picker {
+    width: 100%;
+  }
+}
+
+// 근태구분·사유 셀렉트 — 목업 200 고정 (Select 의 className 은 .picker 래퍼에 붙는다)
+.approval-select {
+  flex: 0 0 auto;
+  width: 200px;
+}
+
+// 비상연락망 — 목업 모노 240
+.approval-input--phone {
   flex: none;
+  width: 240px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
 }
 
-// 폼 안의 소제목 — 어디까지가 전자결재 본문 항목인지 구분해 준다
-.approval-form__group {
-  @include type-caption;
-  margin: 10px 0 2px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-// 인수인계 한 줄 — [프로젝트명] : [팀원들] … [삭제]
-.handover-row {
+// [작성 시작](lg) + 안내 한 줄
+.approval-actions {
   display: flex;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+// 인수인계 한 줄 — [프로젝트명] : [팀원들] [삭제] (목업 grid 1fr 10 1fr 30)
+.handover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1fr) 30px;
   gap: 8px;
-
-  .input:first-of-type {
-    width: 180px;
-    flex: none;
-  }
-
-  .input:last-of-type {
-    flex: 1;
-    min-width: 0;
-  }
+  align-items: center;
 
   &__colon {
     color: var(--text-3);
+    text-align: center;
+  }
+
+  // 삭제 버튼(Tooltip 래퍼가 그리드 칸이다)
+  > :last-child {
+    justify-self: center;
   }
 }
 
@@ -173,36 +315,48 @@
   flex-wrap: wrap;
 }
 
-// 진행 문구 — 스피너 + 현재 단계 + 보조 안내
+// 진행 띠 — 스피너 + 현재 단계 + 보조 안내 (목업: accent-soft 면 · 모서리 8 · 12.5)
 .approval-progress {
-  @include type-small;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--text-2);
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-tab);
+  background: var(--accent-soft);
+  font-size: var(--fs-ui);
+  color: var(--text);
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
 
   &__note {
-    @include type-caption;
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
   }
 }
 
-// 작업 완료 화면
+// ── 작업 완료 화면 (목업 ApprovalDone — 정상 완료는 크게, 누락 안내는 한 단 작게) ──
 .approval-done {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 12px 0 4px;
+  gap: 12px;
+  padding: 40px 40px 32px;
   text-align: center;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
 
   &__icon {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: 56px;
+    height: 56px;
     border-radius: var(--r-full);
-    margin-bottom: 4px;
   }
 
   &--ok &__icon {
@@ -211,79 +365,112 @@
   }
 
   &--info &__icon {
-    color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--info);
+    background: var(--info-soft);
+  }
+
+  &--warn {
+    padding: 24px 28px 22px;
   }
 
   &--warn &__icon {
+    width: 44px;
+    height: 44px;
     color: var(--warning);
     background: var(--warning-soft);
   }
 
   &__title {
-    @include type-emph;
+    margin: 0;
+    font-size: var(--fs-heading);
+    font-weight: 600;
+  }
+
+  &--warn &__title {
+    font-size: var(--fs-emph);
   }
 
   &__hint {
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: normal;
+    margin: 0;
+    max-width: 560px;
+    font-size: var(--fs-body);
+    line-height: 1.7;
+    color: var(--text-2);
   }
 
-  .form-actions {
-    margin-top: 12px;
+  &__actions {
+    padding-top: 6px;
   }
 }
 
-// ── 휴가신청서 ──
-
+// ── 휴가신청서 — 잔여연차 줄 ──
 .vacation-status {
-  @include type-small;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  // 아래 첫 입력 행과 확실히 끊어 보이게 띄운다 — 행 간격(14px)과 비슷하면 구분이 안 된다
-  margin-bottom: 22px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-1);
+  gap: 14px;
+  padding: 12px 16px;
 
-  strong {
-    color: var(--accent);
+  &__label {
+    font-size: var(--fs-ui);
+    color: var(--text-3);
   }
 
+  // 큰 숫자 — 모노 22/600 (값은 숫자뿐이라 모노 가능)
+  &__value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-metric);
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  // "총 15 · 사용 6 · 결재중 0.5" — 한글이 섞여 모노 대신 숫자 폭만 고정
   &__sub {
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: normal;
+    font-size: var(--fs-small);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
   }
 
-  > :last-child {
+  > .btn {
     margin-left: auto;
   }
 }
 
-// ── 지출결의서 ──
-
+// ── 지출결의서 — 항목별 패널 (머리 48 + 본문) ──
 .expend-sec {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  overflow: hidden;
   background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
 
   &__head {
     display: flex;
     align-items: center;
     gap: 10px;
+    height: 48px;
+    padding: 0 18px;
+  }
+
+  // 켜진 항목만 본문이 붙는다 — 머리 바닥선은 본문이 있을 때만
+  &__head:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__check {
+    font-size: var(--fs-week-label); // 목업 13.5
+    font-weight: 600;
   }
 
   &__sum {
-    @include type-caption;
     margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+
+    strong {
+      color: var(--text);
+      font-weight: 600;
+    }
   }
 
   &__body {
@@ -291,6 +478,16 @@
     flex-direction: column;
     gap: 8px;
     align-items: flex-start;
+    padding: 12px 18px; // 목업 12 18 · gap 8
+
+    .hint {
+      margin: 0;
+
+      strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+    }
   }
 }
 
@@ -302,47 +499,137 @@
   margin-left: auto;
 
   &__label {
-    @include type-small;
-    min-width: 66px;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
   }
 }
 
-// 주차권 매수 입력
+// 주차권 매수 입력 — [만원권 [ 6 ] 장]  [5천원권 [ 2 ] 장]
 .expend-count {
   display: flex;
-  gap: 16px;
+  gap: 24px;
   flex-wrap: wrap;
 
   &__item {
-    @include type-small;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    font-size: var(--fs-ui);
 
-    .input {
-      width: 72px;
+    > span:last-child {
+      color: var(--text-2);
     }
+  }
+
+  &__input {
+    width: 64px;
+    flex: none;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
   }
 }
 
-// 석식대 한 줄 (날짜 · 금액 · 적요 … 삭제) — 섹션 폭을 채워 삭제 버튼이 오른쪽 끝에 선다
+// 석식대 한 줄 (날짜 180 · 금액 120 · 적요 … 삭제) — 섹션 폭을 채워 삭제 버튼이 오른쪽 끝에 선다
 .expend-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   align-self: stretch;
 
-  .input {
+  &__amount {
     width: 120px;
     flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
   }
 
   &__note {
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: normal;
-    margin-right: auto;
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+}
+
+// ── 야근 결재 모달 (출퇴근 위젯 진입) — 라벨 위 · 날짜/시간 두 칸 · 하단 바 ──
+.approval-mtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  &__icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border-radius: var(--r-tile);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+.approval-mform {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+
+  .banner {
+    margin: 0;
+  }
+
+  &__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    transition: opacity var(--dur-1) var(--ease);
+  }
+
+  // 진행 중엔 입력을 흐리게 (목업 opacity .6) — 폼은 disabled 라 조작도 막혀 있다
+  &--busy &__fields {
+    opacity: 0.6;
+  }
+
+  &__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  // ⚠️ 모달의 두 칸 그리드(약 253px)에선 폼 페이지의 92px 시각 칸이면 합계가 둘째 줄로 떨어진다 —
+  //    목업 모달판 76px · 간격 6 (2026-09-30 /test)
+  .approval-form__times {
+    gap: 6px;
+  }
+
+  .approval-time {
+    width: 76px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+
+    > label {
+      font-size: var(--fs-small);
+      font-weight: 500;
+      color: var(--text-2);
+    }
+  }
+
+  // 하단 바 — 공용 모달 footer 와 같은 면(가라앉은 면 + 윗선). 모달 본문 여백(4 20 20)을 상쇄해 가장자리까지
+  &__foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 -20px -20px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-sunken);
   }
 }

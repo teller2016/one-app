@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { DatePicker } from '../../../components/DatePicker';
-import { FormRow } from '../../../components/FormRow';
+import { Badge } from '../../../components/Badge';
 import { Input } from '../../../components/Input';
 import { Textarea } from '../../../components/Textarea';
 import { TimePicker } from '../../../components/TimePicker';
@@ -21,8 +21,11 @@ import type { OvertimeSubmitResult } from '../../../../shared/types';
  */
 export function OvertimeForm({
   onBusyChange,
+  layout = 'page',
 }: {
   onBusyChange?: (busy: boolean) => void;
+  /** 'page' = 결재 섹션(라벨 열 + 패널), 'modal' = 출퇴근 위젯의 야근 모달(라벨 위 · 하단 바) — 목업 두 판 */
+  layout?: 'page' | 'modal';
 }) {
   const toast = useToast();
   const [date, setDate] = useState(today);
@@ -51,7 +54,10 @@ export function OvertimeForm({
 
   useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
 
-  const total = useMemo(() => hoursTotal(startTime, endTime), [startTime, endTime]);
+  const total = useMemo(
+    () => hoursTotal(startTime, endTime),
+    [startTime, endTime],
+  );
   const valid =
     !!date && !!total && !!target.trim() && !!content.trim() && !!reason.trim();
 
@@ -93,72 +99,147 @@ export function OvertimeForm({
     );
   }
 
+  const dateField = (
+    <DatePicker value={date} onChange={setDate} disabled={busy} />
+  );
+  const timeField = (
+    <div className="approval-form__times">
+      <span className="approval-time">
+        <TimePicker value={startTime} onChange={setStartTime} disabled={busy} />
+      </span>
+      <span className="approval-form__tilde">~</span>
+      <span className="approval-time">
+        <TimePicker value={endTime} onChange={setEndTime} disabled={busy} />
+      </span>
+      {total ? (
+        layout === 'modal' ? (
+          <span className="approval-form__total">합계 {total}</span>
+        ) : (
+          <Badge variant="accent">합계 {total}</Badge>
+        )
+      ) : (
+        <span className="approval-form__total approval-form__total--bad">
+          시간을 확인하세요
+        </span>
+      )}
+    </div>
+  );
+  const targetField = (
+    <Input
+      value={target}
+      onChange={(e) => setTarget(e.target.value)}
+      placeholder="예: A프로젝트"
+      disabled={busy}
+    />
+  );
+  const contentField = (
+    <Textarea
+      value={content}
+      onChange={(e) => setContent(e.target.value)}
+      placeholder="예: 결제 기능 오류 수정 및 테스트"
+      rows={2}
+      disabled={busy}
+    />
+  );
+  const reasonField = (
+    <Textarea
+      value={reason}
+      onChange={(e) => setReason(e.target.value)}
+      placeholder="예: 고객 납기일 준수를 위해 당일 연장근무 필요"
+      rows={2}
+      disabled={busy}
+    />
+  );
+  const progress = busy && (
+    <ProgressLine
+      step={step}
+      note="창이 열리고 양식이 채워집니다 — 기다려 주세요"
+    />
+  );
+  const actions = (
+    <>
+      <Button
+        variant="primary"
+        size={layout === 'page' ? 'lg' : 'md'}
+        onClick={() => void run()}
+        disabled={!valid || busy}
+        loading={busy}
+      >
+        작성 시작
+      </Button>
+      <span className="hint">
+        작성만 합니다 — 열린 창에서 확인 후 직접 [상신]
+      </span>
+    </>
+  );
+
+  // 모달판 — 라벨이 위, 날짜·시간은 두 칸, 진행 띠와 [작성 시작]은 모달 하단 바 자리 (목업 OvertimeModal)
+  if (layout === 'modal') {
+    return (
+      <div className={'approval-mform' + (busy ? ' approval-mform--busy' : '')}>
+        {error && <Banner variant="danger">{error}</Banner>}
+        {!dept && <Banner variant="warning">{NO_DEPT_HINT}</Banner>}
+        <div className="approval-mform__fields">
+          <div className="approval-mform__pair">
+            <div className="field">
+              <label>연장근무일</label>
+              <div className="approval-date approval-date--fill">
+                {dateField}
+              </div>
+            </div>
+            <div className="field">
+              <label>근무시간</label>
+              {timeField}
+            </div>
+          </div>
+          <div className="field">
+            <label>업무 대상</label>
+            {targetField}
+          </div>
+          <div className="field">
+            <label>수행 내용</label>
+            {contentField}
+          </div>
+          <div className="field">
+            <label>연장근무 사유</label>
+            {reasonField}
+          </div>
+        </div>
+        {progress}
+        <div className="approval-mform__foot">{actions}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="approval-form">
       {error && <Banner variant="danger">{error}</Banner>}
       {!dept && <Banner variant="warning">{NO_DEPT_HINT}</Banner>}
 
-      <FormRow label="연장근무일">
-        <DatePicker value={date} onChange={setDate} disabled={busy} />
-      </FormRow>
+      <div className="approval-panel">
+        <div className="approval-grid">
+          <label className="approval-grid__label">연장근무일</label>
+          <div className="approval-grid__cell">
+            <div className="approval-date">{dateField}</div>
+          </div>
 
-      <FormRow label="근무시간">
-        <div className="approval-form__times">
-          <TimePicker value={startTime} onChange={setStartTime} disabled={busy} />
-          <span className="approval-form__tilde">~</span>
-          <TimePicker value={endTime} onChange={setEndTime} disabled={busy} />
-          <span className="approval-form__total">
-            {total ? `합계 ${total}` : '시간을 확인하세요'}
-          </span>
+          <label className="approval-grid__label">근무시간</label>
+          <div className="approval-grid__cell">{timeField}</div>
+
+          <label className="approval-grid__label">업무 대상</label>
+          <div className="approval-grid__cell">{targetField}</div>
+
+          <label className="approval-grid__label">수행 내용</label>
+          <div className="approval-grid__cell">{contentField}</div>
+
+          <label className="approval-grid__label">연장근무 사유</label>
+          <div className="approval-grid__cell">{reasonField}</div>
         </div>
-      </FormRow>
-
-      <FormRow label="업무 대상">
-        <Input
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          placeholder="예: A프로젝트"
-          disabled={busy}
-        />
-      </FormRow>
-
-      <FormRow label="수행 내용">
-        <Textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="예: 결제 기능 오류 수정 및 테스트"
-          rows={2}
-          disabled={busy}
-        />
-      </FormRow>
-
-      <FormRow label="연장근무 사유">
-        <Textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="예: 고객 납기일 준수를 위해 당일 연장근무 필요"
-          rows={2}
-          disabled={busy}
-        />
-      </FormRow>
-
-      {busy && (
-        <ProgressLine step={step} note="창이 열리고 양식이 채워집니다 — 기다려 주세요" />
-      )}
-
-      <div className="form-actions">
-        <Button
-          variant="primary"
-          onClick={() => void run()}
-          disabled={!valid || busy}
-          loading={busy}
-        >
-          작성 시작
-        </Button>
-        <span className="hint">
-          작성만 합니다 — 열린 창에서 확인 후 직접 [상신]
-        </span>
       </div>
+
+      {progress}
+
+      <div className="approval-actions">{actions}</div>
     </div>
   );
 }

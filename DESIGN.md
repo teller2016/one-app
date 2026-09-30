@@ -119,6 +119,8 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 - **스페이싱**: 4px 그리드 `4/8/12/16/20/24/32`.
 - **컨트롤 높이**: `--control-h: 32px` / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
+- **섹션 레이아웃 치수**(목업): `--panel-head-h` 42(카드형 패널 머리) · `--row-h-ticket` 56(두 줄 티켓 행) · `--nightwatch-side-w` 400 · `--nightwatch-report-h` 760(Nightwatch 설정 열·리포트 모달).
+- **결재 폼 치수**(목업): `--control-h-lg` 36(`Button size="lg"` — 폼의 [작성 시작]) · `--fs-heading` 16(완료 화면 제목) · 시맨틱 `--info`/`--info-soft`(청록 — 정보 배너·작성 완료 아이콘, 액센트와 구분).
 - **라운드**: `--r-xs 3`(인라인 마크) · `--r-sm 5`(칩·작은 버튼) · `--r-md 6`(버튼·입력) · `--r-tile 7`(축소 레일 타일·워크트리 칸) · `--r-tab 8`(세션 탭 윗모서리) · `--r-rail 9`(축소 레일 워크스페이스 칸) · `--r-lg 10`(카드·패널) · `--r-xl 14`(모달) · `--r-full`(카운트 뱃지·진행 바·스위치만 — **버튼은 필이 아니다**).
 - **그림자**: 카드·버튼에 금지. `--shadow-1` 은 세그 선택 칩, `--shadow-2` 는 모달·토스트·팝오버(그림자 + 1px 윤곽).
 - **모션**: `--dur-1 .12s`(hover·토글) · `--dur-2 .18s`(팝오버·드로어·모달 진입) · `--dur-3 .28s`(폭·높이 변화). 진입 이동 `--lift 4px`. 목록 선택·탭 전환은 즉시. **목록 항목에 진입 모션 금지**. 진입 믹스인 fill-mode 는 `backwards`(`.claude/rules/styles.md` 참고). `prefers-reduced-motion` 은 `.01ms` 로 즉시 종료.
@@ -172,7 +174,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 ### Button (`.btn`) — 6px 각형 (`--r-md`, sm 은 `--r-sm`)
 - **variant**: `primary`(--accent-btn 면 + --on-accent 글자 600 — 다크는 밝은 인디고라 **어두운 글자**) · `ghost`(기본 — surface-2 면 + --border-strong, hover surface-3) · `danger`(danger-soft 면 + --danger 글자 + 35% 보더, hover soft-strong)
-- **size**: `md`(높이 `--control-h` 32 · 좌우 12 · 13px) · `sm`(`--control-h-sm` 28 · 좌우 10 · 12px)
+- **size**: `lg`(`--control-h-lg` 36 · 좌우 16 — 폼의 주 액션) · `md`(높이 `--control-h` 32 · 좌우 12 · 13px) · `sm`(`--control-h-sm` 28 · 좌우 10 · 12px)
 - **상태**: hover(면 한 단계) / focus-ring / disabled(opacity 0.45) / **loading**(12px 스피너 — 트랙은 글자색 25% 틴트). 누를 때 수축(scale) 없음 — 도구는 즉시 반응한다
 - 라벨 웨이트 **500** (primary 만 600)
 
@@ -184,12 +186,12 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 - focus: border accent + focus-ring(offset 0). ※ 비포커스 경계는 AA 3:1 미달을 보더 상향+라벨 병행으로 절충(라이트 테마 공통의 알려진 한계)
 ### FileTrigger — Input 룩의 트리거 버튼. ellipsis, hover: border-strong→accent
 ### Segment (`.seg`) — 트랙: --bg-sunken + --border, radius --r-md. 칩: 12px · 500. on: **--seg-on + --border-strong + --text + shadow-1**(유일하게 그림자 허용되는 컨트롤). off 글자 --text-2, hover --text. disabled 0.45
-### Badge — **작은 사각**(높이 20 · --r-sm · 12px 500): soft 배경 + 시맨틱 글자 + StatusDot. variant: `busy`(warning + 점 pulse) · `ok` · `fail`(danger) · `idle` · `pill`(점 없는 정보형 — surface-2). 부속 타임스탬프는 type-caption + --text-3, 간격은 gap(음수 마진 금지)
+### Badge — **작은 사각**(높이 20 · --r-sm · 11.5px 500): soft 배경 + 시맨틱 글자 + StatusDot. variant: `busy`(warning + 점 pulse) · `ok` · `fail`(danger) · `idle` · `pill`(점 없는 정보형 — surface-2) · `accent`(점 없는 액센트 틴트 — 프로젝트 이름 등). 부속 타임스탬프는 type-caption + --text-3, 간격은 gap(음수 마진 금지)
 ### StatusDot — sm 6px(뱃지 내) / md 8px(VPN 위젯). busy=--warning+pulse, ok=--ok, fail/error=--danger, idle=--idle. **VPN error 는 --danger 점**으로 disconnected 와 시각 구분
 ### Chip — `<button>`(접근성). surface-2 + --border-strong + --r-md, 높이 28, hover surface-3. excluded: **점선 윤곽 + 투명 면 + opacity 0.55 + 취소선**(색만으로 구분하지 않는다)
 ### Card 패턴 (`@mixin card-surface`) — **surface-1 + --border 헤어라인 + --r-lg(10px). 그림자 없음**(하이라이트 인셋은 no-op 토큰으로 무효화). 인터랙티브 카드(roster): hover **surface-2 + border-strong만**(translateY 금지). selected: **accent 보더 + accent-soft 배경**(이중 링 금지)
 ### Collapsible — 바깥 --r-lg, head 화살표 SVG chevron-right(open 시 rotate 90°, --dur-2)
-### Banner — variant `warning`(기본, alert-triangle)·`danger`(alert-triangle)·`info`(info, accent). soft 배경 + 시맨틱 보더/글자 + 아이콘 16px
+### Banner — variant `warning`(기본, alert-triangle)·`danger`(alert-triangle)·`info`(info — `--info-soft` 면 + 본문 --text-2 · 굵은 글자 --text). **테두리 없는 soft 면**(목업) · padding 12 14 · --r-tab 8 · 12.5px/1.6 · 아이콘 16px
 ### Confirm (전역 `.confirm` + ConfirmProvider·useConfirm — window.confirm 대체)
 - **promise 기반**: `if (!(await confirm({ title, message?, confirmLabel?, danger? }))) return;` — 호출부가 async 면 그대로 치환된다.
 - 룩: surface-1 + --border-strong + **--r-xl(14px)** + shadow-2, max-width 420px, **중앙(광학 중심 살짝 위)** 배치 — macOS 알럿. 액션은 우측 정렬 [취소(ghost)] [확인(primary / danger)].
@@ -228,7 +230,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 - **여백은 콘텐츠의 pedestal** — 기본 섹션 패딩 `44px 44px 48px`(밀도보다 호흡). 섹션 리드(`.section-head__sub`)는 fs-emph 로 본문보다 한 단계 크게, 아래 여백 28px.
 - 콘텐츠 폭: `--w-content: 800px`(기본 .section — 패딩 확대에 맞춰 상향) / `--w-wide: 1200px`(주간보고)
-- 브레이크포인트(주간보고): 980px(2단→1단) · 1100px(차트 2열→1열) — SCSS 상수로 기록
+- 브레이크포인트(주간보고): 1100px(차트 2열→1열 · 상세 일정 3열→2열) — 2026-09-30 리디자인부터 주간보고는 풀블리드 2단(명단 280 고정 · 둘 다 자기 스크롤)이라 980px 스택은 없앴다
 - roster sticky `max-height: calc(100vh - 168px)`·차트 canvas `max-height 200px + minmax(0)/min-width:0` 오버플로 제약은 **보존**(주석 유지)
 - 고정 min-width(라벨 72px·대상명 120px·주 라벨 170px)는 유지 시 주석 필수
 
