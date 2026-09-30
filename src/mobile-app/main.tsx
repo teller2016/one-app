@@ -5,6 +5,7 @@ import { installOneAppShim } from './shim/oneApp';
 import { startRpc } from './shim/rpc';
 import { initTheme } from '../renderer/lib/theme';
 import { App } from './App';
+import '../renderer/lib/fonts';
 import './styles/mo.scss';
 import { createRoot } from 'react-dom/client';
 

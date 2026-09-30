@@ -106,6 +106,11 @@ export function collectReach() {
 
   const visit = (spec, from, typeOnly) => {
     if (spec.endsWith('.scss') || spec.endsWith('.css')) {
+      // 패키지의 CSS(`@fontsource/…/400.css` 같은 웹폰트) 는 외부 패키지로 집계한다 — 안을 따라가지 않는다
+      if (!spec.startsWith('.') && !spec.startsWith('@one/')) {
+        noteBare(spec, from, typeOnly);
+        return;
+      }
       const r = spec.startsWith('.') ? path.resolve(path.dirname(from), spec) : null;
       if (r && fs.existsSync(r)) walkScss(r);
       else unresolved.push({ spec, from: rel(from) });

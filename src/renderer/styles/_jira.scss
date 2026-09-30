@@ -69,40 +69,41 @@
     color: var(--text-3);
   }
 
-  // 타입 아이콘 — Jira 스타일 컬러 사각 배지
+  // 타입 아이콘 — 옅은 틴트 사각 + 타입 색 글리프 (Signal: 흰 글리프 on 원색은 다크에서 대비 미달)
+  // 틴트는 글리프 색(currentColor)에서 만든다 — 타입마다 배경 토큰을 따로 두지 않는다
   &__type {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 18px;
     height: 18px;
-    border-radius: 5px;
-    color: #ffffff;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, currentColor 16%, transparent);
     flex-shrink: 0;
 
     &--task {
-      background: var(--accent);
+      color: var(--accent);
     }
 
     &--bug {
-      background: var(--danger);
+      color: var(--danger);
     }
 
     &--sub {
-      background: var(--chart-5t); // 틸 — 하위 작업
+      color: var(--chart-5o); // 민트 — 하위 작업 (O쌍 = 틴트 위 글자용 보정색)
     }
 
     &--story {
-      background: var(--ok);
+      color: var(--ok);
     }
 
     &--epic {
-      background: var(--chart-4t); // 퍼플
+      color: var(--chart-4o); // 핑크
     }
 
     // 직접 추가한 티켓 그룹 — 내 담당이 아니라는 뜻이라 타입 색과 겹치지 않게 중립 톤
     &--pinned {
-      background: var(--text-3);
+      color: var(--text-2);
     }
   }
 

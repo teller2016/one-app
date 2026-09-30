@@ -44,77 +44,77 @@
   // 하드코딩하지 않고 부드럽게 열린다. (Chromium 129+, 이 앱은 150)
   interpolate-size: allow-keywords;
 
-  // ===== 배경 레이어 (애플 — 파치먼트 그라운드 + 흰 카드) =====
-  --bg: #f5f5f7; // 앱 전체 그라운드(파치먼트) — main.ts BrowserWindow backgroundColor와 동기화
-  --surface-1: #ffffff; // 카드·입력·collapsible (흰 카드 + 헤어라인)
-  --surface-2: #e8e8ed; // hover 표면·팝오버·토스트
-  --bg-sunken: #e3e3e8; // 세그먼트 트랙 등 가라앉은 웰
+  // ===== 배경 레이어 (Signal — 옅은 회색 그라운드 + 흰 패널) =====
+  --bg: #f4f5f7; // 메인 영역 그라운드 (.content — 창은 비브런시라 BrowserWindow 배경색 없음)
+  --surface-1: #ffffff; // 패널·카드·입력 (흰 면 + 헤어라인)
+  --surface-2: #eef0f3; // hover 표면·팝오버·토스트
+  --bg-sunken: #e4e7eb; // 세그먼트 트랙 등 가라앉은 웰
 
-  // ===== 다크 패널 (로그·코드·커밋 — 애플 니어블랙 타일, panel-dark 믹스인이 소비) =====
-  --surface-dark: #272729; // 타일 1
-  --surface-dark-2: #2a2a2c; // 타일 2 — 다크 패널 안 승격 표면 (마이크로 스텝)
-  --border-dark: #3d3d40;
-  --on-dark: #ffffff; // 다크 위 본문 (14.9:1 — 애플은 다크 위 순백)
-  --on-dark-2: #cccccc; // 다크 위 보조·로그 본문 (9.3:1)
-  --on-dark-3: #98989d; // 다크 위 메타 (5.2:1)
+  // ===== 다크 패널 (로그·코드·커밋 — 흑연 타일, panel-dark 믹스인이 소비) =====
+  --surface-dark: #111316; // 타일 1
+  --surface-dark-2: #1a1d21; // 타일 2 — 다크 패널 안 승격 표면 (마이크로 스텝)
+  --border-dark: #2a2f35;
+  --on-dark: #e8eaed; // 다크 위 본문 (15:1)
+  --on-dark-2: #aeb4bc; // 다크 위 보조·로그 본문 (8.6:1)
+  --on-dark-3: #858c96; // 다크 위 메타 (5.3:1)
 
   // ===== 보더·오버레이 =====
-  --border: #e0e0e0; // 헤어라인 — 흰 카드의 유일한 윤곽
-  --border-strong: #c7c7cc; // hover 보더·입력 기본 보더·스크롤바 thumb
-  --frost: rgba(245, 245, 247, 0.72); // 프로스트 글라스 바 틴트 (탑바 — backdrop-blur 와 병행)
-  --highlight: rgba(255, 255, 255, 0); // 무효화 — 애플은 카드 인셋 없음 (구조 보존용 no-op)
+  --border: #e3e6ea; // 헤어라인 — 흰 카드의 유일한 윤곽
+  --border-strong: #d5d9df; // hover 보더·입력 기본 보더·스크롤바 thumb
+  --frost: rgba(244, 245, 247, 0.82); // 프로스트 글라스 바 틴트 (탑바 — backdrop-blur 와 병행)
+  --highlight: rgba(255, 255, 255, 0); // 무효화 — 카드 인셋 없음 (구조 보존용 no-op)
   --overlay-faint: rgba(0, 0, 0, 0.03);
   --overlay-hover: rgba(0, 0, 0, 0.05);
   --overlay-track: rgba(0, 0, 0, 0.08);
-  --scrollbar-hover: #a1a1a6;
+  --scrollbar-hover: #a0a6ae;
 
-  // ===== 텍스트 (4단 위계 — 니어블랙 잉크, 순흑 금지) =====
-  --text: #1d1d1f; // 애플 잉크 (bg 15.5:1)
-  --text-2: #515154; // 보조·캡션·표 헤더 (7.3:1)
-  --text-3: #66666b; // 메타·타임스탬프·플레이스홀더 (5.2:1)
-  --text-disabled: #a1a1a6; // 비활성 전용
+  // ===== 텍스트 (4단 위계 — 흑연 잉크, 순흑 금지) =====
+  --text: #15171a; // 잉크 (bg 16:1)
+  --text-2: #4a515b; // 보조·캡션·표 헤더 (7.6:1)
+  --text-3: #69717c; // 메타·타임스탬프·플레이스홀더 (4.7:1)
+  --text-disabled: #a0a6ae; // 비활성 전용
 
-  // ===== 액센트 (액션 블루 단일 — 링크·버튼·포커스 전부 이 하나) =====
-  --accent: #0066cc; // 링크·활성·아이콘 틴트·포커스 링 (bg 5.1 / s1 5.6 / s2 4.6:1)
-  --accent-hover: #004f9e; // 링크 hover — 라이트 테마 hover 는 더 어둡게
-  --accent-btn: #0066cc; // primary 필 버튼 배경 (흰 글자 5.6:1) — --accent 와 동일값(단일 블루 원칙)
-  --accent-btn-hover: #0057ad; // primary hover (흰 글자 7.1:1)
-  --accent-soft: rgba(0, 102, 204, 0.12);
-  --accent-glow: rgba(0, 102, 204, 0.35); // 장식 전용 — 포커스 링 금지
+  // ===== 액센트 (인디고 단일 — 링크·버튼·포커스·앱 아이콘 켜진 타일 전부 이 하나) =====
+  --accent: #4353d6; // 링크·활성·아이콘 틴트·포커스 링 (bg 5.9 / s1 6.4:1)
+  --accent-hover: #3544c4; // 링크 hover — 라이트 테마 hover 는 더 어둡게
+  --accent-btn: #4353d6; // primary 버튼 배경 (흰 글자 6.4:1) — --accent 와 동일값(단일 액센트 원칙)
+  --accent-btn-hover: #3544c4; // primary hover (흰 글자 7.9:1)
+  --accent-soft: rgba(67, 83, 214, 0.1);
+  --accent-glow: rgba(67, 83, 214, 0.3); // 장식 전용 — 포커스 링 금지
   --on-accent: #ffffff; // --accent-btn 배경 위에서만
-  --accent-on-dark: #2997ff; // 다크 패널 안 링크 (스카이 링크 블루 — 4.9:1)
-  --accent-hover-on-dark: #61b0ff;
+  --accent-on-dark: #8c9bff; // 다크 패널 안 링크 (8:1)
+  --accent-hover-on-dark: #a9b4ff;
 
-  // ===== 시맨틱 (애플 시스템 컬러 계열 — 글자는 접근성 다크 변형, soft@s1 위 전부 4.5:1+) =====
-  --ok: #217f38;
-  --ok-soft: rgba(52, 199, 89, 0.14);
-  --ok-soft-strong: rgba(52, 199, 89, 0.3); // diff 워드 하이라이트 — 행 틴트 위에 겹침
-  --warning: #8a6100;
-  --warning-soft: rgba(255, 204, 0, 0.18);
-  --danger: #d70015;
-  --danger-soft: rgba(255, 59, 48, 0.12);
-  --danger-soft-strong: rgba(255, 59, 48, 0.28);
-  --ot: #c93400; // 초과근무(OT) 전용
-  --ot-soft: rgba(255, 149, 0, 0.16);
-  --idle: #6c6c71;
-  --idle-soft: rgba(142, 142, 147, 0.14);
+  // ===== 시맨틱 (글자는 soft@s1 위 전부 4.5:1+ — 색만으로 구분하지 않고 점·문구와 함께) =====
+  --ok: #17804f;
+  --ok-soft: rgba(23, 128, 79, 0.1);
+  --ok-soft-strong: rgba(23, 128, 79, 0.24); // diff 워드 하이라이트 — 행 틴트 위에 겹침
+  --warning: #a55f00;
+  --warning-soft: rgba(213, 128, 0, 0.12);
+  --danger: #c4323a;
+  --danger-soft: rgba(196, 50, 58, 0.1);
+  --danger-soft-strong: rgba(196, 50, 58, 0.24);
+  --ot: #b45309; // 초과근무(OT) 전용
+  --ot-soft: rgba(234, 88, 12, 0.12);
+  --idle: #69717c;
+  --idle-soft: rgba(105, 113, 124, 0.12);
   // 다크 패널 안 시맨틱 (panel-dark 가 치환)
-  --ok-on-dark: #34c759;
-  --warning-on-dark: #ffd60a;
-  --danger-on-dark: #ff6961;
+  --ok-on-dark: #4ccb8d;
+  --warning-on-dark: #f2a53a;
+  --danger-on-dark: #f2676d;
 
   // ===== 차트 카테고리컬 팔레트 (T/OT 쌍 — chartTheme.ts가 읽는 단일 소스) =====
-  // 애플 시스템 컬러 10종. O쌍은 ptag 글자색 겸용 — 15% 틴트 배경 위 4.5:1 검증 완료 (DESIGN.md 1장)
-  --chart-1t: #007aff; // 블루
-  --chart-1o: #0064d1;
-  --chart-2t: #34c759; // 그린
-  --chart-2o: #207b37;
-  --chart-3t: #ff9500; // 오렌지
-  --chart-3o: #9e5c00;
-  --chart-4t: #af52de; // 퍼플
-  --chart-4o: #9345ba;
-  --chart-5t: #30b0c7; // 틸
-  --chart-5o: #207483;
+  // 1~5 는 Signal 팔레트(인디고·스카이·앰버·핑크·민트), 6~10 은 보조. O쌍은 ptag 글자색 겸용
+  --chart-1t: #6674f0; // 인디고
+  --chart-1o: #4353d6;
+  --chart-2t: #2fa8cf; // 스카이
+  --chart-2o: #0a6e92;
+  --chart-3t: #f0a13a; // 앰버
+  --chart-3o: #9a5a00;
+  --chart-4t: #d86aa6; // 핑크
+  --chart-4o: #a8336f;
+  --chart-5t: #3fbf82; // 민트
+  --chart-5o: #17804f;
   --chart-6t: #ff2d55; // 핑크
   --chart-6o: #c72342;
   --chart-7t: #5856d6; // 인디고
@@ -126,16 +126,16 @@
   --chart-10t: #8e8e93; // 그레이 (기타)
   --chart-10o: #6c6c70;
 
-  // ===== 라운드 · 그림자 · 모션 (애플 라디우스 문법 — 필=액션) =====
-  --r-xs: 4px; // 인라인 마크(diff 워드 하이라이트 등) — 글줄 안에 앉는 최소 곡률
-  --r-sm: 8px; // 칩·아이콘 버튼·세그 칩
-  --r-md: 11px; // 입력·중첩 패널
-  --r-lg: 18px; // 카드·모달
-  --r-full: 999px; // 버튼 필·뱃지·바
-  --control-h: 36px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
-  --control-h-sm: 30px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
-  --shadow-1: 0 1px 2.5px rgba(0, 0, 0, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
-  --shadow-2: 0 5px 30px rgba(0, 0, 0, 0.22); // 모달·토스트·팝오버 (애플의 단일 그림자 이식)
+  // ===== 라운드 · 그림자 · 모션 (Signal — 작은 곡률, 모달만 조금 더 둥글게) =====
+  --r-xs: 3px; // 인라인 마크(diff 워드 하이라이트 등) — 글줄 안에 앉는 최소 곡률
+  --r-sm: 5px; // 칩·아이콘 버튼·세그 칩
+  --r-md: 6px; // 입력·중첩 패널
+  --r-lg: 10px; // 카드·모달
+  --r-full: 999px; // 카운트 뱃지·진행 바·스위치 (버튼은 필 아님 — --r-md)
+  --control-h: 32px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
+  --control-h-sm: 28px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
+  --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
+  --shadow-2: 0 16px 48px rgba(20, 22, 26, 0.16), 0 0 0 1px rgba(20, 22, 26, 0.08); // 모달·토스트·팝오버 — 그림자 + 1px 윤곽
   --dur-1: 0.12s; // 색·배경 전환
   --dur-2: 0.18s; // transform·진입(페이드·팝오버·섹션 전환)
   --dur-3: 0.28s; // 레이아웃 — 높이·폭이 실제로 변하는 펼침(Collapsible·사이드바 접기)
@@ -143,7 +143,7 @@
   --ease: cubic-bezier(0.25, 0.6, 0.3, 1); // 상태 전환(양방향) 공용
   // 진입 감속 — 빠르게 나타나 부드럽게 안착. 사라질 때는 --ease 를 쓴다(대칭 금지)
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
-  --lift: 6px; // 진입 모션 이동거리 — 아래에서 제자리로. 절제된 애플 무드의 상한선
+  --lift: 4px; // 진입 모션 이동거리 — 아래에서 제자리로. 도구는 기다리게 하지 않는다
 
   // ===== 타이포 (크기만 — 스타일 묶음은 아래 type-* 믹스인이 정본) =====
   --fs-caption: 11px;
@@ -151,12 +151,12 @@
   --fs-body: 13px;
   --fs-emph: 14px;
   --fs-title: 15px;
-  --fs-h2: 26px; // 애플 타이포 드라마 — 큰 제목 + 타이트 자간
-  --fs-metric: 28px;
+  --fs-h2: 20px; // 섹션 제목 — 조밀한 도구라 크게 키우지 않는다
+  --fs-metric: 22px;
   // 번들 폰트가 정본 — 뒤 후보는 폰트 로드 실패 시 폴백용 (위 @font-face 주석 참고)
   --font-mono: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
-  // 디스플레이 = 시스템(SF Pro) — 폰트가 곧 브랜드 (세리프 폐지)
-  --font-display: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  // 디스플레이 = 본문과 같은 IBM Plex Sans KR (lib/fonts.ts 번들)
+  --font-display: 'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
 
   // ===== 레이아웃 =====
   --w-content: 800px; // 기본 섹션 폭 (섹션 패딩 확대에 맞춰 상향)
@@ -175,71 +175,72 @@
   --titlebar-safe: 84px;
 }
 
-// ===== 다크 모드 오버라이드 (macOS 다크 — renderer/lib/theme.ts 가 data-theme 을 설정) =====
+// ===== 다크 모드 오버라이드 (Signal 기본 — renderer/lib/theme.ts 가 data-theme 을 설정) =====
 // 값은 전부 WCAG 재검증(DESIGN.md 1장 다크 표). 여기 없는 토큰은 라이트 값 공용.
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  // 배경 레이어 (iOS grouped background 계열)
-  --bg: #1c1c1e; // main.ts 다크 backgroundColor 와 동기화
-  --surface-1: #2c2c2e;
-  --surface-2: #3a3a3c;
-  --bg-sunken: #141416;
+  // 배경 레이어 (흑연 5단)
+  --bg: #0b0c0e;
+  --surface-1: #111316;
+  --surface-2: #1e2227;
+  --bg-sunken: #171a1e;
 
-  // 다크 패널 — 배경과 갈리도록 퓨어 블랙(애플 "true void" 용법)
-  --surface-dark: #000000;
-  --surface-dark-2: #171719;
-  --border-dark: #333336;
+  // 다크 패널 — 배경보다 한 단 더 어둡게 (터미널과 같은 면)
+  --surface-dark: #08090b;
+  --surface-dark-2: #111316;
+  --border-dark: #23272d;
 
   // 보더·오버레이 (화이트 기반으로 반전)
-  --border: #3a3a3c;
-  --border-strong: #55555a;
-  --frost: rgba(28, 28, 30, 0.68);
-  --highlight: rgba(255, 255, 255, 0.05); // 다크에선 카드 상단 인셋이 은은하게 살아남
+  --border: #23272d;
+  --border-strong: #2f353c;
+  --frost: rgba(17, 19, 22, 0.82);
+  --highlight: rgba(255, 255, 255, 0); // 카드 인셋 없음
   --overlay-faint: rgba(255, 255, 255, 0.04);
   --overlay-hover: rgba(255, 255, 255, 0.06);
   --overlay-track: rgba(255, 255, 255, 0.12);
-  --scrollbar-hover: #6e6e73;
+  --scrollbar-hover: #3a414a;
 
   // 텍스트
-  --text: #f5f5f7;
-  --text-2: #b0b0b6; // 7.9/6.5/5.3
-  --text-3: #98989f; // 5.9/4.9 (s2 위 4.0 — 메타 전용 절충)
-  --text-disabled: #636369;
+  --text: #e8eaed;
+  --text-2: #aeb4bc; // bg 9.6 / s1 8.9 / s2 7.6:1
+  --text-3: #858c96; // bg 5.9 / s1 5.5 / s2 4.7:1
+  --text-disabled: #5a616b;
 
-  // 액센트 (애플 다크 블루 계열)
-  --accent: #409cff; // 링크 (bg 6.0 / s1 4.9)
-  --accent-hover: #6cb2ff; // 다크에선 hover 가 더 밝게
-  --accent-btn: #0b6fd8; // 흰 글자 4.9:1
-  --accent-btn-hover: #0a62be; // 흰 글자 6.0:1
-  --accent-soft: rgba(10, 132, 255, 0.2);
-  --accent-glow: rgba(10, 132, 255, 0.35);
+  // 액센트 (밝은 인디고 — 버튼 글자는 어둡게)
+  --accent: #8c9bff; // 링크 (bg 7.9 / s1 7.4:1)
+  --accent-hover: #a9b4ff; // 다크에선 hover 가 더 밝게
+  --accent-btn: #8c9bff; // 어두운 글자(--on-accent) 7.9:1
+  --accent-btn-hover: #a3afff;
+  --on-accent: #0b0c0e; // 밝은 액센트 위 — 흰 글자는 2.4:1 이라 금지
+  --accent-soft: rgba(140, 155, 255, 0.14);
+  --accent-glow: rgba(140, 155, 255, 0.35);
 
-  // 시맨틱 (애플 시스템 다크 — soft@s1 위 전부 4.5:1+)
-  --ok: #30d158;
-  --ok-soft: rgba(48, 209, 88, 0.16);
-  --ok-soft-strong: rgba(48, 209, 88, 0.34);
-  --warning: #ffd60a;
-  --warning-soft: rgba(255, 214, 10, 0.16);
-  --danger: #ff817a;
-  --danger-soft: rgba(255, 105, 97, 0.16);
-  --danger-soft-strong: rgba(255, 105, 97, 0.32);
-  --ot: #ff9f0a;
-  --ot-soft: rgba(255, 159, 10, 0.16);
-  --idle: #a8a8ae;
-  --idle-soft: rgba(152, 152, 159, 0.16);
+  // 시맨틱 (soft@s1 위 전부 4.5:1+)
+  --ok: #4ccb8d;
+  --ok-soft: rgba(76, 203, 141, 0.13);
+  --ok-soft-strong: rgba(76, 203, 141, 0.3);
+  --warning: #f2a53a;
+  --warning-soft: rgba(242, 165, 58, 0.14);
+  --danger: #f2676d;
+  --danger-soft: rgba(242, 103, 109, 0.14);
+  --danger-soft-strong: rgba(242, 103, 109, 0.3);
+  --ot: #ff8f4d;
+  --ot-soft: rgba(255, 143, 77, 0.14);
+  --idle: #858c96;
+  --idle-soft: rgba(133, 140, 150, 0.14);
 
-  // 차트 (애플 시스템 다크 팔레트 — O쌍은 ptag 글자용으로 밝게 보정)
-  --chart-1t: #0a84ff;
-  --chart-1o: #4aa4ff;
-  --chart-2t: #30d158;
-  --chart-2o: #30d158;
-  --chart-3t: #ff9f0a;
-  --chart-3o: #ff9f0a;
-  --chart-4t: #bf5af2;
-  --chart-4o: #ce82f5;
-  --chart-5t: #40c8e0;
-  --chart-5o: #40c8e0;
+  // 차트 (O쌍은 ptag 글자용으로 밝게 보정)
+  --chart-1t: #8c9bff;
+  --chart-1o: #a9b4ff;
+  --chart-2t: #5bc4e8;
+  --chart-2o: #7fd3ef;
+  --chart-3t: #f2a53a;
+  --chart-3o: #f5b95f;
+  --chart-4t: #e57bb4;
+  --chart-4o: #ec9cc7;
+  --chart-5t: #4ccb8d;
+  --chart-5o: #6fd7a4;
   --chart-6t: #ff375f;
   --chart-6o: #ff6f8c;
   --chart-7t: #5e5ce6;
@@ -252,8 +253,8 @@
   --chart-10o: #a6a6ac;
 
   // 그림자 — 다크에선 더 짙게
-  --shadow-1: 0 1px 2.5px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 5px 30px rgba(0, 0, 0, 0.65);
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px #2f353c;
 }
 
 // ===== 타이포 믹스인 (정본 — 용도 기준으로 사용) =====
@@ -276,7 +277,7 @@
   font-size: var(--fs-body);
   line-height: 1.5;
   font-weight: 400;
-  letter-spacing: -0.008em; // 애플 타이트 — 본문 미세 음수 자간
+  letter-spacing: 0; // IBM Plex Sans KR 은 기본 자간이 이미 촘촘하다
 }
 
 @mixin type-emph {
@@ -292,17 +293,17 @@
 }
 
 @mixin type-h2 {
-  font-family: var(--font-display); // SF Pro — 600 + 음수 자간이 "애플 타이트" (700 금지)
+  font-family: var(--font-display); // 본문과 같은 서체 — 600 + 약한 음수 자간
   font-size: var(--fs-h2);
-  line-height: 1.25;
+  line-height: 1.3;
   font-weight: 600;
-  letter-spacing: -0.013em;
+  letter-spacing: -0.01em;
 }
 
 @mixin type-metric {
   font-size: var(--fs-metric);
   line-height: 1.1;
-  font-weight: 600; // 애플은 볼드 대신 세미볼드
+  font-weight: 500; // 숫자는 모노 톤 — 굵게 누르지 않는다
   font-variant-numeric: tabular-nums;
 }
 
@@ -314,7 +315,7 @@
   }
 }
 
-// ===== 카드 표면 (기능 scss에서 @include) — 애플 무그림자: 흰 카드 + 헤어라인만 =====
+// ===== 카드 표면 (기능 scss에서 @include) — 무그림자: 면 + 헤어라인만 =====
 @mixin card-surface {
   background: var(--surface-1);
   border: 1px solid var(--border);
@@ -411,6 +412,16 @@
   box-sizing: border-box;
 }
 
+// 폼 요소는 body 서체를 물려받지 않는다(UA 기본 = 시스템 폰트) — 명시적으로 상속시킨다.
+// 없으면 .btn·.icon-btn 의 한글만 Apple SD Gothic Neo 로 그려진다(2026-09-30 /test 실측).
+// 고정폭이 필요한 입력은 클래스에서 --font-mono 를 다시 지정하므로 그쪽이 이긴다.
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
 html,
 body,
 #root {
@@ -419,8 +430,9 @@ body,
 }
 
 body {
+  // 본문 = IBM Plex Sans KR 번들(lib/fonts.ts). 뒤 후보는 로드 실패 폴백
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     sans-serif;
   @include type-body;
   // 비브런시: 창 배경 재질이 비치도록 투명 유지 — 불투명 채색은 .content(메인 영역)에서만

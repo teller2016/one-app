@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest';
 import { collectReach, LITE_ROOT, REPO_ROOT } from './lib/reach.mjs';
 
 /** lite 가 값으로 import 해도 되는 외부 패키지 — lite package.json 의 dependencies + electron + node 내장 */
-const ALLOWED_BARE = new Set(['electron', 'react', 'react-dom', 'node:*']);
+// @fontsource/* 는 빌드 때 CSS·woff2 로 번들에 굳는 웹폰트라 런타임 의존이 아니다 → devDependencies
+const ALLOWED_BARE = new Set(['electron', 'react', 'react-dom', 'node:*', '@fontsource/ibm-plex-sans-kr']);
 
 const reach = collectReach();
 

@@ -3,236 +3,118 @@
 #    정본(단일 소스)은 src/renderer/styles/_base.scss — 값이 다르면 _base.scss 가 우선합니다.
 #    각 값의 용도·대비율·치환 맥락은 아래 본문 표를 참조하세요.
 name: one-app-design
-mood: "Apple — 파치먼트 캔버스 · 흰 카드 · 액션 블루 단일 액센트 · SF Pro · 무그림자 크롬 · 필 버튼"
-theme: apple-light-dark   # 라이트(기본 표) + 다크 오버라이드(:root[data-theme='dark'] — 본문 §1 다크 표) · 설정: 시스템/라이트/다크
+mood: "Signal — 흑연 바탕 · 인디고 단일 액센트 · 조밀한 정보 · 키는 모노 · 상태는 점+문구"
+theme: signal-dark-light   # 다크(Signal 기본 무드) + 라이트 — 설정: 시스템/라이트/다크
 contrast: "WCAG 2.1 — 본문 4.5:1, 비텍스트 3:1"
+mockup: "https://claude.ai/artifact/D6HFb87Zfa5MiJpEt3oSdB (디자인 언어 · 화면 · 모달 · 상태 화면)"
 
-colors:
-  # 배경 레이어
-  bg: "#f5f5f7"                 # 앱 전체 그라운드(파치먼트) · main.ts backgroundColor 동기화 필수
-  surface-1: "#ffffff"          # 카드·입력·collapsible (흰 카드 + 헤어라인)
-  surface-2: "#e8e8ed"          # hover 표면·팝오버·토스트
-  bg-sunken: "#e3e3e8"          # 세그먼트 트랙 등 가라앉은 웰
-  # 다크 패널 (로그·코드·커밋 — 애플 니어블랙 타일)
-  surface-dark: "#272729"
-  surface-dark-2: "#2a2a2c"
-  border-dark: "#3d3d40"
-  on-dark: "#ffffff"
-  on-dark-2: "#cccccc"
-  on-dark-3: "#98989d"
-  # 보더 · 오버레이
-  border: "#e0e0e0"             # 헤어라인
-  border-strong: "#c7c7cc"
-  highlight: "rgba(255,255,255,0)"     # 무효화 — 애플은 카드 인셋 없음 (구조 보존용 no-op)
-  overlay-faint: "rgba(0,0,0,0.03)"
-  overlay-hover: "rgba(0,0,0,0.05)"
-  overlay-track: "rgba(0,0,0,0.08)"
-  scrollbar-hover: "#a1a1a6"
-  # 텍스트 (4단 위계 — 니어블랙 잉크)
-  text: "#1d1d1f"
-  text-2: "#515154"
-  text-3: "#66666b"
-  text-disabled: "#a1a1a6"      # 비활성 전용 (WCAG 예외)
-  # 액센트 (액션 블루 단일 — 링크·버튼·포커스 전부 이 하나)
-  accent: "#0066cc"
-  accent-hover: "#004f9e"
-  accent-btn: "#0066cc"
-  accent-btn-hover: "#0057ad"
-  accent-soft: "rgba(0,102,204,.12)"
-  accent-glow: "rgba(0,102,204,.35)"   # 장식 전용 — 포커스 링 금지
-  on-accent: "#ffffff"                 # --accent-btn 배경 위에서만
-  accent-on-dark: "#2997ff"            # 다크 패널 안 링크 (스카이 링크 블루)
-  accent-hover-on-dark: "#61b0ff"
-  # 시맨틱 (애플 시스템 컬러의 접근성 다크 변형 + 밝은 원색 soft 틴트)
-  ok: "#217f38"
-  warning: "#8a6100"
-  danger: "#d70015"
-  ot: "#c93400"
-  idle: "#6c6c71"
-  # 시맨틱 (다크 패널 안)
-  ok-on-dark: "#34c759"
-  warning-on-dark: "#ffd60a"
-  danger-on-dark: "#ff6961"
+colors:            # 라이트 / 다크
+  bg:              ["#f4f5f7", "#0b0c0e"]   # 그라운드
+  surface-1:       ["#ffffff", "#111316"]   # 패널·카드·입력·사이드바
+  surface-2:       ["#eef0f3", "#1e2227"]   # hover·팝오버·토스트
+  bg-sunken:       ["#e4e7eb", "#171a1e"]   # 세그 트랙
+  surface-dark:    ["#111316", "#08090b"]   # 로그·코드·터미널 면
+  border:          ["#e3e6ea", "#23272d"]
+  border-strong:   ["#d5d9df", "#2f353c"]
+  text:            ["#15171a", "#e8eaed"]
+  text-2:          ["#4a515b", "#aeb4bc"]
+  text-3:          ["#69717c", "#858c96"]
+  accent:          ["#4353d6", "#8c9bff"]   # 링크·primary·포커스·앱 아이콘 켜진 타일
+  on-accent:       ["#ffffff", "#0b0c0e"]   # 다크의 밝은 액센트 위는 어두운 글자
+  ok:              ["#17804f", "#4ccb8d"]
+  warning:         ["#a55f00", "#f2a53a"]
+  danger:          ["#c4323a", "#f2676d"]
+  ot:              ["#b45309", "#ff8f4d"]
+  idle:            ["#69717c", "#858c96"]
 
 typography:
-  # 정본은 SCSS 믹스인 type-* (크기+행간+웨이트+자간 세트). --fs-* 는 크기만 담음.
-  font-display: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif"   # SF Pro — 시스템 폰트가 곧 브랜드
-  font-mono: "'SF Mono', ui-monospace, Menlo, monospace"
-  weight-ladder: [300, 400, 600, 700]   # 500 은 의도적으로 없음 (애플 래더)
-  caption: { size: 11px, weight: 600, transform: uppercase }
+  font-body: "'IBM Plex Sans KR' (@fontsource 번들 — lib/fonts.ts)"
+  font-mono: "'JetBrains Mono NL' (assets/fonts 번들)"   # 키·번호·경로·해시·시각·포트·로그
+  weight-ladder: [400, 500, 600, 700]
+  caption: { size: 11px, weight: 600, transform: uppercase }   # 라벨 — 식별자에는 쓰지 말 것
   small:   { size: 12px, weight: 400 }
-  body:    { size: 13px, weight: 400, tracking: -0.008em }
+  body:    { size: 13px, weight: 400 }
   emph:    { size: 14px, weight: 600 }
   title:   { size: 15px, weight: 600 }
-  h2:      { size: 26px, weight: 600, tracking: -0.013em }   # 타이포 드라마 — 큰 제목 + "애플 타이트" 자간
-  metric:  { size: 28px, weight: 600, numeric: tabular-nums }
+  h2:      { size: 20px, weight: 600, tracking: -0.01em }
+  metric:  { size: 22px, weight: 500, numeric: tabular-nums }
 
-radius: { sm: 8px, md: 11px, lg: 18px, full: 999px }   # 필=액션 문법. 중첩 표면은 부모보다 한 단계 작게
-spacing: [4, 8, 12, 16, 20, 24, 32]                    # 4px 그리드
-control-height: { md: 36px, sm: 30px }                 # 한 줄 폼 컨트롤 공통 높이 (--control-h / --control-h-sm)
+radius: { xs: 3px, sm: 5px, md: 6px, lg: 10px, full: 999px }   # 모달만 lg 보다 한 단 더 (컴포넌트에서)
+spacing: [4, 8, 12, 16, 20, 24, 32]
+control-height: { md: 32px, sm: 28px }
 shadow:
-  "1": "0 1px 2.5px rgba(0,0,0,0.12)"    # 컨트롤 전용(세그 선택 칩) — 카드 금지
-  "2": "0 5px 30px rgba(0,0,0,0.22)"     # 모달·토스트·팝오버 (애플의 단일 그림자 이식)
-motion:
-  dur-1: .12s          # 색·배경 전환
-  dur-2: .18s          # transform·진입 (페이드·팝오버·섹션 전환)
-  dur-3: .28s          # 레이아웃 — 높이·폭이 실제로 변하는 펼침 (Collapsible·사이드바 접기)
-  dur-pulse: 1.2s      # 상태 점 펄스
-  ease: "cubic-bezier(.25,.6,.3,1)"      # 상태 전환(양방향)
-  ease-out: "cubic-bezier(.2,.8,.3,1)"   # 진입 감속 (퇴장에는 쓰지 않는다)
-  lift: 6px            # 진입 이동거리 — 아래에서 제자리로
-  keyframes: [rise-in, fade-in, pop-in]  # 공용 진입 (동명 믹스인). 목록 항목엔 걸지 않는다
-focus: "outline 2px solid accent, offset 2px (box-shadow 링 금지 · 입력은 offset 0 + border accent 병행 · 다크 패널 안은 accent-on-dark)"
-icon: { source: "Lucide path (ISC)", sizes: [12, 14, 16, 18, 20], viewBox: 24, stroke: 2 }
+  "1": "세그 선택 칩 전용"
+  "2": "떠 있는 레이어(모달·토스트·팝오버) — 그림자 + 1px 윤곽"
+motion: { dur-1: .12s, dur-2: .18s, dur-3: .28s, lift: 4px, list-items: "진입 모션 금지" }
+focus: "outline 2px solid accent, offset 2px (box-shadow 링 금지)"
+icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 ---
 
-# One App 디자인 가이드
+# One App 디자인 가이드 — Signal
 
-> 무드: **Apple** — 파치먼트(#f5f5f7) 그라운드 위 흰 카드, 단일 액션 블루, SF Pro 타이트 헤드라인, 무그림자 크롬, 필(캡슐) 버튼. **UI 크롬은 물러나고 콘텐츠가 말한다.**
-> 테마: **애플 라이트 전용** + 로그·코드·커밋 패널만 니어블랙 타일(#272729 — 애플의 라이트↔다크 타일 교차 이식). 이 문서가 UI 스타일의 단일 기준이다. 새 UI는 반드시 이 토큰·컴포넌트로만 작성한다.
-> (모든 색 조합은 WCAG 2.1 대비율 계산으로 검증됨 — 본문 4.5:1, 비텍스트 3:1)
+> 무드: **Signal** — 흑연 바탕 위 단 하나의 인디고 액센트. 정보는 조밀하게, 상태는 **색 + 모양(점·아이콘) + 문구**로 함께, 티켓 키·빌드 번호·포트·경로 같은 식별자는 모노로.
+> 테마: **다크가 기본 무드**, 라이트는 같은 역할의 대비만 뒤집은 것. 설정은 시스템/라이트/다크.
+> 목업(정본 시안): https://claude.ai/artifact/D6HFb87Zfa5MiJpEt3oSdB — 화면·모달·상태 화면이 모두 여기 있다. 새 UI 는 목업과 이 문서를 함께 본다.
+> ⚠️ 2026-09-30 리디자인 진행 중 — **§0~§3 은 Signal 기준으로 갱신됨. §4 이후 컴포넌트 스펙은 2단계(공용 컴포넌트)에서 갱신한다.** 그 전까지 §4 의 "필 버튼·애플" 서술은 옛 기준이다.
 
 ## 0. 디자인 원칙
 
-1. **크롬은 물러난다** — 깊이는 표면 색 전환(파치먼트↔화이트↔니어블랙)과 1px 헤어라인만으로. **카드·버튼·텍스트에 그림자 금지**(그림자는 모달 등 떠 있는 레이어와 세그 선택 칩에만 — 애플의 "단 하나의 그림자" 철학).
-2. **블루는 하나** — 모든 인터랙티브 신호(링크·primary 버튼·포커스·활성)는 액션 블루 `#0066cc` 단일. 두 번째 액센트 금지.
-3. **필 = 액션** — 완전 둥근 캡슐(`--r-full`)은 "누르는 것"의 신호. 버튼은 필, 입력은 11px 라운드 사각, 카드는 18px — 라디우스 문법을 섞지 않는다.
-4. **모든 값은 토큰에서** — hex·px 매직넘버 금지. 새 값이 필요하면 토큰을 추가한다.
-5. **상태는 빠짐없이** — 인터랙티브 요소는 hover / active / focus-visible / disabled / **loading** 5상태를 정의한다.
-6. **아이콘은 SVG** — 이모지·텍스트 글리프(▸ ↗ ✕ ◀ ⚙️ 등) 금지. 공용 `Icon` 컴포넌트만 사용. (허용 예외: 비밀번호 마스킹 표기 `●`)
-7. **웨이트 래더 300/400/600/700 — 500 금지** — 본문 400, 강조·제목 600. 헤드라인은 600에 음수 자간("애플 타이트"), 700은 쓰지 않는다.
+1. **액센트는 하나** — 링크·primary 버튼·포커스·활성 표시는 `--accent`(인디고) 단일. 두 번째 액센트 금지. 앱 아이콘의 켜진 타일도 같은 색이다.
+2. **상태 = 색 + 모양 + 문구** — 색만으로 구분하지 않는다. 배지는 점 + 문구, 경고는 아이콘 + 문구.
+3. **식별자는 모노** — 티켓 키(`BBJ-2924`)·빌드 번호(`#482`)·해시·포트·경로·시각·IP 는 `--font-mono`.
+4. **조밀하되 숨 쉬게** — 목록 행 38px 안팎, 컨트롤 32px, 4px 그리드. 섹션 설명 문장은 빈 상태에서만.
+5. **크롬은 물러난다** — 깊이는 표면 단계(bg → surface-1 → surface-2)와 1px 헤어라인으로. 그림자는 떠 있는 레이어에만.
+6. **모든 값은 토큰에서** — hex·px 매직넘버 금지. 새 값이 필요하면 토큰을 추가한다.
+7. **상태는 빠짐없이** — hover / active / focus-visible / disabled / loading, 그리고 섹션의 빈·오류·로딩·미설정 화면(목업 "상태 화면" 페이지).
+8. **아이콘은 SVG** — 이모지·텍스트 글리프 금지. 공용 `Icon` 만.
 
-## 1. 컬러 토큰 (`:root` CSS 변수, `_base.scss`)
+## 1. 컬러 토큰 (`_base.scss` — `:root` 라이트 / `:root[data-theme='dark']` 다크)
 
-베이스는 뉴트럴(무채색) — 웜/쿨 틴트 없음. macOS 시스템 설정과 같은 구성.
+| 역할 | 토큰 | 라이트 | 다크 | 용도 |
+|---|---|---|---|---|
+| 그라운드 | `--bg` | `#f4f5f7` | `#0b0c0e` | 메인 영역 바탕 |
+| 패널 | `--surface-1` | `#ffffff` | `#111316` | 카드·입력·사이드바·상세 패널 |
+| 떠 있는 면 | `--surface-2` | `#eef0f3` | `#1e2227` | hover·팝오버·토스트 |
+| 웰 | `--bg-sunken` | `#e4e7eb` | `#171a1e` | 세그 트랙 |
+| 코드 면 | `--surface-dark` | `#111316` | `#08090b` | 로그·코드·커밋·터미널 (`panel-dark` 스코프) |
+| 헤어라인 | `--border` / `--border-strong` | `#e3e6ea` / `#d5d9df` | `#23272d` / `#2f353c` | 윤곽 / hover·입력 보더 |
+| 잉크 | `--text` / `-2` / `-3` | `#15171a` / `#4a515b` / `#69717c` | `#e8eaed` / `#aeb4bc` / `#858c96` | 본문 / 보조 / 메타 |
+| 액센트 | `--accent` | `#4353d6` | `#8c9bff` | 링크·활성·포커스 (bg 위 5.9 / 7.9:1) |
+| 버튼 글자 | `--on-accent` | `#ffffff` | `#0b0c0e` | ⚠️ 다크는 액센트가 밝아 **어두운 글자** — 흰 글자는 2.4:1 |
+| 성공 | `--ok` | `#17804f` | `#4ccb8d` | 성공·연결됨·작업 중 아크 |
+| 주의 | `--warning` | `#a55f00` | `#f2a53a` | 입력 대기·PROD·미달/초과 |
+| 위험 | `--danger` | `#c4323a` | `#f2676d` | 실패·종료·삭제 |
+| 초과근무 | `--ot` | `#b45309` | `#ff8f4d` | OT 전용 |
+| 유휴 | `--idle` | `#69717c` | `#858c96` | 빌드 이력 없음 등 |
 
-### 배경 레이어
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `--bg` | `#f5f5f7` | **앱 전체 그라운드(파치먼트)** — 메인·사이드바·탑바 단일 배경(구분은 보더). main.ts BrowserWindow backgroundColor와 동기화 필수 |
-| `--surface-1` | `#ffffff` | 카드·입력·collapsible — **흰 카드 + 헤어라인**이 기본 단위 |
-| `--surface-2` | `#e8e8ed` | hover 표면·팝오버·토스트 |
-| `--bg-sunken` | `#e3e3e8` | 세그먼트 트랙 등 가라앉은 웰 |
-
-### 다크 패널 (로그·코드·커밋 전용 — §4 '다크 패널 스코프' 참조)
-| 토큰 | 값 | 용도 | 대비(다크 위) |
-|---|---|---|---|
-| `--surface-dark` | `#272729` | 로그·코드·커밋 패널 (애플 니어블랙 타일 1) | — |
-| `--surface-dark-2` | `#2a2a2c` | 다크 패널 안 승격 표면 (타일 2 — 마이크로 스텝) | — |
-| `--border-dark` | `#3d3d40` | 다크 패널 보더·내부 구분선 | — |
-| `--on-dark` | `#ffffff` | 다크 패널 안 본문·강조 (애플은 다크 위 순백) | 14.9 |
-| `--on-dark-2` | `#cccccc` | 다크 패널 안 보조·로그 본문 (body-muted) | 9.3 |
-| `--on-dark-3` | `#98989d` | 다크 패널 안 메타·타임스탬프 | 5.2 |
-
-### 보더·오버레이
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `--border` | `#e0e0e0` | 기본 헤어라인 (흰 카드의 유일한 윤곽) |
-| `--border-strong` | `#c7c7cc` | hover 보더·입력 기본 보더·스크롤바 thumb |
-| `--highlight` | `rgba(255,255,255,0)` | **무효화** — 애플은 카드 인셋 하이라이트 없음 (`card-surface` 구조 보존용 no-op) |
-| `--overlay-faint` | `rgba(0,0,0,0.03)` | 은은한 배경(일정 블록 등) |
-| `--overlay-hover` | `rgba(0,0,0,0.05)` | 투명 요소 hover(collapsible head 등) |
-| `--overlay-track` | `rgba(0,0,0,0.08)` | 진행바 트랙 |
-| `--scrollbar-hover` | `#a1a1a6` | 스크롤바 thumb hover |
-
-### 텍스트 (4단 위계 — 니어블랙 잉크, 순흑 금지)
-| 토큰 | 값 | 용도 | 대비(bg/s1/s2) |
-|---|---|---|---|
-| `--text` | `#1d1d1f` | 본문·제목 (애플 잉크 — "인쇄물이 아니라 사진처럼") | 15.5/16.8/13.8 |
-| `--text-2` | `#515154` | 보조 텍스트·캡션·표 헤더 | 7.3/7.9/6.5 |
-| `--text-3` | `#66666b` | 메타·타임스탬프·플레이스홀더 | 5.2/5.7/4.7 |
-| `--text-disabled` | `#a1a1a6` | **비활성 전용** (WCAG 예외 대상만) | — |
-
-### 액센트 (액션 블루 단일 — 진짜 애플 값이 그대로 AA 통과)
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `--accent` | `#0066cc` | 링크·활성·아이콘 틴트·포커스 링 (bg 5.1 / s1 5.6 / s2 4.6:1 — 전 표면 통과) |
-| `--accent-hover` | `#004f9e` | 링크 hover (라이트 테마 hover 는 더 어둡게) |
-| `--accent-btn` | `#0066cc` | primary 필 버튼 배경 (흰 글자 5.6:1) — **--accent 와 동일값**(단일 블루 원칙) |
-| `--accent-btn-hover` | `#0057ad` | primary hover (흰 글자 7.1:1) |
-| `--accent-soft` | `rgba(0,102,204,.12)` | 활성 배경(사이드바 등) |
-| `--accent-glow` | `rgba(0,102,204,.35)` | **장식 전용** — 포커스 링에 쓰지 말 것 |
-| `--on-accent` | `#ffffff` | `--accent-btn` 배경 위에서만 사용 (그 외 조합 금지) |
-| `--accent-on-dark` | `#2997ff` | **다크 패널 안** 링크 (애플 스카이 링크 블루 — 다크 위 4.9:1) |
-| `--accent-hover-on-dark` | `#61b0ff` | 다크 패널 안 링크 hover |
-
-※ 애플 문서의 `#0071e3`(포커스 블루)은 라이트 위 텍스트 4.3:1로 미달이라 **채택 안 함** — 포커스 링도 `--accent` 하나로 통일.
-
-### 시맨틱 (애플 시스템 컬러 계열 — 글자는 접근성 다크 변형, soft 는 밝은 원색 틴트)
-| 토큰 | 값 | soft (배경) | soft@s1 위 글자 대비 |
-|---|---|---|---|
-| `--ok` | `#217f38` | `rgba(52,199,89,.14)` | 4.5 |
-| `--warning` | `#8a6100` | `rgba(255,204,0,.18)` | 5.1 |
-| `--danger` | `#d70015` | `rgba(255,59,48,.12)` | 4.6 |
-| `--ot` | `#c93400` | `rgba(255,149,0,.16)` | 4.6 |
-| `--idle` | `#6c6c71` | `rgba(142,142,147,.14)` | 4.5 |
-
-다크 패널 안 시맨틱: `--ok-on-dark #34c759`(6.7) · `--warning-on-dark #ffd60a`(10.6) · `--danger-on-dark #ff6961`(5.3) — §4 다크 패널 스코프가 자동 치환.
-
-### 차트 카테고리컬 팔레트 (T/OT 쌍 — CSS 토큰 `--chart-1t`~`--chart-10o`가 단일 소스)
-애플 시스템 컬러 10종을 T로, **O쌍(진한 쪽)은 ptag 글자색 겸용이라 15% 틴트 배경 위 4.5:1로 어둡게 보정**(9번 옐로만 bg 위 4.49 — 초경계, 허용).
-```
-1 #007aff/#0064d1 (블루)   2 #34c759/#207b37 (그린)   3 #ff9500/#9e5c00 (오렌지)
-4 #af52de/#9345ba (퍼플)   5 #30b0c7/#207483 (틸)     6 #ff2d55/#c72342 (핑크)
-7 #5856d6/#5856d6 (인디고) 8 #a2845e/#7e6749 (브라운) 9 #f5c400/#896e00 (옐로)
-10(기타) #8e8e93/#6c6c70 (그레이)
-```
-- 색각 보정: 스택 세그먼트 사이 **1px 경계선**(`borderColor: --surface-1, borderWidth: 1`)을 chartTheme 기본값으로.
-- 범례·툴팁에 항상 프로젝트명 텍스트 병기 (색 단독 전달 금지).
-- ptag(프로젝트 태그): **글자는 O쌍, 배경은 T쌍 15% 틴트** — T색 글자는 대비 미달.
-
-### 다크 모드 (`:root[data-theme='dark']` 오버라이드 — 환경설정 테마: 시스템/라이트/다크)
-**메커니즘**: `renderer/lib/theme.ts` 가 `<html data-theme>` 를 설정(부팅 시 localStorage 미러로 첫 페인트부터 적용, `system` 이면 matchMedia 로 macOS 모드 추종). 설정 정본은 settings.json `theme`(환경설정 → 일반 세그먼트, 즉시 저장) — main.ts 가 창 생성 시 이 값+`nativeTheme` 으로 backgroundColor(`#1c1c1e`/`#f5f5f7`)를 고른다. chart.js 는 토큰을 스냅숏으로 읽으므로 `useThemeMode()` 훅으로 재생성. **다크 블록에 없는 토큰은 라이트 값 공용** — 새 토큰 추가 시 다크에서도 성립하는지 확인.
-
-| 구분 | 다크 값 (핵심) | 대비 |
-|---|---|---|
-| 배경 | bg `#1c1c1e` · s1 `#2c2c2e` · s2 `#3a3a3c` · sunken `#141416` | — |
-| 다크 패널 | **`#000000`(퓨어 블랙 — bg 와 1.06:1이라 블랙으로 분리)** · border `#333336` | on-dark 계열 그대로(블랙 위 대비 더 상승) |
-| 텍스트 | `#f5f5f7` / `#b0b0b6` / `#98989f` / disabled `#636369` | 15.6 / 7.9 / 5.9 (bg 기준) |
-| 액센트 | 링크 `#409cff` · **hover `#6cb2ff`(다크에선 밝게 — 라이트와 반대)** · btn `#0b6fd8`(흰 4.9) · soft rgba(10,132,255,.2) | 링크 bg 6.0 / s1 4.9 |
-| 시맨틱 | ok `#30d158` · warning `#ffd60a` · danger `#ff817a` · ot `#ff9f0a` · idle `#a8a8ae` (soft 알파 .16) | soft@s1 전부 4.5+ |
-| 차트 | 애플 시스템 다크 10종, **O쌍은 밝게 보정**(라이트와 반대 방향) | 틴트 위 4.5+ |
-| 기타 | color-scheme: dark(네이티브 컨트롤) · highlight rgba(255,255,255,.05) 부활 · 그림자 더 짙게 | — |
+- 각 시맨틱에는 `-soft`(배지·배너 배경) 짝이 있다. soft@surface-1 위 글자 대비는 전부 4.5:1 이상.
+- **차트 팔레트** `--chart-1t`~`--chart-10o`: 1~5 는 인디고·스카이·앰버·핑크·민트(목업 주간보고와 같은 순서), 6~10 은 보조. O쌍은 ptag 글자색 겸용 — 다크에선 밝게, 라이트에선 어둡게 보정.
+- 메커니즘: `renderer/lib/theme.ts` 가 `<html data-theme>` 설정(localStorage 미러로 첫 페인트부터). chart.js 는 `useThemeMode()` 로 재생성. **다크 블록에 없는 토큰은 라이트 값 공용.**
 
 ## 2. 타이포그래피
 
-- **폰트 = 시스템 = 브랜드**: macOS 시스템 스택(-apple-system → **SF Pro**)이 곧 애플의 서체다. 별도 폰트 없음. `--font-display` 도 같은 스택(과거 세리프 흔적 제거).
-- **모노**: `--font-mono: 'SF Mono', ui-monospace, Menlo, monospace` — 코드·로그·커밋 해시.
-- **웨이트 래더 300/400/600/700** — **500 사용 금지**(애플은 500을 의도적으로 비움). 본문 400, 강조·제목 600.
-- **"애플 타이트"**: 제목(`type-h2`)은 음수 자간 -0.011em, 본문도 -0.008em 미세 타이트. 11px 이하에는 음수 자간 금지.
+- **본문 = IBM Plex Sans KR** — `@fontsource/ibm-plex-sans-kr` 400/500/600/700 을 `src/renderer/lib/fonts.ts` 가 import(진입점 3곳: renderer · mobile-app · standalone/lite). 한글은 unicode-range 로 나뉘어 쓰는 글자 묶음만 로드된다. 오프라인에서도 같은 글꼴.
+- **모노 = JetBrains Mono NL** — 기존 번들 그대로(`assets/fonts`, `font-display: block` — xterm 셀 폭 때문).
+- **웨이트 래더 400/500/600/700** — 본문 400, UI 라벨·버튼 500, 제목·강조 600, 로고·큰 제목만 700.
 
-**정본은 SCSS 믹스인** — 크기·행간·웨이트·자간이 묶인 세트. `--fs-*` 변수는 크기만 담는다(chartTheme이 읽음).
-
-| 믹스인 | 스펙 | 용도 (크기 아닌 **용도 기준**으로 매핑) |
+| 믹스인 | 스펙 | 용도 |
 |---|---|---|
-| `type-caption` | 11px/1.35 · 600 · ls .05em · uppercase · **--text-2** | 패널 캡션·표 헤더·칩 T/OT 라벨·차트 legend (uppercase 는 시스템 유지 예외) |
-| `type-small` | 12px/1.45 · 400 | 힌트·메타·위젯 본문·로그 |
-| `type-body` | 13px/1.5 · 400 · ls -0.008em | 기본 UI·입력·버튼 |
-| `type-emph` | 14px/1.45 · 600 | 목록 이름(roster)·강조 본문 |
-| `type-title` | 15px/1.4 · 600 | 카드 제목(프로젝트명) |
-| `type-h2` | **26px**/1.25 · **600** · ls **-0.013em** | 섹션 제목·상세 카드 큰 제목 — 700 금지, 큰 크기+타이트 자간의 "타이포 드라마"가 시그니처 |
-| `type-metric` | **28px**/1.1 · **600** · tabular-nums | 큰 숫자 (애플은 볼드 대신 세미볼드) |
-
-숫자 정렬(시각·합계)은 `font-variant-numeric: tabular-nums`. 버튼 라벨은 **400**(애플 필 버튼 웨이트).
+| `type-caption` | 11px · 600 · uppercase · ls .05em · --text-2 | 패널 라벨·표 헤더 (⚠️ 식별자 금지) |
+| `type-small` | 12px · 400 | 힌트·메타·로그 |
+| `type-body` | 13px · 400 | 기본 UI |
+| `type-emph` | 14px · 600 | 목록 이름·강조 |
+| `type-title` | 15px · 600 | 카드·패널 제목 |
+| `type-h2` | 20px · 600 · ls -0.01em | 섹션·상세 제목 |
+| `type-metric` | 22px · 500 · tabular-nums | 큰 숫자(시간·잔여연차) — 가능하면 모노 |
 
 ## 3. 스페이싱 · 라운드 · 그림자 · 모션 · 포커스
 
-- **스페이싱**: 4px 그리드 — `4/8/12/16/20/24/32`. 컴포넌트 세로 패딩만 ±2px 허용 (예: 버튼 sm 6px).
-- **컨트롤 높이 (한 줄 폼 컨트롤 통일)**: input·세그 트랙·DatePicker/TimePicker·FileTrigger 는 `--control-h: 36px`, 소형(`input--sm` 계열)은 `--control-h-sm: 30px`. 세로 패딩 대신 고정 높이를 쓰고, **기능 SCSS 에서 컨트롤 높이 오버라이드 금지** — 같은 행의 컨트롤은 자동으로 줄이 맞아야 정상.
-- **라운드 (애플 문법 — 섞지 말 것)**: `--r-sm: 8px`(칩·아이콘 버튼·세그 칩) · `--r-md: 11px`(입력·중첩 패널) · `--r-lg: 18px`(카드·모달) · `--r-full: 999px`(**버튼 필**·뱃지·바). **필 = 액션 신호.** 중첩 표면은 부모보다 한 단계 작게.
-- **그림자 (애플 무그림자 크롬)**: 카드·버튼·텍스트에 그림자 **금지** — `card-surface` 는 헤어라인만. `--shadow-1`(0 1px 2.5px rgba(0,0,0,.12))은 **세그 선택 칩 등 컨트롤 전용**, `--shadow-2`(0 5px 30px rgba(0,0,0,.22) — 애플의 단일 제품 그림자 이식)는 **떠 있는 레이어**(모달·토스트·팝오버) 전용.
-- **모션 (애플식 절제 — 존재는 느껴지되 기다림은 없다)**
-  - **지속시간**: `--dur-1: .12s`(색·배경 전환) · `--dur-2: .18s`(transform·진입) · `--dur-3: .28s`(**레이아웃** — 높이·폭이 실제로 변하는 펼침) · `--dur-pulse: 1.2s`(상태 점 펄스) · 스피너 .9s.
-  - **이징**: 상태 전환처럼 **양방향**인 것은 `--ease: cubic-bezier(.25,.6,.3,1)`, 나타나기만 하는 **진입**은 감속 곡선 `--ease-out: cubic-bezier(.2,.8,.3,1)`. 퇴장에 `--ease-out` 을 쓰지 않는다(끝이 늘어져 굼떠 보인다).
-  - **진입 이동거리는 `--lift: 6px`** — 그 이상은 이 무드에서 과하다. 진입은 **`opacity`·`transform` 만** 쓴다(합성 단계에서 끝나 리페인트가 없다 — 터미널 xterm 이 같은 창에 상주한다).
-  - **공용 진입 믹스인** (`_base.scss`): `rise-in`(아래→제자리 — 섹션 전환·모달·토스트·배너) · `fade-in`(넓은 면·오버레이) · `pop-in`(팝오버·툴팁·메뉴 — 트리거에서 자라나듯). fill-mode 는 항상 `both`(없으면 첫 프레임이 번쩍인다).
-  - ⚠️ **목록 항목(카드·행)에는 진입 모션을 걸지 않는다** — 데이터가 뜨는 건 사용자가 기다린 결과라 즉시 보여야 한다. 계단(stagger)을 앞 N개에만 주면 "N개까지만 애니메이션되는" 것으로 읽힌다(2026-08-14 실사용 지적으로 전면 제거). 목록의 모션은 **컨테이너인 섹션 하나**가 대표한다.
-  - **펼침 높이**: `:root { interpolate-size: allow-keywords }` 로 `height: auto` 를 전환 대상으로 만들고, `<details>` 는 `::details-content` 로 연다(Chromium 129+ / 이 앱은 150). 콘텐츠 높이를 JS 로 재지 않는다.
-  - **`prefers-reduced-motion`**: transition 제거 + 모든 애니메이션을 `animation-duration: .01ms` 로 **즉시 종료**시킨다(스피너만 예외로 회전 유지). ⚠️ `animation: none` 은 금지 — 진입 모션이 `fill-mode: both` 라 시작 상태(`opacity: 0`)에 갇혀 **요소가 아예 안 보인다**.
-- **포커스** (`@mixin focus-ring`): `outline: 2px solid var(--accent); outline-offset: 2px;`
-  - box-shadow 링 **금지**. Chromium은 outline이 radius를 따라 라운드로 그려짐(필 버튼에서도 캡슐형 링).
-  - 입력은 offset 0 + `border-color: var(--accent)` 병행.
-  - 다크 패널 안에서는 스코프 재정의로 `--accent-on-dark` 링이 된다(별도 처리 불필요).
+- **스페이싱**: 4px 그리드 `4/8/12/16/20/24/32`.
+- **컨트롤 높이**: `--control-h: 32px` / `--control-h-sm: 28px`. 기능 SCSS 에서 높이 오버라이드 금지.
+- **라운드**: `--r-xs 3`(인라인 마크) · `--r-sm 5`(칩·작은 버튼) · `--r-md 6`(버튼·입력) · `--r-lg 10`(카드·패널) · 모달 14(컴포넌트에서) · `--r-full`(카운트 뱃지·진행 바·스위치만 — **버튼은 필이 아니다**).
+- **그림자**: 카드·버튼에 금지. `--shadow-1` 은 세그 선택 칩, `--shadow-2` 는 모달·토스트·팝오버(그림자 + 1px 윤곽).
+- **모션**: `--dur-1 .12s`(hover·토글) · `--dur-2 .18s`(팝오버·드로어·모달 진입) · `--dur-3 .28s`(폭·높이 변화). 진입 이동 `--lift 4px`. 목록 선택·탭 전환은 즉시. **목록 항목에 진입 모션 금지**. 진입 믹스인 fill-mode 는 `backwards`(`.claude/rules/styles.md` 참고). `prefers-reduced-motion` 은 `.01ms` 로 즉시 종료.
+- **포커스**: `outline: 2px solid var(--accent); outline-offset: 2px`. box-shadow 링 금지. 입력은 offset 0 + 보더 액센트.
 
 ## 4. 컴포넌트 스펙
 
