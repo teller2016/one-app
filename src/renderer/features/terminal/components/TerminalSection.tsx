@@ -1100,7 +1100,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
                 aria-label="새 워크스페이스"
                 onClick={openNewWorkspace}
               >
-                <Icon name="plus" size={16} />
+                <Icon name="plus" size={14} />
               </button>
             </Tooltip>
           </div>

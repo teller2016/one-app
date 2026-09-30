@@ -34,6 +34,7 @@ typography:
   caption: { size: 11px, weight: 600, transform: uppercase }   # 라벨 — 식별자에는 쓰지 말 것
   micro:   { size: 10.5px }                  # --fs-micro — 브랜치 ref 둘째 줄
   nano:    { size: 9.5px }                   # --fs-nano — 타일 위 세션 수 뱃지
+  pico:    { size: 9px }                     # --fs-pico — 워크트리 칸 세션 수 뱃지
   small:   { size: 12px, weight: 400 }
   ui:      { size: 12.5px }                  # --fs-ui — 탭 제목·트리 이름·브랜치명
   ui-sm:   { size: 11.5px }                  # --fs-ui-sm — 시각·보조 모노 값
@@ -96,6 +97,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 1.7 }
 
 - 각 시맨틱에는 `-soft`(배지·배너 배경) 짝이 있다. soft@surface-1 위 글자 대비는 전부 4.5:1 이상.
 - **차트 팔레트** `--chart-1t`~`--chart-10o`: 1~5 는 인디고·스카이·앰버·핑크·민트(목업 주간보고와 같은 순서), 6~10 은 보조. O쌍은 ptag 글자색 겸용 — 다크에선 밝게, 라이트에선 어둡게 보정.
+- **타일 팔레트** `--tile-1`~`--tile-10`: 터미널 워크스페이스 이니셜 타일·색 고르기 전용 **파스텔** — 블루·스카이·오렌지·핑크·그린·코랄·퍼플·라임·옐로·그레이를 색상환에서 고르게 벌리고(가까운 쌍 금지), 밝게 보이는 초록 계열·노랑·하늘은 채도를 한 단 낮춤. 글자는 어두운 잉크(대비 6.5:1+). 차트 색을 면적 넓은 타일에 쓰면 쨍하다(2026-09-30) — 타일에 차트 토큰을 다시 쓰지 말 것.
 - 메커니즘: `renderer/lib/theme.ts` 가 `<html data-theme>` 설정(localStorage 미러로 첫 페인트부터). chart.js 는 `useThemeMode()` 로 재생성. **다크 블록에 없는 토큰은 라이트 값 공용.**
 
 ## 2. 타이포그래피

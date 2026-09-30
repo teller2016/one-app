@@ -44,7 +44,7 @@ import type { WorkspaceSelection } from '../lib/workspace';
 const isAgentBusy = (s: TerminalSessionInfo) =>
   s.working && !!s.agentId && s.agentId !== 'shell';
 
-/** 축소 타일의 라운드 사각 반지름 — SCSS 토큰 `--r-sm`(8px) 과 맞춘 값.
+/** 아크의 라운드 사각 반지름 — 26px 이니셜 타일(`--r-tile` 7) 을 1px 바깥에서 감싸 7 + 1 = 8.
  *  SVG 기하는 CSS 변수로 못 쓰므로 여기서만 숫자로 둔다(토큰이 바뀌면 같이 고칠 것). */
 const SQ_RADIUS = 8;
 /** 아크가 둘레에서 차지하는 비율 — 0.22 면 네 변 중 한 변 남짓 */
@@ -334,6 +334,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
               {...dropTarget(ws)}
             >
               <Tooltip
+                side="right"
                 label={`${ws.name} — 세션 ${wsCount}개${busy ? ' · 작업 중' : ''}${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
               >
                 {/* 펼침 모드의 행 클릭과 같은 동작 — 워크트리 타일 목록을 접고 편다
@@ -342,7 +343,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                   type="button"
                   className={
                     'terminal__ws-sq' +
-                    (wsActive ? ' terminal__ws-sq--active' : '') +
+                    // 목업: 펼친(aria-expanded) 워크스페이스가 한 단 올라온다 — 선택이 든 곳이 아니라
+                    (isOpen ? ' terminal__ws-sq--open' : '') +
                     (dragId === ws.id ? ' terminal__ws-sq--dragging' : '')
                   }
                   aria-expanded={isOpen}
@@ -397,6 +399,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     return (
                       <Tooltip
                         key={wt.path}
+                        side="right"
                         label={`${worktreeLabel(wt)}${
                           count > 0 ? ` · 세션 ${count}개` : ''
                         }${wtBusy ? ' · 작업 중' : ''}${wtWaiting ? ' · 입력 대기' : ''}`}
@@ -418,7 +421,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
                           }
                         >
-                          <Icon name={worktreeIcon(wt)} size={15} />
+                          <Icon name={worktreeIcon(wt, true)} size={15} />
                           {wtBusy && <BusyArc size={24} />}
                           {count > 0 && (
                             <span
@@ -443,6 +446,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
         {otherCount > 0 && (
           <div className="terminal__sq-group">
             <Tooltip
+              side="right"
               label={`기타 세션 ${otherCount}개${otherBusy ? ' · 작업 중' : ''} — 워크스페이스 밖에서 시작된 세션`}
             >
               <button

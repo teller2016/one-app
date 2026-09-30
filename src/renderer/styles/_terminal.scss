@@ -61,7 +61,11 @@
     }
 
     // 축소 목록 — 위아래 10, 타일 사이 8 (TerminalCollapsed 목업)
+    // ⚠️ align-self: stretch 필수 — 패널이 align-items:center 라 그대로면 목록이 내용 폭(34)으로 줄고,
+    //    overflow-y:auto(→ x 도 auto)가 오른쪽으로 삐져나온 세션 수 뱃지를 잘랐다(2026-09-30 사용자 지적).
+    //    자손(__wt-list)에 stretch 를 줘도 부모가 34 면 소용없다 — 스크롤 컨테이너가 레일 폭(48)을 가져야 한다
     .terminal__list {
+      align-self: stretch;
       padding: 10px 0;
       gap: 8px;
     }
@@ -204,6 +208,9 @@
   //    미루지 않으면 접기 시작과 동시에 사라져 애니메이션이 보이지 않는다.
   &__wt-list {
     display: grid;
+    // 축소 레일에서도 폭 전체를 쓴다 — 부모(__sq-group)가 가운데 정렬이라 그대로면 목록이 버튼 폭(30)으로
+    // 줄고, 아래 inner 의 overflow:hidden 이 오른쪽으로 삐져나온 세션 수 뱃지를 잘랐다(2026-09-30 사용자 지적)
+    align-self: stretch;
     grid-template-rows: 0fr;
     opacity: 0;
     visibility: hidden;
@@ -243,13 +250,18 @@
       margin-top: 1px;
     }
 
-    // 축소 모드 — 워크트리 타일 사이 4, 부모 타일과 2 (TerminalCollapsed 목업)
+    // 축소 모드 — 워크트리 타일 사이 4 · 부모 타일과 10 · 아래 4 (TerminalCollapsed 목업: 목록 gap 8 +
+    // 워크트리 묶음 padding 2 0 4). 여백은 콘텐츠 margin 이라 접히면 overflow 에 함께 클립돼 0 이 된다
     .terminal__wt-list--sq & {
       align-items: center;
       gap: 4px;
 
       > :first-child {
-        margin-top: 2px;
+        margin-top: 10px;
+      }
+
+      > :last-child {
+        margin-bottom: 4px;
       }
     }
   }
@@ -356,8 +368,8 @@
   }
 
   // 색 이니셜 타일 — 사용자가 고른 색(우클릭 메뉴) 또는 이름 해시 자동 배정 (tileColor).
-  // Signal: 팔레트 색으로 **채운** 타일 + 어두운 이니셜(목업). 글자는 코드 면 잉크(--surface-dark —
-  // 두 테마 모두 거의 검정)라 차트 T색(중간~밝은 톤) 위에서 읽힌다.
+  // Signal: 파스텔 타일 팔레트(--tile-N, _base.scss)로 **채운** 타일 + 어두운 이니셜(목업). 글자는 코드 면
+  // 잉크(--surface-dark — 두 테마 모두 거의 검정). 예전엔 차트 T색을 빌려 써 쨍했다(2026-09-30 사용자 지적).
   // 크기 24 는 축소 타일(__ws-sq) 기준 — BusyArc 둘레가 이 크기에 맞춰져 있다. 펼친 행은 아래에서 20.
   &__ws-tile {
     width: 24px;
@@ -373,19 +385,14 @@
     font-weight: 600;
     line-height: 1;
     text-transform: uppercase; // 이니셜 대문자 (Superset 동일)
-    background: var(--tile-c, var(--chart-10t));
+    background: var(--tile-c, var(--tile-10));
     color: var(--tile-fg, var(--surface-dark));
   }
 
   @for $i from 1 through 10 {
     &__ws-tile--c#{$i} {
-      --tile-c: var(--chart-#{$i}t);
+      --tile-c: var(--tile-#{$i});
     }
-  }
-
-  // 인디고(7)만 어두운 글자 대비가 모자라다(라이트 3.3 · 다크 3.9) — 흰 글자(5.6 · 5.1)
-  &__ws-tile--c7 {
-    --tile-fg: var(--on-strong);
   }
 
   // 펼친 트리의 타일은 목업처럼 20px · radius 5 (이름 13px 와 줄 맞춤)
@@ -580,10 +587,10 @@
     // ⚠️ 선(1px)이 padding 안쪽 첫 픽셀에 그려지므로 선 아래 = padding − 1 = 5px.
     //    위 = gap 4 + margin 1 = 5px 로 대칭 (2026-08-10 퍼펫티어 실측으로 확정 —
     //    margin 2 였을 땐 유령 여백 3px 까지 겹쳐 위 9px vs 아래 5px 로 보였다).
+    // 목업: 구분선 위아래 8 — 위 8 은 목록 gap, 아래 8 = padding 9 − 선 1
     & + & {
       position: relative;
-      margin-top: 1px;
-      padding-top: 6px;
+      padding-top: 9px;
 
       // 목업 — 22px 짧은 선 (패널 48 가운데)
       &::before {
@@ -619,7 +626,8 @@
     justify-content: center;
     flex-shrink: 0;
     padding: 0;
-    border: 1px solid transparent;
+    // 테두리 없음 — 투명 테두리 1px 도 absolute 기준을 안쪽으로 밀어 세션 수 뱃지가 목업보다 1px 안에 붙었다
+    border: 0;
     border-radius: var(--r-tile); // 목업 7px — 축소 레일 칸
     background: none;
     color: var(--text-2);
@@ -643,7 +651,6 @@
     &--active,
     &--active:hover {
       background: var(--accent-soft);
-      border-color: transparent;
       color: var(--accent);
     }
   }
@@ -667,7 +674,7 @@
     background: var(--surface-3);
     box-shadow: 0 0 0 2px var(--surface-1);
     font-family: var(--font-mono);
-    font-size: var(--fs-nano);
+    font-size: var(--fs-pico); // 목업 워크트리 뱃지 9 — 워크스페이스 뱃지는 아래에서 9.5
     font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -686,6 +693,7 @@
     min-width: 15px;
     height: 15px;
     padding: 0 4px;
+    font-size: var(--fs-nano);
   }
 
   // 축소 타일 — 워크스페이스 이니셜만. 이름·세션 수·입력대기는 툴팁이 맡는다.
@@ -700,7 +708,7 @@
     justify-content: center;
     flex-shrink: 0;
     padding: 0;
-    border: 1px solid transparent;
+    border: 0; // 윤곽은 안쪽 그림자로 — 테두리는 뱃지 absolute 기준을 1px 밀었다(위 __wt-sq 와 같은 이유)
     border-radius: var(--r-rail);
     background: none;
     color: var(--text-2);
@@ -713,19 +721,23 @@
       background: var(--surface-2);
     }
 
-    // 축소 타일 안의 이니셜 타일은 26px · radius 7 · 700 (목업 — 두 글자 이니셜)
+    // 축소 타일 안의 이니셜 타일은 26px · radius 7 · **본문 서체** 11/700 (목업 TerminalCollapsed —
+    // 펼친 트리의 20px 타일만 모노 600 이다)
     .terminal__ws-tile {
       width: 26px;
       height: 26px;
       border-radius: var(--r-tile);
+      font-family: var(--font-display);
       font-weight: 700;
     }
 
-    // 활성 = 한 단 위 면 + 1px 윤곽 (앱 사이드바 활성 항목과 같은 문법)
+    // 펼친 워크스페이스(목업 aria-expanded) · 선택된 '기타 세션' = 한 단 위 면 + 안쪽 1px 윤곽
+    &--open,
+    &--open:hover,
     &--active,
     &--active:hover {
       background: var(--surface-2);
-      border-color: var(--border-strong);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
     }
 
     // 드래그 중 — 끌리는 타일은 흐리게 (펼침 행과 동일)

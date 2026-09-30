@@ -72,10 +72,14 @@ export {
   worktreeRef,
 } from '../../../../shared/types';
 
-/** 워크트리 행 아이콘 — 주 워크트리 laptop · 파생 워크트리 folder-git · 일반 폴더 folder */
-export function worktreeIcon(wt: WorktreeInfo): IconName {
+/**
+ * 워크트리 아이콘 — 목업 그대로: 파생 워크트리 git-branch · 일반 폴더 folder ·
+ * 주 워크트리는 펼친 트리 home(Terminal.dc.html) / 축소 레일 folder(TerminalCollapsed.dc.html)
+ */
+export function worktreeIcon(wt: WorktreeInfo, collapsed = false): IconName {
   if (wt.plain) return 'folder';
-  return wt.isMain ? 'laptop' : 'folder-git';
+  if (wt.isMain) return collapsed ? 'folder' : 'home';
+  return 'git-branch';
 }
 
 /** 프리셋 칩 아이콘 — claude 는 ✳(Superset 무드), 나머지는 터미널 글리프 */

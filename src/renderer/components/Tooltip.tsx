@@ -17,17 +17,20 @@ const SHOW_DELAY_MS = 250;
  */
 export function Tooltip({
   label,
+  side = 'bottom',
   children,
 }: {
   /** 툴팁에 보일 설명 — 트리거의 `aria-label` 은 별도로 줄 것 */
   label: string;
+  /** 붙는 쪽 — 'right' 는 세로로 쌓인 레일(터미널 축소 패널)용: 아래로 뜨면 다음 타일을 가린다 */
+  side?: 'bottom' | 'right';
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
-  const popStyle = usePopover(open, anchorRef, popRef);
+  const popStyle = usePopover(open, anchorRef, popRef, { side });
 
   const clear = () => {
     if (timer.current !== null) {

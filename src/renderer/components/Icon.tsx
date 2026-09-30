@@ -66,6 +66,7 @@ export type IconName =
   | "arrow-down-to-line"
   | "eraser"
   | "git-branch"
+  | "home"
   | "laptop"
   | "folder-git"
   | "pencil"
@@ -403,6 +404,8 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M18 9a9 9 0 0 1-9 9" />
     </>
   ),
+  // 집 — 주 워크트리(펼친 트리, 목업 Terminal.dc.html 의 HOME)
+  home: <path d="M3 11l9-7 9 7 M5 10v10h14V10" />,
   laptop: (
     <>
       <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16" />
