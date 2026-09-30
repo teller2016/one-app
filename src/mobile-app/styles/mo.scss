@@ -193,7 +193,18 @@ html.mo {
   .jira__row {
     flex-wrap: wrap;
     row-gap: 4px;
+    height: auto; // 데스크톱은 40px 고정(목업) — 폰은 두 줄로 흐르므로 풀어 준다
     padding: 10px 12px;
+  }
+
+  // 상세 패널은 폰에서 전체화면 시트 — 데스크톱처럼 목록이 패널 폭만큼 비켜설 필요가 없다
+  .jira--detail {
+    padding-right: 0;
+  }
+
+  // 키 묶음 고정 폭(104)은 폰에서 제목 줄을 좁힌다 — 내용 폭으로
+  .jira__keywrap {
+    width: auto;
   }
 
   // ⚠️ `.jira__title` 은 보고 표(`.jira-report__cell--title`)에서도 쓰인다 — 이 규칙이 거기까지

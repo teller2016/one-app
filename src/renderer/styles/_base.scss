@@ -134,6 +134,7 @@
   --r-xs: 3px; // 인라인 마크(diff 워드 하이라이트 등) — 글줄 안에 앉는 최소 곡률
   --r-sm: 5px; // 칩·아이콘 버튼·세그 칩
   --r-md: 6px; // 입력·중첩 패널
+  --r-mark: 4px; // 라디오형 선택 표식 (작업 시작 모달 워크트리 체크 — 목업)
   --r-tile: 7px; // 축소 레일 타일·워크트리 칸 (목업)
   --r-tab: 8px; // 세션 탭 윗모서리 (목업)
   --r-rail: 9px; // 축소 레일 워크스페이스 칸 (목업)
@@ -164,6 +165,9 @@
   --fs-body: 13px;
   --fs-emph: 14px;
   --fs-title: 15px;
+  --fs-week-label: 13.5px; // 주간 화면 주 표시 (목업 — 모노)
+  --fs-ui-sm: 11.5px; // 시각·보조 모노 값 (목업 11.5)
+  --fs-detail-title: 18px; // 상세 패널 제목 (Jira 이슈 등 — 목업)
   --fs-h2: 20px; // 섹션 제목 — 조밀한 도구라 크게 키우지 않는다
   --fs-metric: 22px;
   // 번들 폰트가 정본 — 뒤 후보는 폰트 로드 실패 시 폴백용 (위 @font-face 주석 참고)
@@ -181,6 +185,10 @@
   --titlebar-h: 44px;
   // 하단 상태바 높이 — .app 그리드의 둘째 행 (VPN·메일·미러링·MO·근태)
   --statusbar-h: 28px;
+  // Jira 상세 패널 폭 — 패널(.jira-view)과 목록이 비켜서는 폭(.jira--detail)이 함께 쓴다 (목업 440)
+  --jira-detail-w: 440px;
+  // 표 행 높이 (Jira 보고 결과 표 등 — 목업 36)
+  --row-h-table: 36px;
   // 섹션 안 패널 머리줄 높이 — 터미널 탭바·워크스페이스 패널 머리처럼 나란히 놓여 줄이 맞아야 하는 바
   --pane-head-h: 44px;
   // 폼 라벨 열 — `.form-row` 의 라벨 최소폭과 라벨↔입력 간격.
@@ -603,6 +611,18 @@ body {
 
     &:hover:not(:disabled) {
       background: var(--surface-3);
+    }
+  }
+
+  // 면 없는 글자 버튼 — 목업의 .btn-ghost (보조 동작·툴바). hover 에만 면이 생긴다
+  &--plain {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-2);
+
+    &:hover:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--text);
     }
   }
 
@@ -1761,7 +1781,8 @@ input.input--bare {
 
 .modal {
   width: 100%;
-  max-width: 640px;
+  // 폭 — Modal 의 width prop 이 --modal-w 로 준다(목업 폭). 없으면 기본 640, wide 는 880
+  max-width: var(--modal-w, 640px);
   max-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
@@ -1774,17 +1795,25 @@ input.input--bare {
 
   // 넓은 콘텐츠(로그·표)용
   &--wide {
-    max-width: 880px;
+    max-width: var(--modal-w, 880px);
   }
 
+  // 머리 — 목업 .modal-head: padding 16 20 12, 바닥선 없음 (본문과 한 면)
   &__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
+    padding: 16px 20px 12px;
     flex-shrink: 0;
+  }
+
+  &__titles {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
   }
 
   &__title {
@@ -1792,8 +1821,31 @@ input.input--bare {
     @include type-title;
   }
 
+  // 제목 아래 보조 한 줄 — 목업: 12px · fg-3
+  &__sub {
+    margin: 0;
+    @include type-small;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // 하단 액션 바 — 목업 .modal-foot: 가라앉은 면 + 윗선, 오른쪽 정렬
+  &__foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-sunken);
+    flex-shrink: 0;
+  }
+
+  // 본문 — 목업 모달 공통값 4 20 20 (StartWork 류 6 은 그 모달 콘텐츠가 2px 더한다)
   &__body {
-    padding: 16px 20px;
+    padding: 4px 20px 20px;
     overflow-y: auto;
     min-height: 0;
   }

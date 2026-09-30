@@ -74,11 +74,12 @@ export function AddTicketModal({
   };
 
   return (
-    <Modal title="티켓 추가" onClose={onClose}>
+    <Modal title="티켓 추가" width={504} onClose={onClose}>
       <div className="jira-add">
         <FormRow label="Jira 주소 또는 티켓 번호" column>
           <Input
             autoFocus // 모달이 뜨자마자 붙여넣을 수 있게
+            className="jira-add__input"
             value={input}
             placeholder="https://…/browse/BBJ-1234"
             onChange={(e) => changeInput(e.currentTarget.value)}
@@ -106,8 +107,8 @@ export function AddTicketModal({
           </div>
         )}
 
-        <div className="form-actions">
-          <Button variant="ghost" onClick={onClose}>
+        <div className="jira-add__actions">
+          <Button variant="plain" onClick={onClose}>
             취소
           </Button>
           {found ? (

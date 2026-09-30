@@ -36,6 +36,9 @@ typography:
   nano:    { size: 9.5px }                   # --fs-nano — 타일 위 세션 수 뱃지
   small:   { size: 12px, weight: 400 }
   ui:      { size: 12.5px }                  # --fs-ui — 탭 제목·트리 이름·브랜치명
+  ui-sm:   { size: 11.5px }                  # --fs-ui-sm — 시각·보조 모노 값
+  week-label: { size: 13.5px, mono: true }  # --fs-week-label — 주간 화면 주 표시
+  detail-title: { size: 18px, weight: 600 } # --fs-detail-title — 상세 패널 제목
   body:    { size: 13px, weight: 400 }
   emph:    { size: 14px, weight: 600 }
   title:   { size: 15px, weight: 600 }
@@ -105,6 +108,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | `type-caption` | 11px · 600 · uppercase · ls .05em · --text-2 | 패널 라벨·표 헤더 (⚠️ 식별자 금지) |
 | `type-small` | 12px · 400 | 힌트·메타·로그 |
 | (크기만) `--fs-ui` 12.5 · `--fs-micro` 10.5 · `--fs-nano` 9.5 | — | 탭 제목·트리 이름·브랜치명 / 브랜치 ref / 타일 위 뱃지 (목업 수치 — 조밀한 터미널 크롬 전용) |
+| (크기만) `--fs-ui-sm` 11.5 · `--fs-week-label` 13.5 · `--fs-detail-title` 18 | — | 시각·보조 모노 값 / 주간 화면 주 표시 / 상세 패널 제목 (목업) |
 | `type-body` | 13px · 400 | 기본 UI |
 | `type-emph` | 14px · 600 | 목록 이름·강조 |
 | `type-title` | 15px · 600 | 카드·패널 제목 |
@@ -126,7 +130,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 
 | 컴포넌트 | React API | 루트 클래스 | variant / size |
 |---|---|---|---|
-| `Button` | `<Button variant size loading>` | `.btn` | **6px 각형**(필 아님). variant: `primary`(액센트 면)·`ghost`(기본 — surface-2 면)·`danger`(soft 면) / size: `md` 32px·`sm` 28px |
+| `Button` | `<Button variant size loading>` | `.btn` | **6px 각형**(필 아님). variant: `primary`(액센트 면)·`ghost`(기본 — surface-2 면, 목업 .btn)·`plain`(면 없음 — 목업 .btn-ghost)·`danger`(soft 면) / size: `md` 32·`sm` 28·`xs` 24(목업 .btn-sm) |
 | `IconButton` | (클래스 직접) | `.icon-btn` | 24×24 / bordered 28×28 |
 | `TextLink` | `<TextLink small external>` | `.textlink` | `small` · 외부링크 arrow-up-right |
 | `Input` | `<Input small>` | `.input` | `small` → `.input--sm` (6px 라운드) |
@@ -145,7 +149,8 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | `SectionHeader` | `<SectionHeader icon title sub>` | `.section-head` | 제목은 `type-h2`(600·타이트 자간) |
 | `RefreshButton` | `<RefreshButton size>` | `.icon-btn` 계열 | 회전 스피너 |
 | `FormRow` | `<FormRow>` | — | 라벨+입력 행 |
-| `Modal` | `<Modal title onClose wide>` | `.modal` | `wide` |
+| `Modal` | `<Modal title subtitle onClose footer wide>` | `.modal` | 머리 padding 16 20 12(바닥선 없음) · 본문 6 20 20 · `footer` = 가라앉은 면 + 윗선 하단 바 (목업 .modal-foot) |
+| `TopbarSlot` | `<TopbarSlot left right>` | `.topbar__slot` | 섹션 세그먼트·액션을 앱 탑바 안에 (목업) — 탑바 없는 셸에선 제자리 |
 | `Confirm` | `useConfirm()` + `<ConfirmProvider>` | `.confirm` | promise 기반 — `danger`·confirmLabel/cancelLabel |
 | `Toast` | `useToast()` + `<ToastProvider>` | `.toast` | 하단 중앙 2s |
 | `Icon` | `<Icon name size>` | inline svg | size 12·14·16·18·20 |

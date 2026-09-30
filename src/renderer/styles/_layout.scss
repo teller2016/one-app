@@ -421,6 +421,29 @@
     @include fade-in;
   }
 
+  // 섹션 컨트롤 자리 (components/TopbarSlot) — 빈 공간은 창 드래그, 컨트롤만 no-drag
+  &__slot {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+  }
+
+  &__slot-left,
+  &__slot-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    -webkit-app-region: no-drag;
+  }
+
+  &__slot-gap {
+    flex: 1;
+  }
+
   // 경로 표시의 그룹 부분 — "개발 / Jira"
   &__group {
     color: var(--text-3);
@@ -762,5 +785,24 @@
     font-size: var(--fs-caption);
     line-height: 1.4;
     text-align: center;
+  }
+}
+
+// 탑바가 없는 셸(폰 MO 셸)에서 TopbarSlot 이 제자리에 그릴 때 — 한 줄 툴바
+.topbar-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  .topbar__slot-left,
+  .topbar__slot-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .topbar__slot-gap {
+    flex: 1;
   }
 }

@@ -254,9 +254,32 @@ export function StartWorkModal({
   const hasWorkspace = ordered.some((ws) => (worktrees[ws.id] ?? []).length > 0);
 
   return (
-    <Modal title={`${issueKey} 작업 시작`} onClose={onClose}>
+    <Modal
+      title={
+        <>
+          <span className="jira-work__title-key">{issueKey}</span> 작업 시작
+        </>
+      }
+      subtitle={summary}
+      width={580}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="plain" onClick={onClose}>
+            취소
+          </Button>
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={!spot}
+            onClick={() => void start()}
+          >
+            작업 시작
+          </Button>
+        </>
+      }
+    >
       <div className="jira-work">
-        <p className="jira-work__summary">{summary}</p>
 
         {!femcReady && (
           <Banner variant="warning">
@@ -299,7 +322,7 @@ export function StartWorkModal({
                         onClick={() => setSpot({ wsId: ws.id, path: wt.path })}
                       >
                         <span className="jira-work__wt-mark">
-                          {on && <Icon name="check" size={12} />}
+                          {on && <Icon name="check" size={11} />}
                         </span>
                         <span className="jira-work__wt-name">{worktreeName(wt)}</span>
                         <span className="jira-work__wt-branch">{worktreeRef(wt) ?? ''}</span>
@@ -366,15 +389,6 @@ export function StartWorkModal({
             onChange={(e) => setNote(e.currentTarget.value)}
           />
         </FormRow>
-
-        <div className="form-actions">
-          <Button variant="ghost" onClick={onClose}>
-            취소
-          </Button>
-          <Button loading={busy} disabled={!spot} onClick={() => void start()}>
-            작업 시작
-          </Button>
-        </div>
       </div>
     </Modal>
   );

@@ -144,7 +144,9 @@ function ActivityRow({
           {eventTime(last?.at ?? issue.updatedAt)}
         </span>
 
-        <Badge variant={statusBadgeVariant(issue)}>{issue.status}</Badge>
+        <Badge variant={statusBadgeVariant(issue)} dot={false}>
+          {issue.status}
+        </Badge>
 
         <button
           type="button"
@@ -351,8 +353,8 @@ export function WeekActivityPanel({
             )}
             {/* 주간보고에 붙여넣을 링크 묶음 — 지금 보이는 목록(필터 반영)만 담는다 */}
             <Button
-              variant="ghost"
-              size="sm"
+              variant="plain"
+              size="xs"
               disabled={visible.length === 0}
               onClick={() => void copyLinks()}
               title="보이는 티켓의 Jira 링크를 줄바꿈으로 복사"

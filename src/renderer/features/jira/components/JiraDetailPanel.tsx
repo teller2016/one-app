@@ -37,24 +37,27 @@ function detailDoc(detail: JiraIssueDetail, dark: boolean): string {
   } catch {
     /* url 이 비정상이면 base 없이 렌더 */
   }
+  // ⚠️ srcdoc 문서는 앱 CSS 변수를 못 읽는다 — _base.scss 의 Signal 토큰 값을 그대로 옮겨 둔다
+  // (bg = --surface-1 · text = --text-2 · strong = --text · muted = --text-3 · soft = --bg-sunken).
+  // 토큰 값을 바꾸면 여기도 함께.
   const c = dark
     ? {
-        bg: '#1c1c1e',
-        text: '#e6e6e8',
-        muted: '#98989e',
-        link: '#6ea8fe',
-        border: '#3a3a3c',
-        soft: '#2c2c2e',
-        card: '#232326',
+        bg: '#111316',
+        text: '#aeb4bc',
+        strong: '#e8eaed',
+        muted: '#858c96',
+        link: '#8c9bff',
+        border: '#23272d',
+        soft: '#171a1e',
       }
     : {
         bg: '#ffffff',
-        text: '#1a1a1a',
-        muted: '#8a8a8a',
-        link: '#2563eb',
-        border: '#e2e2e5',
-        soft: '#f5f5f6',
-        card: '#f7f7f8',
+        text: '#4a515b',
+        strong: '#15171a',
+        muted: '#69717c',
+        link: '#4353d6',
+        border: '#e3e6ea',
+        soft: '#f4f5f7',
       };
   const comments = detail.comments
     .map(
@@ -68,25 +71,28 @@ function detailDoc(detail: JiraIssueDetail, dark: boolean): string {
     .join('');
   return `<!doctype html><html><head><meta charset="utf-8"><base ${baseHref ? `href="${baseHref}" ` : ''}target="_blank"><style>
     :root{color-scheme:${dark ? 'dark' : 'light'};}
-    html,body{margin:0;padding:14px;background:${c.bg};color:${c.text};
-      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;line-height:1.6;word-break:break-word;}
+    html{margin:0;padding:0;background:${c.bg};}
+    body{margin:0;padding:18px 20px;background:${c.bg};color:${c.text};
+      font-family:'IBM Plex Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;font-size:13px;line-height:1.7;word-break:break-word;}
+    body>*:first-child{margin-top:0;}
     img{max-width:100%;height:auto;} a{color:${c.link};}
     table{border-collapse:collapse;max-width:100%;}
     th,td{border:1px solid ${c.border};padding:4px 8px;}
-    pre{background:${c.soft};border-radius:6px;padding:10px;overflow:auto;}
+    pre{background:${c.soft};border:1px solid ${c.border};border-radius:8px;padding:10px 12px;overflow:auto;
+      font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:20px;}
     code{background:${c.soft};border-radius:4px;padding:1px 4px;}
     blockquote{margin:8px 0;padding:2px 12px;border-left:3px solid ${c.border};color:${c.muted};}
     .empty{color:${c.muted};}
-    .cmts-title{margin:26px 0 10px;padding-top:16px;border-top:1px solid ${c.border};
-      font-size:11px;font-weight:700;color:${c.muted};text-transform:uppercase;letter-spacing:.05em;}
-    .cmt{background:${c.card};border:1px solid ${c.border};border-radius:8px;
-      padding:10px 12px;margin:0 0 10px;}
-    .cmt-head{display:flex;gap:8px;align-items:baseline;font-size:12px;
-      padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid ${c.border};}
-    .cmt-head span{color:${c.muted};font-weight:400;}
+    .cmts-title{margin:18px 0 14px;padding-top:18px;border-top:1px solid ${c.border};
+      font-size:11px;font-weight:600;color:${c.muted};letter-spacing:.06em;}
+    .cmts-title span{font-family:ui-monospace,Menlo,monospace;font-weight:400;margin-left:6px;}
+    .cmt{margin:0 0 14px;font-size:12.5px;line-height:1.6;}
+    .cmt-head{display:flex;gap:8px;align-items:baseline;margin-bottom:2px;}
+    .cmt-head b{color:${c.strong};font-weight:600;}
+    .cmt-head span{color:${c.muted};font-family:ui-monospace,Menlo,monospace;font-size:11px;}
   </style></head><body>
     ${detail.descriptionHtml || '<p class="empty">본문이 없습니다.</p>'}
-    ${detail.comments.length ? `<div class="cmts-title">댓글 ${detail.comments.length}</div>${comments}` : ''}
+    ${detail.comments.length ? `<div class="cmts-title">댓글<span>${detail.comments.length}</span></div>${comments}` : ''}
   </body></html>`;
 }
 
@@ -207,7 +213,9 @@ export function JiraDetailPanel({
           <p className="hint">이슈 불러오는 중...</p>
         </div>
       ) : state.kind === 'error' ? (
-        <Banner variant="danger">{state.message}</Banner>
+        <div className="jira-view__error">
+          <Banner variant="danger">{state.message}</Banner>
+        </div>
       ) : (
         <div className="jira-view__body">
           <div className="jira-view__head">
@@ -232,13 +240,13 @@ export function JiraDetailPanel({
               )}
               {state.detail.reporter && <span>보고자 {state.detail.reporter}</span>}
               {state.detail.updated && (
-                <span>업데이트 {state.detail.updated}</span>
+                <span className="jira-view__meta-time">업데이트 {state.detail.updated}</span>
               )}
             </div>
             <div className="jira-view__actions">
               {/* jira-view__work — 폰(MO) 셸이 숨기는 기준 클래스(맥에 femc 세션을 만드는 데스크톱 흐름) */}
               <Button
-                size="sm"
+                size="xs"
                 className="jira-view__work"
                 onClick={() => onStartWork(state.detail)}
               >
@@ -246,8 +254,8 @@ export function JiraDetailPanel({
                 작업 시작
               </Button>
               <Button
-                variant="ghost"
-                size="sm"
+                variant="plain"
+                size="xs"
                 onClick={() => openBrowser(state.detail.url)}
               >
                 <Icon name="arrow-up-right" size={13} />

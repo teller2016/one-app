@@ -542,6 +542,7 @@ export function JiraReportPanel({
           <span className="jira-report__label">프로젝트</span>
           <div className="jira-report__ctrl">
             <MultiSelect
+              small
               className="jira-report__pick"
               options={projects.map((p) => ({
                 value: p.key,
@@ -569,6 +570,7 @@ export function JiraReportPanel({
           <span className="jira-report__label">레이블</span>
           <div className="jira-report__ctrl">
             <MultiSelect
+              small
               className="jira-report__pick"
               options={labelChoices}
               values={labels}
@@ -627,6 +629,7 @@ export function JiraReportPanel({
           <span className="jira-report__label">에픽</span>
           <div className="jira-report__ctrl">
             <MultiSelect
+              small
               className="jira-report__pick"
               options={epicChoices}
               values={epics}
@@ -755,53 +758,53 @@ export function JiraReportPanel({
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="jira-report__sub">
-          <Checkbox
-            label="JQL 직접 입력"
-            checked={advanced}
-            onChange={(e) => {
-              setAdvanced(e.target.checked);
-              // 처음 켤 때는 지금 조건으로 만든 JQL 을 출발점으로 준다
-              if (e.target.checked && !customJql.trim()) setCustomJql(preview.jql);
-            }}
-          />
-          {!advanced && preview.jql && (
-            <span className="jira-report__jql" title={preview.jql}>
-              <code>{preview.jql}</code>
-              <Tooltip label="JQL 복사">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="JQL 복사"
-                  onClick={() => void copy(preview.jql, { success: 'JQL 을 복사했습니다' })}
-                >
-                  <Icon name="copy" size={12} />
-                </button>
-              </Tooltip>
-            </span>
-          )}
-          {!advanced && preview.error && (
-            <span className="jira-report__jql jira-report__jql--warn">{preview.error}</span>
-          )}
-          {!advanced && (labels.length > 0 || epics.length > 0) && periodMode !== 'all' && (
-            <span className="jira-report__jql jira-report__jql--warn">
-              기간도 함께 걸려 있습니다 — 그 기간에 갱신되지 않은 티켓은 빠집니다.
-            </span>
-          )}
-        </div>
-
-        {advanced && (
-          <Textarea
-            code
-            rows={3}
-            value={customJql}
-            onChange={(e) => setCustomJql(e.target.value)}
-            placeholder='예: project = SSB AND labels = "release" ORDER BY created ASC'
-            aria-label="JQL"
-          />
+      <div className="jira-report__sub">
+        <Checkbox
+          label="JQL 직접 입력"
+          checked={advanced}
+          onChange={(e) => {
+            setAdvanced(e.target.checked);
+            // 처음 켤 때는 지금 조건으로 만든 JQL 을 출발점으로 준다
+            if (e.target.checked && !customJql.trim()) setCustomJql(preview.jql);
+          }}
+        />
+        {!advanced && preview.jql && (
+          <span className="jira-report__jql" title={preview.jql}>
+            <code>{preview.jql}</code>
+            <Tooltip label="JQL 복사">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="JQL 복사"
+                onClick={() => void copy(preview.jql, { success: 'JQL 을 복사했습니다' })}
+              >
+                <Icon name="copy" size={12} />
+              </button>
+            </Tooltip>
+          </span>
+        )}
+        {!advanced && preview.error && (
+          <span className="jira-report__jql jira-report__jql--warn">{preview.error}</span>
+        )}
+        {!advanced && (labels.length > 0 || epics.length > 0) && periodMode !== 'all' && (
+          <span className="jira-report__jql jira-report__jql--warn">
+            기간도 함께 걸려 있습니다 — 그 기간에 갱신되지 않은 티켓은 빠집니다.
+          </span>
         )}
       </div>
+
+      {advanced && (
+        <Textarea
+          code
+          rows={3}
+          value={customJql}
+          onChange={(e) => setCustomJql(e.target.value)}
+          placeholder='예: project = SSB AND labels = "release" ORDER BY created ASC'
+          aria-label="JQL"
+        />
+      )}
 
       {projectsError && <Banner variant="warning">{projectsError}</Banner>}
       {labelError && <Banner variant="warning">{labelError}</Banner>}
@@ -828,6 +831,7 @@ export function JiraReportPanel({
             allLabel="상태 전체"
             countLabel={(n) => `상태 ${n}개`}
             small
+            className="jira-report__f-status"
             aria-label="상태 필터"
           />
           <MultiSelect
@@ -837,6 +841,7 @@ export function JiraReportPanel({
             allLabel="담당자 전체"
             countLabel={(n) => `담당자 ${n}명`}
             small
+            className="jira-report__f-assignee"
             aria-label="담당자 필터"
           />
           <MultiSelect
@@ -846,6 +851,7 @@ export function JiraReportPanel({
             allLabel="유형 전체"
             countLabel={(n) => `유형 ${n}개`}
             small
+            className="jira-report__f-type"
             aria-label="유형 필터"
           />
           <Input
@@ -862,6 +868,7 @@ export function JiraReportPanel({
               value={sort}
               onChange={(v) => setSort(v as SortKey)}
               small
+              className="jira-report__f-sort"
               aria-label="정렬"
             />
             <span className="jira-report__count">
@@ -1035,7 +1042,9 @@ export function JiraReportPanel({
               </span>
               <span className="jira-report__cell jira-report__cell--dim">{it.issueType}</span>
               <span className="jira-report__cell">
-                <Badge variant={statusBadgeVariant(it)}>{it.status}</Badge>
+                <Badge variant={statusBadgeVariant(it)} dot={false}>
+                  {it.status}
+                </Badge>
               </span>
               <span className="jira-report__cell jira-report__cell--dim">
                 {it.assignee ?? '—'}

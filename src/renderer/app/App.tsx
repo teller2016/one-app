@@ -3,6 +3,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Icon } from "../components/Icon";
 import { Sidebar, SidebarSection } from "../components/Sidebar";
 import { StatusBar } from "../components/StatusBar";
+import { TOPBAR_SLOT_ID } from "../components/TopbarSlot";
 import { CommandPalette } from "./CommandPalette";
 import { ToastProvider, useToast, useToastDismiss } from "../components/Toast";
 import { ApplinkSection } from "../features/applink";
@@ -484,6 +485,8 @@ export function App() {
                 )}
                 {active.label}
               </span>
+              {/* 섹션 컨트롤 자리 — 섹션이 TopbarSlot 으로 세그먼트·액션을 넣는다 (key 로 섹션마다 비움) */}
+              <div className="topbar__slot" id={TOPBAR_SLOT_ID} key={`slot-${active.id}`} />
             </header>
 
             {/* 메인 영역 — 섹션마다 별도 경계(key)라 다른 섹션으로 옮기면 오류 상태도 초기화된다 */}

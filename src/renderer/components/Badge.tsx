@@ -11,14 +11,17 @@ export function Badge({
   variant,
   children,
   title,
+  dot = true,
 }: {
   variant: BadgeVariant;
   children: ReactNode;
   title?: string;
+  /** false 면 상태 점을 빼고 색 면·글자만 (목록 행의 상태 드롭다운 칩 등) */
+  dot?: boolean;
 }) {
   return (
     <span className={`badge badge--${variant}`} title={title}>
-      {variant !== 'pill' && <StatusDot status={variant} />}
+      {dot && variant !== 'pill' && <StatusDot status={variant} />}
       <span className="badge__label">{children}</span>
     </span>
   );

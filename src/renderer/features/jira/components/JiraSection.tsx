@@ -7,14 +7,13 @@ import type {
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
-import { Collapsible } from '../../../components/Collapsible';
 import { Icon } from '../../../components/Icon';
 import type { IconName } from '../../../components/Icon';
 import { RefreshButton } from '../../../components/RefreshButton';
-import { SectionHeader } from '../../../components/SectionHeader';
 import { Segment } from '../../../components/Segment';
 import { StatusDot } from '../../../components/StatusDot';
 import { Tooltip } from '../../../components/Tooltip';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { useToast } from '../../../components/Toast';
 import { EmptyState } from '../../../components/EmptyState';
 import { errMsg } from '../../../lib/errMsg';
@@ -80,6 +79,7 @@ type MenuState = 'loading' | JiraTransition[] | { error: string };
  */
 const IssueRow = memo(function IssueRow({
   issue,
+  selected,
   menu,
   transitioning,
   workSession,
@@ -92,6 +92,8 @@ const IssueRow = memo(function IssueRow({
   onUnpin,
 }: {
   issue: JiraIssue;
+  /** 상세 패널에 열려 있는 이슈 — 선택 행 표시 (틴트 + 좌측 액센트 바) */
+  selected: boolean;
   menu: MenuState | null; // null = 메뉴 닫힘
   transitioning: boolean;
   /** 이 티켓으로 돌고 있는 femc 세션 (없으면 null) */
@@ -116,7 +118,7 @@ const IssueRow = memo(function IssueRow({
     .join(' · ');
   const prio = issue.priority ? prioInfo(issue.priority) : null;
   return (
-    <div className="jira__row">
+    <div className={'jira__row' + (selected ? ' jira__row--sel' : '')}>
       {/* 키 + 복사 아이콘 묶음 — 행 gap 보다 좁게 붙인다 */}
       <span className="jira__keywrap">
         <button
@@ -198,8 +200,9 @@ const IssueRow = memo(function IssueRow({
             workSession.status === 'busy' ? '작업 중' : '입력 대기'
           } · 터미널로 이동`}
         >
-          <StatusDot status={workSession.status === 'busy' ? 'busy' : 'ok'} />
-          femc
+          {/* 작업 중 = 초록 펄스 · 입력 대기 = 주황 (터미널 탭 점과 같은 의미) */}
+          <StatusDot status={workSession.status === 'busy' ? 'run' : 'wait'} />
+          <span className="jira__work-chip-name">femc</span>
         </button>
       )}
 
@@ -214,14 +217,17 @@ const IssueRow = memo(function IssueRow({
             onToggleMenu(issue.key);
           }}
         >
-          <Badge variant={statusBadgeVariant(issue)}>{issue.status}</Badge>
-          <span className="jira__status-chev">
-            {transitioning ? (
-              <span className="spinner jira__status-spin" />
-            ) : (
-              <Icon name="chevron-down" size={11} />
-            )}
-          </span>
+          {/* 목업: 점 없는 상태 칩 안에 펼침 화살표 (폭 고정 — 행마다 같은 자리) */}
+          <Badge variant={statusBadgeVariant(issue)} dot={false}>
+            <span className="jira__status-text">{issue.status}</span>
+            <span className="jira__status-chev">
+              {transitioning ? (
+                <span className="spinner jira__status-spin" />
+              ) : (
+                <Icon name="chevron-down" size={10} />
+              )}
+            </span>
+          </Badge>
         </button>
 
         {menu !== null && (
@@ -279,6 +285,16 @@ export function JiraSection() {
     return isView(saved) ? saved : 'mine';
   });
   const [issues, setIssues] = useState<JiraIssue[]>([]);
+  // 해결됨 그룹 펼침 — 예전 Collapsible 과 같은 저장 키·형식('1'/'0')
+  const [doneOpen, setDoneOpen] = useState(
+    () => localStorage.getItem('jira:group:done') === '1',
+  );
+  const toggleDone = useCallback(() => {
+    setDoneOpen((v) => {
+      localStorage.setItem('jira:group:done', v ? '0' : '1');
+      return !v;
+    });
+  }, []);
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -523,132 +539,108 @@ export function JiraSection() {
   }, [typedOpen]);
 
   return (
-    <div className="section jira">
-      <div className="jira__head">
-        <SectionHeader
-          title="Jira"
-          icon={<Icon name="clipboard-list" size={18} />}
-          sub={
-            view === 'week'
-              ? '한 주 동안 내가 손댄 티켓입니다. 상태 전환·담당·작업시간 기록을 기준으로 모읍니다.'
-              : view === 'report'
-                ? '프로젝트·기간·레이블·에픽으로 티켓을 모아 보고용 목록을 만듭니다. 필터한 뒤 원하는 형식으로 복사하세요.'
-                : '내게 할당된 미해결 이슈입니다. 제목을 클릭하면 여기서 바로 볼 수 있어요.'
-          }
-        />
-        {/* 티켓 추가·새로고침은 내 이슈 화면 전용 — 주간·보고 화면은 자체 툴바를 갖는다 */}
-        {view === 'mine' && (
-          <div className="jira__head-actions">
-            {/* 담당으로 안 날아온 티켓을 주소로 끌어온다 */}
-            <Button variant="ghost" size="sm" onClick={() => setAddOpen(true)}>
-              <Icon name="plus" size={13} />
-              티켓
-            </Button>
-            <RefreshButton
-              size={14}
-              spinning={loading}
-              onClick={() => void load(true)}
-              title="이슈 목록 새로고침"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* 화면 전환 — 내게 할당된 목록 · 한 주 동안 내가 손댄 티켓 · 프로젝트별 보고 */}
-      <div className="jira__views">
-        <Segment<View>
-          options={[
-            { value: 'mine', label: '내 이슈' },
-            { value: 'week', label: '주간' },
-            { value: 'report', label: '보고' },
-          ]}
-          value={view}
-          onChange={changeView}
-        />
-      </div>
+    <div
+      className={
+        'section jira' +
+        (view === 'mine' ? ' jira--mine' : ' jira--panel') +
+        (view === 'report' ? ' jira--report' : '') +
+        (view === 'mine' && detailOpen ? ' jira--detail' : '')
+      }
+    >
+      {/* 화면 전환·액션은 앱 탑바 안에 (목업 — 경로 옆 세그먼트, 오른쪽 끝 액션).
+          탑바가 없는 폰 셸에선 TopbarSlot 이 제자리에 그린다 */}
+      <TopbarSlot
+        left={
+          <Segment<View>
+            options={[
+              { value: 'mine', label: '내 이슈' },
+              { value: 'week', label: '주간' },
+              { value: 'report', label: '보고' },
+            ]}
+            value={view}
+            onChange={changeView}
+          />
+        }
+        right={
+          // 티켓 추가·새로고침은 내 이슈 화면 전용 — 주간·보고 화면은 자체 툴바를 갖는다
+          view === 'mine' ? (
+            <>
+              {/* 담당으로 안 날아온 티켓을 주소로 끌어온다 */}
+              <Button variant="plain" size="xs" onClick={() => setAddOpen(true)}>
+                <Icon name="plus" size={13} />
+                티켓
+              </Button>
+              <RefreshButton
+                size={14}
+                spinning={loading}
+                onClick={() => void load(true)}
+                title="이슈 목록 새로고침"
+              />
+            </>
+          ) : null
+        }
+      />
 
       {view === 'week' && <WeekActivityPanel onOpenDetail={openDetail} />}
       {view === 'report' && <JiraReportPanel onOpenDetail={openDetail} />}
 
-      {view === 'mine' && !configured && (
-        <Banner variant="info">
-          환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하면 내 이슈가
-          표시됩니다.
-        </Banner>
-      )}
-      {view === 'mine' && configured && error && (
-        <Banner variant="danger">{error}</Banner>
-      )}
-      {/* 추가 티켓만 실패 — 담당 목록은 정상이므로 경고로 낮춰 알린다 */}
-      {view === 'mine' && addedError && (
-        <Banner variant="warning">직접 추가한 티켓을 못 불러왔습니다 — {addedError}</Banner>
-      )}
-
-      {view === 'mine' && projects.length > 1 && (
-        <div className="jira__tabs">
-          <Segment
-            options={[
-              { value: 'all', label: `전체 ${issues.length}` },
-              ...projects.map(([k, c]) => ({ value: k, label: `${k} ${c}` })),
-            ]}
-            value={effectiveProject}
-            onChange={changeProject}
-          />
-        </div>
-      )}
-
-      {/* 내 이슈 목록 — 주간·보고 화면에서는 그리지 않는다(위의 패널이 본문) */}
-      {view !== 'mine' ? null : loading && issues.length === 0 ? (
-        <p className="hint">불러오는 중...</p>
-      ) : visible.length === 0 && configured && !error ? (
-        <EmptyState icon="check" message="미해결 이슈가 없습니다. 깔끔하네요!" />
-      ) : (
+      {view === 'mine' && (
         <>
-          {/* 직접 추가한 티켓 — 담당 그룹들보다 위 */}
-          {pinnedOpen.length > 0 && (
-            <div className="jira__group">
-              <div className="jira__group-head">
-                <span className="jira__type jira__type--pinned">
-                  <Icon name="pin" size={12} />
-                </span>
-                <span className="jira__group-name">직접 추가</span>
-                <span className="jira__group-count">{pinnedOpen.length}</span>
-              </div>
-              <div className="jira__card">
-                {pinnedOpen.map((it) => (
-                  <IssueRow
-                    issue={it}
-                    key={it.key}
-                    menu={menuKey === it.key ? menuState : null}
-                    transitioning={transitioningKey === it.key}
-                    workSession={workByKey.get(it.key) ?? null}
-                    onToggleMenu={toggleMenu}
-                    onTransition={handleTransition}
-                    onCopyLink={copyLink}
-                    onOpenDetail={openDetail}
-                    onStartWork={setWorkIssue}
-                    onOpenSession={openSession}
-                    onUnpin={unpin}
-                  />
-                ))}
-              </div>
+          {/* 필터 줄 — 프로젝트가 둘 이상일 때만 (목업: 목록 위 한 줄 + 바닥선) */}
+          {projects.length > 1 && (
+            <div className="jira__filter">
+              <Segment
+                options={[
+                  { value: 'all', label: `전체 ${issues.length}` },
+                  ...projects.map(([k, c]) => ({ value: k, label: `${k} ${c}` })),
+                ]}
+                value={effectiveProject}
+                onChange={changeProject}
+              />
             </div>
           )}
 
-          {groups.map(({ type, items, icon, tone }) => (
-            <div className="jira__group" key={type}>
-              <div className="jira__group-head">
-                <span className={`jira__type jira__type--${tone}`}>
-                  <Icon name={icon} size={12} />
-                </span>
-                <span className="jira__group-name">{type}</span>
-                <span className="jira__group-count">{items.length}</span>
-              </div>
-              <div className="jira__card">
-                {items.map((it) => (
+          {(!configured || (configured && error) || addedError) && (
+            <div className="jira__banners">
+              {!configured && (
+                <Banner variant="info">
+                  환경설정 → 연동에서 Jira 주소·이메일·API 토큰을 입력하면 내 이슈가
+                  표시됩니다.
+                </Banner>
+              )}
+              {configured && error && <Banner variant="danger">{error}</Banner>}
+              {/* 추가 티켓만 실패 — 담당 목록은 정상이므로 경고로 낮춰 알린다 */}
+              {addedError && (
+                <Banner variant="warning">
+                  직접 추가한 티켓을 못 불러왔습니다 — {addedError}
+                </Banner>
+              )}
+            </div>
+          )}
+
+          {loading && issues.length === 0 ? (
+            <p className="hint jira__loading">불러오는 중...</p>
+          ) : visible.length === 0 && configured && !error ? (
+            <div className="jira__empty">
+              <EmptyState icon="check" message="미해결 이슈가 없습니다. 깔끔하네요!" />
+            </div>
+          ) : (
+            <div className="jira__list">
+              {/* 직접 추가한 티켓 — 담당 그룹들보다 위 */}
+              {pinnedOpen.length > 0 && (
+                <div className="jira__group">
+                  <div className="jira__group-head">
+                    <span className="jira__type jira__type--pinned">
+                      <Icon name="pin" size={11} />
+                    </span>
+                    <span className="jira__group-name">직접 추가</span>
+                    <span className="jira__group-count">{pinnedOpen.length}</span>
+                  </div>
+                  {pinnedOpen.map((it) => (
                   <IssueRow
                     issue={it}
                     key={it.key}
+                    selected={detailOpen && detailKey === it.key}
                     menu={menuKey === it.key ? menuState : null}
                     transitioning={transitioningKey === it.key}
                     workSession={workByKey.get(it.key) ?? null}
@@ -660,41 +652,81 @@ export function JiraSection() {
                     onOpenSession={openSession}
                     onUnpin={unpin}
                   />
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {done.length > 0 && (
-            <div className="jira__done-zone">
-              <Collapsible
-                title={`해결됨 ${done.length}`}
-                icon={
-                  <span className="jira__done-check">
-                    <Icon name="check" size={14} />
-                  </span>
-                }
-                storageKey="jira:group:done"
-              >
-                <div className="jira__done">
-                  {done.map((it) => (
-                    <IssueRow
-                      issue={it}
-                      key={it.key}
-                      menu={menuKey === it.key ? menuState : null}
-                      transitioning={transitioningKey === it.key}
-                      workSession={workByKey.get(it.key) ?? null}
-                      onToggleMenu={toggleMenu}
-                      onTransition={handleTransition}
-                      onCopyLink={copyLink}
-                      onOpenDetail={openDetail}
-                      onStartWork={setWorkIssue}
-                      onOpenSession={openSession}
-                      onUnpin={unpin}
-                    />
                   ))}
                 </div>
-              </Collapsible>
+              )}
+
+              {groups.map(({ type, items, icon, tone }) => (
+                <div className="jira__group" key={type}>
+                  <div className="jira__group-head">
+                    <span className={`jira__type jira__type--${tone}`}>
+                      <Icon name={icon} size={11} />
+                    </span>
+                    <span className="jira__group-name">{type}</span>
+                    <span className="jira__group-count">{items.length}</span>
+                  </div>
+                  {items.map((it) => (
+                  <IssueRow
+                    issue={it}
+                    key={it.key}
+                    selected={detailOpen && detailKey === it.key}
+                    menu={menuKey === it.key ? menuState : null}
+                    transitioning={transitioningKey === it.key}
+                    workSession={workByKey.get(it.key) ?? null}
+                    onToggleMenu={toggleMenu}
+                    onTransition={handleTransition}
+                    onCopyLink={copyLink}
+                    onOpenDetail={openDetail}
+                    onStartWork={setWorkIssue}
+                    onOpenSession={openSession}
+                    onUnpin={unpin}
+                  />
+                  ))}
+                </div>
+              ))}
+
+              {/* 해결됨 — 접힘 그룹 (펼침 여부 기억: jira:group:done) */}
+              {done.length > 0 && (
+                <div className="jira__group">
+                  <button
+                    type="button"
+                    className="jira__group-head jira__group-head--toggle"
+                    aria-expanded={doneOpen}
+                    onClick={toggleDone}
+                  >
+                    <span
+                      className={
+                        'jira__group-chev' + (doneOpen ? ' jira__group-chev--open' : '')
+                      }
+                    >
+                      <Icon name="chevron-right" size={12} />
+                    </span>
+                    <span className="jira__done-check">
+                      <Icon name="check" size={14} />
+                    </span>
+                    <span className="jira__group-name">해결됨</span>
+                    <span className="jira__group-count">{done.length}</span>
+                  </button>
+                  {doneOpen &&
+                    done.map((it) => (
+                  <IssueRow
+                    issue={it}
+                    key={it.key}
+                    selected={detailOpen && detailKey === it.key}
+                    menu={menuKey === it.key ? menuState : null}
+                    transitioning={transitioningKey === it.key}
+                    workSession={workByKey.get(it.key) ?? null}
+                    onToggleMenu={toggleMenu}
+                    onTransition={handleTransition}
+                    onCopyLink={copyLink}
+                    onOpenDetail={openDetail}
+                    onStartWork={setWorkIssue}
+                    onOpenSession={openSession}
+                    onUnpin={unpin}
+                  />
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </>

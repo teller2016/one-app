@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useBackClose } from '../lib/useBackClose';
 import { Icon } from './Icon';
@@ -10,15 +10,24 @@ import { Icon } from './Icon';
  */
 export function Modal({
   title,
+  subtitle,
   onClose,
   children,
+  footer,
   wide = false,
+  width,
 }: {
   title: ReactNode;
+  /** 제목 아래 한 줄 보조 문구 (목업 — 티켓 제목 등) */
+  subtitle?: ReactNode;
   onClose: () => void;
   children: ReactNode;
+  /** 하단 액션 바 — 가라앉은 면 + 윗선, 버튼은 오른쪽 정렬 (목업 .modal-foot) */
+  footer?: ReactNode;
   /** 넓은 콘텐츠(로그·표)용 확장 폭 */
   wide?: boolean;
+  /** 목업 폭(px) — 최대 폭을 이 값으로 (wide 보다 우선). 좁은 창에선 그대로 줄어든다 */
+  width?: number;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,11 +52,15 @@ export function Modal({
     >
       <div
         className={'modal' + (wide ? ' modal--wide' : '')}
+        style={width ? ({ '--modal-w': `${width}px` } as CSSProperties) : undefined}
         role="dialog"
         aria-modal="true"
       >
         <div className="modal__head">
-          <h3 className="modal__title">{title}</h3>
+          <div className="modal__titles">
+            <h3 className="modal__title">{title}</h3>
+            {subtitle && <p className="modal__sub">{subtitle}</p>}
+          </div>
           <button
             type="button"
             className="icon-btn"
@@ -58,6 +71,7 @@ export function Modal({
           </button>
         </div>
         <div className="modal__body">{children}</div>
+        {footer && <div className="modal__foot">{footer}</div>}
       </div>
     </div>,
     document.body,

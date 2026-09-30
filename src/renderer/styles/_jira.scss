@@ -2,47 +2,111 @@
 @use './base' as *;
 
 .jira {
-  max-width: var(--w-wide); // 한 줄 행(제목+상위 항목 칩)이 여유 있게 — 기본 .section 폭 확장
+  // 기본은 .section 여백 + 와이드 폭 — ⚠️ Lite 가 `section jira` 로 보고 패널을 감싸 이 폭을 빌린다
+  max-width: var(--w-wide);
 
-  &__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+  // Signal(2026-09-30 목업): 본체 내 이슈는 풀블리드 — 목록은 가장자리까지, 행은 좌우 20px
+  &--mine {
+    max-width: none;
+    padding: 0;
+    // 상세 패널이 열리면 목록이 그만큼 비켜선다 — 패널은 fixed 라 자리를 스스로 차지하지 않는다
+    transition: padding-right var(--dur-2) var(--ease);
   }
 
-  // [+ 티켓] + 새로고침 — 제목 줄 오른쪽 묶음
-  &__head-actions {
+  &--detail {
+    padding-right: var(--jira-detail-w);
+  }
+
+  // 주간·보고 화면 — 목업의 본문 여백
+  &--panel {
+    max-width: none;
+    padding: 16px 24px 24px;
+  }
+
+  // 보고 화면 — 결과 표만 안에서 스크롤한다(목업). 높이 체인: 섹션이 영역 높이를 채우는 flex 열이고
+  // 보고 패널이 남는 높이를 받는다. Lite 는 `section jira jira--report` 로 같은 체인을 만든다.
+  &--report {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+
+    > .jira-report {
+      flex: 1;
+      min-height: 0;
+    }
+  }
+
+  // 필터 줄 — 프로젝트 세그먼트 (목업: padding 12 20 + 바닥선)
+  &__filter {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
   }
 
-  // 화면 전환 탭 (내 이슈 / 주간) — 헤더 바로 아래, 프로젝트 탭보다 좁은 간격
-  &__views {
-    margin: 4px 0 16px;
+  &__banners {
+    padding: 12px 20px 0;
+
+    .banner {
+      margin-bottom: 8px;
+    }
   }
 
-  // 프로젝트 탭 (2개 이상일 때만 렌더)
-  &__tabs {
-    margin-bottom: 20px;
+  &__loading,
+  &__empty {
+    padding: 16px 20px;
   }
 
-  &__group {
-    margin-bottom: 20px;
+  &__list {
+    padding: 4px 0 16px;
   }
 
-  // 해결됨 영역 — 미해결 그룹들과 별도 구역으로 분리 (여백 + 헤어라인)
-  &__done-zone {
-    margin-top: 36px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
+  // 그룹 헤더 — [유형 칩][라벨][개수] (목업: 34px · padding 0 20 · 위 8)
+  &__group-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    margin-top: 8px;
+    padding: 0 20px;
+
+    // 해결됨 — 헤더 자체가 펼침 토글
+    &--toggle {
+      width: 100%;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      @include focus-ring(-2px);
+    }
   }
 
-  // 해결됨 접힘 그룹 안 목록 — Collapsible 이 카드 룩이라 행만 나열
-  &__done {
-    margin: 0 -16px -12px; // Collapsible body 패딩을 상쇄해 행이 카드 폭을 꽉 채움
+  &__group-chev {
+    display: inline-flex;
+    color: var(--text-3);
+    transition: transform var(--dur-2) var(--ease);
+
+    &--open {
+      transform: rotate(90deg);
+    }
+  }
+
+  // 라벨 — 목업 .label(11px · 대문자 · 자간) 이되 ⚠️ 한글 타입명이라 모노 금지
+  &__group-name {
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+  }
+
+  &__group-count {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
   }
 
   // 해결됨 그룹 헤더의 체크 — 완료 시맨틱 초록
@@ -51,38 +115,19 @@
     color: var(--ok);
   }
 
-  &__group-head {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin-bottom: 8px;
-    padding-left: 2px;
-  }
-
-  &__group-name {
-    @include type-caption;
-    text-transform: none; // 타입 이름은 Jira 표기 그대로 (sub-bug 등)
-  }
-
-  &__group-count {
-    @include type-caption;
-    color: var(--text-3);
-  }
-
-  // 타입 아이콘 — 옅은 틴트 사각 + 타입 색 글리프 (Signal: 흰 글리프 on 원색은 다크에서 대비 미달)
-  // 틴트는 글리프 색(currentColor)에서 만든다 — 타입마다 배경 토큰을 따로 두지 않는다
+  // 유형 칩 — 16px 옅은 틴트 사각 + 유형 색 글리프 (목업 .t-dot)
   &__type {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: var(--r-sm);
+    width: 16px;
+    height: 16px;
+    border-radius: var(--r-xs);
     background: color-mix(in srgb, currentColor 16%, transparent);
     flex-shrink: 0;
 
     &--task {
-      color: var(--accent);
+      color: var(--chart-2o); // 스카이(목업 info)
     }
 
     &--bug {
@@ -90,7 +135,7 @@
     }
 
     &--sub {
-      color: var(--chart-5o); // 민트 — 하위 작업 (O쌍 = 틴트 위 글자용 보정색)
+      color: var(--chart-5o); // 민트 — 하위 작업
     }
 
     &--story {
@@ -101,49 +146,43 @@
       color: var(--chart-4o); // 핑크
     }
 
-    // 직접 추가한 티켓 그룹 — 내 담당이 아니라는 뜻이라 타입 색과 겹치지 않게 중립 톤
+    // 직접 추가 — 목업: 액센트 핀
     &--pinned {
-      color: var(--text-2);
+      color: var(--accent);
     }
   }
 
-  // 그룹 카드 — 행들을 담는 흰 카드 (macOS 설정 그룹 리스트)
-  // ※ overflow:hidden 금지 — 상태 전환 드롭다운이 잘린다. 라운드는 첫/끝 행에서 처리.
-  &__card {
-    @include card-surface;
-
-    .jira__row:first-child {
-      border-radius: var(--r-lg) var(--r-lg) 0 0;
-    }
-
-    .jira__row:last-child {
-      border-radius: 0 0 var(--r-lg) var(--r-lg);
-    }
-
-    .jira__row:only-child {
-      border-radius: var(--r-lg);
-    }
-  }
-
-  // 한 줄 행 — 행 자체는 클릭 영역이 아님 (열기=키·제목, 복사=아이콘, 전환=뱃지)
+  // 행 — 목업 .row-item: 40px · padding 0 20 · gap 10 · 바닥선. 행 자체는 클릭 영역이 아니다
+  // (열기 = 키·제목, 복사 = 아이콘, 전환 = 상태 칩)
   &__row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
-    padding: 9px 14px;
+    height: 40px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
     color: var(--text);
+    transition: background var(--dur-1) var(--ease);
 
-    + .jira__row {
-      border-top: 1px solid var(--border);
+    &:hover {
+      background: var(--bg-sunken);
+    }
+
+    // 상세 패널에 열린 이슈 — 틴트 + 좌측 2px 액센트 (목업 .row-item.sel)
+    &--sel,
+    &--sel:hover {
+      background: var(--accent-soft);
+      box-shadow: inset 2px 0 0 var(--accent);
     }
   }
 
-  // 키 + 복사 아이콘 묶음 — 행 gap(8px)보다 좁게
+  // 키 + 복사 + 핀 묶음 — 목업: 폭 104 고정(행마다 제목 시작선이 같다) · gap 2
   &__keywrap {
     display: inline-flex;
     align-items: center;
-    gap: 1px;
+    gap: 2px;
+    width: 104px;
     flex-shrink: 0;
   }
 
@@ -153,31 +192,36 @@
     padding: 0;
     border: none;
     background: transparent;
+    // 목업 .key — 모노 12 · 500 · 액센트
     font-family: var(--font-mono);
-    @include type-small;
-    color: var(--text-3);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--accent);
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition: color var(--dur-1) var(--ease);
     @include focus-ring(2px);
 
     &:hover {
-      color: var(--accent);
+      color: var(--accent-hover);
       text-decoration: underline;
     }
   }
 
-  // 링크 복사 아이콘 (키 바로 우측) — 공용 .icon-btn 크기 사용
-  &__copy {
+  // 링크 복사·핀 — 목업 20px 아이콘 버튼(글리프 12, fg-3)
+  &__copy,
+  &__pin {
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
+    color: var(--text-3);
   }
 
   // 직접 추가 표시 겸 제거 버튼 — 평소엔 핀, 올리면 ✕ 로 바뀐다.
   // 두 글리프를 겹쳐 두고 표시만 바꾼다(교체 시 폭이 흔들리지 않게)
   &__pin {
     position: relative;
-    flex-shrink: 0;
-    color: var(--text-3);
+    color: var(--accent);
 
     &:hover {
       color: var(--danger);
@@ -205,18 +249,22 @@
     display: inline-flex;
     align-items: center;
 
-    &--highest,
-    &--high {
+    // 목업: 가장 높음 빨강 · 높음 주황 · 보통 회색 · 낮음 스카이
+    &--highest {
       color: var(--danger);
     }
 
-    &--medium {
+    &--high {
       color: var(--warning);
+    }
+
+    &--medium {
+      color: var(--text-3);
     }
 
     &--low,
     &--lowest {
-      color: var(--accent);
+      color: var(--chart-2o);
     }
   }
 
@@ -240,33 +288,33 @@
 
     &:hover {
       color: var(--accent);
-      text-decoration: underline;
     }
   }
 
-  // 상위 항목 칩 — 부모 이슈 제목 (클릭 = 브라우저에서 부모 열기)
+  // 상위 항목 칩 — 목업: 22px · 모서리 5 · 1px 선 · fg-3 · 11.5px · 최대 180
   &__parent {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    max-width: 220px;
-    padding: 2px 9px;
-    border: none;
-    border-radius: var(--r-full);
-    background: var(--overlay-track);
-    color: var(--text-2);
+    max-width: 180px;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-3);
     font-family: inherit;
-    @include type-small;
+    font-size: var(--fs-ui-sm);
     cursor: pointer;
     transition:
-      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease),
       color var(--dur-1) var(--ease);
     @include focus-ring(2px);
 
     &:hover {
-      background: var(--accent-soft);
-      color: var(--accent);
+      border-color: var(--border-strong);
+      color: var(--text-2);
     }
   }
 
@@ -286,27 +334,32 @@
     flex-shrink: 0;
   }
 
-  // 진행 중 표시 — 이 티켓으로 돌고 있는 femc 세션 (누르면 그 터미널로 이동)
+  // 진행 중 표시 — 이 티켓으로 돌고 있는 femc 세션 (누르면 그 터미널로 이동).
+  // 목업 .badge: 20px · 모서리 5 · surface-2 면 · 점 + 모노 'femc'
   &__work-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     flex-shrink: 0;
-    padding: 2px 7px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-full);
+    height: 20px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: var(--r-sm);
     background: var(--surface-2);
     color: var(--text-2);
-    font-family: var(--font-mono);
-    @include type-small;
+    font-family: inherit;
+    font-size: var(--fs-ui);
     cursor: pointer;
-    transition: border-color var(--dur-1) var(--ease);
+    transition: background var(--dur-1) var(--ease);
     @include focus-ring(2px);
 
     &:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+      background: var(--surface-3);
     }
+  }
+
+  &__work-chip-name {
+    font-family: var(--font-mono);
   }
 
   // 작업 시작 — 행 맨 끝 고정 자리 (모든 행에서 같은 위치)
@@ -315,21 +368,43 @@
     margin-left: 2px;
   }
 
+  // 상태 칩 = 전환 메뉴 트리거 — 목업: 폭 84 고정, 글자 왼쪽 · 화살표 오른쪽
   &__status-btn {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
     padding: 0;
     border: none;
     background: transparent;
     cursor: pointer;
     font-family: inherit;
     @include focus-ring(2px);
+
+    .badge {
+      width: 84px;
+      justify-content: space-between;
+      font-size: var(--fs-ui-sm);
+    }
+
+    .badge__label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      width: 100%;
+    }
+  }
+
+  &__status-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__status-chev {
     display: inline-flex;
-    color: var(--text-3);
+    flex-shrink: 0;
+    opacity: 0.8;
   }
 
   &__status-spin {
@@ -346,9 +421,9 @@
     z-index: 20;
     min-width: 150px;
     padding: 4px;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
     box-shadow: var(--shadow-2);
   }
 
@@ -392,24 +467,21 @@
 
 }
 
-// ===== 이슈 상세 패널 — 목록 배치는 그대로 두고 오른쪽에서 슬라이드로 떠오르는 레이어
-// (메일 리더 .mail-modal__view 와 동일 문법 — 섹션은 스크롤 영역이라 fixed 로 띄운다)
+// ===== 이슈 상세 패널 — 목록 오른쪽에 붙는 패널 (목업: 440px · 패널 면 · 왼쪽 경계선) =====
+// 섹션은 스크롤 영역이라 fixed 로 띄우고, 열리면 목록이 .jira--detail 로 그만큼 비켜선다
+// (예전의 떠 있는 카드 + 그림자는 목업에 없다). 폭은 --jira-detail-w 하나로 두 곳이 맞춘다.
 .jira-view {
   position: fixed;
-  top: 56px; // 탑바(44px) + 여백
-  right: 12px;
-  bottom: 12px;
+  top: var(--titlebar-h);
+  right: 0;
+  bottom: var(--statusbar-h);
   z-index: 30; // 상태 전환 드롭다운(20) 위
-  // 본문·스크린샷이 여유 있게 — 사이드바는 침범하지 않게 (폭은 드래그로 바뀌므로 변수를 본다)
-  width: min(1080px, calc(100vw - var(--sidebar-w) - 48px));
+  width: var(--jira-detail-w);
   display: flex;
   flex-direction: column;
-  padding: 14px 16px;
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2); // 떠 있는 레이어 전용 그림자
-  transform: translateX(calc(100% + 40px)); // +40px: 그림자까지 완전히 밖으로
+  border-left: 1px solid var(--border);
+  transform: translateX(100%);
   visibility: hidden;
   transition:
     transform var(--dur-2) var(--ease),
@@ -421,18 +493,22 @@
     transition: transform var(--dur-2) var(--ease);
   }
 
-  // 우상단 [×] — 패널 닫기
+  // 우상단 [×] — 목업: top 14 · right 14
   &__close {
     position: absolute;
-    top: 10px;
-    right: 12px;
+    top: 14px;
+    right: 14px;
     z-index: 1;
   }
 
-  // 로딩 안내 — 패널 가운데 정렬
+  // 로딩·오류 — 패널 가운데 / 안쪽 여백
   &__placeholder {
     margin: auto;
     text-align: center;
+  }
+
+  &__error {
+    padding: 18px 20px;
   }
 
   &__body {
@@ -442,10 +518,13 @@
     min-height: 0;
   }
 
+  // 머리 — 목업: padding 18 20 16 · gap 10 · 바닥선
   &__head {
     flex-shrink: 0;
-    padding-bottom: 12px;
-    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 20px 16px;
     border-bottom: 1px solid var(--border);
   }
 
@@ -453,135 +532,159 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
   }
 
-  // 티켓번호 — 클릭하면 브라우저에서 열기 (목록 .jira__key 와 동일 룩)
+  // 티켓번호 — 목업 .key (목록과 같은 룩), 클릭하면 브라우저에서 열기
   &__key {
     padding: 0;
     border: none;
     background: transparent;
     font-family: var(--font-mono);
-    @include type-small;
-    color: var(--text-3);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--accent);
     font-variant-numeric: tabular-nums;
     cursor: pointer;
     transition: color var(--dur-1) var(--ease);
     @include focus-ring(2px);
 
     &:hover {
-      color: var(--accent);
+      color: var(--accent-hover);
       text-decoration: underline;
     }
   }
 
+  // 제목 — 목업: 18px · 600 · 행간 1.4 (우상단 [×] 자리 30px 비움)
   &__summary {
-    margin: 0 0 8px;
-    padding-right: 32px; // 우상단 [×] 버튼과 겹치지 않게
-    @include type-title;
+    margin: 0;
+    padding-right: 30px;
+    font-size: var(--fs-detail-title);
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
     word-break: break-word;
   }
 
-  // 메타 한 줄 — 타입 · 우선순위 · 보고자 · 업데이트 시각
+  // 메타 한 줄 — 목업: 12px · fg-3 · gap 12 (업데이트 시각은 모노)
   &__meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 14px;
-    margin-bottom: 10px;
+    gap: 4px 12px;
     @include type-small;
     color: var(--text-3);
   }
 
+  &__meta-time {
+    font-family: var(--font-mono);
+  }
+
+  // 액션 — 목업: btn-sm(24px) 두 개 · 위 4
   &__actions {
     display: flex;
     gap: 8px;
+    margin-top: 4px;
   }
 
-  // 본문 iframe — 남는 영역을 채우고 내부 스크롤. srcdoc 문서가 테마 팔레트를
-  // 인라인하므로 요소 배경도 --bg 로 맞춰 로드 전 색 튐을 막는다
+  // 본문 iframe — 남는 영역을 채우고 내부 스크롤. 여백·글자는 srcdoc 문서가 갖는다
+  // (목업: padding 18 20 · 13px · 행간 1.7 · fg-2). 로드 전 색 튐을 막으려 패널 면색으로.
   &__frame {
     flex: 1;
     min-height: 0;
     width: 100%;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    background: var(--bg);
+    border: 0;
+    background: var(--surface-1);
   }
 }
 
-// ── 작업 시작 모달 — 위치(저장소 ▸ 워크트리) 선택 + 시작 스킬 + 부가 설명 ──
-// 목록 문법은 터미널 LNB 와 같다: 저장소가 그룹 헤더, 워크트리가 선택 가능한 행.
+// ── 작업 시작 모달 — 위치(저장소 ▸ 워크트리) 선택 + 시작 스킬 + 부가 설명 (목업 StartWorkModal) ──
+// 저장소가 그룹 이름, 워크트리가 한 줄씩 떨어진 선택 카드(36px). 버튼은 모달 하단 바.
 .jira-work {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  padding-top: 2px; // 목업 본문 위 6 = 공용 4 + 2
 
-  &__summary {
-    margin: 0;
-    color: var(--text-2);
-    @include type-small;
+  // 제목 안 티켓 키 — 목업 .key 15px
+  &__title-key {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--accent);
   }
 
-  // 위치 목록 — 저장소가 많아도 모달이 커지지 않게 스크롤 상한을 둔다
+  .checkbox {
+    font-size: var(--fs-ui);
+  }
+
+  // 위치 목록 — 저장소 그룹 사이 10, 저장소가 많아도 모달이 커지지 않게 스크롤 상한
+  // 스크롤은 모달 본문 하나만 — 목록에 따로 상한을 두면 스크롤바가 두 개 생긴다(2026-09-30 실측)
   &__list {
-    max-height: 260px;
-    overflow-y: auto;
-    padding: 4px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    background: var(--bg-sunken);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  &__ws + &__ws {
-    margin-top: 6px;
+  &__ws {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
+  // 저장소 이름 + 매칭 뱃지 — 목업: 12.5 · 600, 좌우 2
   &__ws-head {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 8px 3px;
-    color: var(--text-3);
-    @include type-small;
+    gap: 8px;
+    padding: 0 2px;
   }
 
   &__ws-name {
+    font-size: var(--fs-ui);
     font-weight: 600;
+    color: var(--text);
   }
 
-  // 이 티켓의 Jira 키와 이어진 저장소 표시 (프로젝트 레지스트리 기준)
+  // 이 티켓의 Jira 키와 이어진 저장소 — 목업 .badge.b-accent 18px · 11px
   &__match {
-    padding: 1px 6px;
-    border-radius: var(--r-full);
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--r-sm);
     background: var(--accent-soft);
     color: var(--accent);
-    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-caption);
+    font-weight: 500;
   }
 
-  // 워크트리 한 줄 = 선택지
+  // 워크트리 한 줄 = 선택 카드 — 목업: 36px · padding 0 12 · 모서리 7 · 가라앉은 면 + 선
   &__wt {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
-    padding: 6px 8px;
-    border: none;
-    border-radius: var(--r-sm);
-    background: transparent;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-tile);
+    background: var(--bg-sunken);
     color: var(--text);
     font-family: inherit;
     text-align: left;
     cursor: pointer;
-    transition: background var(--dur-1) var(--ease);
+    transition:
+      background var(--dur-1) var(--ease),
+      border-color var(--dur-1) var(--ease);
     @include focus-ring(-2px);
 
     &:hover:not(:disabled) {
-      background: var(--surface-2);
+      border-color: var(--border-strong);
     }
 
-    &--on {
+    // 선택 — 액센트 틴트 + 액센트 선
+    &--on,
+    &--on:hover:not(:disabled) {
       background: var(--accent-soft);
-      color: var(--accent);
+      border-color: var(--accent);
     }
 
     &:disabled {
@@ -590,16 +693,28 @@
     }
   }
 
-  // 체크 자리 — 선택 여부와 무관하게 폭을 차지해 행이 흔들리지 않게
+  // 라디오 표식 — 목업: 16px 사각(모서리 4). 선택되면 액센트 면 + 체크
   &__wt-mark {
     display: inline-flex;
+    align-items: center;
     justify-content: center;
-    width: 14px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--r-mark);
+    color: var(--on-accent);
+
+    .jira-work__wt--on & {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
   }
 
   &__wt-name {
     flex-shrink: 0;
+    font-size: var(--fs-ui);
+    font-weight: 500;
   }
 
   &__wt-branch {
@@ -609,57 +724,83 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-mono);
-    @include type-small;
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
+  }
+
+  // 미커밋 변경·세션 수 — 목업 .badge 18px · 11px (미커밋은 주의색 · 모노)
+  &__wt-dirty,
+  &__wt-count {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
   }
 
   // 미커밋 변경 — 남의 작업 위에 새 티켓을 얹지 않도록 경고색으로
   &__wt-dirty {
-    flex-shrink: 0;
+    background: var(--warning-soft);
     color: var(--warning);
-    font-variant-numeric: tabular-nums;
-    @include type-small;
+    font-family: var(--font-mono);
   }
 
   &__wt-count {
-    flex-shrink: 0;
-    color: var(--text-3);
-    @include type-small;
+    background: var(--surface-2);
+    color: var(--text-2);
   }
 }
 
-// ── 티켓 추가 모달 — 주소·번호 입력 후 확인 카드를 보고 확정 ──
+// ── 티켓 추가 모달 — 주소·번호 입력 후 확인 카드를 보고 확정 (목업 AddTicketModal) ──
 .jira-add {
   display: flex;
   flex-direction: column;
   gap: 14px;
 
-  // 확인 결과 — 무엇을 추가하는지 눈으로 확인시키는 카드
+  // 주소·키 입력 — 목업: 모노 12.5
+  &__input {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+  }
+
+  // 확인 결과 카드 — 목업: 선 line-2 · 모서리 10 · padding 12 14 · 가라앉은 면 · gap 6
   &__found {
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
     background: var(--bg-sunken);
+
+    .hint {
+      margin: 0;
+      padding-left: 22px;
+    }
   }
 
   &__found-head {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
   }
 
   &__found-icon {
     color: var(--ok);
-    align-self: center;
     flex-shrink: 0;
   }
 
+  // 목업 .key — 모노 12 · 500 · 액센트
   &__found-key {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    @include type-small;
-    color: var(--text-3);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--accent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -668,35 +809,53 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 500;
     color: var(--text);
   }
 
+  // 유형 · 상태 · 보고자 — 목업: 12px · fg-3 · 아이콘 폭만큼 들여쓰기
   &__found-meta {
-    margin-top: 4px;
+    padding-left: 22px;
     @include type-small;
     color: var(--text-3);
   }
+
+  // 버튼 줄 — 목업: 오른쪽 정렬 gap 8 (이 모달은 하단 바 없이 본문 안)
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
 }
 
-// ===== 주간 활동 (Jira 섹션의 '주간' 화면) =====
+// ===== 주간 활동 (Jira 섹션의 '주간' 화면) — 목업 JiraWeekly =====
 // 한 주(월~일) 동안 내가 손댄 티켓 — 관여도 마크 + 필터 + 펼침 이력.
 // 키·제목·복사 아이콘은 `.jira__key`·`.jira__title`·`.jira__copy` 를 그대로 재사용한다
 // (이 화면이 `.jira` 섹션 안에 렌더되므로 스코프가 닿는다).
 .jira-week {
-  // 주 이동 줄 — [◀] 8.10(월) ~ 8.16(일) [▶] [이번 주] ······ [새로고침]
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .banner {
+    margin: 0;
+  }
+
+  // 주 이동 줄 — [◀] 9.21(월) ~ 9.27(일) [▶] [이번 주] ······ [새로고침] (목업 gap 6)
   &__nav {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 14px;
   }
 
-  // 주 표시 — 폭을 고정해 주를 옮겨도 화살표가 흔들리지 않게
+  // 주 표시 — 목업: 모노 13.5 · 500 · 좌우 4. 폭을 고정해 주를 옮겨도 화살표가 흔들리지 않게
   &__label {
     min-width: 176px;
+    padding: 0 4px;
     text-align: center;
-    @include type-body;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: var(--fs-week-label);
+    font-weight: 500;
     color: var(--text);
     font-variant-numeric: tabular-nums;
   }
@@ -705,48 +864,76 @@
     flex: 1;
   }
 
-  // 관여도 필터 + 프로젝트 분포
+  // 관여도 필터 + 프로젝트 분포 + 링크 복사 (목업 gap 12)
   &__toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px 12px;
-    margin-bottom: 16px;
   }
 
-  // 툴바 오른쪽 묶음 — 프로젝트 분포 + 링크 복사
   &__toolbar-right {
     display: flex;
     align-items: center;
     gap: 12px;
   }
 
+  // 프로젝트 분포 — 목업: 모노 12 · fg-3
   &__projects {
-    @include type-small;
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
   }
 
-  // 행 카드 — 상태 전환 드롭다운이 없는 화면이라 overflow 로 라운딩을 처리한다
+  // 목록 패널 — 목업 .panel (면 + 선 + 10px 모서리)
   &__card {
     @include card-surface;
     overflow: hidden;
   }
 
-  &__item + &__item {
-    border-top: 1px solid var(--border);
+  &__item {
+    border-bottom: 1px solid var(--border);
+
+    &:last-child {
+      border-bottom: 0;
+    }
   }
 
+  // 행 — 목업: 42px · padding 0 14 · gap 10
   &__row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 14px;
+    gap: 10px;
+    height: 42px;
+    padding: 0 14px;
     color: var(--text);
+
+    // 키 묶음은 목업 폭 72 + 복사 버튼 (내 이슈 행의 104 고정 폭을 풀어 준다)
+    .jira__keywrap {
+      width: auto;
+      gap: 0;
+    }
+
+    .jira__key {
+      width: 72px;
+      text-align: left;
+    }
+
+    .jira__copy {
+      margin-left: -8px;
+    }
+
+    // 목업: 점 없는 상태 칩 폭 72 · 11.5px (넘치면 말줄임)
+    .badge {
+      width: 72px;
+      justify-content: center;
+      font-size: var(--fs-ui-sm);
+    }
   }
 
-  // 관여도 마크 — 해결(초록 체크) · 진행(노랑 재생) · 연관(회색 원)
+  // 관여도 마크 — 목업: 22px · 모서리 6 · 해결(초록) · 진행(액센트) · 연관(회색)
   &__mark {
     display: inline-flex;
     align-items: center;
@@ -754,7 +941,7 @@
     flex-shrink: 0;
     width: 22px;
     height: 22px;
-    border-radius: var(--r-full);
+    border-radius: var(--r-md);
 
     &--resolved {
       background: var(--ok-soft);
@@ -762,12 +949,12 @@
     }
 
     &--progressed {
-      background: var(--warning-soft);
-      color: var(--warning);
+      background: var(--accent-soft);
+      color: var(--accent);
     }
 
     &--touched {
-      background: var(--overlay-track);
+      background: var(--surface-2);
       color: var(--text-3);
     }
 
@@ -777,10 +964,13 @@
     }
   }
 
-  // 내 마지막 변경 시각 (요일 + 시:분)
+  // 내 마지막 변경 시각 — 목업: 모노 11.5 · fg-3 · 폭 64 오른쪽 정렬
   &__when {
     flex-shrink: 0;
-    @include type-small;
+    width: 64px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
   }
@@ -801,36 +991,37 @@
     }
   }
 
-  // 펼친 이력 — 관여도 마크 폭만큼 들여쓰고, 배경을 한 톤 낮춰 다음 행과 구분한다
-  // (구분이 없으면 이력 줄이 아래 티켓 행처럼 읽힌다 — 2026-08-13 실측 화면에서 확인)
+  // 펼친 이력 — 목업: padding 4 14 12 50 · 가라앉은 면 · gap 4
   &__events {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 6px 14px 8px 44px;
-    background: var(--surface-2);
-    border-top: 1px solid var(--border);
+    padding: 4px 14px 12px 50px;
+    background: var(--bg-sunken);
   }
 
+  // 이력 한 줄 — 목업: 26px · 12px · gap 14
   &__event {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
     min-width: 0;
+    height: 26px;
     @include type-small;
-    color: var(--text-2);
+    color: var(--text);
   }
 
   &__event-time {
     flex-shrink: 0;
-    width: 58px;
+    width: 64px;
+    font-family: var(--font-mono);
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
   }
 
   &__event-field {
     flex-shrink: 0;
-    min-width: 54px;
+    width: 72px;
     color: var(--text-2);
   }
 
@@ -838,7 +1029,7 @@
   &__event-change {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     min-width: 0;
     color: var(--text-3);
   }
@@ -851,6 +1042,10 @@
     white-space: nowrap;
   }
 
+  &__event-from {
+    color: var(--text-3);
+  }
+
   &__event-to {
     color: var(--text);
   }
@@ -861,24 +1056,34 @@
 .jira-report {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px; // 목업 JiraReport: 블록 사이 10
 
-  // 조회 조건 카드 — 필터별 한 줄(이름 열 + 컨트롤) + 구분선 + JQL 미리보기 줄
-  &__query {
-    @include card-surface;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px 16px;
+  // 위쪽 블록(조건·툴바·복사·배너)은 줄어들지 않고, 결과 표·빈 상태가 남는 높이를 쓴다
+  > * {
+    flex-shrink: 0;
   }
 
-  // 필터 폼 — 이름 열은 가장 긴 이름('프로젝트')에 맞추고 컨트롤 열이 남는 폭을 쓴다.
-  // 세로는 가운데 — 칩이 여러 줄이면 컨트롤 줄 안에서 셀렉트가 가운데로 가므로 이름도 같이 맞춘다
+  // 조회 조건 카드 — 목업: 패널 padding 6 14, 필터별 한 줄(38px · 바닥선) + 마지막 기간 줄(42px)
+  &__query {
+    @include card-surface;
+    padding: 6px 14px;
+  }
+
+  // 필터 폼 — [이름 60][컨트롤]. 줄 구분선은 두 칸(이름·컨트롤)에 같이 그어 한 줄로 이어 보이게 하고,
+  // 마지막 줄(기간)만 선이 없다. gap 은 가로만 — 세로 gap 이 있으면 선이 끊긴다
   &__form {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: center;
-    gap: 10px 16px;
+    grid-template-columns: 60px minmax(0, 1fr);
+    align-items: stretch;
+    column-gap: 10px;
+
+    > * {
+      border-bottom: 1px solid var(--border);
+    }
+
+    > :nth-last-child(-n + 2) {
+      border-bottom: 0;
+    }
   }
 
   // 한 필터의 컨트롤 줄 — 셀렉트 + 새로고침 (+ 칩 + 비우기). 좁으면 칩이 아래 줄로 내려간다
@@ -886,9 +1091,15 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: 6px 10px;
     min-width: 0;
-    min-height: var(--control-h);
+    min-height: 38px;
+    padding: 4px 0;
+  }
+
+  // 마지막(기간) 줄은 목업 42px
+  &__form > :last-child {
+    min-height: 42px;
   }
 
   // 라벨 + 컨트롤 묶음 (기간 줄의 '기준')
@@ -899,16 +1110,27 @@
     min-width: 0;
   }
 
+  // 이름 — 목업: 12px · fg-3 (대문자 캡션 아님)
   &__label {
-    @include type-caption;
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
+    @include type-small;
+    color: var(--text-3);
+  }
+
+  // 기간 줄 안 '기준' 이름은 줄 구분선을 갖지 않는다 (위 &__form > * 규칙 밖)
+  &__field &__label {
+    border: 0;
+    margin-left: 6px;
   }
 
   // 세 셀렉트(프로젝트·레이블·에픽)는 같은 폭으로 세로 줄을 맞춘다 — 팝오버가 트리거 폭을
   // 따라가므로 프로젝트 이름·에픽 제목이 읽힐 만큼 둔다. 칸 폭이 정해진 grid 라 좁은 화면에서는
   // 그대로 줄어든다(예전 flex 한 줄에서는 부모가 내용 폭으로 줄여 제목이 잘렸다 — 2026-09-29)
+  // 목업: 240px
   &__pick {
-    flex: 0 1 320px;
+    flex: 0 1 240px;
     min-width: 0;
   }
 
@@ -925,12 +1147,17 @@
   }
 
   // 공용 .chip 위에 얹는 표기 — 날짜형 이름이 세로로 줄 맞아 읽히게 등폭
+  // 목업 .badge — 20px · 모서리 5 · 떠 있는 면 · ✕ 는 오른쪽 작은 글리프
   &__label-chip {
-    padding: 3px 6px 3px 9px;
+    height: 20px;
+    padding: 0 5px 0 7px;
     gap: 4px;
-    border-radius: var(--r-full);
+    border: 0;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
     color: var(--text-2);
     font-family: var(--font-mono);
+    font-size: var(--fs-small);
     font-variant-numeric: tabular-nums;
 
     // ✕ 는 평소 흐리게 — 칩을 가리켰을 때만 또렷해진다(칩 자체가 '빼기' 버튼이다)
@@ -941,7 +1168,7 @@
 
     &:hover {
       color: var(--text);
-      border-color: var(--danger);
+      background: var(--surface-3);
 
       svg {
         opacity: 1;
@@ -969,11 +1196,13 @@
     gap: 2px;
   }
 
+  // 목업: 13px · 500 · 좌우 4
   &__month-label {
     min-width: 96px;
+    padding: 0 4px;
     text-align: center;
     @include type-body;
-    font-weight: 600;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
   }
 
@@ -992,14 +1221,17 @@
     margin-left: auto;
   }
 
-  // JQL 미리보기 줄 — 필터 폼과 구분선으로 나눈다
+  // JQL 직접 입력 줄 — 목업: 조건 카드 아래 체크 한 줄 (12.5px · fg-2)
   &__sub {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
+
+    .checkbox {
+      font-size: var(--fs-ui);
+      color: var(--text-2);
+    }
   }
 
   // JQL 미리보기 — 실제로 보낼 문자열을 그대로 보여준다 (길면 잘라 두고 title 로 전문)
@@ -1032,8 +1264,26 @@
     gap: 8px;
   }
 
+  // 2차 필터 폭 — 목업: 상태 120 · 담당자 130 · 유형 120 · 정렬 110
+  &__f-status,
+  &__f-type {
+    flex: none;
+    width: 120px;
+  }
+
+  &__f-assignee {
+    flex: none;
+    width: 130px;
+  }
+
+  &__f-sort {
+    flex: none;
+    width: 110px;
+  }
+
+  // 목업: 검색 200
   &__search {
-    width: 180px;
+    width: 200px;
     flex: none;
   }
 
@@ -1044,9 +1294,11 @@
     margin-left: auto;
   }
 
+  // 목업: 모노 12 · fg-2
   &__count {
-    @include type-small;
-    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text-2);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -1155,26 +1407,39 @@
   }
 
   // 결과 표 — 카드 안에 grid 행 (열: 체크 · 번호 · 제목 · 유형 · 상태 · 담당자 · 날짜)
+  // 결과 표 — 목업: 패널 + grid 열 36 · 88 · 1fr · 72 · 92 · 88 · 92, 머리 30px · 행 36px
+  // 표 패널만 안에서 스크롤 — 남는 높이를 받고(flex 1), 머리 줄은 sticky
   &__table {
     @include card-surface;
-    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 120px;
+    overflow: auto;
   }
 
   &__trow {
     display: grid;
-    grid-template-columns: 28px 100px minmax(200px, 1fr) 84px 112px 96px 92px;
+    grid-template-columns: 36px 88px minmax(160px, 1fr) 72px 92px 88px 92px;
     align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
+    min-height: var(--row-h-table);
+    padding: 0 12px;
     color: var(--text);
+    border-bottom: 1px solid var(--border);
 
-    + .jira-report__trow {
-      border-top: 1px solid var(--border);
+    &:last-child {
+      border-bottom: 0;
     }
 
+    // 머리 — 목업 .label 10.5px (⚠️ 한글 열 이름이라 모노 금지)
     &--head {
-      @include type-caption;
-      background: var(--surface-2);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--surface-1);
+      min-height: 30px;
+      font-size: var(--fs-micro);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
     }
 
     // 선택된 행 — 액센트 소프트 틴트
@@ -1213,22 +1478,25 @@
       color: var(--text-2);
     }
 
+    // 목업: 모노 11.5 · fg-3
     &--date {
-      @include type-small;
+      font-family: var(--font-mono);
+      font-size: var(--fs-ui-sm);
       color: var(--text-3);
       font-variant-numeric: tabular-nums;
     }
   }
 
-  // 레이블 칩 — 정보형 작은 필
+  // 레이블 칩 — 목업 .badge 18px · 11px
   &__chip {
+    display: inline-flex;
+    align-items: center;
     flex-shrink: 0;
-    padding: 1px 7px;
-    border-radius: var(--r-full);
-    background: var(--overlay-track);
-    @include type-caption;
-    text-transform: none;
-    letter-spacing: normal;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-size: var(--fs-caption);
     color: var(--text-2);
   }
 }

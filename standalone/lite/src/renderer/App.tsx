@@ -270,8 +270,9 @@ function Shell() {
         <ErrorBoundary key={screen} label={LABELS[screen]}>
           {screen === 'approval' && <ApprovalSection />}
           {screen === 'report' && (
-            // `.jira` 는 본체 Jira 섹션의 와이드 폭(--w-wide)을 빌려 쓰기 위한 것 — 표가 7열이다
-            <div className="section jira">
+            // `.jira` 는 본체 Jira 섹션의 와이드 폭(--w-wide)을 빌려 쓰기 위한 것 — 표가 7열이다.
+            // `jira--report` = 결과 표만 안에서 스크롤하는 높이 체인(본체와 같은 규칙)
+            <div className="section jira jira--report">
               <SectionHeader
                 icon={<Icon name="clipboard-list" size={18} />}
                 title="티켓 보고"
