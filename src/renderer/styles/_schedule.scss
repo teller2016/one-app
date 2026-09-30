@@ -1,137 +1,298 @@
-// 일정 등록 섹션 — 공통 폼/입력/로그 스타일은 _base.scss(공용 컴포넌트)가 담당,
-// 여기는 배치(레이아웃) 속성만 남긴다.
+// 일정 등록 섹션 — 목업 Schedule.dc.html (2026-09-30 리디자인).
+// 레이아웃: 왼쪽 = 날짜·시작 툴바 + 작업 기록 패널(그리드 타임라인), 오른쪽 360 = 완료 안내·노션·실행 로그·안내.
+// 실행 버튼([테스트]·[일정 등록]·[중지])은 탑바 오른쪽 끝(TopbarSlot). 공용 컴포넌트 크기는 건드리지 않는다.
 @use './base' as *;
 
 .sched {
-  // 툴바 — 날짜 세그먼트·시작 시간 피커를 한 줄로 압축
-  // (컨트롤 높이는 _base.scss 의 --control-h 로 전역 통일 — 여기서 오버라이드 금지)
+  display: flex;
+  height: 100%;
+  min-height: 0;
+
+  // ── 왼쪽 열 ── (목업: bg-0 · padding 20 28 · gap 14)
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 20px 28px;
+    overflow-y: auto;
+    background: var(--bg);
+
+    .banner {
+      margin: 0;
+    }
+  }
+
+  // 툴바 — [날짜][세그][(직접 입력이면 날짜 피커)] | [시작][시각] (목업 gap 12)
   &__toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
   &__toolbar-label {
-    @include type-caption;
-    color: var(--text-2);
-
-    &:not(:first-child) {
-      margin-left: 10px;
-    }
+    font-size: var(--fs-small);
+    color: var(--text-3);
   }
 
-  // 타임라인 카드 — 하루 작업 기록이 주인공
-  // ⚠️ 폭은 .section(--w-content)에 맡긴다 — 카드에만 max-width 를 걸면 형제인
-  //    버튼 행·안내문·로그는 섹션 폭까지 뻗어 카드 오른쪽 밖으로 삐져나온다
-  //    (2026-08-14 사용자 지적). 다른 섹션의 카드도 전부 섹션 폭을 그대로 쓴다.
+  // 세로 구분선 (목업 .vdiv · margin 4)
+  &__toolbar-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: 4px;
+    background: var(--border);
+  }
+
+  // ── 작업 기록 패널 ── (목업 .panel — 모서리 10, 안에서 자르기)
   &__card {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     border: 1px solid var(--border);
     border-radius: var(--r-lg);
     background: var(--surface-1);
-    padding: 12px 14px;
   }
 
+  // 패널 머리 — 42 · padding 0 14 · 바닥선 (목업 .panel-head)
   &__card-head {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 8px;
+    align-items: center;
+    gap: 10px;
+    height: var(--panel-head-h);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
   }
 
   &__card-title {
-    @include type-emph;
+    flex: 1;
+    font-size: var(--fs-title);
+    font-weight: 600;
   }
 
+  // 합계 — "합계 9h · OT 1h" (라벨 12 fg-3, 숫자 모노 14/600, OT 는 주의색)
   &__card-total {
-    @include type-caption;
-    color: var(--text-2);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  &__card-total-label {
+    font-size: var(--fs-small);
+    color: var(--text-3);
+  }
+
+  &__card-total-dot {
+    color: var(--text-3);
+  }
+
+  &__card-total-num {
+    font-family: var(--font-mono);
+    font-size: var(--fs-emph);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
+
+    &--ot {
+      color: var(--warning);
+    }
+  }
+
+  // ── 타임라인 그리드 ── 시작 64 · 화살표 칸 20 · 종료 104 · 소요 72 · 일정명 · 삭제 36 (목업)
+  &__grid {
+    display: grid;
+    grid-template-columns: 64px 20px 104px 72px minmax(0, 1fr) 36px;
+    align-items: center;
+    column-gap: 10px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+
+    // 종료 시각 피커는 칸 폭을 채운다 (피커 자체 크기는 공용 그대로)
+    .picker--time {
+      width: 100%;
+    }
+  }
+
+  // 열 머리 — 30 · 10.5 캡션 (한글 라벨이라 모노 대신 본문 서체)
+  &__cols {
+    height: 30px;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    color: var(--text-3);
+  }
+
+  // 기록 행 — 48
+  &__row {
+    height: 48px;
   }
 
   &__empty {
-    margin: 4px 0 10px;
+    margin: 0;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
   }
 
-  // 타임라인 행 — [시작 →][종료 피커][소요][일정명(가변)][삭제]
-  &__row,
-  &__add {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    // 일정명 입력이 남는 폭을 차지 (피커 내부 입력은 컨테이너 안이라 제외됨)
-    > .input {
-      flex: 1;
-    }
-
-    .picker--time {
-      flex: 0 0 auto;
-    }
-  }
-
-  &__row {
-    padding: 3px 0;
-  }
-
-  // 계산된 시작 시각 — 고정 폭 우측 정렬로 피커 열을 맞춘다
+  // 계산된 시작 시각 — 모노 13 (목업) + 흐린 화살표
   &__row-start {
-    @include type-caption;
-    flex: 0 0 auto;
-    width: 58px;
-    text-align: right;
-    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+
+    // 추가 행의 '다음 시작' 은 액센트
+    &--next {
+      color: var(--accent);
+    }
   }
 
-  // 소요 시간 칩
+  &__arrow {
+    color: var(--text-3);
+  }
+
+  // 소요 — 모노 12 · fg-2, 순서가 뒤집히면 위험색
   &__row-dur {
-    @include type-caption;
-    flex: 0 0 52px;
-    text-align: center;
-    padding: 2px 0;
-    border-radius: var(--r-sm);
-    background: var(--bg-sunken);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
 
-    // 종료가 시작보다 앞이면 잘못된 순서 — 경고색
     &--warn {
       color: var(--danger);
     }
   }
 
-  // 점심 구분선 — 12:30 에 끝난 항목 다음에만 표시 (매크로 규칙과 동일)
+  &__title {
+    min-width: 0;
+  }
+
+  &__del {
+    justify-self: center;
+  }
+
+  // 점심 구분 줄 — 32 · 가라앉은 면 · 아이콘 + '점심' + 시각(모노) (목업)
   &__lunch {
-    @include type-caption;
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 2px 0;
+    gap: 10px;
+    height: 32px;
+    padding: 0 16px;
+    background: var(--bg-sunken);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-small);
     color: var(--text-3);
+  }
 
-    &::before,
-    &::after {
-      content: '';
-      flex: 1;
-      border-top: 1px dashed var(--border);
+  &__lunch-time {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 추가 행 — 56 · 가라앉은 면 · [다음 시작][ ][종료][일정명][추가] (목업: 마지막 칸 auto)
+  &__add {
+    display: grid;
+    grid-template-columns: 64px 20px 104px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    height: 56px;
+    padding: 0 16px;
+    background: var(--bg-sunken);
+
+    .picker--time {
+      width: 100%;
     }
   }
 
-  // 추가 행 — 기록 행들과 헤어라인으로 구분
-  &__add {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
+  // ── 오른쪽 열 ── (목업: 폭 360 · 패널 면 · 왼쪽 경계선 · padding 20 · gap 16)
+  &__side {
+    flex: 0 0 360px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: var(--surface-1);
   }
 
-  // 버튼 행에서 등록 그룹과 복사·비우기 그룹 사이를 벌리는 스페이서
-  &__actions-gap {
+  // 완료 안내 — ok soft 띠 (목업: padding 12 14 · 모서리 8 · 12.5 · 아이콘 + 제목 600 + 보조 fg-2)
+  &__done {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: var(--r-tab);
+    background: var(--ok-soft);
+    color: var(--ok);
+    font-size: var(--fs-ui);
+    @include rise-in;
+
+    > svg {
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+  }
+
+  &__done-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    b {
+      font-weight: 600;
+    }
+
+    span {
+      color: var(--text-2);
+      line-height: 1.5;
+    }
+  }
+
+  // [노션에 기록][노션용 복사][비우기] — 3등분 (목업 grid gap 8)
+  &__side-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+
+    .btn {
+      min-width: 0;
+      padding-inline: 6px;
+    }
+  }
+
+  &__divider {
+    flex-shrink: 0;
+    height: 1px;
+    background: var(--border);
+  }
+
+  // 실행 로그 — 라벨 + 남는 높이를 채우는 코드 면 (목업 .term · 11.5/20 · 모서리 8)
+  &__log-wrap {
     flex: 1;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  // 실행 로그 — 공용 .panel-sunken--log 사용, 높이만 지정
+  &__log-label {
+    @include type-caption;
+    color: var(--text-3);
+  }
+
   &__log {
-    height: 220px;
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    border-radius: var(--r-tab);
+    font-size: var(--fs-ui-sm);
+    line-height: 20px;
+  }
+
+  &__note {
+    margin: 0;
+    margin-top: auto;
+    line-height: 1.6;
   }
 }

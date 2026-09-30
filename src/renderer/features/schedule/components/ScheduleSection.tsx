@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
-import { SectionHeader } from '../../../components/SectionHeader';
 import { Banner } from '../../../components/Banner';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
 import { Input } from '../../../components/Input';
 import { DatePicker } from '../../../components/DatePicker';
 import { TimePicker } from '../../../components/TimePicker';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
@@ -369,195 +369,229 @@ export function ScheduleSection() {
   const hasItems = items.some((it) => it.title.trim());
 
   return (
-    <div className="section">
-      <SectionHeader
-        icon={<Icon name="calendar" size={18} />}
-        title="일정 등록"
-        sub="하루 작업을 기록해 두고 비즈박스 그룹웨어에 자동 등록합니다."
+    <div className="sched">
+      {/* 실행 액션은 탑바 오른쪽 끝 (목업 Schedule.dc.html) — 실행 중이면 [중지] 가 붙는다 */}
+      <TopbarSlot
+        right={
+          <>
+            {running && (
+              <Button variant="danger" onClick={cancel}>
+                중지
+              </Button>
+            )}
+            <Button onClick={() => run(true)} disabled={running || !hasItems}>
+              테스트 (등록 안 함)
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => run(false)}
+              loading={running}
+              disabled={!hasItems}
+            >
+              일정 등록
+            </Button>
+          </>
+        }
       />
 
-      {credsReady === false && (
-        <Banner>
-          비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
-          먼저 저장하세요.
-        </Banner>
-      )}
+      {/* 왼쪽 — 날짜·시작 툴바 + 작업 기록 패널 */}
+      <div className="sched__main">
+        {credsReady === false && (
+          <Banner>
+            비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
+            먼저 저장하세요.
+          </Banner>
+        )}
 
-      {/* 툴바 — 날짜·시작 시간 (자주 안 바꾸는 설정은 한 줄로 압축) */}
-      <div className="sched__toolbar">
-        <span className="sched__toolbar-label">날짜</span>
-        <Segment<DateType>
-          options={DATE_OPTIONS}
-          value={dateType}
-          onChange={setDateType}
-          disabled={running}
-        />
-        {dateType === 'date' && (
-          <DatePicker
-            value={customDate}
-            onChange={setCustomDate}
+        <div className="sched__toolbar">
+          <span className="sched__toolbar-label">날짜</span>
+          <Segment<DateType>
+            options={DATE_OPTIONS}
+            value={dateType}
+            onChange={setDateType}
             disabled={running}
           />
-        )}
-        <span className="sched__toolbar-label">시작</span>
-        <TimePicker
-          value={startTime}
-          onChange={setStartTime}
-          disabled={running}
-        />
-      </div>
-
-      {/* 타임라인 카드 — 기록이 주인공 */}
-      <div className="sched__card">
-        <div className="sched__card-head">
-          <span className="sched__card-title">작업 기록</span>
-          {items.length > 0 && (
-            <span className="sched__card-total">
-              합계 {formatHours(totalMin)}
-              {otMin > 0 && (
-                <>
-                  {' · '}
-                  <b>OT {formatHours(otMin)}</b>
-                </>
-              )}
-            </span>
+          {dateType === 'date' && (
+            <DatePicker
+              value={customDate}
+              onChange={setCustomDate}
+              disabled={running}
+            />
           )}
-        </div>
-
-        {worklogLoaded && items.length === 0 && (
-          <p className="hint sched__empty">
-            아직 기록이 없습니다. 작업을 마칠 때마다 아래에서 추가하세요.
-          </p>
-        )}
-
-        {timeline.map((row) => (
-          <Fragment key={row.item.id}>
-            <div className="sched__row">
-              <span className="sched__row-start">
-                {minutesToTime(row.startMin)} →
-              </span>
-              <TimePicker
-                value={row.item.end}
-                onChange={(v) => updateItem(row.item.id, { end: v })}
-                disabled={running}
-              />
-              <span
-                className={
-                  'sched__row-dur' +
-                  (row.durMin <= 0 ? ' sched__row-dur--warn' : '')
-                }
-              >
-                {formatDuration(row.durMin)}
-              </span>
-              <Input
-                value={row.item.title}
-                onChange={(e) =>
-                  updateItem(row.item.id, { title: e.target.value })
-                }
-                disabled={running}
-                spellCheck={false}
-              />
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="항목 삭제"
-                onClick={() => removeItem(row.item.id)}
-                disabled={running}
-              >
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-            {row.lunchAfter && (
-              <div className="sched__lunch">점심 12:30–13:30</div>
-            )}
-          </Fragment>
-        ))}
-
-        {/* 추가 행 — 다음 시작 시각을 미리 보여준다 */}
-        <div className="sched__add">
-          <span className="sched__row-start">
-            {minutesToTime(nextStartMin)} →
-          </span>
-          <TimePicker value={newTime} onChange={setNewTime} disabled={running} />
-          <Input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem();
-            }}
-            placeholder="일정명 — 예: [순수본] QA + 개선건"
-            spellCheck={false}
+          <span className="sched__toolbar-sep" aria-hidden="true" />
+          <span className="sched__toolbar-label">시작</span>
+          <TimePicker
+            value={startTime}
+            onChange={setStartTime}
             disabled={running}
           />
-          <Button
-            size="sm"
-            onClick={addItem}
-            disabled={running || !newTitle.trim()}
-          >
-            <Icon name="plus" size={14} />
-            추가
-          </Button>
+        </div>
+
+        {/* 타임라인 패널 — 기록이 주인공 */}
+        <div className="sched__card">
+          <div className="sched__card-head">
+            <span className="sched__card-title">작업 기록</span>
+            {items.length > 0 && (
+              <span className="sched__card-total">
+                <span className="sched__card-total-label">합계</span>
+                <span className="sched__card-total-num">{formatHours(totalMin)}</span>
+                {otMin > 0 && (
+                  <>
+                    <span className="sched__card-total-dot">·</span>
+                    <span className="sched__card-total-num sched__card-total-num--ot">
+                      OT {formatHours(otMin)}
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+
+          {/* 열 머리 — 시작 · (화살표 칸) · 종료 · 소요 · 일정명 · (삭제) */}
+          <div className="sched__grid sched__cols" aria-hidden="true">
+            <span>시작</span>
+            <span />
+            <span>종료</span>
+            <span>소요</span>
+            <span>일정명</span>
+            <span />
+          </div>
+
+          {worklogLoaded && items.length === 0 && (
+            <p className="hint sched__empty">
+              아직 기록이 없습니다. 작업을 마칠 때마다 아래에서 추가하세요.
+            </p>
+          )}
+
+          {timeline.map((row) => (
+            <Fragment key={row.item.id}>
+              <div className="sched__grid sched__row">
+                <span className="sched__row-start">
+                  {minutesToTime(row.startMin)} <span className="sched__arrow">→</span>
+                </span>
+                <span />
+                <TimePicker
+                  value={row.item.end}
+                  onChange={(v) => updateItem(row.item.id, { end: v })}
+                  disabled={running}
+                />
+                <span
+                  className={
+                    'sched__row-dur' +
+                    (row.durMin <= 0 ? ' sched__row-dur--warn' : '')
+                  }
+                >
+                  {formatDuration(row.durMin)}
+                </span>
+                <Input
+                  className="sched__title"
+                  value={row.item.title}
+                  onChange={(e) =>
+                    updateItem(row.item.id, { title: e.target.value })
+                  }
+                  disabled={running}
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className="icon-btn sched__del"
+                  aria-label="항목 삭제"
+                  onClick={() => removeItem(row.item.id)}
+                  disabled={running}
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+              {row.lunchAfter && (
+                <div className="sched__lunch">
+                  <Icon name="utensils" size={12} />
+                  <span>점심</span>
+                  <span className="sched__lunch-time">12:30–13:30</span>
+                </div>
+              )}
+            </Fragment>
+          ))}
+
+          {/* 추가 행 — 다음 시작 시각을 미리 보여준다 */}
+          <div className="sched__add">
+            <span className="sched__row-start sched__row-start--next">
+              {minutesToTime(nextStartMin)} <span className="sched__arrow">→</span>
+            </span>
+            <span />
+            <TimePicker value={newTime} onChange={setNewTime} disabled={running} />
+            <Input
+              className="sched__title"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem();
+              }}
+              placeholder="일정명 — 예: [순수본] QA + 개선건"
+              spellCheck={false}
+              disabled={running}
+            />
+            <Button
+              size="xs"
+              onClick={addItem}
+              disabled={running || !newTitle.trim()}
+            >
+              <Icon name="plus" size={12} />
+              추가
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* 액션 — 좌: 등록 실행 / 우: 노션 복사·비우기 */}
-      <div className="form-actions">
-        <Button
-          variant="primary"
-          onClick={() => run(false)}
-          loading={running}
-          disabled={!hasItems}
-        >
-          일정 등록
-        </Button>
-        <Button onClick={() => run(true)} disabled={running || !hasItems}>
-          테스트 (등록 안 함)
-        </Button>
-        {running && (
-          <Button variant="danger" onClick={cancel}>
-            중지
-          </Button>
+      {/* 오른쪽 — 완료 안내 · 노션 · 실행 로그 · 안내 (목업 360 열) */}
+      <aside className="sched__side">
+        {done && (
+          <div className="sched__done" role="status">
+            <Icon name="check" size={14} />
+            <div className="sched__done-body">
+              <b>등록 완료</b>
+              <span>
+                [노션에 기록]으로 바로 남기거나, [노션용 복사]로 붙여넣을 수 있습니다.
+              </span>
+            </div>
+          </div>
         )}
-        <span className="sched__actions-gap" />
-        <Button
-          onClick={recordNotion}
-          loading={notionSaving}
-          disabled={running || !hasItems}
-        >
-          <Icon name="pencil" size={14} />
-          노션에 기록
-        </Button>
-        <Button onClick={copyNotion} disabled={running || !hasItems}>
-          <Icon name="copy" size={14} />
-          노션용 복사
-        </Button>
-        <Button onClick={clearAll} disabled={running || items.length === 0}>
-          비우기
-        </Button>
-      </div>
-      {done && (
-        <p className="note">
-          ✅ 등록 완료 — [노션에 기록]으로 바로 남기거나, [노션용 복사]로
-          붙여넣을 수 있습니다.
-        </p>
-      )}
-      <p className="note">
-        ※ 실행하면 자동 조작용 브라우저가 열립니다. 등록이 끝나도 확인용으로 창이
-        열려 있으니 확인 후 직접 닫으세요.
-      </p>
 
-      {/* 실행 로그 — 실행 전엔 숨겨 화면을 차지하지 않는다 */}
-      {(running || log) && (
-        <>
-          <label className="form-label">실행 로그</label>
-          <pre
-            className="panel-sunken panel-sunken--log sched__log"
-            ref={logRef}
+        <div className="sched__side-actions">
+          <Button
+            onClick={recordNotion}
+            loading={notionSaving}
+            disabled={running || !hasItems}
           >
-            {log}
-          </pre>
-        </>
-      )}
+            노션에 기록
+          </Button>
+          <Button onClick={copyNotion} disabled={running || !hasItems}>
+            노션용 복사
+          </Button>
+          <Button onClick={clearAll} disabled={running || items.length === 0}>
+            비우기
+          </Button>
+        </div>
+
+        <div className="sched__divider" />
+
+        {/* 실행 로그 — 실행 전엔 숨겨 화면을 차지하지 않는다 */}
+        {(running || log) && (
+          <div className="sched__log-wrap">
+            <span className="sched__log-label">실행 로그</span>
+            <pre
+              className="panel-sunken panel-sunken--log sched__log"
+              ref={logRef}
+            >
+              {log}
+            </pre>
+          </div>
+        )}
+
+        <p className="hint sched__note">
+          ※ 실행하면 자동 조작용 브라우저가 열립니다. 등록이 끝나도 확인용으로 창이
+          열려 있으니 확인 후 직접 닫으세요.
+        </p>
+      </aside>
     </div>
   );
 }

@@ -23,28 +23,28 @@ export function RosterRow({
   const pct = Math.min((total.T / WEEKLY_STANDARD_HOURS) * 100, 100);
   const mm = calcTotalMM(data.summaryData, excluded);
 
+  // 목업 Weekly.dc.html 명단 행 — 66px · 이름 13/500 + 시간 모노 12.5(미달/초과면 주의색) · 4px 바 · MM 모노 11
   return (
     <button
       type="button"
       className={`weekly-roster-row weekly-roster-row--${tone}${selected ? ' is-selected' : ''}`}
       onClick={() => onSelect(name)}
+      aria-pressed={selected}
     >
-      <div className="weekly-roster-row__line">
+      <span className="weekly-roster-row__line">
         <span className="weekly-roster-row__name">{name}</span>
         <span className="weekly-roster-row__hours">
           {total.T}
           <i>/{WEEKLY_STANDARD_HOURS}</i>
         </span>
-      </div>
-      {/* T 진행바 — 트랙은 공용 .progress, 채움 색은 tone 모디파이어가 결정 */}
-      <div className="progress weekly-roster-row__bar">
-        <span className="progress__fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="weekly-roster-row__meta">
-        <span className="weekly-roster-row__mm">
-          MM T <b>{mm.T}</b> / OT <b>{mm.OT}</b>
-        </span>
-      </div>
+      </span>
+      {/* T 진행바 — 채움 색은 tone 모디파이어가 결정 */}
+      <span className="weekly-roster-row__bar">
+        <span className="weekly-roster-row__fill" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="weekly-roster-row__mm">
+        MM T <b>{mm.T}</b> / OT <b>{mm.OT}</b>
+      </span>
     </button>
   );
 }

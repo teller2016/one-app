@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { Checkbox } from '../../../components/Checkbox';
-import { SectionHeader } from '../../../components/SectionHeader';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { Banner } from '../../../components/Banner';
 import { Badge } from '../../../components/Badge';
 import { Icon } from '../../../components/Icon';
@@ -142,73 +142,85 @@ export function WeeklySection() {
       ).length
     : 0;
 
+  // 주 표시 — "지난주" 같은 이름 + 괄호 안 날짜 범위(모노)
+  const weekName =
+    weekOffset === 0
+      ? '이번주'
+      : weekOffset === -1
+        ? '지난주'
+        : `${weekOffset > 0 ? '+' : ''}${weekOffset}주`;
+
+  // 목업 Weekly.dc.html — 탑바(주 이동 · 월~일 기준 · [주간보고 분석]) → 요약 띠(기간·인원·미달/초과)
+  // → 풀블리드 2단(좌 명단 280 · 우 상세). 섹션 제목은 없다(탑바 경로가 대신한다).
   return (
     <div className="section weekly">
-      <SectionHeader
-        icon={<Icon name="bar-chart" size={18} />}
-        title="주간보고"
-        sub="FE챕터 개인별 주간 일정을 분석해 팀원별 T/OT·MM 을 보여줍니다."
+      <TopbarSlot
+        left={
+          <div className="weekly__weeknav">
+            <Button
+              size="xs"
+              onClick={() => setWeekOffset((v) => Math.max(v - 1, -MAX_OFFSET))}
+              disabled={loading || weekOffset <= -MAX_OFFSET}
+              aria-label="이전 주"
+              icon
+            >
+              <Icon name="chevron-left" size={14} />
+            </Button>
+            <span className="weekly__weeklabel">
+              {weekName}{' '}
+              <span className="weekly__weekrange">({weekRangeLabel(weekOffset, monWeek)})</span>
+            </span>
+            <Button
+              size="xs"
+              onClick={() => setWeekOffset((v) => Math.min(v + 1, MAX_OFFSET))}
+              disabled={loading || weekOffset >= MAX_OFFSET}
+              aria-label="다음 주"
+              icon
+            >
+              <Icon name="chevron-right" size={14} />
+            </Button>
+            {weekOffset !== 0 && (
+              <Button size="xs" onClick={() => setWeekOffset(0)} disabled={loading}>
+                이번주
+              </Button>
+            )}
+          </div>
+        }
+        right={
+          <div className="weekly__actions">
+            <Checkbox
+              className="weekly__monweek"
+              title="월요일~일요일 기준으로 계산합니다. 페이지가 일~토 단위라 두 주를 수집하므로 시간이 조금 더 걸려요."
+              checked={monWeek}
+              onChange={(e) => toggleMonWeek(e.target.checked)}
+              disabled={loading}
+              label="월~일 기준"
+            />
+            <Button variant="primary" onClick={run} loading={loading}>
+              주간보고 분석
+            </Button>
+          </div>
+        }
       />
 
       {credsReady === false && (
-        <Banner>
-          비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
-          먼저 저장하세요.
-        </Banner>
+        <div className="weekly__notice">
+          <Banner>
+            비즈박스 계정 정보가 없습니다. <b>환경설정</b> 탭에서 아이디/비밀번호를
+            먼저 저장하세요.
+          </Banner>
+        </div>
       )}
 
-      {/* 주 선택 + 실행 */}
-      <div className="weekly__toolbar">
-        <div className="weekly__weeknav">
-          <Button
-            size="sm"
-            onClick={() => setWeekOffset((v) => Math.max(v - 1, -MAX_OFFSET))}
-            disabled={loading || weekOffset <= -MAX_OFFSET}
-            aria-label="이전 주"
-          >
-            <Icon name="chevron-left" size={12} />
-          </Button>
-          <span className="weekly__weeklabel">
-            {weekOffset === 0
-              ? `이번주 (${weekRangeLabel(0, monWeek)})`
-              : weekOffset === -1
-                ? `지난주 (${weekRangeLabel(-1, monWeek)})`
-                : `${weekOffset > 0 ? '+' : ''}${weekOffset}주 (${weekRangeLabel(weekOffset, monWeek)})`}
-          </span>
-          <Button
-            size="sm"
-            onClick={() => setWeekOffset((v) => Math.min(v + 1, MAX_OFFSET))}
-            disabled={loading || weekOffset >= MAX_OFFSET}
-            aria-label="다음 주"
-          >
-            <Icon name="chevron-right" size={12} />
-          </Button>
-          {weekOffset !== 0 && (
-            <Button size="sm" onClick={() => setWeekOffset(0)} disabled={loading}>
-              이번주
-            </Button>
-          )}
+      {error && (
+        <div className="weekly__notice">
+          <Banner variant="danger">{error}</Banner>
         </div>
-        <div className="weekly__actions">
-          <Checkbox
-            className="weekly__monweek"
-            title="월요일~일요일 기준으로 계산합니다. 페이지가 일~토 단위라 두 주를 수집하므로 시간이 조금 더 걸려요."
-            checked={monWeek}
-            onChange={(e) => toggleMonWeek(e.target.checked)}
-            disabled={loading}
-            label="월~일 기준"
-          />
-          <Button variant="primary" onClick={run} loading={loading}>
-            주간보고 분석
-          </Button>
-        </div>
-      </div>
-
-      {error && <Banner variant="danger">{error}</Banner>}
+      )}
 
       {/* 로딩 */}
       {loading && (
-        <div className="weekly__loading">
+        <div className="weekly__state">
           <div className="spinner spinner--lg" />
           <p>{progressStep || '일정 데이터를 불러오는 중…'}</p>
         </div>
@@ -217,10 +229,13 @@ export function WeeklySection() {
       {/* 결과 */}
       {!loading && report && (
         <>
+          {/* 요약 띠 — 기간(모노) · 인원 · 기준시간 미달/초과 (목업 높이 44 · 바닥선) */}
           <div className="weekly__meta">
             {period && (
               <Badge variant="pill">
-                {period.start} ~ {period.end}
+                <span className="weekly__mono">
+                  {period.start} ~ {period.end}
+                </span>
               </Badge>
             )}
             <Badge variant="pill">{report.nameList.length}명</Badge>
@@ -232,10 +247,12 @@ export function WeeklySection() {
           </div>
 
           {report.nameList.length === 0 ? (
-            <EmptyState icon="bar-chart" message="표시할 사원 데이터가 없습니다." />
+            <div className="weekly__state">
+              <EmptyState icon="bar-chart" message="표시할 사원 데이터가 없습니다." />
+            </div>
           ) : (
             <div className="weekly__panes">
-              {/* 왼쪽: 팀 목록 (항상 보임, 스크롤 시 고정) */}
+              {/* 왼쪽: 팀 목록 280 (자기 스크롤) */}
               <aside className="weekly__roster">
                 {report.nameList.map((name) => (
                   <RosterRow
@@ -249,7 +266,7 @@ export function WeeklySection() {
                 ))}
               </aside>
 
-              {/* 오른쪽: 선택한 사원 상세 */}
+              {/* 오른쪽: 선택한 사원 상세 (자기 스크롤) */}
               <div className="weekly__detail-pane">
                 {selected && selectedName && (
                   <EmployeeDetail
@@ -269,11 +286,13 @@ export function WeeklySection() {
 
       {/* 최초 안내 */}
       {!loading && !report && !error && (
-        <EmptyState
-          icon="info"
-          message="[주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
+        <div className="weekly__state">
+          <EmptyState
+            icon="info"
+            message="[주간보고 분석]을 누르면 그룹웨어에서 해당 주의 일정을 수집해
             팀원별로 정리합니다. (백그라운드 브라우저 — 수십 초 걸릴 수 있어요)"
-        />
+          />
+        </div>
       )}
     </div>
   );

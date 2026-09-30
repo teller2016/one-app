@@ -7,6 +7,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: 'lg' | 'md' | 'sm' | 'xs';
   /** 로딩 중 — 스피너 표시 + 자동 disabled */
   loading?: boolean;
+  /** 아이콘만 있는 정사각 버튼 (목업 .btn-icon — 폭 = 높이) */
+  icon?: boolean;
 };
 
 /**
@@ -17,6 +19,7 @@ export function Button({
   variant = 'ghost',
   size = 'md',
   loading = false,
+  icon = false,
   className,
   type,
   disabled,
@@ -32,6 +35,7 @@ export function Button({
         : size === 'lg'
           ? ' btn--lg'
           : '') +
+    (icon ? ' btn--icon' : '') +
     (className ? ` ${className}` : '');
   return (
     <button

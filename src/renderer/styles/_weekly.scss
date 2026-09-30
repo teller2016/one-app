@@ -1,29 +1,36 @@
-// 주간보고 섹션 — 좌우 2단(팀 목록 + 상세) 와이드 레이아웃 (fe-schedule-extension 이식)
+// 주간보고 섹션 — Signal 목업(Weekly.dc.html, 2026-09-30)을 그대로 옮긴 배치.
+// 탑바 슬롯(주 이동 · 월~일 기준 · [주간보고 분석]) → 요약 띠(44) → 풀블리드 2단(좌 명단 280 · 우 상세).
+// 룩은 공용 클래스·토큰, 여기는 배치와 목업 수치.
 @use './base' as *;
 
+// 섹션 루트 — 풀블리드 + 높이 체인(명단·상세가 각자 스크롤). .section 의 여백·폭 제한을 푼다
 .weekly {
-  max-width: var(--w-wide); // 좌우 2단(팀 목록 + 상세)을 위해 기본 .section 폭을 확장
+  max-width: none;
+  height: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 
-  &__toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-
+  // ── 탑바 슬롯 ──
+  // 주 이동 — [‹] "지난주 (날짜 범위)" [›] [이번주] (목업: 라벨 13/500 · 범위 모노 12 보조 잉크)
   &__weeknav {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
   }
 
   &__weeklabel {
-    min-width: 170px; // 주 라벨 고정폭 — 주 이동 시 좌우 버튼이 흔들리지 않도록 (DESIGN.md 5장)
-    text-align: center;
-    @include type-body;
-    font-weight: 600;
+    padding: 0 8px;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  &__weekrange {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text-2);
   }
 
   &__actions {
@@ -32,98 +39,99 @@
     gap: 12px;
   }
 
-  // 월~일 기준 토글 (settings__check 와 동일 무드, 툴바용)
-  // 룩은 공용 Checkbox — 툴바에선 라벨 톤만 낮춘다
+  // 월~일 기준 — 라벨만 보조 잉크 12.5 (체크 자체는 공용 Checkbox)
   &__monweek {
     color: var(--text-2);
+    font-size: var(--fs-ui);
   }
 
-  &__meta {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 14px;
-    // 기간·인원수는 공용 Badge(pill), 기준시간 미달·초과는 Badge(fail)
-  }
+  // 배너 — 요약 띠 위, 본문과 같은 좌우 여백
+  &__notice {
+    flex-shrink: 0;
+    padding: 12px 20px 0;
 
-  &__loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    padding: 64px 20px;
-    color: var(--text-2);
-    @include type-body;
-
-    p {
+    .banner {
       margin: 0;
     }
   }
 
-  // 좌우 2단 — 왼쪽 팀 목록 + 오른쪽 상세
-  &__panes {
+  // 요약 띠 — 높이 44 · padding 0 20 · gap 8 · 바닥선 (기간 모노 · 인원 · 미달/초과)
+  &__meta {
+    flex-shrink: 0;
     display: flex;
-    align-items: flex-start;
-    gap: 18px;
+    align-items: center;
+    gap: 8px;
+    height: var(--pane-head-h);
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  &__mono {
+    font-family: var(--font-mono);
+  }
+
+  // 로딩 · 빈 상태 · 최초 안내 — 남는 높이 가운데
+  &__state {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: var(--text-2);
+    font-size: var(--fs-ui);
+
+    p {
+      margin: 0;
+    }
+
+    .empty-state {
+      width: 100%;
+      max-width: 560px;
+    }
+  }
+
+  // 풀블리드 2단 — 명단 280(패널 면 · 오른쪽 경계선) + 상세(그라운드). 둘 다 자기 스크롤
+  &__panes {
+    flex: 1;
+    min-height: 0;
+    display: flex;
   }
 
   &__roster {
-    width: 264px;
-    min-width: 240px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    // 상세를 스크롤해도 팀 목록은 화면에 고정 (인원 많으면 목록만 스크롤) — 보존 필수
-    position: sticky;
-    top: 6px;
-    max-height: calc(100vh - 168px);
+    width: 280px;
+    flex-shrink: 0;
     overflow-y: auto;
+    background: var(--surface-1);
+    border-right: 1px solid var(--border);
   }
 
   &__detail-pane {
     flex: 1;
-    min-width: 0;
-  }
-
-  // 브레이크포인트 980px — 좁은 창에서 2단을 위아래로 쌓고, 목록은 가로로 흐르게 (DESIGN.md 5장)
-  @media (max-width: 980px) {
-    &__panes {
-      flex-direction: column;
-    }
-
-    &__roster {
-      width: auto;
-      max-width: none;
-      position: static;
-      max-height: none;
-      flex-direction: row;
-      flex-wrap: wrap;
-    }
-
-    &__roster .weekly-roster-row {
-      width: 200px;
-    }
+    min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록 — 보존 필수
+    overflow-y: auto;
+    background: var(--bg);
   }
 }
 
-// T 합계 표시 (상세 헤더) — 38시간 미달/초과 시 경고색
+// T 합계 표시 (상세 머리) — 모노 22/500, 38시간이면 성공색 · 미달/초과면 주의색 (목업)
 .weekly-hours {
-  @include type-body;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--fs-metric);
+  font-weight: 500;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 
-  &__big {
-    @include type-metric;
-  }
-
   &__den {
-    color: var(--text-2);
-    font-weight: 600;
-    font-size: var(--fs-body);
+    font-size: var(--fs-emph);
+    color: var(--text-3);
   }
 
   &--warn {
-    color: var(--danger);
+    color: var(--warning);
   }
 
   &--good {
@@ -131,253 +139,368 @@
   }
 }
 
-// 팀 목록 사원 한 줄 (좌측 목록) — 시간·진행바 색으로만 상태 구분 (좌측 보더 없음)
+// 명단 한 줄 — 66px · padding 0 16 · gap 6 · 바닥선. 선택 = 액센트 틴트 + 좌측 2px 바 (목업 row-item.sel)
 .weekly-roster-row {
-  @include card-interactive;
-  @include focus-ring;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
-  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 66px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+  @include focus-ring(-2px);
+
+  &:hover {
+    background: var(--bg-sunken);
+  }
 
   &.is-selected {
-    border-color: var(--accent);
     background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   &__line {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
 
   &__name {
-    @include type-emph;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__hours {
-    font-size: var(--fs-title);
-    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
     font-variant-numeric: tabular-nums;
+    color: var(--text);
 
     i {
       font-style: normal;
-      font-size: var(--fs-small);
-      font-weight: 600;
-      color: var(--text-2);
+      color: var(--text-3);
     }
   }
 
   &--warn &__hours {
-    color: var(--danger);
+    color: var(--warning);
   }
 
-  &--good &__hours {
-    color: var(--ok);
+  // T 진행바 — 높이 4 · 트랙 --surface-3 · 채움 ok(38시간)·warning(미달/초과)
+  &__bar {
+    display: block;
+    height: 4px;
+    border-radius: var(--r-full);
+    background: var(--surface-3);
+    overflow: hidden;
   }
 
-  // T 진행바 (38시간 기준) — 트랙은 공용 .progress, 채움 색만 tone 별로
-  &--warn &__bar .progress__fill {
-    background: var(--danger);
-  }
-
-  &--good &__bar .progress__fill {
+  &__fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--r-full);
     background: var(--ok);
+    transition: width var(--dur-3) var(--ease);
   }
 
-  &__meta {
+  &--warn &__fill {
+    background: var(--warning);
+  }
+
+  // MM 줄 — 모노 11 흐린 잉크, 숫자만 보조 잉크 500
+  &__mm {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+
+    b {
+      color: var(--text-2);
+      font-weight: 500;
+    }
+  }
+}
+
+// 상세 — padding 18 22 · gap 14 (목업)
+.weekly-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록 — 보존 필수
+
+  // 머리 — 이름 h1 20/600 · 시간 · (오른쪽) 전체 MM 13 보조 잉크, 숫자 모노 600
+  &__head {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    @include type-small;
-    color: var(--text-2);
+    align-items: flex-end;
+    gap: 16px;
+  }
+
+  &__name {
+    margin: 0;
+    @include type-h2;
+    line-height: 1;
   }
 
   &__mm {
     margin-left: auto;
-
-    b {
-      color: var(--text);
-      font-weight: 700;
-    }
-  }
-}
-
-// 프로젝트 칩 목록 — 칩 자체는 공용 .chip(버튼), 아래는 칩 내부 표기만
-.weekly-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.weekly-chip__nm {
-  font-weight: 600;
-}
-
-.weekly-chip__seg {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.weekly-chip__lbl {
-  @include type-caption;
-
-  &--ot {
-    color: var(--ot);
-  }
-}
-
-.weekly-chip__sep {
-  color: var(--text-2);
-  opacity: 0.6;
-}
-
-.weekly-chip__hr {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.weekly-chip__mm {
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-}
-
-// 하단 상세 (선택한 사원 1명)
-.weekly-detail {
-  @include card-surface;
-  border-top: 3px solid var(--accent);
-  padding: 20px;
-  min-width: 0; // 내부 차트가 폭을 밀어내 가로 오버플로가 나지 않도록 — 보존 필수
-
-  &__head {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 4px;
-
-    h3 {
-      margin: 0;
-      @include type-h2;
-    }
-  }
-
-  &__mm {
-    @include type-body;
+    font-size: var(--fs-body);
     color: var(--text-2);
-    margin-bottom: 14px;
 
     b {
+      font-family: var(--font-mono);
+      font-weight: 600;
       color: var(--text);
-      font-weight: 700;
     }
   }
 
-  .weekly-chips {
-    margin-bottom: 16px;
-  }
-
+  // 차트 2분할 1.5 : 1 · gap 14
   &__duo {
     display: grid;
     // minmax(0, …) 로 트랙이 canvas 최소폭 아래로도 줄어들게 (안 하면 가로 오버플로) — 보존 필수
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
     gap: 14px;
-    margin-bottom: 14px;
 
-    // 브레이크포인트 1100px — 차트 2열 → 1열 (DESIGN.md 5장)
+    // 좁은 창 — 차트 2열 → 1열
     @media (max-width: 1100px) {
       grid-template-columns: minmax(0, 1fr);
     }
   }
 }
 
-// 상세 내부 패널 (차트·상세 일정) — 카드(r-lg) 안 중첩 표면이라 한 단계 작은 r-md
+// MM 칩 목록 — 칩 자체는 공용 .chip(포함 = 면 + 선 · 제외 = 점선·흐림·취소선)
+.weekly-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weekly-chip {
+  gap: 7px;
+
+  &__nm {
+    font-weight: 500;
+  }
+
+  // "T 22h (0.13)" — 모노 11.5, 라벨·MM 은 흐린 잉크
+  &__seg {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
+    font-variant-numeric: tabular-nums;
+
+    &--ot {
+      color: var(--warning);
+    }
+  }
+
+  &__dim {
+    color: var(--text-3);
+  }
+
+  &__seg--ot &__dim {
+    color: inherit;
+    opacity: 0.7;
+  }
+}
+
+// 차트 패널 — 패널 면 · 1px 선 · 모서리 10 · padding 14 16 · gap 10 (목업 .panel)
 .weekly-panel {
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   min-width: 0; // 내부 canvas 가 패널 폭을 밀어내지 않도록 — 보존 필수
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
   overflow: hidden;
 
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  // 패널 라벨 — 목업 .label(모노 대문자)인데 한글이라 본문 서체 11/600 흐린 잉크 (한글 모노 금지)
   &__title {
-    @include type-caption;
-    margin-bottom: 14px;
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    color: var(--text-3);
   }
 
-  canvas {
-    max-width: 100%;
-    max-height: 200px; // 차트 높이 제한 — 보존 필수 (제거 시 세로로 무한 성장)
+  // 막대 범례 — T(보조 잉크 견본) · OT(같은 견본 45%) — 11px 흐린 잉크
+  &__keys {
+    display: flex;
+    gap: 10px;
+    margin-left: auto;
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+  }
+
+  &__key {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    i {
+      width: 10px;
+      height: 10px;
+      border-radius: var(--r-xs);
+      background: var(--text-2);
+    }
+
+    &--ot i {
+      opacity: 0.45;
+    }
+  }
+
+  // 막대 영역 188 (목업) — 캔버스는 이 칸을 채운다. ⚠️ 높이 고정 필수(없으면 세로로 무한 성장)
+  &__bar {
+    position: relative;
+    height: 188px;
+
+    canvas {
+      max-width: 100%;
+    }
+  }
+
+  // 도넛 + 범례 — 지름 150 · 범례와 gap 18
+  &__round {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+  }
+
+  &__donut {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    flex-shrink: 0;
   }
 }
 
-// 상세 일정
-.weekly-srow {
-  margin-bottom: 18px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-// 프로젝트 태그 — 색은 chartTheme.getColor 인라인(팔레트 인덱스 기반)
-.weekly-ptag {
-  display: inline-block;
+// 도넛 범례 — 10px 견본(모서리 2) + 이름 12 · 줄 gap 6
+.weekly-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: var(--fs-small);
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: var(--r-sm); // 칩 계열은 --r-sm (DESIGN.md 3장)
-  margin-bottom: 8px;
+  color: var(--text);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  i {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    border-radius: var(--r-xs);
+  }
 }
 
-.weekly-sblock {
+// 상세 일정 — 패널(머리 42 + 바닥선) 안 3열 그리드 · padding 12 14 · gap 12
+.weekly-sched {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
-  background: var(--overlay-faint);
-  border-radius: var(--r-sm); // 패널(r-md) 안 중첩 — 한 단계 작게
-  padding: 12px 16px;
-  margin-bottom: 10px;
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  overflow: hidden;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    height: var(--panel-head-h);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 12px;
+    padding: 12px 14px;
+
+    @media (max-width: 1100px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}
+
+// 프로젝트 한 열 — 태그 → 블록들 · gap 8
+.weekly-srow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+// 프로젝트 태그 — 12/600 · padding 2 8 · 모서리 5. 색은 chartTheme 인라인(글자 O쌍 · 면 T쌍 16%)
+.weekly-ptag {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+// T / OT 블록 — 1px 선 · 모서리 8 · padding 8 10 · gap 6 · 가라앉은 면
+.weekly-sblock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-tab);
+  background: var(--bg-sunken);
 
   &__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
   }
 }
 
-.weekly-stype {
-  font-size: var(--fs-title);
-  font-weight: 700;
-
-  &--t {
-    color: var(--text);
-  }
-
-  &--ot {
-    color: var(--ot);
-  }
-}
-
+// 일정 줄 — 12 보조 잉크 · 한 줄 말줄임(전문은 title)
 .weekly-slist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin: 0;
-  padding-left: 2px;
+  padding: 0;
   list-style: none;
 
   li {
-    @include type-body;
-    color: var(--text);
-    padding: 5px 0 5px 16px;
-    position: relative;
-
-    &::before {
-      content: '-';
-      position: absolute;
-      left: 2px;
-      color: var(--text-2);
-    }
+    font-size: var(--fs-small);
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

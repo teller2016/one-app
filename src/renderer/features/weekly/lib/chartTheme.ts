@@ -66,6 +66,20 @@ export type ChartTheme = {
   centerSubFont: string;
   /** 스택/도넛 세그먼트 사이 1px 경계 — 색각 보정 (DESIGN.md 1장) */
   segmentBorder: { borderColor: string; borderWidth: number };
+  /** 고정폭 폰트 패밀리 — 축 눈금 숫자 (목업: 모노 10) */
+  monoFamily: string;
+  /** 축 선 색 (--border) — 목업은 격자 없이 왼쪽 축·바닥선만 */
+  axisColor: string;
+  /** 색에 투명도를 입힌다 — OT 막대는 같은 프로젝트 색의 50% (목업) */
+  withAlpha: (color: string, alpha: number) => string;
+};
+
+/** '#rrggbb' → 'rgba(r,g,b,a)' (그 밖의 형식은 그대로 돌려준다 — 캔버스가 해석) */
+const withAlpha = (color: string, alpha: number): string => {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color.trim());
+  if (!m) return color;
+  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
 /** 토큰 하나 읽기 — 빈 값이면 폴백 상수 사용 (.trim() 필수) */
@@ -102,21 +116,26 @@ export function readChartTheme(): ChartTheme {
   const monoFamily = readVar(styles, '--font-mono');
   const text = readVar(styles, '--text');
   const text2 = readVar(styles, '--text-2');
+  const text3 = readVar(styles, '--text-3');
 
   return {
     getColor,
-    tickColor: text2,
+    // 목업: 눈금·요일 글자는 흐린 잉크(--text-3)
+    tickColor: text3 || text2,
     gridColor: readVar(styles, '--border'),
     legendColor: text2,
     captionSize,
     fontFamily,
     centerTextColor: text,
     centerTextFont: `500 ${metricSize}px ${monoFamily}`,
-    centerSubColor: text2,
+    centerSubColor: text3 || text2,
     centerSubFont: `400 ${captionSize}px ${fontFamily}`,
     segmentBorder: {
       borderColor: readVar(styles, '--surface-1'),
       borderWidth: 1,
     },
+    monoFamily,
+    axisColor: readVar(styles, '--border'),
+    withAlpha,
   };
 }

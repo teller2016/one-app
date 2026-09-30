@@ -14,6 +14,8 @@ export function ProjectChips({
   excluded: Set<string>;
   onToggle: (project: string) => void;
 }) {
+  // 목업 MM 칩 — 이름 500 + "T 22h (0.13)"(모노 11.5, 라벨·MM 흐리게) + OT 가 있으면 주의색 "· OT 3h (0.02)".
+  // 포함/제외 모양은 공용 .chip(--excluded = 점선·흐림·취소선)
   return (
     <div className="weekly-chips">
       {summaryData.map((it) => {
@@ -23,8 +25,9 @@ export function ProjectChips({
           <button
             type="button"
             key={it.name}
-            className={'chip' + (isExcluded ? ' chip--excluded' : '')}
+            className={'chip weekly-chip' + (isExcluded ? ' chip--excluded' : '')}
             title={isExcluded ? 'MM 제외됨 (클릭하여 포함)' : 'MM 포함됨 (클릭하여 제외)'}
+            aria-pressed={!isExcluded}
             onClick={(e) => {
               e.stopPropagation();
               onToggle(it.name);
@@ -33,17 +36,14 @@ export function ProjectChips({
             <span className="weekly-chip__nm">{it.name}</span>
             {hasT && (
               <span className="weekly-chip__seg">
-                <span className="weekly-chip__lbl">T</span>
-                <span className="weekly-chip__hr">{it.T}</span>
-                <span className="weekly-chip__mm">({it.TMM})</span>
+                <span className="weekly-chip__dim">T</span> {it.T}h{' '}
+                <span className="weekly-chip__dim">({it.TMM})</span>
               </span>
             )}
-            {hasT && it.OT > 0 && <span className="weekly-chip__sep">·</span>}
             {it.OT > 0 && (
               <span className="weekly-chip__seg weekly-chip__seg--ot">
-                <span className="weekly-chip__lbl weekly-chip__lbl--ot">OT</span>
-                <span className="weekly-chip__hr">{it.OT}</span>
-                <span className="weekly-chip__mm">({it.OTMM})</span>
+                <span className="weekly-chip__dim">{hasT ? '· OT' : 'OT'}</span> {it.OT}h{' '}
+                <span className="weekly-chip__dim">({it.OTMM})</span>
               </span>
             )}
           </button>
