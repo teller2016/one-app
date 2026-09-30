@@ -95,6 +95,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `standalone-lite.md` | `standalone/**` | 단독 배포판 — `@one` alias·preload 부분집합·아이콘·pkill 패턴 |
 | `renderer-ui.md` | `src/renderer/**` · `src/mobile-app/**` (ts·tsx) | 공용 컴포넌트 목록·피커 팝오버·공통 훅 |
 | `styles.md` | `**/*.scss` · `DESIGN.md` | SCSS 작성법·공통 클래스·셸(상태바)·폰 스타일 |
+| `signal-style.md` | `**/*.scss` · `DESIGN.md` | **스타일 사전** — 목업→토큰 변환표·글자 역할·표면/페이지 패턴 값 (스타일 잡을 때 기준) |
 | `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |
 | `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
 | `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
