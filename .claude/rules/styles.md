@@ -54,6 +54,9 @@ paths:
 `.app` 은 2행 그리드(위 `사이드바 | 콘텐츠`, 아래 전체 폭 `.statusbar` — `--statusbar-h`). 사이드바·상태바는 **불투명 `--surface-1`**, 콘텐츠는 `--bg`. 창의 `vibrancy: 'sidebar'` 는 로드 전 배경으로만 남는다 — **BrowserWindow 에 backgroundColor 지정 금지**(그 재질이 로드 전 배경이다). 탑바는 창 전체 폭 fixed 프로스트 바라 높이(44px) 변경 시 `.main` padding-top 을 동기화해야 한다.
 - ⚠️ 상태바 팝오버(`.statusbar__pop`)에 `display` 를 주지 말 것 — 닫힘이 `hidden` 속성이라 UA 의 `[hidden]{display:none}` 에 기대고 있다.
 
+## 목업 토큰 대응 (리디자인 목업 .dc.html → `_base.scss`)
+bg-0=`--bg` · bg-1=`--surface-1` · bg-2=`--bg-sunken` · bg-3=`--surface-2` · bg-4=`--surface-3` · line=`--border` · line-2=`--border-strong`. ⚠️ 라이트 `--bg-sunken` 은 목업 bg-2(`#f7f8fa`)다 — 한때 `#e4e7eb`(bg-4)로 잘못 잡혀 `--border` 와 같아서 테두리 있는 패널의 선이 사라졌다(2026-09-30 /test, PR 커밋 패널).
+
 ## 다크 테마
 다크 토큰은 `_base.scss` 의 `:root[data-theme='dark']` 블록. main 은 창 생성 시 `theme`+`nativeTheme` 으로 backgroundColor 를 선택한다.
 

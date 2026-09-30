@@ -256,10 +256,36 @@ export function CreatePrModal({
   };
 
   return (
-    <Modal wide title={`새 PR — ${repoName}`} onClose={onClose}>
-      {/* 원본 → 대상 한 줄. 두 셀렉트 모두 팝오버에서 바로 검색된다 (저장소는 탭에서 확정) */}
+    <Modal
+      width={740}
+      title={`새 PR — ${repoName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={creating}>
+            취소
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void create()}
+            loading={creating}
+            disabled={
+              !title.trim() ||
+              !head ||
+              commits === null ||
+              commits.length === 0 ||
+              !confirmOk
+            }
+          >
+            PR 생성
+          </Button>
+        </>
+      }
+    >
+      {/* 원본 → 대상 한 줄. 두 셀렉트 모두 팝오버에서 바로 검색된다 (저장소는 탭에서 확정).
+          목업: 라벨을 위에 둔 두 칸 + 가운데 화살표 */}
       <div className="prs__route">
-        <FormRow label="원본">
+        <FormRow column label="원본">
           <Select
             searchable
             limit={OPTION_LIMIT}
@@ -275,7 +301,7 @@ export function CreatePrModal({
         <span className="prs__route-arrow" aria-hidden="true">
           <Icon name="arrow-right" size={14} />
         </span>
-        <FormRow label="대상">
+        <FormRow column label="대상">
           <Select
             searchable
             limit={OPTION_LIMIT}
@@ -364,7 +390,7 @@ export function CreatePrModal({
         </>
       )}
 
-      <FormRow label="제목">
+      <FormRow column label="제목">
         <Input
           type="text"
           value={title}
@@ -377,7 +403,6 @@ export function CreatePrModal({
       </FormRow>
       <FormRow column label="본문">
         <Textarea
-          code
           className="prs__create-body"
           value={body}
           onChange={(e) => {
@@ -389,26 +414,6 @@ export function CreatePrModal({
       </FormRow>
 
       {createError && <Banner variant="danger">{createError}</Banner>}
-
-      <div className="form-actions">
-        <Button
-          variant="primary"
-          onClick={() => void create()}
-          loading={creating}
-          disabled={
-            !title.trim() ||
-            !head ||
-            commits === null ||
-            commits.length === 0 ||
-            !confirmOk
-          }
-        >
-          PR 생성
-        </Button>
-        <Button onClick={onClose} disabled={creating}>
-          취소
-        </Button>
-      </div>
     </Modal>
   );
 }

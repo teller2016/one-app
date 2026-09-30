@@ -12,7 +12,7 @@ colors:            # 라이트 / 다크
   bg:              ["#f4f5f7", "#0b0c0e"]   # 그라운드
   surface-1:       ["#ffffff", "#111316"]   # 패널·카드·입력·사이드바
   surface-2:       ["#eef0f3", "#1e2227"]   # hover·팝오버·토스트
-  bg-sunken:       ["#e4e7eb", "#171a1e"]   # 세그 트랙
+  bg-sunken:       ["#f7f8fa", "#171a1e"]   # 세그 트랙
   surface-dark:    ["#111316", "#08090b"]   # 로그·코드·터미널 면
   border:          ["#e3e6ea", "#23272d"]
   border-strong:   ["#d5d9df", "#2f353c"]
@@ -81,7 +81,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 | 그라운드 | `--bg` | `#f4f5f7` | `#0b0c0e` | 메인 영역 바탕 |
 | 패널 | `--surface-1` | `#ffffff` | `#111316` | 카드·입력·사이드바·상세 패널 |
 | 떠 있는 면 | `--surface-2` | `#eef0f3` | `#1e2227` | hover·팝오버·토스트 |
-| 웰 | `--bg-sunken` | `#e4e7eb` | `#171a1e` | 세그 트랙 |
+| 웰 | `--bg-sunken` | `#f7f8fa` | `#171a1e` | 세그 트랙 |
 | 코드 면 | `--surface-dark` | `#111316` | `#08090b` | 로그·코드·커밋·터미널 (`panel-dark` 스코프) |
 | 헤어라인 | `--border` / `--border-strong` | `#e3e6ea` / `#d5d9df` | `#23272d` / `#2f353c` | 윤곽 / hover·입력 보더 |
 | 잉크 | `--text` / `-2` / `-3` | `#15171a` / `#4a515b` / `#69717c` | `#e8eaed` / `#aeb4bc` / `#858c96` | 본문 / 보조 / 메타 |

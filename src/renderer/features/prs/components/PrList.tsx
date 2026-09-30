@@ -71,7 +71,7 @@ export function PrList({
                       : `${pr.base} 로 들어가는 PR`
                   }
                 >
-                  <Icon name="arrow-right" size={12} />
+                  <Icon name="arrow-right" size={11} />
                   {pr.base}
                 </span>
               )}

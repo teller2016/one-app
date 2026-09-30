@@ -7,14 +7,12 @@ import type {
 } from '../../../../shared/types';
 import { ownerRepoFromUrl } from '../../../../shared/types';
 import { issueKeysIn } from '../../../../shared/jira-url';
-import { SectionHeader } from '../../../components/SectionHeader';
+import { TopbarSlot } from '../../../components/TopbarSlot';
 import { Icon } from '../../../components/Icon';
 import { Banner } from '../../../components/Banner';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { Button } from '../../../components/Button';
-import { Input } from '../../../components/Input';
 import { Segment } from '../../../components/Segment';
-import { TextLink } from '../../../components/TextLink';
 import { useToast } from '../../../components/Toast';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
@@ -292,53 +290,53 @@ export function PrSection() {
 
   return (
     <div className="section prs">
-      <div className="prs__head">
-        <SectionHeader
-          icon={<Icon name="git-pull-request" size={18} />}
-          title="PR"
-          sub="열린 PR 을 한 화면에서 확인하고, 만들고, 바로 머지합니다."
-        />
-        <div className="prs__toolbar">
-          <Input
-            small
-            className="prs__search"
-            type="text"
-            placeholder="제목·브랜치 검색"
-            aria-label="PR 검색"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {hasToken && (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!currentRegistry}
-              onClick={() => setCreateOpen(true)}
-            >
-              <Icon name="plus" size={12} /> 새 PR
-            </Button>
-          )}
-          <RefreshButton
-            bordered
-            size={14}
-            spinning={loading}
-            // 수동 새로고침은 main 의 목록 캐시를 우회한다
-            onClick={() => void load(true)}
-            disabled={loading}
-            title="PR 목록 새로고침"
-          />
-        </div>
-      </div>
+      {/* 탑바 오른쪽 — 검색 · [새 PR] · 새로고침 (목업: 섹션 제목 없이 탑바에서 바로 조작) */}
+      <TopbarSlot
+        right={
+          <>
+            <label className="prs__search">
+              <Icon name="search" size={14} />
+              <input
+                type="text"
+                placeholder="제목·브랜치 검색"
+                aria-label="PR 검색"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            {hasToken && (
+              <Button
+                variant="primary"
+                disabled={!currentRegistry}
+                onClick={() => setCreateOpen(true)}
+              >
+                <Icon name="plus" size={14} /> 새 PR
+              </Button>
+            )}
+            <RefreshButton
+              size={14}
+              spinning={loading}
+              // 수동 새로고침은 main 의 목록 캐시를 우회한다
+              onClick={() => void load(true)}
+              disabled={loading}
+              title="PR 목록 새로고침"
+            />
+          </>
+        }
+      />
 
       {result && !result.configured ? (
-        <Banner variant="info">
-          <b>환경설정 → 연동</b>에 Gitea 주소를 입력하면 PR 기능이 활성화됩니다.
-        </Banner>
+        <div className="prs__notice">
+          <Banner variant="info">
+            <b>환경설정 → 연동</b>에 Gitea 주소를 입력하면 PR 기능이 활성화됩니다.
+          </Banner>
+        </div>
       ) : (
         <>
-          {/* 저장소 탭 (최상단) — 여기서 고른 저장소로 아래 전부가 스코프된다 (전체 보기 없음) */}
+          {/* 필터 줄 — 저장소 탭(여기서 고른 저장소로 아래 전부가 스코프 — 전체 보기 없음) ·
+              Gitea PR 페이지 · 조직 칩(목록·알림에서 제외/포함). 목업: 한 줄 + 바닥선 */}
           {repoTabs.length > 0 && (
-            <div className="prs__tabs">
+            <div className="prs__bar">
               <Segment
                 options={repoTabs.map((r) => {
                   const count = orgFiltered.filter((pr) => pr.repo === r).length;
@@ -352,10 +350,9 @@ export function PrSection() {
               />
               {/* 현재 저장소의 Gitea PR 경로 — 웹에서 올리거나 훑을 때 */}
               {giteaUrl && effectiveTab && (
-                <TextLink
-                  small
-                  external
-                  className="prs__tabs-link"
+                <button
+                  type="button"
+                  className="prs__gitea"
                   title={`${effectiveTab}/pulls 를 브라우저에서 열기`}
                   onClick={() =>
                     void window.oneApp.openExternal(
@@ -364,71 +361,83 @@ export function PrSection() {
                   }
                 >
                   Gitea PR 페이지
-                </TextLink>
+                  <Icon name="arrow-up-right" size={11} />
+                </button>
+              )}
+              {orgs.length > 1 && (
+                <>
+                  <span className="prs__bar-sep" aria-hidden="true" />
+                  {orgs.map((org) => {
+                    const isExcluded = excluded.has(org);
+                    const count = prs.filter((pr) => orgOf(pr) === org).length;
+                    return (
+                      <button
+                        type="button"
+                        key={org}
+                        className={
+                          'prs__org' + (isExcluded ? ' prs__org--excluded' : '')
+                        }
+                        title={
+                          isExcluded
+                            ? '제외됨 — 클릭하면 목록·알림에 포함'
+                            : '포함됨 — 클릭하면 목록·알림에서 제외'
+                        }
+                        aria-pressed={!isExcluded}
+                        onClick={() => toggleOrg(org)}
+                      >
+                        {org}
+                        <span className="prs__org-count">{count}</span>
+                      </button>
+                    );
+                  })}
+                </>
               )}
             </div>
           )}
 
-          {!hasToken && (
-            <Banner>
-              PR <b>생성·머지</b>에는 Gitea 토큰이 필요합니다 —{' '}
-              <b>환경설정 → 연동</b>에 토큰을 저장하세요. (목록 조회는 지금도
-              가능)
-            </Banner>
-          )}
-
-          {/* 조직(프로젝트) 필터 칩 — 클릭으로 목록·알림에서 제외/포함 */}
-          {orgs.length > 1 && (
-            <div className="prs__filters">
-              {orgs.map((org) => {
-                const isExcluded = excluded.has(org);
-                const count = prs.filter((pr) => orgOf(pr) === org).length;
-                return (
-                  <button
-                    type="button"
-                    key={org}
-                    className={'chip' + (isExcluded ? ' chip--excluded' : '')}
-                    title={
-                      isExcluded
-                        ? '제외됨 — 클릭하면 목록·알림에 포함'
-                        : '포함됨 — 클릭하면 목록·알림에서 제외'
-                    }
-                    onClick={() => toggleOrg(org)}
-                  >
-                    {org}
-                    <span className="prs__chip-count">{count}</span>
-                  </button>
-                );
-              })}
+          {(!hasToken || (result && !result.ok)) && (
+            <div className="prs__notice">
+              {!hasToken && (
+                <Banner>
+                  PR <b>생성·머지</b>에는 Gitea 토큰이 필요합니다 —{' '}
+                  <b>환경설정 → 연동</b>에 토큰을 저장하세요. (목록 조회는 지금도
+                  가능)
+                </Banner>
+              )}
+              {result && !result.ok && (
+                <Banner variant="danger">
+                  {result.error ?? 'PR 조회에 실패했습니다.'}
+                </Banner>
+              )}
             </div>
           )}
 
-          {result && !result.ok ? (
-            <Banner variant="danger">
-              {result.error ?? 'PR 조회에 실패했습니다.'}
-            </Banner>
-          ) : loading && prs.length === 0 ? (
-            <p className="hint">불러오는 중...</p>
+          {result && !result.ok ? null : loading && prs.length === 0 ? (
+            <p className="hint prs__loading">불러오는 중...</p>
           ) : repoTabs.length === 0 ? (
-            <EmptyState
-              icon="git-pull-request"
-              message="저장소가 없습니다."
-              hint="프로젝트 탭에서 Gitea 원격이 있는 프로젝트를 등록하면 저장소 탭이 생깁니다."
-            />
+            <div className="prs__notice">
+              <EmptyState
+                icon="git-pull-request"
+                message="저장소가 없습니다."
+                hint="프로젝트 탭에서 Gitea 원격이 있는 프로젝트를 등록하면 저장소 탭이 생깁니다."
+              />
+            </div>
           ) : visible.length === 0 && !selected ? (
-            <EmptyState
-              icon="check"
-              message={
-                q
-                  ? '검색에 해당하는 열린 PR 이 없습니다.'
-                  : `${repoTabLabel(effectiveTab)} 에 열린 PR 이 없습니다.`
-              }
-              hint={
-                currentRegistry
-                  ? '오른쪽 위 [새 PR]로 push 한 브랜치의 PR 을 만들 수 있어요.'
-                  : '이 저장소는 프로젝트 레지스트리에 없어 여기서 PR 을 만들 수 없습니다.'
-              }
-            />
+            <div className="prs__notice">
+              <EmptyState
+                icon="check"
+                message={
+                  q
+                    ? '검색에 해당하는 열린 PR 이 없습니다.'
+                    : `${repoTabLabel(effectiveTab)} 에 열린 PR 이 없습니다.`
+                }
+                hint={
+                  currentRegistry
+                    ? '오른쪽 위 [새 PR]로 push 한 브랜치의 PR 을 만들 수 있어요.'
+                    : '이 저장소는 프로젝트 레지스트리에 없어 여기서 PR 을 만들 수 없습니다.'
+                }
+              />
+            </div>
           ) : (
             <div className="prs__body">
               <PrList
@@ -448,11 +457,13 @@ export function PrSection() {
                   onMerged={onMerged}
                 />
               ) : (
-                <EmptyState
-                  icon="git-pull-request"
-                  message="PR 을 선택하세요"
-                  hint="왼쪽 목록에서 고르면 커밋·변경 파일·충돌 여부와 머지 버튼이 여기 표시됩니다."
-                />
+                <div className="prs__detail prs__detail--empty">
+                  <EmptyState
+                    icon="git-pull-request"
+                    message="PR 을 선택하세요"
+                    hint="왼쪽 목록에서 고르면 커밋·변경 파일·충돌 여부와 머지 버튼이 여기 표시됩니다."
+                  />
+                </div>
               )}
             </div>
           )}

@@ -13,7 +13,6 @@ import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Segment } from '../../../components/Segment';
-import { TextLink } from '../../../components/TextLink';
 import { IssueChip } from '../../../components/IssueChip';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
@@ -154,13 +153,14 @@ export function PrDetail({
           <IssueChip key={k} issueKey={k} jiraUrl={jiraUrl} />
         ))}
         {pr.url && (
-          <TextLink
-            small
-            external
+          <button
+            type="button"
+            className="prs__link"
             onClick={() => void window.oneApp.openExternal(pr.url)}
           >
             브라우저에서 열기
-          </TextLink>
+            <Icon name="arrow-up-right" size={11} />
+          </button>
         )}
       </div>
 
@@ -173,7 +173,7 @@ export function PrDetail({
             {head && (
               <>
                 <span className="prs__branch-head">{head}</span>
-                <Icon className="prs__branch-arrow" name="arrow-right" size={13} />
+                <Icon className="prs__branch-arrow" name="arrow-right" size={12} />
               </>
             )}
             <span className="prs__branch-base">{base}</span>
@@ -182,7 +182,7 @@ export function PrDetail({
         {pr.approvals != null && pr.approvals > 0 ? (
           <Badge variant="ok">승인 {pr.approvals}</Badge>
         ) : (
-          <Badge variant="idle">리뷰 대기</Badge>
+          <Badge variant="pill">리뷰 대기</Badge>
         )}
         {mergeable === true ? (
           <Badge variant="ok">충돌 없음</Badge>
@@ -238,7 +238,7 @@ export function PrDetail({
                         : undefined
                   }
                 >
-                  {c.message.split('\n')[0]}
+                  <span className="prs__commit-msg">{c.message.split('\n')[0]}</span>
                   {c.alreadyIn && <Badge variant="pill">{c.alreadyIn} 포함</Badge>}
                 </li>
               ))}

@@ -48,7 +48,7 @@
   --bg: #f4f5f7; // 메인 영역 그라운드 (.content — 창은 비브런시라 BrowserWindow 배경색 없음)
   --surface-1: #ffffff; // 패널·카드·입력 (흰 면 + 헤어라인)
   --surface-2: #eef0f3; // hover 표면·팝오버·토스트
-  --bg-sunken: #e4e7eb; // 세그먼트 트랙 등 가라앉은 웰
+  --bg-sunken: #f7f8fa; // 가라앉은 웰(세그 트랙·코드 패널 틀) — 목업 bg-2. ⚠️ #e4e7eb 로 두면 --border 와 같아져 테두리가 사라진다
   --surface-3: #e4e7eb; // 기본 버튼 hover — surface-2 보다 한 단 더
   --seg-on: #ffffff; // 세그먼트 선택 칩 (트랙 위로 떠오르는 면)
   --scrim: rgba(20, 22, 26, 0.38); // 모달 뒤 딤
