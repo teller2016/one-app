@@ -20,6 +20,7 @@ import {
   ContextMenuSeparator,
 } from '../../../components/ContextMenu';
 import { Icon } from '../../../components/Icon';
+import { StatusDot } from '../../../components/StatusDot';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
 import {
@@ -55,7 +56,7 @@ const ARC_RATIO = 0.22;
  *    기하가 안 맞아 아크가 타일을 관통하거나 코너가 밖으로 튄다(styles/_terminal.scss 참고).
  */
 function BusyArc({ size }: { size: number }) {
-  // size = 감쌀 내용물보다 조금 큰 지름 (이니셜 타일 24px → 26, 아이콘만 있는 타일 → 24)
+  // size = 감쌀 내용물보다 조금 큰 지름 (축소 이니셜 타일 26px → 28, 아이콘만 있는 타일 → 24)
   const inset = 1; // stroke 절반이 잘리지 않게 안쪽으로
   const side = size - inset * 2;
   // 라운드 사각 둘레 = 직선 네 변 + 코너 원 하나
@@ -355,11 +356,11 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     className={`terminal__ws-tile terminal__ws-tile--c${tileColor(ws)}`}
                     aria-hidden="true"
                   >
-                    {initials(ws.name)}
+                    {initials(ws.name, 2)}
                   </span>
                   {/* 자식 워크트리에서 에이전트가 돌고 있으면 타일 둘레를 아크가 돈다 —
                       숫자 뱃지·이니셜을 가리지 않고 폭도 먹지 않는다 (펼침 모드는 스피너) */}
-                  {busy && <BusyArc size={26} />}
+                  {busy && <BusyArc size={28} />}
                   {/* 자식 워크트리에 켜진 세션 합계 — 부모만 보여도 사용 중임을 알 수 있게 */}
                   {wsCount > 0 && (
                     <span
@@ -536,7 +537,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                         aria-label="작업 중"
                       />
                     )}
-                    {/* 자식 워크트리에 켜진 세션 합계 — 입력 대기가 있으면 초록 */}
+                    {/* 자식 워크트리에 켜진 세션 합계 — 입력 대기가 있으면 주황 */}
                     {wsCount > 0 && (
                       <span
                         className={
@@ -647,7 +648,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                           onSelect({ kind: 'worktree', wsId: ws.id, path: wt.path })
                         }
                       >
-                        <Icon name={worktreeIcon(wt)} size={14} />
+                        <Icon name={worktreeIcon(wt)} size={13} />
                         <span className="terminal__wt-body">
                           <span className="terminal__wt-name">
                             {worktreeName(wt)}
@@ -663,6 +664,12 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             role="img"
                             aria-label="작업 중"
                           />
+                        )}
+                        {/* 입력 대기 — 주황 점 (목업). 세션 수 옆 숫자만으론 눈에 안 띈다 */}
+                        {waiting && (
+                          <span className="terminal__wt-wait" role="img" aria-label="입력 대기">
+                            <StatusDot status="wait" />
+                          </span>
                         )}
                       </button>
                       {!wt.isMain && (
@@ -704,7 +711,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
               title="워크스페이스 밖(홈 등)에서 시작된 세션"
               onClick={() => onSelect({ kind: 'other' })}
             >
-              <Icon name="terminal" size={14} />
+              <Icon name="terminal" size={13} />
               <span className="terminal__wt-body">
                 <span className="terminal__wt-name">기타 세션 ({otherCount})</span>
               </span>

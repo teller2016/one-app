@@ -55,7 +55,10 @@ export function Tooltip({
       onPointerLeave={hide}
       // 클릭하면 볼 일이 끝났으므로 닫는다 (누른 자리에 계속 떠 있으면 방해된다)
       onPointerDown={hide}
-      onFocusCapture={() => {
+      onFocusCapture={(e) => {
+        // 키보드 포커스(:focus-visible)일 때만 연다 — 코드가 돌려준 포커스(모달·전체 화면을 닫고
+        // 연 자리로 복귀)에도 열면 마우스를 올리지 않았는데 툴팁이 떠서 남는다(2026-09-30 /test)
+        if (!(e.target instanceof Element) || !e.target.matches(':focus-visible')) return;
         clear();
         setOpen(true); // 키보드 이동은 즉시 — 지연이 있으면 탭 순회 중 설명을 놓친다
       }}

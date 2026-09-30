@@ -12,13 +12,14 @@ paths:
 "AI 에 작업 시키고 → 변경 확인 → 커밋 → 푸시" 루프의 **확인·커밋·푸시** 담당. 커밋은 메시지 입력 + `add -A` 일괄(2026-08 Superset 스타일 개편에서 UI 추가).
 
 ## 진입점 셋
-- **터미널 우측 드로어**: 툴바 git-branch 토글, localStorage `terminal:changesOpen`, 활성 세션 cwd 대상 — 좌측 grip 드래그로 너비 조절 240~640px, localStorage `terminal:changesWidth`.
-- **전체 화면 오버레이**(`ChangesOverlay`): 드로어 헤더 **⤢ 버튼** 또는 **파일 행 더블클릭** — 좌측 패널(커밋 작성·파일 리스트·커밋 목록) + 우측 **사이드-바이-사이드 diff**(`SplitDiff`, unified→행 페어 파싱은 `lib/diff.ts`). body portal + fixed(z 90), Escape 닫기. 데스크톱 전용.
+- **터미널 우측 드로어**: 툴바 git-branch 토글, localStorage `terminal:changesOpen`, 활성 세션 cwd 대상 — 좌측 grip 드래그로 너비 조절 240~640px(기본 380), localStorage `terminal:changesWidth`. 드로어 diff 는 줄 번호·부호 열(`UnifiedDiff numbered`) + 파일 머리(diff --git·index·---·+++ 줄은 숨김) — 폰 '변경' 탭은 폭이 좁아 원문 그대로.
+- **전체 화면 오버레이**(`ChangesOverlay`): 드로어 헤더 **⤢ 버튼** 또는 **파일 행 더블클릭** — 좌측 패널(커밋 작성·파일 리스트·커밋 목록) + 우측 **사이드-바이-사이드 diff**(`SplitDiff`, unified→행 페어 파싱은 `lib/diff.ts`). body portal + fixed(z 90), Escape 닫기. 데스크톱 전용. **딤(`--scrim`) 위 사방 32px 안쪽 카드**(`.changes-full` = 딤, `__card` = surface-1·`--r-xl`) — 딤 클릭 닫기는 pointerdown `preventDefault`(뒤따르는 mousedown 이 body 로 가 포커스를 뺏지 않게), 딤·카드 모두 `-webkit-app-region: no-drag`, 카드가 신호등 아래라 머리에 `--titlebar-safe` 예약 패딩 없음(2026-09-30).
   - ⚠️ 진입 버튼은 **테두리 + 15px 글리프**로 띄운다 — 13px 아이콘 버튼으로 다른 아이콘 무리에 섞어 뒀더니 사용자가 기능이 있는 줄도 몰랐다(2026-08-07). 더블클릭 경로를 함께 둔 이유도 같다.
   - ⚠️ 오버레이 루트에 **`-webkit-app-region: no-drag` 필수** — 밑에 깔린 사이드바·탑바가 `drag` 라 이게 없으면 창 끌기가 헤더 클릭(닫기·푸시)을 통째로 삼킨다(2026-08-07 실측). 헤더 좌측 패딩은 `--titlebar-safe`(신호등 자리).
   - 좌측 패널 폭·좌우 diff 비율은 **grip 드래그**(터미널 패널과 같은 규칙: 히트 11px·선 2px·포인터 캡처·놓는 순간 localStorage 1회). 비율 손잡이를 한 지점에 놓으려고 `SplitDiff` 를 **2열 grid**(각 열 = 번호+본문)로 짰다 — 번호를 별도 열로 빼면 경계가 두 군데로 갈라진다.
+- ⚠️ 푸시 툴팁은 개수가 있을 때만 "커밋 N개 푸시", upstream 이 없어 개수가 없으면 "원격으로 푸시"("커밋 개 푸시" 로 빠지던 것 — 2026-09-30).
 - ⚠️ **툴바의 푸시는 `primary` 필로 두지 말 것** — 섹션 툴바 중 유일한 채운 블루라 혼자 떠 보였다(2026-08-07 사용자 지적). ghost 톤 + 아이콘으로 두고 **올릴 커밋이 있을 때만**(`--ready`) 액센트 글자·테두리로 신호한다.
-  - 좌측 파일 목록은 **평면 리스트**(`FileTree`)다 — 폴더 트리로 만들었더니 자식이 하나뿐인 폴더가 계단처럼 쌓여(`.claude > rules > features`) 폭만 먹었다(2026-08-07 사용자 요청으로 되돌림). 파일명을 앞세우고 디렉터리는 뒤에 흐리게(`direction: rtl` 로 앞쪽 말줄임).
+  - 좌측 파일 목록은 **폴더 트리**(`FileTree` — 2026-09-30 목업: 깊이마다 14px, 종류 글자는 행 오른쪽 끝, 삭제 파일은 취소선). ⚠️ **자식이 폴더 하나뿐인 폴더는 한 줄로 합친다**(`src/features/cart`) — 합치지 않았을 때 계단처럼 쌓여 폭만 먹는다는 이유로 평면 목록으로 되돌렸던 적이 있다(2026-08-07).
 - **MO '변경' 탭**: `mobile-app/views/MoChangesView` — 프로젝트 레지스트리 선택 + 같은 `ChangesView` 재사용.
 
 ## 상태 로직은 `lib/useChanges.ts` 훅 (드로어·오버레이 공유)
@@ -67,3 +68,5 @@ IPC 6채널 전부 `handleShared`(MO 화이트리스트) — ⚠️ **클라이�
 2. **내용이 같으면 이전 상태 객체를 유지한다** — IPC 응답은 매번 새 객체라 그대로 set 하면 5초마다 diff 전체가 재렌더된다. `useChanges` 가 status/log 는 JSON 키, diff 는 필드 비교로 같으면 이전 객체를 반환 → `SplitDiff`/`UnifiedDiff` 의 `memo` 가 실제로 먹는다.
 3. **청크 렌더** — 512KB diff 를 통째로 그리면 수만 DOM 노드. SplitDiff 800행·UnifiedDiff 1200줄씩 '더 보기'로 끊고, **key=파일 경로**로 파일 전환 시 상한을 리셋한다(같은 파일 갱신은 유지).
 4. **오버레이가 떠 있는 동안 드로어 폴링 중지** — `ChangesView` 의 `polling` prop(← `useChanges` `enabled`). 같은 대상을 둘이 동시에 git 조회할 이유가 없다.
+
+- ⚠️ 전체 화면 카드는 **열 때 카드로 포커스를 옮기고 닫으면 연 자리로 돌려준다**, 그리고 터미널 포커스 안전망(`usePaneOrchestration` 의 portal 예외 선택자)에 **`.changes-full` 이 들어 있어야 한다** — 빠지면 여는 클릭 다음 프레임에 xterm 이 포커스를 되찾아 Esc 가 셸로 들어간다(2026-09-30 /test).

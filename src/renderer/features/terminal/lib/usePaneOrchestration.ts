@@ -118,8 +118,10 @@ export function usePaneOrchestration({
       // ⚠️ rAF 로 미룬다 — 클릭이 만드는 포커스 이동(버튼 기본 포커스, 방금 열린 모달의
       // autoFocus)이 이 핸들러보다 **뒤에** 확정된다. 즉시 부르면 그것들을 빼앗는다.
       requestAnimationFrame(() => {
-        // portal 이 떠 있으면 포커스 주인은 그쪽이다
-        if (document.querySelector('.modal-overlay, .picker__pop')) return;
+        // portal 이 떠 있으면 포커스 주인은 그쪽이다 — 변경사항 전체 화면(.changes-full)도 portal 이다.
+        // ⚠️ 빠뜨리면 여는 클릭 다음 프레임에 포커스를 xterm 으로 되찾아 와, Esc 가 오버레이에
+        //    닿지 않고 셸로 들어간다(2026-09-30 /test)
+        if (document.querySelector('.modal-overlay, .picker__pop, .changes-full')) return;
         // ⚠️ 텍스트를 드래그 선택한 직후면 손대지 않는다 — 변경사항 diff 를 선택해
         // ⌘C 하려는 순간 포커스를 옮기면 선택이 날아간다.
         if (window.getSelection()?.toString()) return;

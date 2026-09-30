@@ -33,13 +33,21 @@ export function sameSelection(
 
 /**
  * 이름 이니셜 — 워크스페이스 타일·축소 패널 타일 공용.
- * Superset 타일과 같은 첫 글자 1자 + 대문자 (2026-08-06 사용자 요청).
+ * 기본은 첫 글자 1자 + 대문자(펼친 트리 — Superset 동일, 2026-08-06 사용자 요청).
+ * `max: 2` 는 축소 패널 타일(2026-09-30 리디자인 목업 — ST·AD·OA): 영문은 단어(-·_·공백·.)가
+ * 둘 이상이면 앞 두 단어의 첫 글자, 아니면 앞 두 글자. 한글 등 영문이 아닌 첫 글자는 1자 유지
+ * (한글 두 글자는 26px 타일에 들어가지 않는다).
  * Array.from — 서로게이트 쌍(이모지 등)이 반 글자로 잘리지 않게.
  */
-export function initials(title: string): string {
+export function initials(title: string, max: 1 | 2 = 1): string {
   const t = title.trim();
   if (!t) return '?';
-  return (Array.from(t)[0] ?? '?').toUpperCase();
+  const first = Array.from(t)[0] ?? '?';
+  if (max === 1 || !/[A-Za-z0-9]/.test(first)) return first.toUpperCase();
+  const words = t.split(/[-_\s.]+/).filter(Boolean);
+  const two =
+    words.length >= 2 ? `${words[0][0]}${words[1][0]}` : Array.from(t).slice(0, 2).join('');
+  return two.toUpperCase();
 }
 
 /** 워크스페이스 타일 색 — 이름 해시로 차트 팔레트(--chart-1t~10t) 중 하나를 고정 배정 */

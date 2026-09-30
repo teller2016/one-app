@@ -76,7 +76,7 @@ const PENDING_ACTIVATE_TTL_MS = 3000;
 // 변경사항 드로어 너비 — 좌측 모서리 드래그로 조절, localStorage 기억
 const CHANGES_MIN_W = 240;
 const CHANGES_MAX_W = 640;
-const CHANGES_DEFAULT_W = 320;
+const CHANGES_DEFAULT_W = 380; // 목업 기본 폭 (2026-09-30)
 
 // 워크스페이스 패널 너비 — 우측 모서리 드래그로 조절하고 SNAP 아래로 끌면 아이콘 타일만 남는다.
 // (앱 사이드바 Sidebar.tsx 와 같은 규칙 — 저장은 놓는 순간 1회)
@@ -1194,6 +1194,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
                   <Icon name="search" size={14} />
                 </button>
               </Tooltip>
+              <span className="terminal__bar-sep" aria-hidden="true" />
               <Tooltip label="글자 작게">
                 <button
                   type="button"

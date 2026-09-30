@@ -87,7 +87,7 @@ paths:
 - visible(다중)=크기 주장·fit·refresh, focused(단일)=`term.focus()`·⌘F. ⚠️ visible effect 에서 `focus()` 금지.
 - 영속 `terminal:layout`(selKey → 트리 배열). ⚠️ sanitize 는 **`sessionsReady` 이후만**. ratio 는 `findSplit`(splitId). focused 가 죽으면 ⚠️ **`rememberActive` 먼저**.
 - ⚠️ 경계·포커스를 inset box-shadow 로 그리지 말 것 — `split-grip::after`·`--focused::after`.
-- 탭바 = '가라앉은 선반 + 장 탭'(⑧안). ⚠️ 반려안(연결형·세그먼트+장식·칩+박스) 금지. ⌘1..9 는 `tabView.tabs` 순.
+- 탭바 = 2026-09-30 목업으로 교체(사용자 지시 "디자인과 동일하게"): 선반 = 패널 면 + 바닥선, 비활성 탭 = 배경·테두리 없음, **활성 탭 = 터미널 면색 장이 바닥선을 덮어 아래 pane 과 이어진다**, 상태점은 제목 앞·× 는 모든 탭에 늘. ⚠️ 활성 탭에 `margin-bottom: -1px` 금지 — 리스트가 `overflow-x: auto` 라 잘린다(리스트 padding-bottom 0 으로 탭이 부모의 inset 바닥선을 덮는다). 분할 그룹은 한 장(tab-pack) 안 멤버 세그먼트 유지. ⌘1..9 는 `tabView.tabs` 순.
 - 상세: 노트 '분할(스플릿) 그룹 — 탭 드래그로 여러 pane 동시 표시'.
 
 ## memo 계약 (pane·탭바·LNB)
@@ -124,10 +124,13 @@ paths:
 ## 세션 패널 (좌측)
 - **일반 폴더도 워크스페이스** — `parseWorktrees`(workspaces/git.ts)가 `plain: true` 합성, 표시는 `worktreeRef`/`worktreeLabel`(shared/types.ts)·`worktreeIcon`. 저장 안 하고 조회마다 판정. ⚠️ `.git` 이 있는데 실패하면 throw.
 - ⚠️ 선택 보정 effect 는 폴백 = 현재 선택이면 set 안 함(무한 루프).
+- 변경사항 드로어의 머리 띠는 `.terminal__changes::before`(left -8px ~ right, 높이 `--pane-head-h`, 탭바와 같은 선반+바닥선)로 탭바 선을 창 끝까지 잇고, `::after` 가 xterm 과의 세로 경계다 — aside 의 margin/padding 규칙은 그대로, `.changes__head` 높이만 `--pane-head-h - 8px`.
 - 리사이즈·`SIDE_SNAP_W`(140) 축소(패널 48·타일 34)·grip 토글은 **`Sidebar.tsx` 와 같은 규칙**. 저장은 놓을 때 1회 `Math.round`. ⚠️ 접힌 채 끝나면 펼침 폭을 드래그 시작 값으로.
-- 축소 타일 = 이니셜(CJK 1자), ⚠️ 닫기(×) 없음(`⌘⇧W`). ⚠️ `side-grip` 실폭 0(`margin: 0 -5px`), ⚠️ 드로어 `margin-left: 8px`·`padding: 8px 8px 0 0` 유지.
+- 축소 타일 = 이니셜 2자(`initials(name, 2)` — 영문 ST·OA, CJK 는 1자), ⚠️ 닫기(×) 없음(`⌘⇧W`). ⚠️ `side-grip` 실폭 0(`margin: 0 -5px`). 드로어는 2026-09-30 사용자 지시로 목업 구조(패널 면 + border-left, 바깥 여백 없음)로 변경 — grip 은 경계선 위 실폭 0(`left: -6px`, `::after` 가 경계와 같은 x). 드로어 안쪽 모양은 `_changes.scss` 의 `.terminal__changes .changes` 스코프에만(폰 '변경' 탭과 공유 컴포넌트).
+- **상태 색(2026-09-30)**: 작업 중 = **초록**(`--ok` — 탭 점 `StatusDot run` 펄스·LNB 스피너·축소 아크) · 입력 대기 = **주황**(`--warning` — 탭 점 `StatusDot wait` 펄스 없음·세션 수 뱃지·브랜치 라벨). 예전 '대기=초록(준비됨)'으로 되돌리지 말 것 — 사이드바 뱃지·토스트의 주의색과 맞춘 것이다. MO 페이지(`src/mobile`)는 아직 옛 색.
 - 작업중 표시 = `spinner spinner--xs` / 축소 `BusyArc`(`terminal__sq-arc`). ⚠️ **`busy` 가 아니라 `working`** 을 볼 것(셸 제외). ⚠️ 아크를 원형 링·conic-gradient 로 바꾸지 말 것.
 - 세션 목록은 탭바(`SessionTabs`). 이름 변경 = **우클릭 [이름 변경]** → `Input bare`(`terminal:rename`), `select()`. ⚠️ `bare` 가 `min-height` 하한을 지워야 탭이 안 부푼다.
+- 패널 머리줄 `__side-head` 는 탭바와 같은 `--pane-head-h` 높이로 바닥선을 잇는다(패널 패딩 0 — 여백은 머리줄 0 12 0 16·목록 8 이 각자). LNB·축소 타일·뱃지 수치는 목업(Terminal·TerminalCollapsed 보드) 그대로 — 채운 색 타일(인디고 7번만 흰 글자 `--on-strong`), 세션 수 뱃지는 주황 채움 + 패널 면 2px 링(2026-09-30 목업이 08-20 'soft·링 금지' 결정을 대체).
 - 상세: 노트 '세션 패널 (좌측)'·'세션 패널은 드래그 리사이즈 + 완전 축소'.
 
 ## xterm 구성

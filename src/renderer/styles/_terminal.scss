@@ -29,7 +29,7 @@
   &__side {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0; // 머리줄과 목록이 붙는다 (목업)
     width: 240px;
     flex-shrink: 0;
     min-height: 0;
@@ -39,9 +39,10 @@
     transition: width var(--dur-3) var(--ease);
     // xterm 이 gap 없이 붙어 있으므로 경계는 선이 맡는다 (grip hover 선이 이 위를 덮는다)
     border-right: 1px solid var(--border);
-    // 섹션 패딩이 없어(풀블리드) 패널이 자기 여백을 갖는다 — 우측 6 은
-    // 행 hover 배경이 경계선에 닿지 않게 (2026-08-06 사용자 지적)
-    padding: 8px 6px 8px 10px;
+    // 패딩 0 — 여백은 머리줄(0 12 0 16)과 목록(__list: 8)이 각자 갖는다 (목업 2026-09-30)
+    padding: 0;
+    // Signal: 앱 사이드바와 같은 패널 면 — 그라운드(--bg) 위 xterm 다크 패널과 단을 나눈다
+    background: var(--surface-1);
   }
 
   // 축소 — 이니셜 타일만 남는다. 헤더 액션은 감추지 않고 세로로 쌓는다
@@ -55,6 +56,14 @@
 
     .terminal__side-head {
       justify-content: center;
+      padding-inline: 0;
+      align-self: stretch;
+    }
+
+    // 축소 목록 — 위아래 10, 타일 사이 8 (TerminalCollapsed 목업)
+    .terminal__list {
+      padding: 10px 0;
+      gap: 8px;
     }
 
     .terminal__side-actions {
@@ -94,10 +103,11 @@
       transition: background var(--dur-1) var(--ease);
     }
 
+    // 앱 사이드바 grip 과 같은 액센트 선 — --border 는 패널 경계선과 같은 색이라 hover 가 안 보였다
     &:hover::after,
     &:active::after,
     &:focus-visible::after {
-      background: var(--border);
+      background: var(--accent);
     }
 
     &:focus-visible {
@@ -105,15 +115,23 @@
     }
   }
 
+  // 머리줄 — 탭바(__tabs)와 같은 높이로 줄을 맞추고, 패널 폭 전체에 바닥 선을 긋는다 (목업: 0 12 0 16)
   &__side-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    flex-shrink: 0;
+    height: var(--pane-head-h);
+    padding: 0 12px 0 16px;
+    border-bottom: 1px solid var(--border);
   }
 
+  // 패널 라벨 — 목업 .label (캡션·600·자간 — 한글이라 uppercase 는 무의미하지만 자간은 같게)
   &__side-title {
-    @include type-small;
+    font-size: var(--fs-caption);
+    font-weight: 500;
+    letter-spacing: 0.06em;
     color: var(--text-3);
   }
 
@@ -128,7 +146,9 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    // 목업 — 목록 여백 8, 워크스페이스 그룹 사이 10 (구분선 없이 간격만)
+    padding: 8px;
+    gap: 10px;
     // 넘치면 휠·트랙패드로 스크롤하되 **바는 감춘다**(세션 탭바·에이전트 칩과 같은 규칙,
     // 2026-08-08 사용자 요청) — 좁은 LNB 에서 10px 회색 바가 트리 옆에 끼어들면
     // 워크트리 행의 ±변경량과 겹쳐 보인다. 축소 모드(타일)도 같은 클래스를 쓴다.
@@ -152,8 +172,8 @@
   &__ws-group {
     display: flex;
     flex-direction: column;
-    // ⚠️ gap 은 0 — 행↔워크트리 목록 사이 2px 은 __wt-list-inner 의 padding-top 이 갖는다.
-    // gap 으로 두면 목록이 접혀(높이 0) 있어도 그 2px 이 남아 행 아래가 붕 뜬다.
+    // ⚠️ gap 은 0 — 행↔워크트리 목록 사이 간격은 __wt-list-inner 첫 행 margin 이 갖는다.
+    // gap 으로 두면 목록이 접혀(높이 0) 있어도 그 간격이 남아 행 아래가 붕 뜬다.
     gap: 0;
 
     // 워크스페이스 그룹 사이 구분선 (Superset 동일).
@@ -163,11 +183,7 @@
     //    선이 아래 그룹에 치우쳐 보였다(2026-08-10 사용자 지적). gap 4 + margin 2 = padding 6 대칭.
     //    (위 그룹이 펼쳐져 있으면 끝이 흐린 브랜치 글자라 행간만큼 위가 살짝 더 떠 보이는 건
     //    글자의 속성이라 감수 — 접힌 그룹 기준(타일↔타일)으로 정확히 대칭을 맞춘다)
-    & + & {
-      border-top: 1px solid var(--border);
-      margin-top: 2px;
-      padding-top: 6px;
-    }
+    // Signal: 그룹 사이는 선이 아니라 간격(__list gap 10)으로 나눈다(목업) — 구분선은 '기타 세션' 앞에만.
 
     // 드롭 표시 — 그룹 전체가 드롭 존이라 선도 그룹 위/아래에 그린다
     &--drop-before {
@@ -217,23 +233,23 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px; // 목업 — 행 사이 1px
 
     // 행과의 간격 — ⚠️ inner 의 padding-top 으로 주면 안 된다: grid 0fr 로 접혀도
     // 패딩은 트랙 min-content 계산에서 짜부라지지 않아 **그룹 바닥에 유령 여백으로 남는다**
     // (2026-08-10 실측: 축소 모드 3px — 구분선 위 9px vs 아래 5px 비대칭의 주범이었다).
     // 첫 행의 margin 은 콘텐츠라 overflow:hidden 에 함께 클립되어 접히면 0 이 된다.
     > :first-child {
-      margin-top: 2px;
+      margin-top: 1px;
     }
 
-    // 축소 모드 — 타일이라 간격이 조금 넓고 가운데 정렬
+    // 축소 모드 — 워크트리 타일 사이 4, 부모 타일과 2 (TerminalCollapsed 목업)
     .terminal__wt-list--sq & {
       align-items: center;
-      gap: 3px;
+      gap: 4px;
 
       > :first-child {
-        margin-top: 3px;
+        margin-top: 2px;
       }
     }
   }
@@ -247,15 +263,18 @@
     }
   }
 
+  // 워크스페이스 행 — 목업 32px · padding 0 4 0 8 · radius 6 · gap 8
   &__ws-row {
     display: flex;
     align-items: center;
+    height: 32px;
     padding-right: 4px;
     border-radius: var(--r-md);
     transition: background var(--dur-1) var(--ease);
 
+    // 패널 면(surface-1) 위 hover = 한 단 위 면 (앱 사이드바 항목과 같은 문법)
     &:hover {
-      background: var(--overlay-hover);
+      background: var(--surface-2);
     }
 
     // 드래그 순서 변경 — 끌리는 행은 흐리게 (놓일 자리 표시는 그룹의 --drop-*)
@@ -315,7 +334,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 4px 6px 6px;
+    height: 100%;
+    padding: 0 4px 0 8px;
     @include type-small;
     color: var(--text);
   }
@@ -326,7 +346,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 4px 6px 6px;
+    height: 100%;
+    padding: 0 4px 0 8px;
     border: 0;
     background: none;
     color: inherit;
@@ -334,7 +355,10 @@
     cursor: pointer;
   }
 
-  // 색 이니셜 타일 — 사용자가 고른 색(우클릭 메뉴) 또는 이름 해시 자동 배정 (tileColor)
+  // 색 이니셜 타일 — 사용자가 고른 색(우클릭 메뉴) 또는 이름 해시 자동 배정 (tileColor).
+  // Signal: 팔레트 색으로 **채운** 타일 + 어두운 이니셜(목업). 글자는 코드 면 잉크(--surface-dark —
+  // 두 테마 모두 거의 검정)라 차트 T색(중간~밝은 톤) 위에서 읽힌다.
+  // 크기 24 는 축소 타일(__ws-sq) 기준 — BusyArc 둘레가 이 크기에 맞춰져 있다. 펼친 행은 아래에서 20.
   &__ws-tile {
     width: 24px;
     height: 24px;
@@ -343,24 +367,39 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--r-sm);
+    // 목업 — 모노 600 (1~2자라 한글 폴백 벌어짐 문제 없음)
+    font-family: var(--font-mono);
     font-size: var(--fs-caption);
     font-weight: 600;
     line-height: 1;
-    text-transform: uppercase; // 첫 글자 대문자 1자 (Superset 동일)
-    border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-    background: color-mix(in srgb, currentColor 12%, transparent);
+    text-transform: uppercase; // 이니셜 대문자 (Superset 동일)
+    background: var(--tile-c, var(--chart-10t));
+    color: var(--tile-fg, var(--surface-dark));
   }
 
   @for $i from 1 through 10 {
     &__ws-tile--c#{$i} {
-      color: var(--chart-#{$i}t);
+      --tile-c: var(--chart-#{$i}t);
     }
+  }
+
+  // 인디고(7)만 어두운 글자 대비가 모자라다(라이트 3.3 · 다크 3.9) — 흰 글자(5.6 · 5.1)
+  &__ws-tile--c7 {
+    --tile-fg: var(--on-strong);
+  }
+
+  // 펼친 트리의 타일은 목업처럼 20px · radius 5 (이름 13px 와 줄 맞춤)
+  &__ws-hit &__ws-tile,
+  &__ws-edit &__ws-tile {
+    width: 20px;
+    height: 20px;
   }
 
   &__ws-name {
     flex: 1;
     min-width: 0;
-    @include type-small;
+    font-size: var(--fs-body);
+    font-weight: 600;
     color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -372,9 +411,9 @@
     color: var(--text-3);
     font-variant-numeric: tabular-nums;
 
-    // 자식 워크트리에 입력 대기 세션이 있으면 초록
+    // 자식 워크트리에 입력 대기 세션이 있으면 주황(주의)
     &--waiting {
-      color: var(--ok);
+      color: var(--warning);
       font-weight: 600;
     }
   }
@@ -389,21 +428,20 @@
   // 이름 span 안이 아니라 형제로 둔다 — 이름은 ellipsis 라 안에 넣으면 함께 잘린다.
   &__lnb-spin {
     flex-shrink: 0;
+    // 작업 중 = 초록 (탭 상태점·축소 아크와 같은 색 — 공용 스피너 기본은 액센트)
+    border-top-color: var(--ok);
   }
 
-  // 워크트리 행 — [아이콘][이름/브랜치][±변경량][제거]. 활성 행은 우측 터미널 패널과
-  // 이어진 것처럼 같은 니어블랙 타일로 채운다 (panel-dark 가 텍스트 토큰을 재매핑)
+  // 워크트리 행 — 목업 40px · padding 0 6 0 30 · radius 6 · gap 8.
+  // [아이콘 13][이름(+세션 수)/브랜치 두 줄][작업 중 스피너 · 입력 대기 점][제거 ×]
   &__wt-row {
     display: flex;
     align-items: center;
-    margin-left: 12px;
+    height: 40px;
     padding-right: 6px;
-    border: 1px solid transparent;
     border-radius: var(--r-md);
     color: var(--text-3); // 행 아이콘 톤 (currentColor)
-    transition:
-      background var(--dur-1) var(--ease),
-      border-color var(--dur-1) var(--ease);
+    transition: background var(--dur-1) var(--ease);
 
     .terminal__wt-remove {
       opacity: 0;
@@ -415,40 +453,32 @@
     }
 
     &:hover {
-      background: var(--overlay-hover);
+      background: var(--surface-2);
     }
 
-    // 활성 = accent-soft 틴트 + accent 아이콘(currentColor) — 지금 어느 워크트리를
-    // 보고 있는지가 트리에서 한눈에 잡힌다. 이름(--text)·브랜치(--text-3)는 자기 색을
-    // 갖고 있어 그대로고, 색이 바뀌는 것은 행 아이콘뿐이다.
-    // 2026-08-06 에는 중성 오버레이(overlay-track)로 정착했으나, 2026-08-20 리디자인
-    // 시안 검토에서 사용자가 accent 안을 채택했다(예전에 반려된 것은 채도 100% '블루 필').
+    // 활성 = 목업 .row-item.sel — accent-soft 틴트 + 좌측 2px 액센트 선.
+    // (행은 pane 경계가 아니라 목록 항목이라 inset 그림자로 그린다 — 스플릿 경계 금지 규칙과 무관)
     // :hover 동반 선언은 특정도 — 단독 &--active(0,1,0)는 :hover(0,2,0)에 진다.
     &--active,
     &--active:hover {
       background: var(--accent-soft);
-      border-color: transparent;
-      color: var(--accent);
+      box-shadow: inset 2px 0 0 var(--accent);
     }
 
-    // 폴더가 사라진 워크트리 (git prune 대상) — 선택 불가 표시
+    // 폴더가 사라진 워크트리 (git prune 대상) — 선택 불가 표시 (목업 .45)
     &--missing {
-      opacity: 0.55;
-    }
-
-    // 입력대기 세션이 있는 워크트리 — 브랜치 라벨을 초록으로
-    &--waiting .terminal__wt-branch {
-      color: var(--ok);
+      opacity: 0.45;
     }
   }
 
   &__wt-hit {
     flex: 1;
     min-width: 0;
+    height: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 4px 6px 8px;
+    padding: 0 0 0 30px; // 목업 — 워크스페이스 이름 아래로 들여쓴다
     border: 0;
     background: none;
     color: inherit;
@@ -460,6 +490,12 @@
     }
   }
 
+  // 입력 대기 점 (목업) — 스피너와 같은 자리
+  &__wt-wait {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
   &__wt-body {
     flex: 1;
     min-width: 0;
@@ -469,7 +505,8 @@
   }
 
   &__wt-name {
-    @include type-small;
+    font-size: var(--fs-ui);
+    line-height: 1.3;
     color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -480,8 +517,8 @@
   // 브랜치명 — 대소문자 구분 식별자라 type-caption(uppercase) 금지, 고정폭으로
   &__wt-branch {
     font-family: var(--font-mono);
-    font-size: var(--fs-caption);
-    line-height: 1.35;
+    font-size: var(--fs-micro);
+    line-height: 1.3;
     color: var(--text-3);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -500,7 +537,7 @@
     height: 22px;
     flex-shrink: 0;
     border: 0;
-    border-radius: var(--r-full);
+    border-radius: var(--r-sm); // 버튼은 각형 — 필은 카운트·점·바만 (DESIGN.md §3)
     background: none;
     color: var(--text-2);
     cursor: pointer;
@@ -510,20 +547,23 @@
       opacity var(--dur-1) var(--ease);
 
     &:hover {
-      background: var(--overlay-hover);
+      background: var(--surface-3);
       color: var(--text);
     }
   }
 
-  // '기타 세션' — 어느 워크트리에도 안 속한 세션 묶음 (홈 등). 그룹과 같은 구분선
+  // '기타 세션' — 어느 워크트리에도 안 속한 세션 묶음 (홈 등). 목업: divider + 28px 행
   &__other-wrap {
     border-top: 1px solid var(--border);
-    margin-top: 6px;
-    padding-top: 6px;
+    padding-top: 4px;
   }
 
   &__other-row {
-    margin-left: 0;
+    height: 28px;
+
+    .terminal__wt-hit {
+      padding-left: 8px;
+    }
   }
 
   // 축소 그룹 — [워크스페이스 타일][워크트리 아이콘 타일…] 세로 스택 + 구분선
@@ -545,14 +585,16 @@
       margin-top: 1px;
       padding-top: 6px;
 
+      // 목업 — 22px 짧은 선 (패널 48 가운데)
       &::before {
         content: '';
         position: absolute;
         top: 0;
-        left: 6px;
-        right: 6px;
+        left: 50%;
+        width: 22px;
+        translate: -50% 0;
         height: 1px;
-        background: var(--border);
+        background: var(--border-strong);
       }
     }
 
@@ -578,9 +620,9 @@
     flex-shrink: 0;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: var(--r-sm);
+    border-radius: var(--r-tile); // 목업 7px — 축소 레일 칸
     background: none;
-    color: var(--text-3);
+    color: var(--text-2);
     cursor: pointer;
     transition:
       background var(--dur-1) var(--ease),
@@ -588,8 +630,8 @@
       color var(--dur-1) var(--ease);
 
     &:hover {
-      background: var(--overlay-hover);
-      color: var(--text-2);
+      background: var(--surface-2);
+      color: var(--text);
     }
 
     &:disabled {
@@ -606,44 +648,44 @@
     }
   }
 
-  // 세션 수 뱃지 — 타일 우상단에 걸치는 필 (0 이면 렌더 안 함).
-  // 워크트리 타일과 부모 워크스페이스 타일이 공용으로 쓴다 (부모 = 자식 합계)
-  // ⚠️ **앱의 '축소된 사이드바 아이콘 우상단 카운트' 문법을 그대로 쓴다** —
-  //    정본은 `.sidebar__item-badge`(_layout.scss)와 `.mail-nav__count`(_mail.scss).
-  //    자리(우상단)·규격(--fs-caption 600 · min-width · r-full)·soft 배경이 그 규칙이고,
-  //    여기만 다르게 만들면 같은 화면 왼쪽의 앱 사이드바 뱃지와 따로 논다.
-  // ⚠️ 진한 색을 꽉 채우지 말 것 — `--text-3` 채움 + 배경색 글자로 만들었더니 DESIGN.md
-  //    의 뱃지 규칙(soft 배경 + 시맨틱 글자)에서 혼자 벗어나 무겁고 이질적이었다.
-  // ⚠️ **테두리·링을 두르지 말 것** — 배경색(--bg) 링으로 타일에서 떼어내 봤더니
-  //    초록 대기 뱃지 둘레에 회색 테두리가 도는 꼴이 됐다(2026-08-20 사용자 지적).
-  //    정본(.sidebar__item-badge)도 링 없이 배경 하나로 아이콘 위에 앉는다.
-  // ⚠️ 배경은 **불투명**이어야 한다 — soft 토큰(반투명)을 그대로 쓰면 뱃지의 절반은
-  //    컬러 이니셜 타일 위, 절반은 패널 위라 한 뱃지 안에서 색이 갈라진다.
-  //    그래서 대기색도 soft 토큰 대신 --surface-2 에 --ok 를 섞어 불투명하게 만든다.
+  // 세션 수 뱃지 — 타일 우상단에 걸치는 필 (0 이면 렌더 안 함). 목업(TerminalCollapsed) 그대로:
+  // 기본 = 한 단 밝은 면 + 보조 글자, 입력 대기 = **주황 채움 + 어두운 글자**, 패널 면 색 2px 링으로
+  // 타일에서 떼어 낸다. (2026-09-30 사용자 지시 "디자인과 동일하게" — 예전 'soft 배경·링 금지'
+  // 결정(2026-08-20)을 목업이 대체했다)
+  // 워크트리 타일과 부모 워크스페이스 타일이 공용 (부모 = 자식 합계, 위치·크기만 아래에서 조정)
   &__wt-sq-count {
     position: absolute;
-    top: -1px;
-    right: 1px;
-    min-width: 13px;
-    height: 13px;
+    top: -3px;
+    right: -4px;
+    min-width: 14px;
+    height: 14px;
     padding: 0 3px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: var(--r-full);
-    background: var(--surface-2);
-    font-size: var(--fs-caption);
+    background: var(--surface-3);
+    box-shadow: 0 0 0 2px var(--surface-1);
+    font-family: var(--font-mono);
+    font-size: var(--fs-nano);
     font-weight: 600;
     line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--text-2);
 
-    // 입력 대기 세션이 있으면 초록 — 예전의 대기 점을 숫자가 겸한다.
-    // soft 배경 + 시맨틱 글자 = `.badge--ok` 와 같은 조합 (단 불투명 — 위 주석)
     &--waiting {
-      background: color-mix(in srgb, var(--ok) 16%, var(--surface-2));
-      color: var(--ok);
+      background: var(--warning);
+      color: var(--surface-dark);
     }
+  }
+
+  // 부모(워크스페이스) 타일의 뱃지는 한 단 크게 · 조금 더 바깥에
+  &__ws-sq &__wt-sq-count {
+    top: -4px;
+    right: -5px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
   }
 
   // 축소 타일 — 워크스페이스 이니셜만. 이름·세션 수·입력대기는 툴팁이 맡는다.
@@ -659,7 +701,7 @@
     flex-shrink: 0;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: var(--r-sm);
+    border-radius: var(--r-rail);
     background: none;
     color: var(--text-2);
     cursor: pointer;
@@ -668,14 +710,22 @@
       border-color var(--dur-1) var(--ease);
 
     &:hover {
-      background: var(--overlay-hover);
+      background: var(--surface-2);
     }
 
-    // 활성 = 살짝 밝아지는 필 (워크트리 타일과 동일)
+    // 축소 타일 안의 이니셜 타일은 26px · radius 7 · 700 (목업 — 두 글자 이니셜)
+    .terminal__ws-tile {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--r-tile);
+      font-weight: 700;
+    }
+
+    // 활성 = 한 단 위 면 + 1px 윤곽 (앱 사이드바 활성 항목과 같은 문법)
     &--active,
     &--active:hover {
-      background: var(--overlay-track);
-      border-color: transparent;
+      background: var(--surface-2);
+      border-color: var(--border-strong);
     }
 
     // 드래그 중 — 끌리는 타일은 흐리게 (펼침 행과 동일)
@@ -686,10 +736,10 @@
 
   // (입력대기 점은 세션 수 뱃지의 --waiting 색으로 대체 — 위 wt-sq-count 참고)
 
-  // 작업중(에이전트 실행) — 타일 둘레를 accent 아크가 한 바퀴 돈다.
+  // 작업중(에이전트 실행) — 타일 둘레를 초록(--ok) 아크가 한 바퀴 돈다(펼침 스피너와 같은 색).
   // ⚠️ 축소 모드에 스피너를 '놓을 자리'는 없다 — 타일이 30~34px 이고 우상단은 이미 세션
   //    수 뱃지가 점유한다. 둘레 링은 레이아웃 폭을 1px도 먹지 않아 이니셜·숫자·입력대기
-  //    초록을 그대로 남기면서 펼침 모드 스피너와 같은 '돌고 있다' 언어를 쓴다.
+  //    주황을 그대로 남기면서 펼침 모드 스피너와 같은 '돌고 있다' 언어를 쓴다.
   // 구현은 **타일과 같은 라운드 사각을 stroke-dash 로 달리는 SVG 아크**다.
   // ⚠️ 2026-08-19 스크린샷 왕복으로 걸러낸 오답 두 개 — 되돌리지 말 것:
   //    ①conic-gradient 링 + `transform: rotate` → 사각 요소가 돌아 코너가 타일 밖으로 튄다
@@ -705,7 +755,7 @@
     left: 50%;
     translate: -50% -50%;
     fill: none;
-    stroke: var(--accent);
+    stroke: var(--ok);
     stroke-width: 1.5;
     stroke-linecap: round;
     // 1.6s — 0.9s 는 작은 타일 둘레를 도는 짧은 아크라 '휙휙' 지나가 산만했다.
@@ -734,22 +784,20 @@
     overflow: hidden;
   }
 
-  // ── 상단 세션 탭바 (Superset 세그먼트 스타일) — [탭|탭|탭][+] ➝ 우측 [변경사항][MO] ──
-  // 탭은 사이 구분선으로 이어진 넓은 세그먼트 — 활성은 밝은 제목 + ×, 비활성은 흐린
-  // 제목 + (작업 중·입력 대기일 때만) 상태점.
-  // 탭바 = 가라앉은 선반 + '장' 탭 (2026-08-10 시안 ⑧ '통탭' 확정, 같은 날 기하 통일).
-  // 모든 탭이 같은 장(테두리+라운드+톤)이고 분할 그룹은 장이 넓어 멤버 세그먼트가
-  // 여럿일 뿐이다 — "묶음 = 한 장" 은유. 장들은 바닥 경계선 **위에** 얹힌다
-  // (list 의 padding-bottom 1px — 선을 뚫는 연결형은 상태마다 모양이 갈라져 폐기).
-  // 칩·세그먼트 시절의 장식형 묶음 표시(연결선·캡·여백·박스)는 전부 반려됐다.
+  // ── 상단 세션 탭바 — [·탭 ×][·탭 ×][+] ➝ 우측 [에디터][변경사항] ──
+  // 2026-09-30 목업(사용자 지시 "디자인과 동일하게"): 선반 = 패널 면(--surface-1) + 바닥선,
+  // 비활성 탭 = 배경·테두리 없음(흐린 제목), **활성 탭 = 터미널 면색 장이 바닥선을 덮어
+  // 아래 터미널과 이어진다**. 상태점은 제목 앞, × 는 모든 탭에 늘.
+  // 분할 그룹은 여전히 '한 장'(tab-pack)에 멤버 세그먼트 — 활성 멤버만 터미널 면색.
   &__tabs {
     display: flex;
     align-items: flex-end; // 탭이 바닥(경계선)에 붙는다
     gap: 8px;
-    min-height: 38px;
+    // 좌측 패널 머리줄(__side-head)과 같은 높이 — 두 띠의 바닥선이 한 줄로 이어진다
+    min-height: var(--pane-head-h);
     flex-shrink: 0;
-    padding: 6px 8px 0 0; // 하단 0 — 탭 바닥이 경계선 위에 얹힌다
-    background: var(--bg-sunken);
+    padding: 0 10px 0 0; // 하단 0 — 활성 탭 바닥이 경계선 위를 덮는다
+    background: var(--surface-1);
     box-shadow: inset 0 -1px 0 0 var(--border);
 
     // 그룹 멤버 탭을 끌어 올린 상태 — 탭바 = '그룹에서 분리' 드롭 존임을 알린다
@@ -787,16 +835,13 @@
     display: flex;
     align-items: flex-end;
     gap: 2px;
-    padding: 0 0 1px 8px; // 하단 1px — 장들이 바닥 경계선 **위에** 얹힌다(선은 안 끊긴다)
+    // 하단 0 — 활성 탭이 바닥선(부모의 inset 그림자)을 **덮어** 아래 터미널 면과 이어진다
+    padding: 0 0 0 10px;
     overflow-x: auto;
     scrollbar-width: none; // 탭 초과분은 휠/트랙패드 가로 스크롤 — 바는 감춘다
   }
 
-  // 세션 탭 = 테두리 있는 '장' — 단일 탭도 그룹(tab-pack)과 **완전히 같은 기하**다
-  // (그룹은 장이 넓어 세그먼트가 여럿일 뿐). 연결형(--bg 채움으로 바닥선 뚫기)은
-  // 단일/그룹/활성마다 모양·높이가 제각각으로 읽혀 폐기했다(2026-08-10 사용자 지적,
-  // 스크린샷 실측). 활성 표시는 어디서나 같은 **액센트 틴트 한 겹**(background-image —
-  // 바탕색 위에 겹쳐야 해서 색이 아니라 이미지 레이어로 칠한다).
+  // 세션 탭 — 목업: 36px · padding 0 10 0 12 · 윗모서리 라운드 · gap 8 (고정폭 150 은 유지 — 2026-08-10 요청)
   &__tab {
     display: inline-flex;
     align-items: center;
@@ -807,23 +852,40 @@
     // 없으면 긴 제목이 150px 기준을 밀어내고 탭을 계속 늘린다(2026-08-10 사용자
     // 신고 — 제목 말줄임은 __tab-title 의 ellipsis 가 맡는다).
     min-width: 0;
-    height: 29px;
-    padding-right: 4px;
-    border: 1px solid var(--border);
+    height: 36px;
+    padding-right: 6px;
+    border: 1px solid transparent;
     border-bottom: 0;
-    border-radius: var(--r-sm) var(--r-sm) 0 0;
-    background-color: color-mix(in srgb, var(--bg) 45%, transparent);
+    border-radius: var(--r-tab) var(--r-tab) 0 0;
+    background: none;
+    color: var(--text-2);
     transition: background-color var(--dur-1) var(--ease);
 
     &:hover {
-      background-image: linear-gradient(var(--overlay-hover), var(--overlay-hover));
+      background-color: var(--surface-2);
     }
 
-    // 활성 탭 — 액센트 틴트 한 겹 (그룹 안 활성 멤버와 동일 합성)
+    // 활성 탭 — 터미널 면색 장 + 1px 테두리(아래는 없음) → 아래 pane 과 한 면으로 이어진다.
     // ⚠️ :hover(특정도 0,2,0)가 --active(0,1,0)를 이기므로 hover 도 함께 고정
+    // 활성 장은 터미널 면(두 테마 모두 어두움) — 글자·× 는 on-dark 계열이어야 라이트 테마에서도 보인다
     &--active,
     &--active:hover {
-      background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+      background-color: var(--surface-dark);
+      border-color: var(--border);
+      color: var(--on-dark);
+
+      .terminal__tab-title {
+        color: var(--on-dark);
+      }
+
+      .terminal__tab-close {
+        color: var(--on-dark-3);
+
+        &:hover {
+          color: var(--on-dark);
+          background: color-mix(in srgb, var(--on-dark) 10%, transparent);
+        }
+      }
     }
 
     // 이름 편집 중 — **기하는 일반 탭 그대로 둔다**. 폭(flex)·정렬(align-self)을
@@ -853,6 +915,7 @@
     // 자리표시자 — 다른 창으로 분리된 세션. pane 이 없는 '바깥 창의 그림자'라
     // 점선 테두리 + 보조색으로 한눈에 구분한다(클릭 = 그 창 포커스).
     &--detached {
+      border-color: var(--border);
       border-style: dashed;
 
       .terminal__tab-title {
@@ -905,12 +968,12 @@
     display: inline-flex;
     align-items: stretch;
     flex-shrink: 0; // 멤버가 고정폭이라 장도 줄지 않는다 — 넘치면 리스트 스크롤
-    height: 29px;
+    height: 36px;
     border: 1px solid var(--border);
     border-bottom: 0;
-    border-radius: var(--r-sm) var(--r-sm) 0 0;
+    border-radius: var(--r-tab) var(--r-tab) 0 0;
     overflow: hidden; // 멤버 세그먼트가 라운드 밖으로 삐져나가지 않게
-    background-color: color-mix(in srgb, var(--bg) 45%, transparent);
+    background-color: transparent;
 
     // 멤버 = 세그먼트 — 장이 테두리·톤을 갖고 있으므로 자기 윤곽·바탕은 지우고
     // 사이 구분선만 남긴다. hover·활성 틴트(이미지 레이어)는 단일 탭 규칙 그대로.
@@ -924,14 +987,22 @@
         border-left: 1px solid var(--border);
       }
     }
+
+    // 활성 멤버만 터미널 면색 — 위 투명 규칙(0,2,0)이 --active(0,1,0)를 이기므로 여기서 되살린다
+    .terminal__tab--active,
+    .terminal__tab--active:hover {
+      background-color: var(--surface-dark);
+    }
   }
 
   &__tab-hit {
     flex: 1;
     display: inline-flex;
     align-items: center;
+    gap: 8px; // 상태점 ↔ 제목 (목업)
     min-width: 0;
-    padding: 4px 4px 4px 10px;
+    height: 100%;
+    padding: 0 4px 0 12px;
     border: 0;
     background: none;
     color: inherit;
@@ -940,30 +1011,20 @@
   }
 
   &__tab-title {
-    @include type-small;
-    color: var(--text-3); // 비활성 — 흐린 제목 (Superset 동일)
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    color: var(--text-2); // 비활성 — 흐린 제목 (목업 fg-2)
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  &__tab--active &__tab-title {
-    color: var(--text);
-  }
 
-  // 비활성 탭 우측 슬롯 — 평소엔 상태점, 탭에 hover 하면 × 종료 버튼으로 바뀐다
-  // (활성 탭으로 전환하지 않고도 닫을 수 있게 — 2026-08-06 사용자 요청)
-  &__tab-side {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-  }
 
+  // 상태점 — 제목 앞 (작업 중 초록 펄스 · 입력 대기 주황)
   &__tab-dot {
     display: inline-flex;
+    flex-shrink: 0;
   }
 
   &__tab-close {
@@ -974,9 +1035,9 @@
     height: 22px;
     flex-shrink: 0;
     border: 0;
-    border-radius: var(--r-full);
+    border-radius: var(--r-sm); // 버튼은 각형 (DESIGN.md §3)
     background: none;
-    color: var(--text-2);
+    color: var(--text-3); // 목업 — × 는 흐리게 (히트 22px 하한은 유지 — renderer-ui 규칙)
     cursor: pointer;
     transition:
       background var(--dur-1) var(--ease),
@@ -988,7 +1049,7 @@
     }
   }
 
-  // 슬롯 교체 — 평소엔 표식(상태점·'다른 창' 아이콘), 탭에 hover 하면 버튼으로 바뀐다.
+  // 자리표시자 탭 앞자리 교체 — 평소엔 '다른 창' 아이콘, 탭에 hover 하면 되돌리기 버튼.
   // ⚠️ **이 블록은 반드시 `__tab-close` 뒤에 둘 것.** `--hover` 의 `display: none` 과
   // `__tab-close` 의 `display: inline-flex` 는 특정도가 같아(0,1,0) **순서로만** 갈린다 —
   // 앞에 두면 종료 버튼이 hover 없이 늘 떠서 상태점과 나란히 그려진다(2026-09-01 발견:
@@ -997,7 +1058,6 @@
     display: none;
   }
 
-  &__tab:hover &__tab-dot,
   &__tab:hover &__tab-lead-icon {
     display: none;
   }
@@ -1009,17 +1069,18 @@
   // [+] — 탭과 같은 높이·같은 윗라운드의 고스트 스텁 (브라우저 새 탭 버튼 문법).
   // 예전 테두리 사각 버튼은 연결형 탭바(선반 + 바닥선)에서 혼자 붕 떠 보였다
   // (2026-08-10 사용자 지적) — 탭 줄의 일원처럼 바닥에 붙인다.
+  // [+] — 목업 ghost sm 아이콘 버튼, 탭 줄 세로 가운데(바닥에서 4px 띄움)
   &__tab-add {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 29px;
+    width: var(--control-h-xs);
+    height: var(--control-h-xs);
     flex-shrink: 0;
     align-self: flex-end;
-    margin-left: 2px;
+    margin: 0 0 7px 2px; // 목업 — 바닥에서 7
     border: 0;
-    border-radius: var(--r-sm) var(--r-sm) 0 0;
+    border-radius: var(--r-md);
     background: none;
     color: var(--text-2);
     cursor: pointer;
@@ -1288,13 +1349,16 @@
   // 예전엔 pane 마다 있었는데 분할하면 반복될 이유가 없어 하나로 올렸다(2026-08-10).
   // __panes 밖(위)의 일반 flex 행이라 모든 pane 에 균일하게 적용된다 — 숨은 pane
   // inset:0 크기 동등성도 그대로다. 높이는 최소로 유지해 터미널을 덜 먹는다.
+  // 목업: 40px · 패널 면 · 바닥선 · padding 0 12 · gap 6 — [프리셋 버튼…][편집] ··· [검색] | [- 13 +][맨 아래][Finder]
   &__bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    min-height: 22px;
-    padding: 2px 8px 2px 6px; // 풀블리드라 자체 여백 — 최소한만
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 12px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
   }
 
   &__bar-presets {
@@ -1302,65 +1366,24 @@
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     overflow-x: auto;
-    scrollbar-width: none; // 칩이 넘치면 가로 스크롤 — 바는 감춘다
+    scrollbar-width: none; // 버튼이 넘치면 가로 스크롤 — 바는 감춘다
   }
 
-  // ⚙ 와 칩 사이 세로 구분선
+  // 세로 구분선 (목업 .vdiv — 검색과 글자 크기 사이)
   &__bar-sep {
     width: 1px;
-    height: 14px;
+    height: 24px;
     flex-shrink: 0;
     margin: 0 4px;
     background: var(--border);
   }
 
-  // 프리셋 칩 — [아이콘 이름]. 클릭 = 같은 위치의 새 세션에서 실행. 바가 낮아
-  // 칩도 캡션 크기로 조밀하게 (2026-08-06 사용자 요청)
-  &__preset {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    flex-shrink: 0;
-    padding: 2px 6px;
-    border: 0;
-    border-radius: var(--r-sm);
-    background: none;
-    color: var(--text-2);
-    cursor: pointer;
-    transition:
-      background var(--dur-1) var(--ease),
-      color var(--dur-1) var(--ease);
-
-    svg {
-      color: var(--text-3);
-    }
-
-    &:hover:not(:disabled) {
-      background: var(--overlay-hover);
-      color: var(--text);
-    }
-
-    // 실행할 위치가 없을 때(세션 없음 + 워크트리 미선택) — 목록은 보이되 누를 수 없다
-    &:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-  }
-
-  // type-caption 은 uppercase 변형이라 못 쓴다 — 크기 토큰만 가져온다
-  &__preset-name {
-    font-size: var(--fs-caption);
-    line-height: 1.4;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
   &__bar-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
   }
 
@@ -1428,7 +1451,7 @@
     // (proposeDimensions 가 element 의 padding 4방향을 읽는다) — 그래서 여기로 옮겼다.
     .xterm {
       height: 100%;
-      padding: 8px 6px 8px 12px; // 우측은 스크롤바 자리라 좁게
+      padding: 14px 10px 14px 16px; // 목업 14·16 — 우측은 스크롤바 자리라 좁게
     }
 
     // xterm 번들 CSS 가 뷰포트 배경을 #000 으로 하드코딩해 둬서 테마를 안 따른다 —
@@ -1474,30 +1497,28 @@
   }
 
   // ── 변경사항 드로어 (우측 — 활성 세션 cwd 의 git 상태·diff·푸시) ──
-  // 너비는 인라인 스타일 — 좌측 grip 드래그로 조절 (TerminalSection, localStorage 기억)
+  // 너비는 인라인 스타일 — 좌측 grip 드래그로 조절 (TerminalSection, localStorage 기억).
+  // 2026-09-30 목업(사용자 지시 "디자인과 동일하게"): 패널 면(--surface-1) + 왼쪽 경계선, 바깥 여백 없음.
+  // 안쪽 구획(머리 44 · 모드/커밋 · 파일 · diff · 커밋 로그)은 _changes.scss 의 `.terminal__changes .changes` 가 맡는다.
   &__changes {
     position: relative;
     flex-shrink: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    // .terminal 의 gap 을 0 으로 없앴으므로(xterm 좌측 붙이기) 여기만 스스로 간격을 만든다
-    // — 아래 grip 의 left: -8px 이 놓일 자리이기도 하다.
-    margin-left: 8px;
-    // 헤더(브랜치·푸시)가 창 상단·우측 모서리에 딱 붙어 답답했다(2026-08-07 사용자 지적).
-    // 좌측은 grip 자리라 두고 위/오른쪽만 숨통을 튼다.
-    padding: 8px 8px 0 0;
+    background: var(--surface-1);
+    border-left: 1px solid var(--border);
     // 조건부 렌더라 여는 순간에만 모션이 걸린다(닫기는 즉시 — 퇴장 애니메이션 자리가 없다).
     // 넓은 패널이라 이동 없이 페이드만 — 옆에서 밀려오면 xterm 폭 변화와 겹쳐 어지럽다.
     @include fade-in;
   }
 
-  // 리사이즈 grip — .terminal__changes 의 margin(8px) 위에 걸치는 히트 영역, 호버 시 세로선 표시
+  // 리사이즈 grip — 왼쪽 경계선 위에 걸치는 히트 영역(실폭 0 — side-grip 과 같은 원리), 호버 시 액센트 선
   &__changes-grip {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: -8px;
+    left: -6px;
     width: 11px;
     cursor: col-resize;
     z-index: 1;
@@ -1507,7 +1528,7 @@
       position: absolute;
       top: 0;
       bottom: 0;
-      left: 4px;
+      left: 5px; // 경계선(border-left)과 같은 x
       width: 2px;
       border-radius: var(--r-full);
       background: transparent;
@@ -1516,25 +1537,27 @@
 
     &:hover::after,
     &:active::after {
-      background: var(--border);
+      background: var(--accent);
     }
   }
 
-  // 드로어 토글 버튼 — 열려 있으면 액센트로 표시
-  &__changes-btn--on {
+  // 드로어 토글 버튼 — 열려 있으면 액센트 틴트 면 + 액센트 아이콘 (목업)
+  &__changes-btn--on,
+  &__changes-btn--on:hover:not(:disabled) {
+    background: var(--accent-soft);
     color: var(--accent);
   }
 }
 
-// MO(모바일) 접속 모달 내용
+// MO(모바일) 접속 모달 내용은 아래 .terminal-mo
 // ── 팝아웃 창 (TerminalPopoutApp) — 앱 셸 없이 탭바 + pane 만 있는 별도 창 ──
 .terminal--popout {
   height: 100vh;
 
   .terminal__tabs {
     // 이 창엔 탑바가 없다 — 탭바가 곧 타이틀바다. 메인 창과 같은 높이(--titlebar-h)를
-    // 줘서 ①신호등(trafficLightPosition y:16)이 세로 중앙에 오고 ②탭(29px)이 바닥
-    // 정렬이라 위에 남는 15px 이 **창을 잡아 끄는 손잡이**가 된다.
+    // 줘서 ①신호등(trafficLightPosition y:16)이 세로 중앙에 오고 ②탭(36px)이 바닥
+    // 정렬이라 위에 남는 8px 이 **창을 잡아 끄는 손잡이**가 된다(탭 오른쪽 빈 공간과 함께).
     min-height: var(--titlebar-h);
     // hiddenInset 신호등이 탭바 좌상단에 얹힌다 — 예약폭 + 숨통 8px 만큼 비운다
     padding-left: calc(var(--titlebar-safe) + 8px);
@@ -1610,8 +1633,8 @@
     gap: 8px;
 
     img {
-      border-radius: var(--r-md);
-      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border-strong);
     }
   }
 

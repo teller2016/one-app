@@ -1,10 +1,11 @@
-// 프리셋 바 (Superset 동일) — [⚙ | 칩…]. 칩 클릭 = 그 위치의 새 세션에서 명령 실행.
+// 프리셋 바 — [칩…][편집]. (2026-09-30 목업: 칩은 공용 Button xs) 칩 클릭 = 그 위치의 새 세션에서 명령 실행.
 // ⚠️ 세션 화면(TerminalView)과 '세션 없음' 화면(TerminalSection)이 **같은 것을 쓴다** —
 //    예전엔 TerminalView 안에만 있어서 세션이 0 개면 프리셋이 통째로 사라졌다.
 //    첫 세션을 프리셋으로 시작하는 것이 가장 자연스러운 흐름인데 그게 막혀 있었다
 //    (2026-08-08 사용자 지적). 자리도 같아서 세션이 생겨도 바가 움직이지 않는다.
 import { memo } from 'react';
 import type { TerminalPreset } from '../../../../shared/types';
+import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { Tooltip } from '../../../components/Tooltip';
 import { presetIcon } from '../lib/workspace';
@@ -27,19 +28,6 @@ export const PresetBar = memo(function PresetBar({
 }) {
   return (
     <span className="terminal__bar-presets" title={cwd}>
-      <Tooltip label="프리셋 편집 — 클릭 한 번으로 실행할 명령 관리">
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="프리셋 편집"
-          onClick={onEdit}
-        >
-          <Icon name="settings" size={14} />
-        </button>
-      </Tooltip>
-      {presets.length > 0 && (
-        <span className="terminal__bar-sep" aria-hidden="true" />
-      )}
       {presets.map((p) => (
         <Tooltip
           key={p.id}
@@ -49,17 +37,23 @@ export const PresetBar = memo(function PresetBar({
               : `${p.command} — 새 세션에서 실행`
           }
         >
-          <button
-            type="button"
-            className="terminal__preset"
-            disabled={disabled}
-            onClick={() => onRun(p)}
-          >
+          <Button size="xs" disabled={disabled} onClick={() => onRun(p)}>
             <Icon name={presetIcon(p)} size={13} />
-            <span className="terminal__preset-name">{p.name}</span>
-          </button>
+            {p.name}
+          </Button>
         </Tooltip>
       ))}
+      {/* 편집은 칩 줄 끝에 (목업) — 칩이 없으면 이것만 남는다 */}
+      <Tooltip label="프리셋 편집 — 클릭 한 번으로 실행할 명령 관리">
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="프리셋 편집"
+          onClick={onEdit}
+        >
+          <Icon name="pencil" size={14} />
+        </button>
+      </Tooltip>
     </span>
   );
 });

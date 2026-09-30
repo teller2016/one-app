@@ -32,16 +32,19 @@ typography:
   font-mono: "'JetBrains Mono NL' (assets/fonts 번들)"   # 키·번호·경로·해시·시각·포트·로그
   weight-ladder: [400, 500, 600, 700]
   caption: { size: 11px, weight: 600, transform: uppercase }   # 라벨 — 식별자에는 쓰지 말 것
+  micro:   { size: 10.5px }                  # --fs-micro — 브랜치 ref 둘째 줄
+  nano:    { size: 9.5px }                   # --fs-nano — 타일 위 세션 수 뱃지
   small:   { size: 12px, weight: 400 }
+  ui:      { size: 12.5px }                  # --fs-ui — 탭 제목·트리 이름·브랜치명
   body:    { size: 13px, weight: 400 }
   emph:    { size: 14px, weight: 600 }
   title:   { size: 15px, weight: 600 }
   h2:      { size: 20px, weight: 600, tracking: -0.01em }
   metric:  { size: 22px, weight: 500, numeric: tabular-nums }
 
-radius: { xs: 3px, sm: 5px, md: 6px, lg: 10px, full: 999px }   # 모달만 lg 보다 한 단 더 (컴포넌트에서)
+radius: { xs: 3px, sm: 5px, md: 6px, tile: 7px, tab: 8px, rail: 9px, lg: 10px, xl: 14px, full: 999px }   # 모달만 lg 보다 한 단 더 (컴포넌트에서)
 spacing: [4, 8, 12, 16, 20, 24, 32]
-control-height: { md: 32px, sm: 28px }
+control-height: { md: 32px, field: 30px, sm: 28px, xs: 24px }
 shadow:
   "1": "세그 선택 칩 전용"
   "2": "떠 있는 레이어(모달·토스트·팝오버) — 그림자 + 1px 윤곽"
@@ -101,6 +104,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 |---|---|---|
 | `type-caption` | 11px · 600 · uppercase · ls .05em · --text-2 | 패널 라벨·표 헤더 (⚠️ 식별자 금지) |
 | `type-small` | 12px · 400 | 힌트·메타·로그 |
+| (크기만) `--fs-ui` 12.5 · `--fs-micro` 10.5 · `--fs-nano` 9.5 | — | 탭 제목·트리 이름·브랜치명 / 브랜치 ref / 타일 위 뱃지 (목업 수치 — 조밀한 터미널 크롬 전용) |
 | `type-body` | 13px · 400 | 기본 UI |
 | `type-emph` | 14px · 600 | 목록 이름·강조 |
 | `type-title` | 15px · 600 | 카드·패널 제목 |
@@ -110,8 +114,8 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 2 }
 ## 3. 스페이싱 · 라운드 · 그림자 · 모션 · 포커스
 
 - **스페이싱**: 4px 그리드 `4/8/12/16/20/24/32`.
-- **컨트롤 높이**: `--control-h: 32px` / `--control-h-sm: 28px`. 기능 SCSS 에서 높이 오버라이드 금지.
-- **라운드**: `--r-xs 3`(인라인 마크) · `--r-sm 5`(칩·작은 버튼) · `--r-md 6`(버튼·입력) · `--r-lg 10`(카드·패널) · 모달 14(컴포넌트에서) · `--r-full`(카운트 뱃지·진행 바·스위치만 — **버튼은 필이 아니다**).
+- **컨트롤 높이**: `--control-h: 32px` / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
+- **라운드**: `--r-xs 3`(인라인 마크) · `--r-sm 5`(칩·작은 버튼) · `--r-md 6`(버튼·입력) · `--r-tile 7`(축소 레일 타일·워크트리 칸) · `--r-tab 8`(세션 탭 윗모서리) · `--r-rail 9`(축소 레일 워크스페이스 칸) · `--r-lg 10`(카드·패널) · `--r-xl 14`(모달) · `--r-full`(카운트 뱃지·진행 바·스위치만 — **버튼은 필이 아니다**).
 - **그림자**: 카드·버튼에 금지. `--shadow-1` 은 세그 선택 칩, `--shadow-2` 는 모달·토스트·팝오버(그림자 + 1px 윤곽).
 - **모션**: `--dur-1 .12s`(hover·토글) · `--dur-2 .18s`(팝오버·드로어·모달 진입) · `--dur-3 .28s`(폭·높이 변화). 진입 이동 `--lift 4px`. 목록 선택·탭 전환은 즉시. **목록 항목에 진입 모션 금지**. 진입 믹스인 fill-mode 는 `backwards`(`.claude/rules/styles.md` 참고). `prefers-reduced-motion` 은 `.01ms` 로 즉시 종료.
 - **포커스**: `outline: 2px solid var(--accent); outline-offset: 2px`. box-shadow 링 금지. 입력은 offset 0 + 보더 액센트.

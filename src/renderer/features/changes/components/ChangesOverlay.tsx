@@ -1,7 +1,12 @@
 // 변경사항 전체 화면 — Superset 의 diff 뷰어처럼 좌측 패널(커밋 작성·파일·커밋 목록)
 // + 우측 사이드-바이-사이드 diff. 터미널 드로어의 ⤢ 버튼이 연다 (데스크톱 전용).
 // 상태 로직은 드로어와 같은 useChanges 훅 — 화면 형태만 다르다.
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { ChangesTarget } from '../../../../shared/types';
 import { Button } from '../../../components/Button';
@@ -29,7 +34,7 @@ const RATIO_MAX = 80;
 
 const savedSide = (() => {
   const n = Number(localStorage.getItem('changes:sideWidth'));
-  return Number.isFinite(n) && n >= SIDE_MIN && n <= SIDE_MAX ? n : 320;
+  return Number.isFinite(n) && n >= SIDE_MIN && n <= SIDE_MAX ? n : 280; // 목업 기본 폭
 })();
 const savedRatio = (() => {
   const n = Number(localStorage.getItem('changes:splitRatio'));
@@ -48,6 +53,17 @@ export function ChangesOverlay({
   // fullDiff — 분할 뷰가 hunk 조각이 아니라 '변경 전 파일 | 변경 후 파일' 전체가 되게
   const ch = useChanges(target, { fullDiff: true });
   const [message, setMessage] = useState('');
+
+  // 열면 카드로 포커스를 옮기고(Esc 가 확실히 닿게), 닫으면 연 자리로 돌려준다 —
+  // 카드 안 버튼에 포커스가 있던 채로 닫히면 포커스가 body 로 빠진다(2026-09-30 /test)
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const prev = document.activeElement;
+    cardRef.current?.focus();
+    return () => {
+      if (prev instanceof HTMLElement && prev.isConnected) prev.focus();
+    };
+  }, []);
 
   // Escape 로 닫기 — 공용 Modal 과 같은 규칙
   useEffect(() => {
@@ -76,7 +92,7 @@ export function ChangesOverlay({
   const startDrag = (
     e: ReactPointerEvent<HTMLDivElement>,
     onMove: (ev: PointerEvent) => void,
-    onEnd: () => void
+    onEnd: () => void,
   ) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -99,11 +115,13 @@ export function ChangesOverlay({
     startDrag(
       e,
       (ev) => {
-        const w = Math.round(Math.min(SIDE_MAX, Math.max(SIDE_MIN, startW + ev.clientX - startX)));
+        const w = Math.round(
+          Math.min(SIDE_MAX, Math.max(SIDE_MIN, startW + ev.clientX - startX)),
+        );
         sideRef.current = w;
         setSideWidth(w);
       },
-      () => localStorage.setItem('changes:sideWidth', String(sideRef.current))
+      () => localStorage.setItem('changes:sideWidth', String(sideRef.current)),
     );
   };
 
@@ -114,12 +132,16 @@ export function ChangesOverlay({
         const box = diffWrapRef.current?.getBoundingClientRect();
         if (!box || box.width === 0) return;
         const pct = Math.round(
-          Math.min(RATIO_MAX, Math.max(RATIO_MIN, ((ev.clientX - box.left) / box.width) * 100))
+          Math.min(
+            RATIO_MAX,
+            Math.max(RATIO_MIN, ((ev.clientX - box.left) / box.width) * 100),
+          ),
         );
         ratioRef.current = pct;
         setRatio(pct);
       },
-      () => localStorage.setItem('changes:splitRatio', String(ratioRef.current))
+      () =>
+        localStorage.setItem('changes:splitRatio', String(ratioRef.current)),
     );
   };
 
@@ -151,235 +173,290 @@ export function ChangesOverlay({
   const canPush = status?.upstream ? (status.ahead ?? 0) > 0 : !!status?.branch;
 
   return createPortal(
-    <div className="changes-full" role="dialog" aria-modal="true" aria-label="변경사항 전체 화면">
-      <header className="changes-full__head">
-        <Icon name="git-branch" size={14} />
-        <span className="changes-full__branch" title={status?.upstream}>
-          {status?.branch ?? ''}
-        </span>
-        {status && (status.behind ?? 0) > 0 && (
-          <span className="changes__ab changes__ab--behind">↓{status.behind}</span>
-        )}
-        {(status?.baseBranch || ch.mode === 'branch') && (
-          <Segment
-            options={[
-              { value: 'work', label: '변경' },
-              { value: 'branch', label: `${status?.baseBranch ?? 'main'} 대비` },
-            ]}
-            value={ch.mode}
-            onChange={ch.setMode}
-          />
-        )}
-        <span className="changes__spacer" />
-        <div className="changes__actions">
-          <RefreshButton onClick={() => void ch.refresh()} />
-          <Tooltip
-            label={canPush ? `커밋 ${status?.ahead ?? ''}개 푸시` : '푸시할 커밋이 없습니다'}
-          >
-            <Button
-              size="sm"
-              className={'changes__push' + (canPush ? ' changes__push--ready' : '')}
-              aria-label="원격으로 푸시"
-              loading={ch.pushing}
-              disabled={!canPush}
-              onClick={() => void doPush()}
-            >
-              <Icon name="arrow-up-to-line" size={14} />
-              {status && (status.ahead ?? 0) > 0 && status.ahead}
-            </Button>
-          </Tooltip>
-          <Tooltip label="닫기 (Esc)">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="전체 화면 닫기"
-              onClick={onClose}
-            >
-              <Icon name="x" size={15} />
-            </button>
-          </Tooltip>
-        </div>
-      </header>
-
-      <div className="changes-full__body">
-        <aside className="changes-full__side" style={{ width: sideWidth }}>
-          {!status ? (
-            <div className="changes--center">
-              <span className="spinner" />
-            </div>
-          ) : !status.repo ? (
-            <EmptyState icon="folder" message="git 저장소가 아닙니다" />
-          ) : !status.ok ? (
-            <EmptyState icon="alert-triangle" message="상태 조회 실패" hint={status.error} />
-          ) : (
-            <>
-              {ch.mode === 'work' && !ch.commitSel && (status.files?.length ?? 0) > 0 && (
-                <div className="changes__commitbox">
-                  <Textarea
-                    rows={3}
-                    placeholder="커밋 메시지"
-                    aria-label="커밋 메시지"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                  />
-                  <Button
-                    size="sm"
-                    loading={ch.committing}
-                    disabled={!message.trim()}
-                    onClick={() => void doCommit()}
-                  >
-                    커밋
-                  </Button>
-                </div>
-              )}
-
-              {ch.commitSel && (
-                <div className="changes__mode-commit">
-                  <Icon name="git-commit" size={12} />
-                  <code>{ch.commitSel.hash}</code> 커밋을 보는 중
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="커밋 보기 해제"
-                    onClick={() => ch.selectCommit(null)}
-                  >
-                    <Icon name="x" size={12} />
-                  </button>
-                </div>
-              )}
-
-              <div className="changes-full__files">
-                {files === null ? (
-                  <span className="spinner" />
-                ) : files.length === 0 ? (
-                  <EmptyState icon="check" message="변경사항이 없습니다" />
-                ) : (
-                  <FileTree
-                    files={files}
-                    selectedPath={ch.selected?.path}
-                    onSelect={(f) => ch.selectFile(f)}
-                  />
-                )}
-              </div>
-
-              {ch.log.length > 0 && (
-                <Collapsible
-                  title={`커밋 ${ch.log.length}`}
-                  icon={<Icon name="git-commit" size={14} />}
-                  storageKey="changes:logOpenFull"
-                  defaultOpen={false}
-                >
-                  <div className="changes__log">
-                    {ch.log.map((c) => (
-                      <button
-                        key={c.hash}
-                        type="button"
-                        className={`changes__log-row${
-                          ch.commitSel?.hash === c.hash ? ' changes__log-row--active' : ''
-                        }${c.isMerge ? ' changes__log-row--merge' : ''}`}
-                        title={c.subject}
-                        onClick={() =>
-                          ch.selectCommit(ch.commitSel?.hash === c.hash ? null : c)
-                        }
-                      >
-                        <span
-                          className={`changes__log-dot${
-                            c.unpushed ? ' changes__log-dot--unpushed' : ''
-                          }`}
-                          aria-hidden="true"
-                        />
-                        <code>{c.hash}</code>
-                        <span className="changes__log-subject">{c.subject}</span>
-                        <span className="changes__log-date">{relTime(c.date)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </Collapsible>
-              )}
-            </>
+    // 딤 위에 떠 있는 카드 (2026-09-30 리디자인 — 예전엔 창 전체를 덮었다). 카드 바깥 클릭 = 닫기.
+    // ⚠️ pointerdown 에서 preventDefault — 언마운트 뒤 이어지는 mousedown 이 body 로 가서
+    //    포커스를 빼앗지 않게(⌘K 팔레트와 같은 이유)
+    <div
+      className="changes-full"
+      onPointerDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      <div
+        ref={cardRef}
+        tabIndex={-1}
+        className="changes-full__card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="변경사항 전체 화면"
+      >
+        <header className="changes-full__head">
+          <Icon name="git-branch" size={14} />
+          <span className="changes-full__branch" title={status?.upstream}>
+            {status?.branch ?? ''}
+          </span>
+          {status && (status.behind ?? 0) > 0 && (
+            <span className="changes__ab changes__ab--behind">
+              ↓{status.behind}
+            </span>
           )}
-        </aside>
+          {(status?.baseBranch || ch.mode === 'branch') && (
+            <Segment
+              options={[
+                { value: 'work', label: '변경' },
+                {
+                  value: 'branch',
+                  label: `${status?.baseBranch ?? 'main'} 대비`,
+                },
+              ]}
+              value={ch.mode}
+              onChange={ch.setMode}
+            />
+          )}
+          <span className="changes__spacer" />
+          <div className="changes__actions">
+            <RefreshButton onClick={() => void ch.refresh()} />
+            <Tooltip
+              label={
+                canPush
+                  ? (status?.ahead ?? 0) > 0
+                    ? `커밋 ${status?.ahead}개 푸시`
+                    : '원격으로 푸시'
+                  : '푸시할 커밋이 없습니다'
+              }
+            >
+              <Button
+                size="sm"
+                className={
+                  'changes__push' + (canPush ? ' changes__push--ready' : '')
+                }
+                aria-label="원격으로 푸시"
+                loading={ch.pushing}
+                disabled={!canPush}
+                onClick={() => void doPush()}
+              >
+                <Icon name="arrow-up-to-line" size={14} />
+                {status && (status.ahead ?? 0) > 0 && status.ahead}
+              </Button>
+            </Tooltip>
+            <Tooltip label="닫기 (Esc)">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="전체 화면 닫기"
+                onClick={onClose}
+              >
+                <Icon name="x" size={15} />
+              </button>
+            </Tooltip>
+          </div>
+        </header>
 
-        <div
-          className="changes-full__grip"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="파일 목록 너비 조절"
-          tabIndex={0}
-          onPointerDown={onSideGrip}
-        />
-
-        <main className="changes-full__main">
-          {ch.selected ? (
-            <>
-              <div className="changes-full__file-head">
-                <span className={`changes__kind changes__kind--${ch.selected.kind}`}>
-                  {KIND_CHAR[ch.selected.kind]}
-                </span>
-                <span className="changes-full__file-path" title={ch.selected.path}>
-                  {ch.selected.origPath
-                    ? `${ch.selected.origPath} → ${ch.selected.path}`
-                    : ch.selected.path}
-                </span>
-                {(ch.selected.additions ?? ch.selected.deletions) !== undefined && (
-                  <span className="changes__counts">
-                    +{ch.selected.additions ?? 0} −{ch.selected.deletions ?? 0}
-                  </span>
-                )}
+        <div className="changes-full__body">
+          <aside className="changes-full__side" style={{ width: sideWidth }}>
+            {!status ? (
+              <div className="changes--center">
+                <span className="spinner" />
               </div>
-              <div className="changes-full__diffwrap" ref={diffWrapRef}>
-                <div className="changes-full__diff">
-                  {!ch.diff && <span className="spinner" />}
-                  {ch.diff && !ch.diff.ok && (
-                    <EmptyState
-                      icon="alert-triangle"
-                      message="diff 실패"
-                      hint={ch.diff.error}
-                    />
-                  )}
-                  {ch.diff?.ok && ch.diff.binary && (
-                    <EmptyState
-                      icon="info"
-                      message="바이너리 파일"
-                      hint="diff 를 표시할 수 없습니다."
-                    />
-                  )}
-                  {ch.diff?.ok && !ch.diff.binary && (
-                    <>
-                      {/* key=파일 경로 — 파일 전환 시 '더 보기' 상한 리셋 (같은 파일 갱신은 유지) */}
-                      <SplitDiff
-                        key={ch.selected.path}
-                        diff={ch.diff.diff ?? ''}
-                        leftRatio={ratio}
+            ) : !status.repo ? (
+              <EmptyState icon="folder" message="git 저장소가 아닙니다" />
+            ) : !status.ok ? (
+              <EmptyState
+                icon="alert-triangle"
+                message="상태 조회 실패"
+                hint={status.error}
+              />
+            ) : (
+              <>
+                {ch.mode === 'work' &&
+                  !ch.commitSel &&
+                  (status.files?.length ?? 0) > 0 && (
+                    <div className="changes__commitbox">
+                      <Textarea
+                        rows={3}
+                        placeholder="커밋 메시지"
+                        aria-label="커밋 메시지"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
                       />
-                      {ch.diff.truncated && (
-                        <p className="sdiff__empty">… (너무 길어 잘렸습니다)</p>
-                      )}
-                    </>
+                      <Button
+                        size="sm"
+                        loading={ch.committing}
+                        disabled={!message.trim()}
+                        onClick={() => void doCommit()}
+                      >
+                        커밋
+                      </Button>
+                    </div>
+                  )}
+
+                {ch.commitSel && (
+                  <div className="changes__mode-commit">
+                    <Icon name="git-commit" size={12} />
+                    <code>{ch.commitSel.hash}</code> 커밋을 보는 중
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label="커밋 보기 해제"
+                      onClick={() => ch.selectCommit(null)}
+                    >
+                      <Icon name="x" size={12} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="changes-full__files">
+                  {files === null ? (
+                    <span className="spinner" />
+                  ) : files.length === 0 ? (
+                    <EmptyState icon="check" message="변경사항이 없습니다" />
+                  ) : (
+                    <FileTree
+                      files={files}
+                      selectedPath={ch.selected?.path}
+                      onSelect={(f) => ch.selectFile(f)}
+                    />
                   )}
                 </div>
-                {/* 변경 전/후 비율 손잡이 — diff 위에 떠 있어 스크롤과 무관하게 제자리 */}
-                {ch.diff?.ok && !ch.diff.binary && (
-                  <div
-                    className="changes-full__split-grip"
-                    style={{ left: `${ratio}%` }}
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="변경 전/후 영역 너비 조절"
-                    tabIndex={0}
-                    onPointerDown={onSplitGrip}
-                  />
+
+                {ch.log.length > 0 && (
+                  <Collapsible
+                    title={`커밋 ${ch.log.length}`}
+                    icon={<Icon name="git-commit" size={14} />}
+                    storageKey="changes:logOpenFull"
+                    defaultOpen={false}
+                  >
+                    <div className="changes__log">
+                      {ch.log.map((c) => (
+                        <button
+                          key={c.hash}
+                          type="button"
+                          className={`changes__log-row${
+                            ch.commitSel?.hash === c.hash
+                              ? ' changes__log-row--active'
+                              : ''
+                          }${c.isMerge ? ' changes__log-row--merge' : ''}`}
+                          title={c.subject}
+                          onClick={() =>
+                            ch.selectCommit(
+                              ch.commitSel?.hash === c.hash ? null : c,
+                            )
+                          }
+                        >
+                          <span
+                            className={`changes__log-dot${
+                              c.unpushed ? ' changes__log-dot--unpushed' : ''
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <code>{c.hash}</code>
+                          <span className="changes__log-subject">
+                            {c.subject}
+                          </span>
+                          <span className="changes__log-date">
+                            {relTime(c.date)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </Collapsible>
                 )}
+              </>
+            )}
+          </aside>
+
+          <div
+            className="changes-full__grip"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="파일 목록 너비 조절"
+            tabIndex={0}
+            onPointerDown={onSideGrip}
+          />
+
+          <main className="changes-full__main">
+            {ch.selected ? (
+              <>
+                <div className="changes-full__file-head">
+                  <span
+                    className={`changes__kind changes__kind--${ch.selected.kind}`}
+                  >
+                    {KIND_CHAR[ch.selected.kind]}
+                  </span>
+                  <span
+                    className="changes-full__file-path"
+                    title={ch.selected.path}
+                  >
+                    {ch.selected.origPath
+                      ? `${ch.selected.origPath} → ${ch.selected.path}`
+                      : ch.selected.path}
+                  </span>
+                  {(ch.selected.additions ?? ch.selected.deletions) !==
+                    undefined && (
+                    <span className="changes__counts">
+                      +{ch.selected.additions ?? 0} −
+                      {ch.selected.deletions ?? 0}
+                    </span>
+                  )}
+                </div>
+                <div className="changes-full__diffwrap" ref={diffWrapRef}>
+                  <div className="changes-full__diff">
+                    {!ch.diff && <span className="spinner" />}
+                    {ch.diff && !ch.diff.ok && (
+                      <EmptyState
+                        icon="alert-triangle"
+                        message="diff 실패"
+                        hint={ch.diff.error}
+                      />
+                    )}
+                    {ch.diff?.ok && ch.diff.binary && (
+                      <EmptyState
+                        icon="info"
+                        message="바이너리 파일"
+                        hint="diff 를 표시할 수 없습니다."
+                      />
+                    )}
+                    {ch.diff?.ok && !ch.diff.binary && (
+                      <>
+                        {/* key=파일 경로 — 파일 전환 시 '더 보기' 상한 리셋 (같은 파일 갱신은 유지) */}
+                        <SplitDiff
+                          key={ch.selected.path}
+                          diff={ch.diff.diff ?? ''}
+                          leftRatio={ratio}
+                        />
+                        {ch.diff.truncated && (
+                          <p className="sdiff__empty">
+                            … (너무 길어 잘렸습니다)
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {/* 변경 전/후 비율 손잡이 — diff 위에 떠 있어 스크롤과 무관하게 제자리 */}
+                  {ch.diff?.ok && !ch.diff.binary && (
+                    <div
+                      className="changes-full__split-grip"
+                      style={{ left: `${ratio}%` }}
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="변경 전/후 영역 너비 조절"
+                      tabIndex={0}
+                      onPointerDown={onSplitGrip}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="changes--center">
+                <EmptyState icon="folder-git" message="파일을 선택하세요" />
               </div>
-            </>
-          ) : (
-            <div className="changes--center">
-              <EmptyState icon="folder-git" message="파일을 선택하세요" />
-            </div>
-          )}
-        </main>
+            )}
+          </main>
+        </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

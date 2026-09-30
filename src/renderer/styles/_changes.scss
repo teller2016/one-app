@@ -275,6 +275,19 @@
     flex-shrink: 0;
   }
 
+  // 경로의 폴더 부분 — 흐리게 (파일 이름만 또렷하게)
+  &__dir {
+    color: var(--text-3);
+  }
+
+  &__count-add {
+    color: var(--ok);
+  }
+
+  &__count-del {
+    color: var(--danger);
+  }
+
   // ── unified diff — 로그·터미널과 같은 다크 패널 계열 (panel-dark 가 --ok 등을 재매핑) ──
   &__diff {
     flex: 1;
@@ -311,32 +324,262 @@
   }
 }
 
+// ── 데스크톱 드로어 안의 변경사항 — 목업(Terminal 보드 오른쪽 패널) 수치 그대로 ──
+// ⚠️ 폰 '변경' 탭도 같은 ChangesView 를 쓰므로 드로어 전용 모양은 반드시 `.terminal__changes` 아래에만.
+.terminal__changes .changes {
+  gap: 0;
+
+  // 머리 44 — 브랜치(액센트 아이콘 + 모노 이름) · ↓behind · [전체 화면][새로고침][푸시]
+  .changes__head {
+    height: var(--pane-head-h);
+    padding: 0 12px 0 16px;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+
+    > svg {
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+  }
+
+  .changes__branch {
+    font-size: var(--fs-ui);
+    font-weight: 500;
+  }
+
+  // 전체 화면 버튼 — 목업은 다른 아이콘 버튼과 같은 ghost (테두리 없음)
+  .changes__expand {
+    border: 0;
+  }
+
+  // 푸시 — 목업: 액센트 틴트 면 + 액센트 글자(아이콘 + 모노 개수), 테두리 없음
+  .changes__push {
+    font-family: var(--font-mono);
+    border-color: transparent;
+
+    &--ready,
+    &--ready:hover:not(:disabled) {
+      background: var(--accent-soft);
+      border-color: transparent;
+      color: var(--accent);
+    }
+  }
+
+  // 모드 토글 + 커밋 작성 — 한 구획(padding 12 16 · 사이 10), 아래 선은 파일 목록이 긋는다
+  .changes__mode {
+    padding: 12px 16px 0;
+  }
+
+  .changes__commitbox {
+    align-items: center;
+    padding: 10px 16px 0;
+
+    textarea {
+      height: var(--control-h-field);
+      min-height: var(--control-h-field);
+      padding: 6px 10px;
+      overflow: hidden;
+    }
+  }
+
+  // 파일 목록 — 위 구획과 선으로 나누고 padding 6 8, 행 28px (선택 = 틴트 + 좌측 액센트 선)
+  .changes__files {
+    margin-top: 12px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .changes__file {
+    height: 28px;
+    flex-shrink: 0; // 목록(column + max-height)이 좁아도 행이 눌리지 않고 목록이 스크롤된다
+    padding: 0 8px;
+    border-radius: var(--r-md);
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &--active,
+    &--active:hover {
+      background: var(--accent-soft);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+  }
+
+  .changes__path {
+    font-size: var(--fs-small);
+    color: var(--text);
+  }
+
+  .changes__counts {
+    display: inline-flex;
+    gap: 6px;
+  }
+
+  .changes--center {
+    padding: 16px;
+  }
+
+  // diff 머리 32 — 파일 이름(모노)
+  .changes__diff-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    flex-shrink: 0;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .changes__diff-file {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // diff — 목업은 코드 면이 아니라 패널 면 위 .code(12/20) + 줄 배경 (다크 패널 스코프를 걷는다)
+  .changes__diff {
+    padding: 6px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    // panel-dark 가 재정의한 토큰을 부모(패널 면) 값으로 되돌린다 — 안 하면 라이트 테마에서
+    // 밝은 on-dark 글자가 흰 면 위에 남는다 (사용자 정의 속성은 inherit 키워드를 받는다)
+    --text: inherit;
+    --text-2: inherit;
+    --text-3: inherit;
+    --border: inherit;
+    --accent: inherit;
+    --accent-hover: inherit;
+    --ok: inherit;
+    --warning: inherit;
+    --danger: inherit;
+    color: var(--text-2);
+    font-size: var(--fs-small);
+    line-height: 20px;
+  }
+
+  .changes__dline--row {
+    display: flex;
+    padding: 0 12px;
+  }
+
+  // 목업 .add/.del — 글자는 본문색, 줄 배경으로만 구분 (부호 열이 +/− 를 말한다)
+  .changes__dline--add {
+    background: var(--ok-soft);
+    color: var(--text);
+  }
+
+  .changes__dline--del {
+    background: var(--danger-soft);
+    color: var(--text);
+  }
+
+  .changes__dline-n {
+    width: 28px;
+    flex-shrink: 0;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .changes__dline-sign {
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+
+  // 커밋 로그 — 하단 38px 접이식 구획 (카드가 아니라 위 선 하나)
+  .collapsible {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+  }
+
+  .collapsible__head {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 0;
+    font-size: var(--fs-caption);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+  }
+
+  .collapsible__body {
+    padding: 0 8px 8px;
+  }
+}
+
 // ── 변경사항 전체 화면 (Superset diff 뷰어 스타일) — 드로어 ⤢ 로 진입 ──
+// 딤(--scrim) 위 사방 32px 안쪽에 떠 있는 카드. 딤 클릭 = 닫기(ChangesOverlay).
 .changes-full {
   position: fixed;
   inset: 0;
   z-index: 90; // 공용 모달과 같은 층 — 확인 다이얼로그(95)·피커(96)가 위에 온다
   display: flex;
-  flex-direction: column;
-  background: var(--bg);
+  padding: 32px;
+  background: var(--scrim);
   // ⚠️ 필수 — 밑에 깔린 사이드바·탑바가 `-webkit-app-region: drag` 라, 명시하지 않으면
-  // 창 드래그가 헤더 클릭을 통째로 흡수한다(닫기·푸시가 안 눌림 — 2026-08-07 사용자 지적)
+  // 창 드래그가 클릭을 통째로 흡수한다(닫기·푸시·딤 닫기가 안 눌림 — 2026-08-07 사용자 지적)
   -webkit-app-region: no-drag;
+  @include fade-in(var(--dur-1));
 
+  // 열 때 포커스를 받는 카드(tabIndex -1) — 프로그램 포커스라 링은 그리지 않는다
+  &__card {
+    outline: none;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+    -webkit-app-region: no-drag;
+    @include rise-in;
+  }
+
+  // 목업: 56px · padding 0 16 0 20 · gap 10 — [브랜치 아이콘][브랜치][↓][세그] ··· [새로고침][푸시][닫기]
   &__head {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
-    // 좌측은 macOS 신호등 예약폭 — 안 주면 브랜치명이 신호등 3개와 겹친다
-    padding: 10px 14px 10px var(--titlebar-safe);
+    // 카드가 신호등 아래로 내려와 예약폭이 필요 없다(예전 창 전체 덮개일 땐 --titlebar-safe)
+    height: 56px;
+    padding: 0 16px 0 20px;
     border-bottom: 1px solid var(--border);
     color: var(--text-3);
+
+    .seg-group {
+      margin-left: 8px;
+    }
+
+    // 푸시 — 드로어와 같은 액센트 틴트 (목업)
+    .changes__push {
+      font-family: var(--font-mono);
+
+      &--ready,
+      &--ready:hover:not(:disabled) {
+        background: var(--accent-soft);
+        border-color: transparent;
+        color: var(--accent);
+      }
+    }
   }
 
   &__branch {
-    @include type-emph;
     font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-weight: 500;
     color: var(--text);
   }
 
@@ -347,15 +590,68 @@
   }
 
   // 폭은 ChangesOverlay 가 인라인으로 준다(SCSS 값은 첫 페인트용) — grip 드래그로 조절
+  // 목업: 280 · 가라앉은 면 · padding 10 0 — [커밋 작성][파일 트리] ··· [커밋 로그]
   &__side {
-    width: 320px;
+    width: 280px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px;
+    gap: 0;
+    padding: 10px 0;
+    background: var(--bg-sunken);
     border-right: 1px solid var(--border);
     overflow-y: auto;
+
+    // 커밋 작성 — padding 0 12 10 · 세로 스택(메시지 3줄 → [커밋] 오른쪽) · 아래 선
+    .changes__commitbox {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 0 12px 10px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+
+      textarea {
+        min-height: 64px;
+      }
+
+      .btn {
+        align-self: flex-end;
+      }
+    }
+
+    // 커밋 로그 — 구분선 + 라벨 머리 + 30px 행
+    .collapsible {
+      margin: auto 0 0;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+      background: none;
+    }
+
+    .collapsible__head {
+      padding: 10px 16px 6px;
+      border-radius: 0;
+      font-size: var(--fs-caption);
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+    }
+
+    .collapsible__body {
+      padding: 0;
+    }
+
+    .changes__log-row {
+      height: 30px;
+      padding: 0 16px;
+      border-radius: 0;
+      gap: 8px;
+
+      code {
+        color: var(--accent);
+      }
+    }
   }
 
   // 좌측 패널 ↔ diff 세로 손잡이 (터미널 패널 grip 과 같은 규칙: 넓은 히트, 얇은 선)
@@ -404,13 +700,21 @@
     flex-direction: column;
   }
 
+  // 목업: 40px · padding 0 16 · gap 10 — [종류][경로] ··· [+N −N]
   &__file-head {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-shrink: 0;
-    padding: 8px 14px;
+    height: 40px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--border);
+
+    .changes__counts {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: auto;
+    }
   }
 
   &__file-path {
@@ -436,9 +740,11 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
-    padding: 10px 0; // 좌우 여백은 셀이 가진다 — 가운데 경계를 % 로 계산해야 해서
+    padding: 0; // 좌우 여백은 셀이 가진다 — 가운데 경계를 % 로 계산해야 해서
     border: 0; // 전체 화면에선 패널이 아니라 면 — 테두리·곡률 없음
-    @include panel-dark;
+    // 목업 — 코드 면이 아니라 카드 면(--surface-1) 위 12/20 코드
+    background: var(--surface-1);
+    color: var(--text-2);
   }
 
   // 변경 전/후 비율 손잡이 — diff 위에 떠 있고 좌우로 끌면 --sdiff-l 이 바뀐다
@@ -451,19 +757,36 @@
     cursor: col-resize;
     z-index: 1;
 
+    // 목업 — 세로 경계선(좌 열의 border-right 역할) + 가운데에 잡는 손잡이(10×36 캡슐)
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 5px;
+      width: 1px;
+      background: var(--border);
+    }
+
     &::after {
       content: '';
       position: absolute;
-      inset: 0 auto 0 4px;
-      width: 2px;
-      background: var(--border-dark);
-      transition: background var(--dur-1) var(--ease);
+      top: 50%;
+      left: 0;
+      width: 10px;
+      height: 36px;
+      margin-top: -18px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-sm);
+      background: var(--surface-3);
+      transition:
+        background var(--dur-1) var(--ease),
+        border-color var(--dur-1) var(--ease);
     }
 
     &:hover::after,
     &:active::after,
     &:focus-visible::after {
-      background: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
 
     &:focus-visible {
@@ -478,27 +801,63 @@
   flex-direction: column;
   gap: 1px;
 
+  // 목업: 28px · padding 0 16 · [이름 경로] ··· [+N][−N][종류] — 종류 글자는 order 로 오른쪽 끝
   &__file {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
     width: 100%;
-    padding: 4px 8px;
+    height: 28px;
+    padding: 0 16px;
     border: none;
-    border-radius: var(--r-sm);
+    border-radius: 0;
     background: none;
     text-align: left;
     cursor: pointer;
     min-width: 0;
     transition: background var(--dur-1) var(--ease);
 
-    &:hover {
-      background: var(--overlay-hover);
+    // 깊이마다 14px (목업 16 + depth × 14)
+    padding-left: calc(16px + var(--ftree-depth, 0) * 14px);
+
+    .changes__kind {
+      order: 3;
+      text-align: right;
     }
 
-    &--active {
-      background: var(--accent-soft);
+    &--deleted .ftree__name {
+      text-decoration: line-through;
     }
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &--active,
+    &--active:hover {
+      background: var(--accent-soft);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+  }
+
+  // 폴더 행 — 목업: 흐린 폴더 아이콘 + 이름, 깊이 들여쓰기 (파일 행과 같은 28px)
+  &__dirrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 16px 0 calc(16px + var(--ftree-depth, 0) * 14px);
+    color: var(--text-3);
+  }
+
+  &__dirname {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    color: var(--text-3);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   // 파일명 + 경로를 한 덩어리로 — 좁을 때 경로가 먼저 줄어든다
@@ -511,10 +870,11 @@
   }
 
   &__name {
-    @include type-small;
+    font-size: var(--fs-small);
     font-family: var(--font-mono);
     color: var(--text);
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -561,8 +921,8 @@
   grid-template-columns: var(--sdiff-l, 50%) minmax(0, 1fr);
   align-content: start; // 남는 세로 공간에서 행이 늘어나지 않게
   font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  line-height: 1.6;
+  font-size: var(--fs-small);
+  line-height: 20px;
 
   // 행 래퍼는 grid 에 끼어들지 않는다 — 좌/우 두 덩어리가 부모 2열에 직접 놓인다
   &__row {
@@ -573,7 +933,7 @@
   &__side {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: 0; // 번호 칸이 자기 뒤 여백(12)을 갖는다 (목업)
     min-width: 0;
 
     &--add {
@@ -599,10 +959,11 @@
     border-radius: var(--r-sm);
   }
 
+  // 목업 — 48px 오른쪽 정렬 + 12px 뒤 여백
   &__no {
     flex-shrink: 0;
-    min-width: 3.5em; // 자릿수가 달라도 본문 시작선이 흔들리지 않게
-    padding-left: 10px;
+    width: 48px;
+    padding-right: 12px;
     text-align: right;
     color: var(--text-3);
     user-select: none;

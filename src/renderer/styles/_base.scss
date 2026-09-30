@@ -85,6 +85,7 @@
   --accent-soft: rgba(67, 83, 214, 0.1);
   --accent-glow: rgba(67, 83, 214, 0.3); // 장식 전용 — 포커스 링 금지
   --on-accent: #ffffff; // --accent-btn 배경 위에서만
+  --on-strong: #ffffff; // 진한 채움(차트 7 인디고 타일 등) 위 글자 — 두 테마 공용
   --accent-on-dark: #8c9bff; // 다크 패널 안 링크 (8:1)
   --accent-hover-on-dark: #a9b4ff;
 
@@ -133,11 +134,16 @@
   --r-xs: 3px; // 인라인 마크(diff 워드 하이라이트 등) — 글줄 안에 앉는 최소 곡률
   --r-sm: 5px; // 칩·아이콘 버튼·세그 칩
   --r-md: 6px; // 입력·중첩 패널
+  --r-tile: 7px; // 축소 레일 타일·워크트리 칸 (목업)
+  --r-tab: 8px; // 세션 탭 윗모서리 (목업)
+  --r-rail: 9px; // 축소 레일 워크스페이스 칸 (목업)
   --r-lg: 10px; // 카드·패널
   --r-xl: 14px; // 모달·확인 다이얼로그 — 떠 있는 큰 면만
   --r-full: 999px; // 카운트 뱃지·진행 바·스위치 (버튼은 필 아님 — --r-md)
   --control-h: 32px; // 폼 컨트롤 공통 높이 — input·세그 트랙·피커 트리거·파일 트리거
   --control-h-sm: 28px; // 소형 컨트롤 (input--sm 계열 — 위젯·설정 그리드)
+  --control-h-field: 30px; // 드로어 커밋 입력 한 줄 (목업)
+  --control-h-xs: 24px; // 초소형 버튼 Button size="xs" (목업 .btn-sm — 툴바 프리셋·탭 [+])
   --shadow-1: 0 1px 2px rgba(20, 22, 26, 0.12); // 컨트롤 전용(세그 선택 칩) — 카드 금지
   --shadow-2: 0 16px 48px rgba(20, 22, 26, 0.16), 0 0 0 1px rgba(20, 22, 26, 0.08); // 모달·토스트·팝오버 — 그림자 + 1px 윤곽
   --dur-1: 0.12s; // 색·배경 전환
@@ -152,6 +158,9 @@
   // ===== 타이포 (크기만 — 스타일 묶음은 아래 type-* 믹스인이 정본) =====
   --fs-caption: 11px;
   --fs-small: 12px;
+  --fs-nano: 9.5px; // 타일 위 세션 수 뱃지 (목업)
+  --fs-micro: 10.5px; // 브랜치 ref 둘째 줄 (목업)
+  --fs-ui: 12.5px; // 탭 제목·트리 이름·브랜치명 (목업)
   --fs-body: 13px;
   --fs-emph: 14px;
   --fs-title: 15px;
@@ -172,6 +181,8 @@
   --titlebar-h: 44px;
   // 하단 상태바 높이 — .app 그리드의 둘째 행 (VPN·메일·미러링·MO·근태)
   --statusbar-h: 28px;
+  // 섹션 안 패널 머리줄 높이 — 터미널 탭바·워크스페이스 패널 머리처럼 나란히 놓여 줄이 맞아야 하는 바
+  --pane-head-h: 44px;
   // 폼 라벨 열 — `.form-row` 의 라벨 최소폭과 라벨↔입력 간격.
   // `.form-hint` 가 입력칸 아래로 들여쓸 때 이 값을 더해 쓴다(매직넘버 금지).
   --form-label-w: 72px;
@@ -560,6 +571,15 @@ body {
   &--sm {
     height: var(--control-h-sm);
     padding: 0 10px;
+    font-size: var(--fs-small);
+    border-radius: var(--r-sm);
+  }
+
+  // 초소형 — 툴바 프리셋 칩 등 (목업 .btn-sm 24px)
+  &--xs {
+    height: var(--control-h-xs);
+    padding: 0 8px;
+    gap: 5px;
     font-size: var(--fs-small);
     border-radius: var(--r-sm);
   }
@@ -1115,6 +1135,16 @@ input.input--bare {
 
   &--idle {
     background: var(--idle);
+  }
+
+  // 터미널 세션 — 작업 중은 초록 펄스, 입력 대기는 주황(가만히 — 사람을 부르는 색)
+  &--run {
+    background: var(--ok);
+    animation: pulse var(--dur-pulse) ease-in-out infinite;
+  }
+
+  &--wait {
+    background: var(--warning);
   }
 }
 

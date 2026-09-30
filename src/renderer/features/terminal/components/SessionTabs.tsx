@@ -27,10 +27,11 @@ import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { errMsg } from '../../../lib/errMsg';
 
-// waiting 은 "준비됨"(초록) — busy 의 경고색 펄스와 대비시켜 훑어보기 쉽게
-const STATUS_DOT: Record<TerminalSessionStatus, 'busy' | 'ok' | 'idle'> = {
-  busy: 'busy',
-  waiting: 'ok',
+// 작업 중 = 초록 펄스, 입력 대기 = 주황(펄스 없음) — 입력 대기는 "나를 부른다"는 주의 신호라
+// 사이드바 뱃지·토스트와 같은 주의색으로 맞춘다 (2026-09-30 Signal 리디자인 — 예전엔 대기=초록)
+const STATUS_DOT: Record<TerminalSessionStatus, 'run' | 'wait' | 'idle'> = {
+  busy: 'run',
+  waiting: 'wait',
   idle: 'idle',
 };
 const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
@@ -405,40 +406,25 @@ export const SessionTabs = memo(function SessionTabs({
           }${i < 9 ? ` (⌘${i + 1})` : ''}\n우클릭: 메뉴(별도 창 분리·이름 변경·종료) · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
           onClick={() => onSelect(s.id)}
         >
+          {/* 상태점은 제목 앞 — 작업 중(초록 펄스)·입력 대기(주황)만 (목업 2026-09-30) */}
+          {s.status !== 'idle' && (
+            <span className="terminal__tab-dot" aria-hidden="true">
+              <StatusDot status={STATUS_DOT[s.status]} />
+            </span>
+          )}
           <span className="terminal__tab-title">{s.title}</span>
         </button>
-        {s.id === activeId ? (
-          <Tooltip label="세션 종료 (⌘⇧W)">
-            <button
-              type="button"
-              className="terminal__tab-close"
-              aria-label={`'${s.title}' 세션 종료`}
-              onClick={() => onClose(s)}
-            >
-              <Icon name="x" size={14} />
-            </button>
-          </Tooltip>
-        ) : (
-          /* 비활성 탭 — 평소엔 상태점(작업 중·입력 대기만), hover 하면 × 로 바뀐다
-             (활성으로 전환하지 않고도 종료 가능 — 2026-08-06 사용자 요청) */
-          <span className="terminal__tab-side">
-            {s.status !== 'idle' && (
-              <span className="terminal__tab-dot" aria-hidden="true">
-                <StatusDot status={STATUS_DOT[s.status]} />
-              </span>
-            )}
-            <Tooltip label="세션 종료">
-              <button
-                type="button"
-                className="terminal__tab-close terminal__tab-close--hover"
-                aria-label={`'${s.title}' 세션 종료`}
-                onClick={() => onClose(s)}
-              >
-                <Icon name="x" size={14} />
-              </button>
-            </Tooltip>
-          </span>
-        )}
+        {/* × 는 모든 탭에 늘 — 활성으로 전환하지 않고도 닫는다 (2026-08-06 요청 · 목업) */}
+        <Tooltip label={s.id === activeId ? '세션 종료 (⌘⇧W)' : '세션 종료'}>
+          <button
+            type="button"
+            className="terminal__tab-close"
+            aria-label={`'${s.title}' 세션 종료`}
+            onClick={() => onClose(s)}
+          >
+            <Icon name="x" size={12} />
+          </button>
+        </Tooltip>
       </span>
     );
   };
@@ -598,27 +584,24 @@ export const SessionTabs = memo(function SessionTabs({
           title={`${s.title} — 별도 창에서 열림${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 되돌리기 · 우클릭: 메뉴`}
           onClick={() => onFocusWindow?.(windowId)}
         >
-          <span className="terminal__tab-title">{s.title}</span>
-        </button>
-        {/* 우측 — 일반 비활성 탭과 완전히 같은 구조라 × 자리가 정확히 맞는다.
-            분리된 세션의 작업 중·입력 대기도 여기서 그대로 보인다 */}
-        <span className="terminal__tab-side">
           {s.status !== 'idle' && (
             <span className="terminal__tab-dot" aria-hidden="true">
               <StatusDot status={STATUS_DOT[s.status]} />
             </span>
           )}
-          <Tooltip label="세션 종료">
-            <button
-              type="button"
-              className="terminal__tab-close terminal__tab-close--hover"
-              aria-label={`'${s.title}' 세션 종료`}
-              onClick={() => onClose(s)}
-            >
-              <Icon name="x" size={14} />
-            </button>
-          </Tooltip>
-        </span>
+          <span className="terminal__tab-title">{s.title}</span>
+        </button>
+        {/* 우측 — 일반 탭과 완전히 같은 구조(× 늘 표시)라 × 자리가 정확히 맞는다 */}
+        <Tooltip label="세션 종료">
+          <button
+            type="button"
+            className="terminal__tab-close"
+            aria-label={`'${s.title}' 세션 종료`}
+            onClick={() => onClose(s)}
+          >
+            <Icon name="x" size={12} />
+          </button>
+        </Tooltip>
       </span>
     );
   };
