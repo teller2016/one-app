@@ -1779,6 +1779,7 @@ input.input--bare {
 // ===== 보조 텍스트 =====
 .hint {
   @include type-small;
+  font-size: var(--fs-ui-sm); // 11.5 — 목업 .hint
   color: var(--text-3);
 }
 

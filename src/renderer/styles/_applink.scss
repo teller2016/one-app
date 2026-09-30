@@ -1,61 +1,228 @@
-// 딥링크(applink) 섹션 — 룩은 공용 클래스, 여기는 배치
+// 딥링크(applink) 섹션 — 목업 Applink.dc.html (2026-09-30 리디자인)
+// 가운데 760 단일 열: [API 키 줄] → [생성 폼 패널] → [생성된 딥링크 패널]. 섹션 제목 없음 — 어드민 링크는 탑바 슬롯.
 @use './base' as *;
 
 .applink {
-  &__key {
-    margin-bottom: 12px;
+  // 목업: 본문 padding 28 0 · 가운데 760 · 블록 사이 gap 16
+  max-width: var(--applink-w);
+  padding: 28px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  // 공용 배너의 아래 여백은 이 섹션의 gap 이 대신한다
+  .banner {
+    margin: 0;
   }
 
-  &__key-status {
-    margin: 0 0 14px;
+  // ── API 키 줄 (저장됨) — 패널 면 · 1px 선 · 모서리 8 · padding 10 14 · gap 10 ──
+  &__key {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-tab);
+    background: var(--surface-1);
+
+    // 미저장·변경 모드 — 경고 띠 + 입력 줄을 세로로 (목업 상태 보드: gap 8)
+    &--edit {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 12px 14px;
+    }
+  }
+
+  &__key-icon {
+    display: inline-flex;
+    color: var(--ok);
+  }
+
+  &__key-text {
+    flex: 1;
+    font-size: var(--fs-ui);
+  }
+
+  // 키 입력 줄 — 라벨 48 · 입력 28 · [저장] 24 (목업 상태 보드)
+  &__key-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .input {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+
+  &__key-label {
+    flex: none;
+    width: 48px;
+    font-size: var(--fs-small);
+    color: var(--text-2);
+  }
+
+  // ── 생성 폼 패널 — padding 20 · gap 16 ──
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+  }
+
+  // 필드 — 라벨 위 (12/500 fg-2 · gap 6)
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    > label {
+      font-size: var(--fs-small);
+      font-weight: 500;
+      color: var(--text-2);
+    }
+  }
+
+  // URL 입력 — 모노 12.5 (placeholder 는 한글이라 본문 서체)
+  &__mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+
+    &::placeholder {
+      font-family: var(--font-display);
+    }
+  }
+
+  // 공유 정보 접이식 — 1px 선 · 모서리 8 · 머리 38(가라앉은 면) · 본문 padding 14 12 · gap 12
+  &__og {
+    border: 1px solid var(--border);
+    border-radius: var(--r-tab);
+    overflow: hidden;
+  }
+
+  &__og-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    border: 0;
+    background: var(--bg-sunken);
+    color: var(--text);
+    font-family: inherit;
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    @include focus-ring(-2px);
+
+    > :first-child {
+      color: var(--text-3);
+    }
+  }
+
+  &__og-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 12px;
   }
 
   &__og-desc {
-    margin: 0 0 12px;
+    margin: 0;
   }
 
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  // ── 생성된 딥링크 패널 — 머리 42 · 행 54 ──
   &__list {
-    @include card-surface;
-    padding: 4px 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+  }
+
+  &__list-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: var(--panel-head-h);
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  // 패널 라벨 — 목업 .label 은 모노 대문자지만 한글이라 본문 서체 11/600 흐린 잉크(한글 모노 금지)
+  &__list-title {
+    flex: 1;
+    font-size: var(--fs-caption);
+    font-weight: 600;
+    color: var(--text-3);
+  }
+
+  &__list-count {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
   }
 
   &__item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 0;
+    gap: 14px;
+    height: 54px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
 
-    + .applink__item {
-      border-top: 1px solid var(--border);
-    }
-
-    &-main {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-      flex: 1;
-    }
-
-    // 생성된 딥링크 — 잘 보이게 (모노)
-    &-url {
-      font-family: var(--font-mono);
-      font-weight: 600;
-    }
-
-    // 대상 URL — 보조 (한 줄 말줄임)
-    &-target {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      @include type-caption;
-      color: var(--text-3);
+    &:last-child {
+      border-bottom: 0;
     }
   }
-}
 
-// 어드민 링크 — 헤더 아래
-.applink__admin {
-  margin: -6px 0 16px;
+  &__item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  // 단축 URL — 모노 12.5 액센트 + 외부 아이콘 11 (간격 5)
+  &__item-url {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    cursor: pointer;
+    @include focus-ring(1px);
+
+    &:hover {
+      color: var(--accent-hover);
+      text-decoration: underline;
+    }
+  }
+
+  // 대상 URL — 모노 11 흐린 잉크, 한 줄 말줄임
+  &__item-target {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+  }
 }

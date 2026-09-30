@@ -109,3 +109,6 @@ scrcpy 창을 닫으면 exit 이벤트로 위젯 상태 자동 갱신(`mirror:ch
 `renderer/features/applink` + `main/features/applink`
 
 applink.kr 디퍼드 딥링크(단축 URL) 생성. 클라이언트 JS 호출이 막혀 있어 **main 에서** `POST /deeplink/deeplink_create.asp` 를 호출(`X-API-KEY` + `$canonical_url`·선택 OG 필드). **API 키는 safeStorage 암호화**로 `userData/applink.json` 에만 저장. UI 는 키 관리 + 대상 URL + 접이식 공유 정보(제목·설명·이미지·PC 링크) + 생성 시 클립보드 자동 복사 + 이번 세션 생성 목록.
+
+**화면 구조 (2026-09-30 리디자인 — 목업 Applink.dc.html)**: 섹션 제목 없이 [딥링크 어드민 열기]는 탑바 슬롯(`TopbarSlot` right). 본문은 가운데 `--applink-w` 760 단일 열(padding 28 0 · gap 16): API 키 줄(패널 면·모서리 8 — 미저장/변경 모드면 경고 띠 + 라벨 48·입력 28·[저장] xs) → 생성 폼 패널(padding 20·gap 16, 필드 라벨 위 12/500, URL 입력 모노 12.5) → 생성된 딥링크 패널(머리 42 · 행 54 · 단축 URL 모노 12.5 액센트 + 외부 아이콘 · 대상 모노 11 · [복사] xs). [딥링크 생성] 은 `Button lg` 오른쪽 정렬.
+- ⚠️ 공유 정보 접이식은 공용 `Collapsible`(카드 룩)이 아니라 섹션 전용 상자(1px 선·모서리 8·머리 38 가라앉은 면)다 — 열림 상태는 예전과 같은 `applink:group:og` 키('1'/'0')라 사용자가 접어 둔 상태가 유지된다.
