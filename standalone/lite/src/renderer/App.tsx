@@ -60,6 +60,8 @@ function Shell() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [updateHidden, setUpdateHidden] = useState(false);
   const [install, setInstall] = useState<InstallState>({ status: 'idle' });
+  // 지난 [지금 업데이트]가 교체 단계에서 실패했다 — 시작 후 첫 확인에만 온다(닫으면 끝)
+  const [lastFailed, setLastFailed] = useState<UpdateInfo['lastInstallFailed']>();
   const confirm = useConfirm();
 
   useEffect(() => {
@@ -72,7 +74,10 @@ function Shell() {
     // 앱은 그대로 돌아야 한다). main 이 실패를 값으로 돌려주므로 catch 는 방어용이다.
     void window.oneApp.update
       .check()
-      .then(setUpdate)
+      .then((info) => {
+        setUpdate(info);
+        setLastFailed(info.lastInstallFailed);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -263,6 +268,32 @@ function Shell() {
 
       {/* 새 버전 알림 — [지금 업데이트]는 앱 안에서 받아 교체하고 다시 시작한다(updateInstall.ts).
           자동 교체가 안 되는 위치·플랫폼이면 [받기]로 릴리스 페이지를 연다 */}
+      {/* 지난 자동 설치가 앱 종료 뒤 교체 단계에서 실패 — 조용히 옛 버전으로 돌아와 같은 업데이트를
+          되풀이하지 않게 알리고 직접 받는 길을 준다 */}
+      {lastFailed && install.status === 'idle' && (
+        <div className="app__update">
+          <Banner variant="danger">
+            <div className="app__update-row">
+              <span>
+                지난 업데이트(<b>{lastFailed.version}</b>)를 설치하지 못했습니다 — {lastFailed.reason}{' '}
+                릴리스 페이지에서 받아 앱 폴더에 덮어쓰면 됩니다(설정·계정 유지).
+              </span>
+              <span className="app__update-actions">
+                <Button
+                  size="sm"
+                  // lastFailed 는 확인 결과에서만 오므로 update 가 있다 (url 은 실패해도 채워진다)
+                  onClick={() => update && void window.oneApp.openExternal(update.url)}
+                >
+                  릴리스 페이지
+                </Button>
+                <Button size="sm" onClick={() => setLastFailed(undefined)}>
+                  닫기
+                </Button>
+              </span>
+            </div>
+          </Banner>
+        </div>
+      )}
       {showUpdate && <div className="app__update">{renderUpdateBanner()}</div>}
 
       <main className="app__body">

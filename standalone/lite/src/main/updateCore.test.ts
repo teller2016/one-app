@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   compareVersion,
   macSwapScript,
+  parseSwapResult,
   pickAsset,
   psq,
   shq,
@@ -71,6 +72,8 @@ const plan: SwapPlan = {
   backup: '/Applications/OneAppLite.app.bak',
   launch: '/Applications/OneAppLite.app',
   log: '/tmp/update.log',
+  result: '/tmp/update-result.txt',
+  version: '2.4.1',
 };
 
 /** 본문에서 각 표식이 이 순서로 등장하는지 — 앞 표식 **뒤에서부터** 찾는다(같은 문구가 여러 번 나와도 순서를 본다) */
@@ -123,8 +126,24 @@ describe('winSwapScript', () => {
     backup: 'C:\\Users\\홍길동\\OneAppLite.bak',
     launch: 'C:\\Users\\홍길동\\OneAppLite\\OneAppLite.exe',
     log: 'C:\\Users\\홍길동\\AppData\\Local\\Temp\\update.log',
+    result: 'C:\\Users\\홍길동\\AppData\\Local\\Temp\\update-result.txt',
+    version: '2.4.1',
   };
   const s = winSwapScript(winPlan);
+
+  it('맨 먼저 작업 폴더를 임시 폴더로 옮긴다 — 앱 폴더를 붙잡으면 폴더 이름 바꾸기가 늘 실패한다(2.4.0 무한 업데이트)', () => {
+    order(s, ['Set-Location -LiteralPath ([IO.Path]::GetTempPath())', 'Get-Process -Id 777', 'Move-Item -LiteralPath $target']);
+  });
+  it('결과 파일에 성공·실패를 남긴다 — 다음 실행이 실패를 알린다', () => {
+    order(s, ["Log 'swapped'", 'Result "ok $version"', 'Relaunch']);
+    expect(s).toContain("Log 'backup failed (target still locked)'; Result \"fail $version");
+    expect(s).toContain('Result "fail $version 새 버전을');
+    expect(s).toContain('Result "fail $version 교체 중 오류');
+    expect(s).toContain("$result = 'C:\\Users\\홍길동\\AppData\\Local\\Temp\\update-result.txt'");
+  });
+  it('재실행한 앱의 작업 폴더는 앱 폴더다', () => {
+    expect(s).toContain('Start-Process -FilePath $launch -WorkingDirectory ([IO.Path]::GetDirectoryName($launch))');
+  });
 
   it('종료 대기 → 백업(재시도) → 교체 → 재실행 → 정리 순서', () => {
     order(s, [
@@ -156,5 +175,32 @@ describe('winSwapScript', () => {
   it('정리는 명시된 stage 만 지운다 — Split-Path 로 상위를 유추하지 않는다', () => {
     expect(s).toContain("$stage = 'C:\\Users\\홍길동\\AppData\\Local\\Temp\\stage'");
     expect(s).not.toContain('Split-Path');
+  });
+});
+
+describe('macSwapScript 결과 파일', () => {
+  const s = macSwapScript(plan);
+  it('성공은 ok, 실패 두 갈래는 fail 로 남긴다', () => {
+    expect(s).toContain(`printf '%s\\n' 'ok 2.4.1' >'/tmp/update-result.txt'`);
+    expect(s.split(`printf '%s\\n' 'fail 2.4.1`).length - 1).toBe(2);
+  });
+  it('작업 폴더를 앱 밖으로 옮긴다', () => {
+    expect(s).toContain('cd /tmp');
+  });
+});
+
+describe('parseSwapResult', () => {
+  it('ok · fail 한 줄을 읽는다 (PowerShell 5.1 의 BOM·CRLF 포함)', () => {
+    expect(parseSwapResult('ok 2.4.1\n')).toEqual({ ok: true, version: '2.4.1' });
+    expect(parseSwapResult('\uFEFFfail 2.4.1 앱 폴더가 사용 중이라 바꾸지 못했습니다.\r\n')).toEqual({
+      ok: false,
+      version: '2.4.1',
+      reason: '앱 폴더가 사용 중이라 바꾸지 못했습니다.',
+    });
+  });
+  it('사유가 비면 기본 문구, 모양이 다르면 null', () => {
+    expect(parseSwapResult('fail 2.4.1')).toEqual({ ok: false, version: '2.4.1', reason: '원인을 알 수 없습니다.' });
+    expect(parseSwapResult('garbage')).toBeNull();
+    expect(parseSwapResult('')).toBeNull();
   });
 });

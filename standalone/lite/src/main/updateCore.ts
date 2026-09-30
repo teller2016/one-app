@@ -73,7 +73,26 @@ export type SwapPlan = {
   launch: string;
   /** 헬퍼 로그 파일 — 실패 원인을 나중에 볼 수 있게 */
   log: string;
+  /**
+   * 결과 파일 — 헬퍼가 끝에 `ok <버전>` 또는 `fail <버전> <사유>` 한 줄을 쓴다. 다음에 뜬 앱이 읽어
+   * 실패를 배너로 알린다(예전엔 실패가 로그에만 남아 "재시작이 안 되고 업데이트가 무한 반복"으로 보였다)
+   */
+  result: string;
+  /** 설치하려던 버전 — 결과 파일에 함께 적는다 */
+  version: string;
 };
+
+/** 결과 파일 한 줄을 읽는다 — `ok <버전>` · `fail <버전> <사유>` (앞의 BOM·공백 허용) */
+export function parseSwapResult(
+  text: string,
+): { ok: true; version: string } | { ok: false; version: string; reason: string } | null {
+  const line = text.replace(/^\uFEFF/, '').trim().split(/\r?\n/)[0] ?? '';
+  const m = line.match(/^(ok|fail)\s+(\S+)(?:\s+(.*))?$/);
+  if (!m) return null;
+  return m[1] === 'ok'
+    ? { ok: true, version: m[2] }
+    : { ok: false, version: m[2], reason: (m[3] ?? '').trim() || '원인을 알 수 없습니다.' };
+}
 
 /** POSIX sh 단일 인용 — `'` 는 `'\''` 로 */
 export const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -92,11 +111,14 @@ const WAIT_EXIT_SEC = 30;
  * 볼륨이 다르면(외장 디스크에 앱을 둔 경우) `ditto` 로 복사한다.
  */
 export function macSwapScript(plan: SwapPlan): string {
-  const { pid, target, incoming, stage, backup, launch, log } = plan;
+  const { pid, target, incoming, stage, backup, launch, log, result, version } = plan;
+  const res = (line: string) => `printf '%s\\n' ${shq(line)} >${shq(result)}`;
   return [
     '#!/bin/sh',
     '# One App Lite 업데이트 헬퍼 — 앱이 만든 임시 스크립트. 앱이 종료되면 교체하고 다시 띄운다.',
     `exec >>${shq(log)} 2>&1`,
+    // 작업 폴더를 앱 밖으로 — Windows 헬퍼와 같은 원칙(앱 폴더를 붙잡지 않는다)
+    'cd /tmp || true',
     `echo "[$(date)] start pid=${pid}"`,
     'i=0',
     `while kill -0 ${pid} 2>/dev/null; do`,
@@ -110,18 +132,20 @@ export function macSwapScript(plan: SwapPlan): string {
     `LAUNCH=${shq(launch)}`,
     'rm -rf "$BACKUP"',
     'if ! mv "$TARGET" "$BACKUP"; then',
-    '  echo "backup failed"; open "$LAUNCH"; exit 1',
+    `  echo "backup failed"; ${res(`fail ${version} 기존 앱을 옮기지 못했습니다.`)}; open "$LAUNCH"; exit 1`,
     'fi',
     'if mv "$INCOMING" "$TARGET" 2>/dev/null || { rm -rf "$TARGET"; ditto "$INCOMING" "$TARGET"; }; then',
     '  echo "swapped"',
     '  # 앱이 직접 받은 파일엔 검역 표시가 없지만, 혹시 붙어 있어도 첫 실행이 막히지 않게',
     '  xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true',
+    `  ${res(`ok ${version}`)}`,
     '  open "$LAUNCH"',
     '  rm -rf "$BACKUP"',
     '  rm -rf "$STAGE"',
     '  echo "done"',
     'else',
     '  echo "swap failed, restoring"',
+    `  ${res(`fail ${version} 새 버전을 옮겨 놓지 못해 기존 앱으로 되돌렸습니다.`)}`,
     '  rm -rf "$TARGET"',
     '  mv "$BACKUP" "$TARGET"',
     '  open "$LAUNCH"',
@@ -141,18 +165,28 @@ export function macSwapScript(plan: SwapPlan): string {
  *   호출부는 파일을 **UTF-8 BOM** 으로 저장해야 PowerShell 5.1 이 한글을 바로 읽는다.
  */
 export function winSwapScript(plan: SwapPlan): string {
-  const { pid, target, incoming, stage, backup, launch, log } = plan;
+  const { pid, target, incoming, stage, backup, launch, log, result, version } = plan;
   return [
     '# One App Lite 업데이트 헬퍼 — 앱이 만든 임시 스크립트. 앱이 종료되면 폴더를 교체하고 다시 띄운다.',
     "$ErrorActionPreference = 'Stop'",
+    // ⚠️ 작업 폴더를 앱 폴더 밖으로 — Windows 는 **어떤 프로세스의 작업 폴더인 폴더**를 이름 바꾸거나
+    //    옮길 수 없다. 앱을 더블클릭해 띄우면 작업 폴더가 앱 폴더이고, 헬퍼가 그걸 물려받아 자기 발로
+    //    백업(이름 바꾸기)을 막고 있었다 → 20번 재시도 후 포기 → 옛 앱 재실행 = "무한 업데이트"(2.4.0 신고).
+    //    호출부도 cwd 를 임시 폴더로 주지만, 스크립트가 스스로도 한 번 더 옮긴다.
+    'Set-Location -LiteralPath ([IO.Path]::GetTempPath())',
     `$log = ${psq(log)}`,
     `$target = ${psq(target)}`,
     `$incoming = ${psq(incoming)}`,
     `$stage = ${psq(stage)}`,
     `$backup = ${psq(backup)}`,
     `$launch = ${psq(launch)}`,
+    `$result = ${psq(result)}`,
+    `$version = ${psq(version)}`,
     'function Log($m) { Add-Content -LiteralPath $log -Value ("[{0}] {1}" -f (Get-Date -Format s), $m) }',
-    'function Relaunch() { try { Start-Process -FilePath $launch } catch { Log "relaunch failed: $_" } }',
+    // 결과 한 줄 — 다음에 뜬 앱이 읽는다(parseSwapResult). 실패해도 교체 흐름은 막지 않는다
+    'function Result($m) { try { Set-Content -LiteralPath $result -Value $m -Encoding UTF8 } catch { Log "result write failed: $_" } }',
+    // 재실행한 앱의 작업 폴더는 앱 폴더로 (앱이 상대 경로에 기대지 않지만 사용자가 더블클릭했을 때와 같게)
+    'function Relaunch() { try { Start-Process -FilePath $launch -WorkingDirectory ([IO.Path]::GetDirectoryName($launch)) } catch { Log "relaunch failed: $_" } }',
     'function MoveDir($from, $to) {',
     '  if ([IO.Path]::GetPathRoot($from) -ieq [IO.Path]::GetPathRoot($to)) {',
     '    Move-Item -LiteralPath $from -Destination $to',
@@ -171,12 +205,14 @@ export function winSwapScript(plan: SwapPlan): string {
     '  for ($i = 0; $i -lt 20 -and -not $moved; $i++) {',
     '    try { Move-Item -LiteralPath $target -Destination $backup; $moved = $true } catch { Start-Sleep -Milliseconds 500 }',
     '  }',
-    "  if (-not $moved) { Log 'backup failed (target still locked)'; Relaunch; exit 1 }",
+    "  if (-not $moved) { Log 'backup failed (target still locked)'; Result \"fail $version 앱 폴더가 사용 중이라 바꾸지 못했습니다 — 앱 폴더를 연 탐색기 창이나 다른 프로그램을 닫고 다시 시도하세요.\"; Relaunch; exit 1 }",
     '  try {',
     '    MoveDir $incoming $target',
     "    Log 'swapped'",
+    '    Result "ok $version"',
     '  } catch {',
     '    Log "swap failed: $_ - restoring"',
+    '    Result "fail $version 새 버전을 옮겨 놓지 못해 기존 앱으로 되돌렸습니다."',
     '    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }',
     '    Move-Item -LiteralPath $backup -Destination $target',
     '    Relaunch',
@@ -188,6 +224,7 @@ export function winSwapScript(plan: SwapPlan): string {
     "  Log 'done'",
     '} catch {',
     '  Log "fatal: $_"',
+    '  Result "fail $version 교체 중 오류가 났습니다 — $_"',
     '  if (-not (Test-Path -LiteralPath $target) -and (Test-Path -LiteralPath $backup)) {',
     '    Move-Item -LiteralPath $backup -Destination $target',
     '  }',

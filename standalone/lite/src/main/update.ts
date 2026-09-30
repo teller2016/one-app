@@ -6,10 +6,16 @@
 //
 // ⚠️ 확인 실패는 오류로 만들지 않는다 — 사내망에서 GitHub 이 막혀 있어도 앱은 그대로 돌아야 한다.
 import { app, ipcMain, shell } from 'electron';
+import fs from 'node:fs';
 import { fetchWithTimeout } from '@one/main/lib/http';
 import type { UpdateInfo, UpdateInstallResult } from '../shared/update';
-import { compareVersion, pickAsset } from './updateCore';
-import { installUpdate, isStageFolder, resolveInstallTarget } from './updateInstall';
+import { compareVersion, parseSwapResult, pickAsset } from './updateCore';
+import {
+  installUpdate,
+  isStageFolder,
+  resolveInstallTarget,
+  swapResultPath,
+} from './updateInstall';
 
 /** ⚠️ 바꾸면 `scripts/release.mjs` 의 REPO 도 함께 바꿀 것 (배포하는 곳과 보는 곳이 같아야 한다) */
 const REPO = 'teller2016/one-app-lite';
@@ -33,13 +39,36 @@ const TIMEOUT_MS = 8_000;
 /** 마지막 확인 결과 — `update:install` 은 렌더러가 준 URL 이 아니라 이것을 쓴다 */
 let lastInfo: UpdateInfo | null = null;
 
+/**
+ * 지난 교체 결과 — 시작 후 한 번만 읽고 지운다. 실패였고 **지금도 그 버전보다 낮으면** 알린다
+ * (결과 파일만 남고 사용자가 이미 손으로 새 버전을 깔았다면 알릴 이유가 없다).
+ */
+let swapResultRead = false;
+function takeLastInstallFailure(current: string): UpdateInfo['lastInstallFailed'] {
+  if (swapResultRead) return undefined;
+  swapResultRead = true;
+  const file = swapResultPath();
+  let text = '';
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return undefined; // 파일 없음 = 지난번에 설치를 시도하지 않았다
+  }
+  fs.rmSync(file, { force: true });
+  const r = parseSwapResult(text);
+  if (!r || r.ok || compareVersion(r.version, current) <= 0) return undefined;
+  return { version: r.version, reason: r.reason };
+}
+
 export async function checkUpdate(): Promise<UpdateInfo> {
   const current = app.getVersion();
+  const lastInstallFailed = takeLastInstallFailure(current);
   const fail = (error: string): UpdateInfo => ({
     ok: false,
     current,
     url: RELEASES_URL,
     error,
+    lastInstallFailed,
   });
 
   try {
@@ -81,6 +110,7 @@ export async function checkUpdate(): Promise<UpdateInfo> {
         : target.ok
           ? undefined
           : target.reason,
+      lastInstallFailed,
     };
     lastInfo = info;
     return info;

@@ -30,6 +30,11 @@ export type UpdateInfo = {
   canInstall?: boolean;
   /** `canInstall` 이 false 인 이유 — 사용자에게 그대로 보여준다 */
   installBlocked?: string;
+  /**
+   * 지난 [지금 업데이트]가 교체 단계(앱 종료 후 헬퍼)에서 실패했다 — 시작 후 첫 확인에만 실린다.
+   * 셸이 배너로 알리고 릴리스 페이지에서 직접 받게 안내한다(조용히 옛 버전으로 돌아오지 않게)
+   */
+  lastInstallFailed?: { version: string; reason: string };
 };
 
 export type UpdatePhase = 'download' | 'verify' | 'extract' | 'install';

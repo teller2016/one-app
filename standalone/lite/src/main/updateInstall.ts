@@ -249,7 +249,7 @@ async function launchHelper(plan: SwapPlan, kind: 'mac' | 'win') {
   if (kind === 'mac') {
     const script = path.join(temp, `${EXECUTABLE}-update.sh`);
     fs.writeFileSync(script, macSwapScript(plan), { mode: 0o755 });
-    spawn('/bin/sh', [script], { detached: true, stdio: 'ignore' }).unref();
+    spawn('/bin/sh', [script], { detached: true, stdio: 'ignore', cwd: temp }).unref();
     return;
   }
 
@@ -259,6 +259,7 @@ async function launchHelper(plan: SwapPlan, kind: 'mac' | 'win') {
   fs.writeFileSync(probe, `${BOM}exit 0\n`, 'utf8');
   try {
     await run('powershell.exe', [...PS_FLAGS, '-File', probe], {
+      cwd: temp,
       windowsHide: true,
       timeout: 15_000,
     });
@@ -273,7 +274,10 @@ async function launchHelper(plan: SwapPlan, kind: 'mac' | 'win') {
   const script = path.join(temp, `${EXECUTABLE}-update.ps1`);
   // PowerShell 5.1 은 BOM 이 있어야 UTF-8 로 읽는다 — 한글 사용자 폴더 경로
   fs.writeFileSync(script, `${BOM}${winSwapScript(plan)}`, 'utf8');
+  // ⚠️ cwd 를 임시 폴더로 — 안 주면 앱의 작업 폴더(= 더블클릭으로 띄웠을 때 앱 폴더)를 물려받아
+  //    헬퍼 자신이 그 폴더를 붙잡는 바람에 교체(폴더 이름 바꾸기)가 늘 실패했다(2.4.0 신고, 스크립트도 이중 방어)
   spawn('powershell.exe', [...PS_FLAGS, '-File', script], {
+    cwd: temp,
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
@@ -281,6 +285,9 @@ async function launchHelper(plan: SwapPlan, kind: 'mac' | 'win') {
 }
 
 let installing = false;
+
+/** 헬퍼 결과 파일 — `update.ts` 가 다음 시작 때 읽는다 */
+export const swapResultPath = () => path.join(app.getPath('temp'), `${EXECUTABLE}-update-result.txt`);
 
 /** 임시 폴더 안의 경로인가 — `update:open-folder` 가 임의 경로를 열지 않게 */
 export function isStageFolder(folder: string): boolean {
@@ -338,7 +345,10 @@ export async function installUpdate(
       backup: `${resolved.target.target}.bak`,
       launch: resolved.target.launch,
       log: path.join(temp, `${EXECUTABLE}-update.log`),
+      result: swapResultPath(),
+      version,
     };
+    fs.rmSync(plan.result, { force: true }); // 지난 결과가 이번 결과로 읽히지 않게
     await launchHelper(plan, resolved.target.kind);
 
     // 헬퍼가 우리 종료를 기다리고 있다
