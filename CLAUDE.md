@@ -16,7 +16,7 @@
 | `npm run lint` | ESLint (훅 규칙 포함 — `exhaustive-deps` 경고 0 을 유지한다) |
 | `npm test` | 순수 로직 단위 테스트 (vitest) |
 | `npm run make` | `.app` + 배포용 `.zip` (macOS 는 ZIP maker 만 있다 — DMG 아님) |
-| `npm run icon` | 앱 아이콘 원본(`assets/icon.png`) 생성 — 도형 코드가 정본 (`scripts/make-icon.mjs`) |
+| `npm run icon` | 앱 아이콘 원본(`assets/icon.png`) + 폰 홈 화면 아이콘(`src/mobile-app/public/icon-192·512`) 생성 — 도형 코드가 정본 (`scripts/make-icon.mjs`) |
 | `npm run icon:dev` | 개발용 DEV 아이콘 생성 (원본 아이콘을 바꿨을 때만) |
 
 ## 프로젝트 구조 (feature 중심 — Bulletproof React 스타일)
