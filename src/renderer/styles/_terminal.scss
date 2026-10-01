@@ -1118,6 +1118,15 @@
     align-self: stretch;
   }
 
+  &__tabs-tools {
+    display: flex;
+    align-items: center;
+    align-self: center; // 탭은 바닥 정렬이지만 툴바는 바 세로 중앙에 (우측 액션과 같은 줄)
+    gap: 6px;
+    flex: 0 1 auto;
+    min-width: 0; // 좁아지면 안쪽 프리셋 칩 줄(__bar-presets)이 줄어 가로 스크롤된다
+  }
+
   &__tabs-actions {
     display: flex;
     align-items: center;
@@ -1357,22 +1366,10 @@
     border-radius: var(--r-xs);
   }
 
-  // 상단 공용 툴바 — 탭바 아래 한 줄(좌측 [⚙ | 프리셋 칩…], 우측 아이콘 액션).
+  // 공용 툴바 — **세션 탭 줄 오른쪽**(`__tabs-tools`)에 붙는다. 좌 [프리셋 칩…][편집] · [검색] | [- 13 +][맨 아래] | 탭바 액션.
+  // 2026-10-01: 탭바 아래 별도 줄(40px)이던 것을 합쳤다 — 터미널 세로 공간 확보(사용자 "위아래가 좁다").
   // 예전엔 pane 마다 있었는데 분할하면 반복될 이유가 없어 하나로 올렸다(2026-08-10).
-  // __panes 밖(위)의 일반 flex 행이라 모든 pane 에 균일하게 적용된다 — 숨은 pane
-  // inset:0 크기 동등성도 그대로다. 높이는 최소로 유지해 터미널을 덜 먹는다.
-  // 목업: 40px · 패널 면 · 바닥선 · padding 0 12 · gap 6 — [프리셋 버튼…][편집] ··· [검색] | [- 13 +][맨 아래][Finder]
-  &__bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    min-height: 40px;
-    padding: 0 12px;
-    background: var(--surface-1);
-    border-bottom: 1px solid var(--border);
-  }
-
+  // 탭과 폭을 다툰다 — 탭 목록(flex 1)이 먼저 줄고(가로 스크롤), 그다음 프리셋 칩이 줄어 가로 스크롤된다.
   &__bar-presets {
     flex: 1;
     min-width: 0;

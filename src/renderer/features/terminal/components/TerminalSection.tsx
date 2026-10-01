@@ -588,7 +588,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [rememberActive]
   );
 
-  /** 그 세션의 cwd 를 Finder 로 — 툴바[Finder]·탭 우클릭 메뉴 공용 */
+  /** 그 세션의 cwd 를 Finder 로 — 탭 우클릭 메뉴 (툴바 버튼은 2026-10-01 제거 — 우클릭으로 충분) */
   const revealSessionCwd = useCallback(
     (id: string) => {
       void (async () => {
@@ -613,11 +613,6 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     },
     [toast]
   );
-  /** 툴바 [Finder] — 대상은 포커스 세션 */
-  const revealActive = useCallback(() => {
-    const id = activeIdRef.current;
-    if (id) revealSessionCwd(id);
-  }, [revealSessionCwd]);
 
   // ── 워크트리를 IDE(Antigravity)로 열기 — 탭바 우측 액션 ──
   // 설치 여부는 한 번만 묻고, 미설치면 이름이 null 이라 버튼이 그려지지 않는다.
@@ -906,6 +901,102 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     [barCwd, runPreset]
   );
 
+  // ── 공용 툴바 — 세션 탭 줄 오른쪽에 붙는다(2026-10-01: 탭 아래 별도 줄이던 것을 합쳐
+  // 터미널 높이를 한 줄(40px) 더 확보 — 사용자 "위아래가 좁다"). pane 마다 있던 툴바를 하나로
+  // 모은 것(2026-08-10)은 그대로 — 프리셋·글자크기는 공유 상태고, 검색·맨아래로는
+  // 포커스 pane 에 핸들로 위임한다. 워크스페이스 등록 전 화면에서는 등록이 먼저라 감춘다.
+  // ⚠️ useMemo 필수 — SessionTabs 는 memo 라 매 렌더 새 엘리먼트를 넘기면 탭바가 늘 다시 그려진다.
+  const showBarTools = !!activeSession || workspaces.length > 0;
+  const activeScrolledUp = !!activeId && !!scrolledUp[activeId];
+  const barTools = useMemo(
+    () =>
+      showBarTools ? (
+        <>
+          <PresetBar
+            presets={barPresets}
+            cwd={barCwd ?? undefined}
+            disabled={!barCwd}
+            onRun={runPresetForBar}
+            onEdit={openPresets}
+          />
+          {/* 아이콘 버튼은 전부 Tooltip — 접근성 이름은 aria-label (renderer-ui 규칙) */}
+          <span className="terminal__bar-actions">
+            <Tooltip label="검색 (⌘F)">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="검색"
+                disabled={!activeSession}
+                onClick={openActiveSearch}
+              >
+                <Icon name="search" size={14} />
+              </button>
+            </Tooltip>
+            <span className="terminal__bar-sep" aria-hidden="true" />
+            <Tooltip label="글자 작게">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="글자 작게"
+                disabled={fontSize <= FONT_SIZE_MIN}
+                onClick={() => changeFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
+              >
+                <Icon name="minus" size={14} />
+              </button>
+            </Tooltip>
+            <Tooltip
+              label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}
+            >
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
+                onClick={() => changeFontSize(FONT_SIZE_DEFAULT)}
+              >
+                <span className="terminal__bar-size">{fontSize}</span>
+              </button>
+            </Tooltip>
+            <Tooltip label="글자 크게">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="글자 크게"
+                disabled={fontSize >= FONT_SIZE_MAX}
+                onClick={() => changeFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            </Tooltip>
+            {activeScrolledUp && (
+              <Tooltip label="맨 아래로">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="맨 아래로"
+                  onClick={scrollActiveToBottom}
+                >
+                  <Icon name="arrow-down-to-line" size={14} />
+                </button>
+              </Tooltip>
+            )}
+          </span>
+        </>
+      ) : null,
+    [
+      showBarTools,
+      barPresets,
+      barCwd,
+      runPresetForBar,
+      openPresets,
+      activeSession,
+      openActiveSearch,
+      fontSize,
+      changeFontSize,
+      activeScrolledUp,
+      scrollActiveToBottom,
+    ]
+  );
+
   // ── 패널 너비·축소 (앱 사이드바 Sidebar.tsx 와 같은 규칙) ──
   const [changesWidth, setChangesWidth] = useState(savedChangesWidth);
   const changesWidthRef = useRef(changesWidth);
@@ -1166,95 +1257,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           remoteDraggingId={remoteDragId}
           onAdoptSession={adoptSession}
           onReorder={reorderTabs}
+          tools={barTools}
         />
-
-        {/* 상단 공용 바 — pane 마다 있던 툴바를 탭바 아래 하나로 고정(2026-08-10 사용자
-            요청: 분할해도 전부 공유값이라 반복될 이유가 없다). 프리셋·글자크기는 원래
-            공유 상태고, 검색·맨아래로·Finder 는 포커스 pane 에 핸들로 위임한다.
-            워크스페이스 등록 전 화면에서는 등록이 먼저라 감춘다. */}
-        {(activeSession || workspaces.length > 0) && (
-          <div className="terminal__bar">
-            <PresetBar
-              presets={barPresets}
-              cwd={barCwd ?? undefined}
-              disabled={!barCwd}
-              onRun={runPresetForBar}
-              onEdit={openPresets}
-            />
-            {/* 아이콘 버튼은 전부 Tooltip — 접근성 이름은 aria-label (renderer-ui 규칙) */}
-            <span className="terminal__bar-actions">
-              <Tooltip label="검색 (⌘F)">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="검색"
-                  disabled={!activeSession}
-                  onClick={openActiveSearch}
-                >
-                  <Icon name="search" size={14} />
-                </button>
-              </Tooltip>
-              <span className="terminal__bar-sep" aria-hidden="true" />
-              <Tooltip label="글자 작게">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="글자 작게"
-                  disabled={fontSize <= FONT_SIZE_MIN}
-                  onClick={() => changeFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
-                >
-                  <Icon name="minus" size={14} />
-                </button>
-              </Tooltip>
-              <Tooltip
-                label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}
-              >
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
-                  onClick={() => changeFontSize(FONT_SIZE_DEFAULT)}
-                >
-                  <span className="terminal__bar-size">{fontSize}</span>
-                </button>
-              </Tooltip>
-              <Tooltip label="글자 크게">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="글자 크게"
-                  disabled={fontSize >= FONT_SIZE_MAX}
-                  onClick={() => changeFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
-                >
-                  <Icon name="plus" size={14} />
-                </button>
-              </Tooltip>
-              {!!activeId && scrolledUp[activeId] && (
-                <Tooltip label="맨 아래로">
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="맨 아래로"
-                    onClick={scrollActiveToBottom}
-                  >
-                    <Icon name="arrow-down-to-line" size={14} />
-                  </button>
-                </Tooltip>
-              )}
-              <Tooltip label="세션 위치를 Finder 에서 열기">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Finder 에서 열기"
-                  disabled={!activeSession}
-                  onClick={revealActive}
-                >
-                  <Icon name="folder" size={14} />
-                </button>
-              </Tooltip>
-            </span>
-          </div>
-        )}
 
         {/* pane 영역 — 마크업·불변식은 TerminalPanes(팝아웃 창과 공유)에 있다.
             ⚠️ sessions 가 아니라 mainSessions — 분리 세션의 pane 이 숨은 채 attach 를

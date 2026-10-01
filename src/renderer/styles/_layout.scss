@@ -50,6 +50,16 @@
     transition: none;
   }
 
+  // ⌘\ 완전 숨김 — 폭 0 으로 접히는 동안 내용이 옆으로 비어져 나오지 않게 자른다.
+  // 경계선(::after)도 0 폭 위에 1px 로 남으므로 지운다.
+  &--hidden {
+    overflow: hidden;
+
+    &::after {
+      display: none;
+    }
+  }
+
   &__brand {
     display: flex;
     align-items: center;

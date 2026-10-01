@@ -96,8 +96,8 @@ paths:
 - ⚠️ **워크트리 폴링은 경량 조회**(`workspaces.worktrees(id, false)` → `listWorktreesBrief`), `dirty` 는 필요한 순간에만 상세로.
 - 상세: 노트 '⚠️ pane·탭바·LNB 는 `memo` 다'.
 
-## 상단 공용 바·탭바 액션
-- 툴바는 **탭바 아래 공용 바 하나**. 프리셋 대상 = 포커스 세션 cwd, 없으면 선택 워크트리.
+## 공용 툴바·탭바 액션
+- 툴바는 **세션 탭 줄 오른쪽**(`SessionTabs` 의 `tools` 슬롯 → `__tabs-tools`) — 2026-10-01 탭바 아래 별도 줄(40px)을 합쳐 터미널 높이 확보. ⚠️ `tools` 는 `useMemo` 로 고정해 넘긴다(SessionTabs 는 memo). 팝아웃 창은 넘기지 않는다. 프리셋 대상 = 포커스 세션 cwd, 없으면 선택 워크트리.
 - 검색·맨아래로는 `onRegisterHandle` 의 **포커스 pane 핸들** 위임, 노출은 `onScrolledChange(id, bool)`.
 - `</>` = **워크트리 루트**를 Antigravity 로 `execFile('open', ['-a', …])`(⚠️ `shell.openPath` 불가). ⚠️ 경로는 `listWorktrees()` 대조 후. 번들 탐색 `workspaces:editor-info`.
 

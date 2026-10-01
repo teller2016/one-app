@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { useRegisterCommands } from '../lib/commands';
 import { beginPointerDrag } from '../lib/pointerDrag';
 import { Icon } from './Icon';
 
@@ -58,8 +59,46 @@ export function Sidebar({
   // 드래그 중에는 상태만 갱신하고 저장은 놓는 순간 1회 (터미널 드로어 grip 과 같은 규칙)
   const widthRef = useRef(width);
   const collapsedRef = useRef(collapsed);
+  // ⌘\ 로 완전히 숨김(축소 아이콘 줄까지) — 접기/펴기와 별개 상태라 다시 보이면
+  // 숨기기 전 모양(펼침/축소)으로 돌아온다. 터미널을 넓게 쓰려는 용도(2026-10-01 사용자 요청)
+  const [hidden, setHidden] = useState(
+    () => localStorage.getItem('sidebar:hidden') === '1',
+  );
 
-  const applied = collapsed ? COLLAPSED_W : width;
+  const applied = hidden ? 0 : collapsed ? COLLAPSED_W : width;
+
+  const toggleHidden = useCallback(() => {
+    setHidden((v) => {
+      localStorage.setItem('sidebar:hidden', v ? '0' : '1');
+      return !v;
+    });
+  }, []);
+
+  // capture 로 받아 xterm 보다 먼저 잡는다(⌘K 팔레트와 같은 방식).
+  // ⚠️ e.key 가 아니라 e.code — 한국어 자판에서는 같은 키가 '₩' 로 들어온다.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (e.code !== 'Backslash' || e.isComposing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleHidden();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [toggleHidden]);
+
+  useRegisterCommands('sidebar', () => [
+    {
+      id: 'sidebar:toggle-hidden',
+      group: '명령',
+      label: hidden ? '메뉴 사이드바 보이기' : '메뉴 사이드바 숨기기',
+      hint: '⌘\\',
+      keywords: 'sidebar lnb menu hide',
+      icon: 'maximize',
+      run: toggleHidden,
+    },
+  ]);
 
   // 사이드바 폭에 기대는 다른 레이아웃(.jira-view 등)이 같은 값을 보도록 전역 변수로 노출한다.
   // theme.ts 가 <html data-theme> 을 쓰는 것과 같은 방식.
@@ -157,9 +196,12 @@ export function Sidebar({
       className={
         'sidebar' +
         (collapsed ? ' sidebar--collapsed' : '') +
+        (hidden ? ' sidebar--hidden' : '') +
         (dragging ? ' sidebar--dragging' : '')
       }
       style={{ width: applied, minWidth: applied }}
+      // 숨긴 동안 Tab 포커스·스크린리더에서도 빠진다
+      inert={hidden}
     >
       <div className="sidebar__brand">
         <span className="sidebar__brand-mark">

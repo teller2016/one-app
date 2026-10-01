@@ -84,6 +84,7 @@ export const SessionTabs = memo(function SessionTabs({
   onAdoptSession,
   onReorder,
   rightActions,
+  tools,
 }: {
   /** 표시 항목(순서 = 표시 순서) — 그룹은 멤버 칩들을 tab-pack 박스로 감싼다 */
   items: TabItem[];
@@ -128,6 +129,9 @@ export const SessionTabs = memo(function SessionTabs({
   onReorder: (ids: string[]) => void;
   /** 우측 액션 교체 슬롯 — 팝아웃 창이 변경사항·MO 버튼 대신 레포 라벨 등을 꽂는다 */
   rightActions?: ReactNode;
+  /** 탭 줄 오른쪽(우측 액션 앞)의 공용 툴바 — 메인 창의 프리셋·검색·글자 크기·Finder.
+   *  ⚠️ 이 컴포넌트는 memo 라 호출부가 useMemo 로 고정해 넘겨야 한다 */
+  tools?: ReactNode;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 우클릭 메뉴 [이름 변경] 이 제목을 입력창으로 바꾼다.
@@ -711,6 +715,13 @@ export const SessionTabs = memo(function SessionTabs({
           실측). 손잡이는 탭 바깥의 독립 요소여야 한다. 드롭 존(그룹 분리·가져오기)은
           그대로다 — 진행 중인 드래그의 dragover 는 drag 영역도 정상 수신한다. */}
       <div className="terminal__tabs-space" aria-hidden="true" />
+
+      {tools && (
+        <div className="terminal__tabs-tools">
+          {tools}
+          <span className="terminal__bar-sep" aria-hidden="true" />
+        </div>
+      )}
 
       {tabMenu}
 

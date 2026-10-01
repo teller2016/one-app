@@ -52,6 +52,7 @@ paths:
 
 ## 셸 (사이드바 · 탑바 · 상태바) — 정본은 `DESIGN.md` §4 셸
 `.app` 은 2행 그리드(위 `사이드바 | 콘텐츠`, 아래 전체 폭 `.statusbar` — `--statusbar-h`). 사이드바·상태바는 **불투명 `--surface-1`**, 콘텐츠는 `--bg`. 창의 `vibrancy: 'sidebar'` 는 로드 전 배경으로만 남는다 — **BrowserWindow 에 backgroundColor 지정 금지**(그 재질이 로드 전 배경이다). 탑바는 창 전체 폭 fixed 프로스트 바라 높이(44px) 변경 시 `.main` padding-top 을 동기화해야 한다.
+- **⌘\ = 메뉴 사이드바 완전 숨김**(2026-10-01, `Sidebar.tsx` — `sidebar:hidden`, 폭 0 + `.sidebar--hidden` + `inert`). 접기/펴기(`sidebar:collapsed`)와 별개라 다시 보이면 이전 모양으로 돌아온다. 키는 `e.code === 'Backslash'`(한국어 자판은 `e.key` 가 `₩`). ⌘P 팔레트에도 명령으로 있다.
 - ⚠️ 상태바 팝오버(`.statusbar__pop`)에 `display` 를 주지 말 것 — 닫힘이 `hidden` 속성이라 UA 의 `[hidden]{display:none}` 에 기대고 있다.
 
 ## 목업 토큰 대응 (리디자인 목업 .dc.html → `_base.scss`)
