@@ -31,6 +31,7 @@ import {
   onSessionsChanged,
   onTerminalData,
   onTerminalExit,
+  rememberDesktopSize,
   renameSession,
   resizeSession,
   restoreSessions,
@@ -92,6 +93,7 @@ export function registerTerminalIpc() {
       sender.on('did-navigate', () => attachedBySender.get(sender)?.clear());
     }
     ids.add(id);
+    rememberDesktopSize(id, cols, rows);
     return attachSession(id, cols, rows);
   });
   ipcMain.on('terminal:detach', (e, id: string) => {
@@ -178,9 +180,11 @@ export function registerTerminalIpc() {
   ipcMain.on('terminal:write', (_e, id: string, data: string) =>
     writeSession(id, data)
   );
-  ipcMain.on('terminal:resize', (_e, id: string, cols: number, rows: number) =>
-    resizeSession(id, cols, rows)
-  );
+  // 데스크톱의 주장은 기억해 둔다 — 폰이 크기를 놓으면 여기로 되돌린다(pty.releaseRemoteSize)
+  ipcMain.on('terminal:resize', (_e, id: string, cols: number, rows: number) => {
+    rememberDesktopSize(id, cols, rows);
+    resizeSession(id, cols, rows);
+  });
   // 휠 스크롤은 tmux copy-mode 로 위임한다 — tmux 클라이언트가 대체 화면으로 붙어
   // xterm 뷰포트엔 스크롤할 것이 없다(자세한 배경은 pty.scrollSession 주석).
   // invoke 인 이유는 결과(위로 올라가 있는지)로 [맨 아래로] 버튼을 켜기 때문이다.

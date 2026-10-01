@@ -3,6 +3,7 @@
 // 채팅은 읽기 전용(ChatView composer=false) — 입력은 터미널이 그대로 받는다. 데이터는 useTerminalChat(IPC).
 // xterm 은 크기 그대로 아래에 살아 있다(attach·PTY 크기·스크롤백 유지 — PTY 를 줄이면 폰·전체 터미널까지 작아진다).
 import { memo, useCallback, type CSSProperties } from 'react';
+import { Icon } from '../../../components/Icon';
 import { setChatView } from '../lib/chatViews';
 import { useTerminalChat } from '../lib/useTerminalChat';
 import { ChatView } from './ChatView';
@@ -12,6 +13,7 @@ export const TerminalChatPane = memo(function TerminalChatPane({
   busy,
   findSignal,
   strip,
+  remote,
   onFocusTerminal,
 }: {
   sessionId: string;
@@ -21,6 +23,8 @@ export const TerminalChatPane = memo(function TerminalChatPane({
   findSignal: number;
   /** 아래로 드러낼 터미널 높이(px) — null 이면 아직 못 쟀다(CSS 기본값) */
   strip: number | null;
+  /** 폰이 터미널 크기를 쥐고 있다(보는 쪽 우선) — 아래 칸이 좁거나 잘린 이유를 한 줄로 알린다 */
+  remote: { cols: number; rows: number } | null;
   /** 키보드를 터미널로 — 채팅을 눌러도 이어서 바로 칠 수 있게 */
   onFocusTerminal: () => void;
 }) {
@@ -51,6 +55,14 @@ export const TerminalChatPane = memo(function TerminalChatPane({
         onReturnFocus={onFocusTerminal}
         onShowTerminal={onShowTerminal}
       />
+      {split && remote && (
+        <div className="terminal__chat-remote" role="status">
+          <Icon name="smartphone" size={14} />
+          <span>
+            폰에서 터미널로 보는 중 ({remote.cols}×{remote.rows}) — 폰을 내려놓으면 입력 칸이 돌아옵니다
+          </span>
+        </div>
+      )}
     </div>
   );
 });

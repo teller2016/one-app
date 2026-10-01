@@ -255,6 +255,9 @@ class MoTerminalController {
         }
         // 돌아왔다 — 탭바 배지가 보이므로 트레이의 알림은 걷는다
         void this.closeNotificationsFor(() => true);
+        requestAnimationFrame(() => this.claimSize()); // 다시 보고 있다 — 터미널 보기면 폰 크기로
+      } else {
+        this.releaseSize(); // 화면 꺼짐·앱 전환 — PC 가 제 크기로 돌아가게
       }
       this.syncWakeLock();
     });
@@ -355,9 +358,27 @@ class MoTerminalController {
   setActive(active: boolean) {
     this.active = active;
     this.syncView();
-    if (active) requestAnimationFrame(() => this.refit());
-    else this.closeKeyboard();
+    if (active) requestAnimationFrame(() => this.claimSize());
+    else {
+      this.closeKeyboard();
+      this.releaseSize(); // 다른 탭으로 갔다 — 안 보는 동안 PC 화면을 폰 크기로 묶어 두지 않는다
+    }
     this.syncWakeLock();
+  }
+
+  /**
+   * 크기 규칙(2026-10-01 사용자 결정) — **보는 쪽 우선 + 놓으면 데스크톱으로**. 폰은 터미널 보기로 **보고 있는
+   * 동안만** 크기를 쥔다. 화면 꺼짐·앱 전환·다른 탭·채팅 보기면 놓고(서버가 데스크톱 크기로 되돌린다), 돌아오면 다시 쥔다.
+   * ⚠️ 놓지 않으면 폰을 내려놓은 뒤에도 PTY 가 폰 크기로 남아 PC 는 입력 상자가 pane 아래로 잘렸다(사용자 신고).
+   */
+  private claimSize() {
+    this.refit();
+    if (!this.term || !this.active || this.state.view !== 'term' || !this.state.attachedId) return;
+    this.send({ type: 'resize', cols: this.term.cols, rows: this.term.rows });
+  }
+
+  private releaseSize() {
+    if (this.state.attachedId) this.send({ type: 'release' });
   }
 
   private refit() {
@@ -651,13 +672,12 @@ class MoTerminalController {
     localStorage.setItem(VIEWS_KEY, JSON.stringify(next));
     this.syncView();
     if (view === 'term') {
-      // 숨어 있던 xterm 을 맞추고 이 폰의 크기를 주장한다(채팅 보기 동안은 데스크톱 크기를 따랐다)
-      requestAnimationFrame(() => {
-        this.refit();
-        if (this.term) this.send({ type: 'resize', cols: this.term.cols, rows: this.term.rows });
-      });
+      // 숨어 있던 xterm 을 맞추고 이 폰의 크기를 주장한다(채팅 보기 동안은 데스크톱 크기를 따랐다).
+      // claimSize 는 **보낼 때의** 보기를 다시 본다 — 그 한 프레임 사이 채팅으로 되돌렸으면 주장하지 않는다
+      requestAnimationFrame(() => this.claimSize());
     } else {
       this.closeKeyboard();
+      this.releaseSize(); // 채팅 보기는 크기를 주장하지 않는다 — 쥐고 있던 폰 크기를 데스크톱에 돌려준다
     }
   }
 

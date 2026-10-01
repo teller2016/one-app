@@ -27,6 +27,7 @@ import {
   onSessionsChanged,
   onTerminalData,
   onTerminalExit,
+  releaseRemoteSize,
   resizeSession,
   scrollSession,
   scrollSessionToBottom,
@@ -68,7 +69,10 @@ type SocketState = {
   attachedId: string | null;
   alive: boolean;
   kind: 'term' | 'rpc';
-  /** 마지막으로 받은 폰 터미널 크기 — 백프레셔 재동기화(attach 재실행)에 쓴다 */
+  /**
+   * 이 폰이 쥐고 있는 터미널 크기(0 = 주장 없음 — 채팅 보기·놓음). 백프레셔 재동기화(attach 재실행)에 쓰고,
+   * 폰이 보기를 그만두면(놓음·다른 세션·연결 끊김) 이 크기일 때만 데스크톱 크기로 되돌린다(releaseHeldSize)
+   */
   cols: number;
   rows: number;
   /** 출력 프레임을 버린 적이 있다 — 버퍼가 빠지면 attach 를 다시 돌려 화면을 맞춘다 */
@@ -81,6 +85,14 @@ type SocketState = {
   chatOff: (() => void) | null;
 };
 const socketState = new Map<WebSocket, SocketState>();
+
+/** 폰이 쥔 크기를 놓는다 — 그 세션 PTY 를 데스크톱 크기로 되돌린다(pty.releaseRemoteSize) */
+function releaseHeldSize(state: SocketState) {
+  if (state.attachedId && state.cols > 0 && state.rows > 0)
+    releaseRemoteSize(state.attachedId, state.cols, state.rows);
+  state.cols = 0;
+  state.rows = 0;
+}
 
 const newSocketState = (kind: SocketState['kind']): SocketState => ({
   attachedId: null,
@@ -409,6 +421,8 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'attach': {
       const attachId = msg.id;
       const { cols, rows } = msg;
+      // 다른 세션으로 옮긴다 — 보던 세션의 크기는 데스크톱에 돌려준다
+      if (state.attachedId && state.attachedId !== attachId) releaseHeldSize(state);
       state.cols = cols;
       state.rows = rows;
       state.attachGen += 1; // 진행 중인 재동기화는 이 attach 에 밀려 버려진다
@@ -444,6 +458,10 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       state.rows = msg.rows;
       if (state.attachedId)
         resizeSession(state.attachedId, msg.cols, msg.rows);
+      break;
+    // 폰이 이 세션을 더는 보지 않는다(화면 꺼짐·앱 전환·채팅 보기·다른 탭) — 크기를 데스크톱에 돌려준다
+    case 'release':
+      releaseHeldSize(state);
       break;
     // 터치 스크롤 위임 — 데스크톱 휠(terminal:scroll)과 **같은 함수**를 탄다. tmux 가
     // pane 플래그로 3단 분기(SGR 휠 주입 / 방향키 / copy-mode)하므로, 마우스 모드를
@@ -691,7 +709,9 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
       }
     });
     ws.on('close', () => {
-      socketState.get(ws)?.chatOff?.(); // 폰이 사라졌다 — 대화 기록 읽기도 멈춘다
+      const st = socketState.get(ws);
+      st?.chatOff?.(); // 폰이 사라졌다 — 대화 기록 읽기도 멈춘다
+      if (st) releaseHeldSize(st); // 쥐고 있던 크기도 데스크톱에 돌려준다
       socketState.delete(ws);
     });
     ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → 앱 사망

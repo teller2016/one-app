@@ -177,6 +177,9 @@ export const TerminalView = memo(function TerminalView({
   const [chatFind, setChatFind] = useState(0);
   // 채팅 보기에서 아래로 드러낼 터미널 높이(px) — claude 화면의 입력 상자·스피너·대화상자 시작 줄부터 pane 바닥까지
   const [chatStrip, setChatStrip] = useState<number | null>(null);
+  // 채팅 보기 중 폰이 터미널 크기를 쥐고 있다(보는 쪽 우선) — 아래 칸이 좁거나 잘리는 이유를 채팅에 알린다.
+  // 터미널 보기의 '폰 화면' 배지(remoteFit)는 채팅에 가려 안 보인다
+  const [chatRemote, setChatRemote] = useState<{ cols: number; rows: number } | null>(null);
   /** 이 pane 의 입력 자리 — 채팅 보기에서도 xterm 이다(아래 칸) */
   const focusInput = useCallback(() => termRef.current?.focus(), []);
 
@@ -309,10 +312,15 @@ export const TerminalView = memo(function TerminalView({
       else if (ev.seq > attachSeq) term.write(ev.data);
     });
     // 다른 클라이언트(MO)가 PTY 크기를 바꾸면 내 xterm 도 따라간다 — 안 하면 렌더가 깨짐
+    // 따라간 크기는 아래 onResize 가 PTY 로 되돌려 보내지 않는다(`followed`) — main 이 그것을 '데스크톱 크기'로
+    // 기억하면 폰이 크기를 놓을 때 폰 크기로 되돌아간다(pty.releaseRemoteSize)
+    let followed: { cols: number; rows: number } | null = null;
     const offResized = window.oneApp.terminal.onResized((ev) => {
       if (ev.id !== id) return;
-      if (ev.cols !== term.cols || ev.rows !== term.rows)
+      if (ev.cols !== term.cols || ev.rows !== term.rows) {
+        followed = { cols: ev.cols, rows: ev.rows };
         term.resize(ev.cols, ev.rows);
+      }
     });
     // ⚠️ DA(터미널 능력 질의) 자동 응답은 PTY 로 보내지 않는다 — attach replay(링버퍼)에
     // 세션 시작 때 tmux 가 보낸 질의(ESC[>c 등)가 남아 있어 xterm 이 replay 를 파싱하며
@@ -578,6 +586,9 @@ export const TerminalView = memo(function TerminalView({
       // 폰(MO)이 보고 있는 세션의 크기까지 되돌려 버린다(크기 공유는 마지막 주장 기준).
       // 분할로 보이는 pane 들은 각자 **자기 세션**의 크기를 주장하므로 서로 충돌하지 않는다.
       if (!visibleRef.current) return;
+      const wasFollow = followed?.cols === cols && followed.rows === rows;
+      followed = null;
+      if (wasFollow) return; // 폰이 정한 크기를 따라간 것 — 내 주장이 아니다
       if (ptyResizeTimer !== null) window.clearTimeout(ptyResizeTimer);
       const send = () => {
         ptyResizeTimer = null;
@@ -815,6 +826,15 @@ export const TerminalView = memo(function TerminalView({
       const lines: string[] = [];
       for (let i = 0; i < term.rows; i += 1) lines.push(buf.getLine(buf.viewportY + i)?.translateToString(true) ?? '');
       top = liveRegionTop(lines, term.cols) ?? top;
+      // 내 pane 이 제안하는 크기와 PTY 크기가 다르다 = 폰이 쥐고 있다(내가 쥐면 fit 이 곧바로 같게 맞춘다)
+      const dims = fitRef.current?.proposeDimensions();
+      const held =
+        dims?.cols &&
+        dims.rows &&
+        (Math.abs(dims.cols - term.cols) >= REMOTE_FIT_SLACK_MIN || Math.abs(dims.rows - term.rows) >= REMOTE_FIT_SLACK_MIN);
+      setChatRemote((prev) =>
+        !held ? null : prev?.cols === term.cols && prev.rows === term.rows ? prev : { cols: term.cols, rows: term.rows },
+      );
       // 줄 → px 는 xterm 화면 요소 기준 — 폰이 더 작은 크기를 잡아 화면 아래 여백이 있어도(remoteFit) 맞는다
       const screen = pane.querySelector('.xterm-screen');
       if (top === null || !screen) return;
@@ -833,6 +853,7 @@ export const TerminalView = memo(function TerminalView({
       subs.forEach((sub) => sub.dispose());
       ro.disconnect();
       if (raf !== null) cancelAnimationFrame(raf);
+      setChatRemote(null); // 터미널 보기로 갔다 오는 사이 폰이 놓았을 수 있다 — 옛 안내를 한 프레임도 남기지 않게
     };
   }, [chat, visible, id]);
 
@@ -932,8 +953,12 @@ export const TerminalView = memo(function TerminalView({
       // ⚠️ 탭이 쓰는 `data-session` 과 이름을 나눈다 — 탭바의 `overTabArea`(closest 판정)와
       // 셀렉터가 겹치면 드롭 영역 판정을 헷갈리게 만들 수 있다.
       data-pane-session={id}
-      // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다
-      onMouseDownCapture={() => onFocusPane(id)}
+      // capture — xterm 의 textarea 가 mousedown 을 먼저 소비해도 포커스 전환은 일어나야 한다.
+      // 누른 것 = 지금 PC 에서 본다 — 폰이 쥐고 있던 크기를 되찾는다(창 focus 는 창이 이미 포커스면 안 뜬다)
+      onMouseDownCapture={() => {
+        onFocusPane(id);
+        reclaimRef.current?.();
+      }}
       // ── 이미지 붙여넣기 = Ctrl+V 위임 ──────────────────────────────────
       // ⌘V 는 Electron 기본 메뉴의 role:paste 로 처리돼 xterm 의 paste 핸들러에 닿는데,
       // xterm 은 `clipboardData.getData('text/plain')` **한 줄만** 읽는다(Clipboard.ts).
@@ -1090,6 +1115,7 @@ export const TerminalView = memo(function TerminalView({
           busy={busy}
           findSignal={chatFind}
           strip={chatStrip}
+          remote={chatRemote}
           onFocusTerminal={focusInput}
         />
       )}

@@ -34,6 +34,8 @@ export type TermClientMsg =
   | { type: 'attach'; id: string; cols: number; rows: number }
   | { type: 'input'; data: string } // attach 된 세션에 키 입력
   | { type: 'resize'; cols: number; rows: number }
+  // 폰이 크기를 놓는다(화면 꺼짐·앱 전환·채팅 보기·다른 탭) — 서버가 데스크톱 크기로 되돌린다(pty.releaseRemoteSize)
+  | { type: 'release' }
   // 스크롤 위임 — 데스크톱 휠과 **같은 경로**(main 의 scrollSession → tmux 3단 분기)를 탄다.
   // ⚠️ 클라이언트가 휠을 xterm 에 직접 넘기면, 대체 화면에서 xterm 이 그것을 방향키(↑↓)로
   //    바꿔 앱에 보낸다 — claude 는 리렌더마다 마우스 모드를 껐다 켜므로 그 틈에 들어간

@@ -84,6 +84,8 @@ type Session = {
   cwd: string;
   cols: number;
   rows: number;
+  /** 데스크톱 pane 이 마지막으로 주장한 크기 — 폰이 쥐었던 크기를 놓으면 여기로 되돌린다(releaseRemoteSize) */
+  deskSize?: { cols: number; rows: number };
   agentId: TerminalSessionInfo['agentId'];
   projectId?: string;
   projectName?: string;
@@ -983,6 +985,26 @@ export function resizeSession(id: string, cols: number, rows: number): void {
   // attach 와 같은 이유 — redraw 가 만드는 합성 waiting 의 알림을 막는다
   if (s.status !== 'busy') s.notifiedSinceInput = true;
   resizeListeners.forEach((cb) => cb(id, cols, rows));
+}
+
+/** 데스크톱 pane 의 크기 주장을 기억한다(ipc.ts — attach·resize). 폰을 따라간 크기는 렌더러가 되돌려 보내지 않는다 */
+export function rememberDesktopSize(id: string, cols: number, rows: number): void {
+  const s = sessions.get(id);
+  if (s && cols > 0 && rows > 0) s.deskSize = { cols, rows };
+}
+
+/**
+ * 폰(MO)이 쥐고 있던 크기를 놓는다 — 화면 꺼짐·앱 전환·채팅 보기·다른 탭/세션·연결 끊김(server.ts).
+ * 지금 크기가 그 폰이 주장한 크기일 때만(그새 다른 쪽이 주장했으면 그대로 둔다) 데스크톱 크기로 되돌린다.
+ * ⚠️ 이게 없으면 폰을 한 번 터미널 보기로 열었다 내려놓은 뒤에도 PTY 가 폰 크기로 남아, PC 는 폭이 좁고 행이 넘쳐
+ *    **입력 상자가 pane 아래로 잘렸다**(2026-10-01 사용자 신고 — 데스크톱 재주장은 창 focus 때뿐이라 창이 이미
+ *    포커스면 안 뜬다). 크기 규칙은 '보는 쪽 우선 + 놓으면 데스크톱으로'(사용자 결정).
+ */
+export function releaseRemoteSize(id: string, cols: number, rows: number): void {
+  const s = sessions.get(id);
+  if (!s?.deskSize || cols <= 0 || rows <= 0) return;
+  if (s.cols !== cols || s.rows !== rows) return;
+  resizeSession(id, s.deskSize.cols, s.deskSize.rows);
 }
 
 export function killSession(id: string): void {

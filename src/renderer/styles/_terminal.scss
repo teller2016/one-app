@@ -1127,6 +1127,25 @@
     border-bottom: 1px solid var(--border);
   }
 
+  // 폰이 터미널 크기를 쥔 동안(보는 쪽 우선) — 아래 칸이 좁거나 잘린 이유. 채팅 맨 아래 한 줄
+  &__chat-remote {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-2);
+    font-size: var(--fs-ui);
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+  }
+
   &__tab-close {
     display: inline-flex;
     align-items: center;
