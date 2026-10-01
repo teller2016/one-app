@@ -122,6 +122,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 1.7 }
 
 - **스페이싱**: 4px 그리드 `4/8/12/16/20/24/32`.
 - **컨트롤 높이**: `--control-h: 32px`(입력·셀렉트) / `--control-h-btn: 30px`(기본 버튼·세그 트랙 — 목업 .btn·.seg) / `--control-h-field: 30px`(드로어 커밋 입력) / `--control-h-sm: 28px` / `--control-h-xs: 24px`(`Button size="xs"` — 툴바 칩·탭바 [+]). 기능 SCSS 에서 높이 오버라이드 금지.
+- **머리줄 높이**: `--pane-head-h: 44px`(섹션 안 나란히 놓인 패널 머리 — 주간보고·Nightwatch) / `--term-head-h: 32px`·`--term-tab-h: 28px`(터미널 섹션 탭바·세션 패널 머리·변경사항 드로어 머리 — 2026-10-01 터미널 세로 공간 확보로 압축).
 - **섹션 레이아웃 치수**(목업): `--panel-head-h` 42(카드형 패널 머리) · `--row-h-ticket` 56(두 줄 티켓 행) · `--nightwatch-side-w` 400 · `--nightwatch-report-h` 760(Nightwatch 설정 열·리포트 모달).
 - 딥링크: `--applink-w` 760(가운데 단일 열 — 목업 Applink)
 - 배포: `--deploy-detail-h` 744 · `--deploy-log-h` 176(빌드 내역 모달 높이·그 안 콘솔 로그 — 목업 BuildDetailModal)

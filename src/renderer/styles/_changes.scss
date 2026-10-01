@@ -329,9 +329,9 @@
 .terminal__changes .changes {
   gap: 0;
 
-  // 머리 44 — 브랜치(액센트 아이콘 + 모노 이름) · ↓behind · [전체 화면][새로고침][푸시]
+  // 머리 32(--term-head-h — 탭바와 바닥선을 잇는다) — 브랜치(액센트 아이콘 + 모노 이름) · ↓behind · [전체 화면][새로고침][푸시]
   .changes__head {
-    height: var(--pane-head-h);
+    height: var(--term-head-h);
     padding: 0 12px 0 16px;
     gap: 8px;
     border-bottom: 1px solid var(--border);

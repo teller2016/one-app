@@ -126,7 +126,7 @@
     justify-content: space-between;
     gap: 8px;
     flex-shrink: 0;
-    height: var(--pane-head-h);
+    height: var(--term-head-h);
     padding: 0 12px 0 16px;
     border-bottom: 1px solid var(--border);
   }
@@ -811,7 +811,7 @@
     align-items: flex-end; // 탭이 바닥(경계선)에 붙는다
     gap: 8px;
     // 좌측 패널 머리줄(__side-head)과 같은 높이 — 두 띠의 바닥선이 한 줄로 이어진다
-    min-height: var(--pane-head-h);
+    min-height: var(--term-head-h);
     flex-shrink: 0;
     padding: 0 10px 0 0; // 하단 0 — 활성 탭 바닥이 경계선 위를 덮는다
     background: var(--surface-1);
@@ -858,7 +858,7 @@
     scrollbar-width: none; // 탭 초과분은 휠/트랙패드 가로 스크롤 — 바는 감춘다
   }
 
-  // 세션 탭 — 목업: 36px · padding 0 10 0 12 · 윗모서리 라운드 · gap 8 (고정폭 150 은 유지 — 2026-08-10 요청)
+  // 세션 탭 — 목업: 36px → 2026-10-01 28px(--term-tab-h, 머리줄 32 압축) · padding 0 10 0 12 · 윗모서리 라운드 · gap 8 (고정폭 150 은 유지 — 2026-08-10 요청)
   &__tab {
     display: inline-flex;
     align-items: center;
@@ -869,7 +869,7 @@
     // 없으면 긴 제목이 150px 기준을 밀어내고 탭을 계속 늘린다(2026-08-10 사용자
     // 신고 — 제목 말줄임은 __tab-title 의 ellipsis 가 맡는다).
     min-width: 0;
-    height: 36px;
+    height: var(--term-tab-h);
     padding-right: 6px;
     border: 1px solid transparent;
     border-bottom: 0;
@@ -985,7 +985,7 @@
     display: inline-flex;
     align-items: stretch;
     flex-shrink: 0; // 멤버가 고정폭이라 장도 줄지 않는다 — 넘치면 리스트 스크롤
-    height: 36px;
+    height: var(--term-tab-h);
     border: 1px solid var(--border);
     border-bottom: 0;
     border-radius: var(--r-tab) var(--r-tab) 0 0;
@@ -1095,7 +1095,9 @@
     height: var(--control-h-xs);
     flex-shrink: 0;
     align-self: flex-end;
-    margin: 0 0 7px 2px; // 목업 — 바닥에서 7
+    // 탭(바닥 정렬)의 세로 중앙에 맞춘다 — 탭 높이에서 계산한다. 예전 고정값 '바닥에서 7'(탭 36 기준)은
+    // 탭을 28 로 줄이자 버튼이 탭 중앙보다 5px 떠 보였다(2026-10-01 사용자 지적)
+    margin: 0 0 calc((var(--term-tab-h) - var(--control-h-xs)) / 2) 2px;
     border: 0;
     border-radius: var(--r-md);
     background: none;
@@ -1513,7 +1515,7 @@
   // ── 변경사항 드로어 (우측 — 활성 세션 cwd 의 git 상태·diff·푸시) ──
   // 너비는 인라인 스타일 — 좌측 grip 드래그로 조절 (TerminalSection, localStorage 기억).
   // 2026-09-30 목업(사용자 지시 "디자인과 동일하게"): 패널 면(--surface-1) + 왼쪽 경계선, 바깥 여백 없음.
-  // 안쪽 구획(머리 44 · 모드/커밋 · 파일 · diff · 커밋 로그)은 _changes.scss 의 `.terminal__changes .changes` 가 맡는다.
+  // 안쪽 구획(머리 32 · 모드/커밋 · 파일 · diff · 커밋 로그)은 _changes.scss 의 `.terminal__changes .changes` 가 맡는다.
   &__changes {
     position: relative;
     flex-shrink: 0;
@@ -1570,8 +1572,9 @@
 
   .terminal__tabs {
     // 이 창엔 탑바가 없다 — 탭바가 곧 타이틀바다. 메인 창과 같은 높이(--titlebar-h)를
-    // 줘서 ①신호등(trafficLightPosition y:16)이 세로 중앙에 오고 ②탭(36px)이 바닥
-    // 정렬이라 위에 남는 8px 이 **창을 잡아 끄는 손잡이**가 된다(탭 오른쪽 빈 공간과 함께).
+    // 줘서 ①신호등(trafficLightPosition y:16)이 세로 중앙에 오고 ②탭(--term-tab-h 28)이 바닥
+    // 정렬이라 위에 남는 16px 이 **창을 잡아 끄는 손잡이**가 된다(탭 오른쪽 빈 공간과 함께).
+    // ⚠️ 메인 창 탭바(--term-head-h 32)로 줄이지 말 것 — 신호등이 들어갈 높이가 모자란다.
     min-height: var(--titlebar-h);
     // hiddenInset 신호등이 탭바 좌상단에 얹힌다 — 예약폭 + 숨통 8px 만큼 비운다
     padding-left: calc(var(--titlebar-safe) + 8px);
