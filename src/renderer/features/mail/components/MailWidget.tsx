@@ -87,7 +87,7 @@ export function MailWidget() {
           ? `새 메일 ${unread}통`
           : '새 메일 없음';
 
-  // ⌘K 팔레트 명령
+  // ⌘P 팔레트 명령
   useRegisterCommands('mail', () =>
     configured
       ? [

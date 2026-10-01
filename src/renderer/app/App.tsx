@@ -325,12 +325,14 @@ export function App() {
     };
   }, [goBack, goForward]);
 
-  // ⌘K 명령 팔레트 — 어느 화면에서든(터미널 포함) 연다. capture 로 받아 xterm 보다 먼저 잡는다
+  // ⌘P 명령 팔레트 — 어느 화면에서든(터미널 포함) 연다. capture 로 받아 xterm 보다 먼저 잡는다.
+  // ⌘K 는 다른 앱의 전역 단축키와 겹쳐 2026-10-01 ⌘P 로 바꿨다
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
-      if (e.key.toLowerCase() !== "k" || e.isComposing) return;
+      // e.code 로 판정 — 한글 입력 상태에서는 e.key 가 'ㅔ' 라 놓친다
+      if (e.code !== "KeyP" || e.isComposing) return;
       e.preventDefault();
       e.stopPropagation();
       setPaletteOpen((v) => !v);

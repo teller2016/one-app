@@ -36,7 +36,7 @@ export function StatusWidget({
   tooltip: string;
   /**
    * 값이 바뀌면 팝오버를 닫는다 — 위젯이 할 일을 끝냈을 때(폰 제어·미러링 연결 성공 등) 올린다.
-   * 동작 함수가 ⌘K 명령과 공용이라 본체 안 훅이 아니라 위젯 셸 prop 으로 받는다
+   * 동작 함수가 ⌘P 명령과 공용이라 본체 안 훅이 아니라 위젯 셸 prop 으로 받는다
    */
   closeSignal?: number;
   children: ReactNode;

@@ -21,7 +21,7 @@ export function MoStatusItem() {
     return api.server.onChanged(() => void refresh());
   }, []);
 
-  // ⌘K 팔레트 명령
+  // ⌘P 팔레트 명령
   useRegisterCommands('mo', () =>
     window.oneApp?.terminal
       ? [

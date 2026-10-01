@@ -43,7 +43,7 @@ paths:
 
 - ⚠️ **본체는 열림 여부와 무관하게 항상 마운트**한다(닫힘은 언마운트가 아니라 `hidden`). 재마운트되면 위젯 초기 조회가 다시 도는데, 근태는 그게 **headless 브라우저 그룹웨어 조회**다. 그래서 팝오버도 `body` portal 이 아니라 제자리 `fixed` 다.
 - ⚠️ 외부 클릭 판정에서 `.modal-overlay`·`.picker__pop`·`.toasts` 는 제외한다 — 위젯이 띄운 모달·확인창은 `body` portal 이라 좌표상 '팝오버 밖'이고, 그대로 닫으면 야근 결재 모달을 여는 순간 배경이 사라진다.
-- 할 일이 끝나면 팝업을 닫게 하려면 `closeSignal`(숫자)을 올린다 — 폰 제어·미러링 연결 성공 시 `MirrorWidget` 이 쓴다. 동작 함수가 ⌘K 명령과 공용이라 본체 안 훅이 아니라 셸 prop 이다.
+- 할 일이 끝나면 팝업을 닫게 하려면 `closeSignal`(숫자)을 올린다 — 폰 제어·미러링 연결 성공 시 `MirrorWidget` 이 쓴다. 동작 함수가 ⌘P 명령과 공용이라 본체 안 훅이 아니라 셸 prop 이다.
 - 모달을 바로 여는 항목(메일·MO)은 셸 없이 `StatusBarItem` 만 쓴다.
 
 - ⚠️ **옵션 스타일을 조상 스코프(`.picker--select .picker__option`·`.terminal-new__select .picker__option`)로 걸면 안 먹는다** — 팝오버 자신의 클래스(`.picker__pop--select`·`--sm`·`--search`)에 쓸 것.
@@ -54,13 +54,13 @@ paths:
 ## 탑바 슬롯 (`TopbarSlot`)
 섹션 세그먼트·액션은 `<TopbarSlot left right>` 로 앱 탑바에 그린다(탑바 없는 셸 — Lite·폰 — 에선 제자리 `.topbar-inline`). 섹션 안 하위 화면(폼 등)은 **`crumb`** 로 경로 셋째 칸(`그룹 / 섹션 / 하위`)을 채운다 — 탑바 없는 셸에선 그리지 않으므로 그쪽은 페이지 제목을 직접 그린다(`useHasTopbar`).
 
-## ⌘K 명령 팔레트 (`app/CommandPalette.tsx` + `lib/commands.ts`)
+## ⌘P 명령 팔레트 (`app/CommandPalette.tsx` + `lib/commands.ts`)
 - 동작의 정본은 각 기능이다 — 팔레트가 동작을 다시 구현하지 않는다. 위젯은 떠 있는 동안 **`useRegisterCommands(id, () => Command[])`** 로 자기 명령을 등록하고(버튼과 **같은 핸들러**를 넘긴다 — 확인창·오류 표시가 그대로 따라온다), 팔레트는 열릴 때·입력할 때마다 `collectCommands()` 로 모은다.
   - ⚠️ 등록하는 건 **배열이 아니라 만드는 함수**다(ref 로 최신만 쓴다) — 핸들러가 렌더마다 새로 만들어지므로 배열 등록은 매 렌더 재등록이 된다.
   - 실행 중·불가 상태(busy 등)면 빈 배열을 돌려 명령을 숨긴다.
 - 섹션 안 동작(배포 확인 모달)은 **요청을 담아 두고 섹션이 소비**한다(`features/deploy/lib/deployRequest.ts` — `sectionNav` 의 터미널 포커스 요청과 같은 패턴: 섹션 이동 → 마운트·목록 로드 뒤 `takeDeployRequest`, 이미 떠 있으면 `onDeployRequest` 구독). ⚠️ 배포는 **확인 모달까지만** — 팔레트에서 바로 실행하지 않는다.
 - 명령 실행 전에 팔레트를 **먼저 닫는다** — 명령이 띄우는 확인창·모달이 팔레트 뒤에 깔리지 않게. z-index 는 모달(90) 위·확인창(95) 아래(93).
-- ⌘K 는 `App` 의 **window capture** 리스너 — 터미널 pane(xterm) 포커스 중에도 먼저 잡는다. 한글 조합 중(`isComposing`) Enter·방향키는 IME 몫이라 무시한다.
+- ⌘P 는 `App` 의 **window capture** 리스너 — 터미널 pane(xterm) 포커스 중에도 먼저 잡는다. 한글 조합 중(`isComposing`) Enter·방향키는 IME 몫이라 무시한다. 키는 `e.code === 'KeyP'`(한글 자판은 `e.key` 가 `ㅔ`). ⌘K 는 다른 앱 전역 단축키와 겹쳐 2026-10-01 ⌘P 로 바꿨다.
 - ⚠️ 섹션 번호 단축키(⌘1~9)는 만들지 말 것 — 터미널 탭 전환이 쓰고 있다.
 - ⚠️ 키 처리(↑↓·↵·Esc)는 입력창이 아니라 **팔레트 컨테이너**의 `onKeyDown` 이고, 컨테이너 `onMouseDown` 이 입력창 밖 클릭의 기본 동작을 막아 **포커스가 입력창을 떠나지 않게** 한다 — 입력창에만 달았을 땐 푸터·그룹 제목 클릭 한 번에 포커스가 body 로 빠져 키가 전부 먹통이었다(2026-09-30 /test).
 - 닫을 때 **연 자리로 포커스를 돌려준다**(터미널 pane 에서 열었으면 바로 이어 입력) — 단 명령을 실행해 닫았으면 돌려주지 않는다(이동했거나 명령이 띄운 모달이 포커스를 가져간다).

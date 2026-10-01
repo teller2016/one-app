@@ -175,7 +175,7 @@ export function ChangesOverlay({
   return createPortal(
     // 딤 위에 떠 있는 카드 (2026-09-30 리디자인 — 예전엔 창 전체를 덮었다). 카드 바깥 클릭 = 닫기.
     // ⚠️ pointerdown 에서 preventDefault — 언마운트 뒤 이어지는 mousedown 이 body 로 가서
-    //    포커스를 빼앗지 않게(⌘K 팔레트와 같은 이유)
+    //    포커스를 빼앗지 않게(⌘P 팔레트와 같은 이유)
     <div
       className="changes-full"
       onPointerDown={(e) => {

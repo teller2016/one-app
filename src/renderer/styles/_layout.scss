@@ -94,7 +94,7 @@
     white-space: nowrap;
   }
 
-  // ⌘K 팔레트 진입 버튼 — 검색창 모양(누르면 팔레트가 뜬다)
+  // ⌘P 팔레트 진입 버튼 — 검색창 모양(누르면 팔레트가 뜬다)
   &__cmd {
     display: flex;
     align-items: center;
@@ -652,7 +652,7 @@
   }
 }
 
-// ===== ⌘K 명령 팔레트 (app/CommandPalette.tsx — body portal) =====
+// ===== ⌘P 명령 팔레트 (app/CommandPalette.tsx — body portal) =====
 // 모달(90) 위·확인창(95) 아래. 명령이 띄우는 확인창·모달은 팔레트를 닫은 뒤에 뜬다.
 .palette-overlay {
   position: fixed;

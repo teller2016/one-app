@@ -153,7 +153,7 @@ export function VpnWidget() {
     </>
   );
 
-  // ⌘K 팔레트 명령 — 위젯 버튼과 같은 핸들러(같은 상태·오류 표시)를 그대로 쓴다
+  // ⌘P 팔레트 명령 — 위젯 버튼과 같은 핸들러(같은 상태·오류 표시)를 그대로 쓴다
   useRegisterCommands('vpn', () => {
     if (busy || st === 'connecting') return [];
     if (st === 'connected')

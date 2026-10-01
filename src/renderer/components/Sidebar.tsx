@@ -46,7 +46,7 @@ export function Sidebar({
   sections: SidebarSection[];
   activeId: string;
   onSelect: (id: string) => void;
-  /** ⌘K 명령 팔레트 열기 — 브랜드 아래 '이동 · 명령' 버튼 */
+  /** ⌘P 명령 팔레트 열기 — 브랜드 아래 '이동 · 명령' 버튼 */
   onOpenPalette: () => void;
 }) {
   const [width, setWidth] = useState(savedWidth);
@@ -74,7 +74,7 @@ export function Sidebar({
     });
   }, []);
 
-  // capture 로 받아 xterm 보다 먼저 잡는다(⌘K 팔레트와 같은 방식).
+  // capture 로 받아 xterm 보다 먼저 잡는다(⌘P 팔레트와 같은 방식).
   // ⚠️ e.key 가 아니라 e.code — 한국어 자판에서는 같은 키가 '₩' 로 들어온다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -257,17 +257,17 @@ export function Sidebar({
         </span>
         <span className="sidebar__brand-name">One App</span>
       </div>
-      {/* ⌘K 팔레트 진입점 — 단축키를 모르는 사람도 찾게 버튼으로도 둔다 */}
+      {/* ⌘P 팔레트 진입점 — 단축키를 모르는 사람도 찾게 버튼으로도 둔다 */}
       <button
         type="button"
         className="sidebar__cmd"
         onClick={onOpenPalette}
-        title="이동 · 명령 (⌘K)"
-        aria-label="이동 · 명령 (⌘K)"
+        title="이동 · 명령 (⌘P)"
+        aria-label="이동 · 명령 (⌘P)"
       >
         <Icon name="search" size={14} />
         <span className="sidebar__cmd-label">이동 · 명령</span>
-        <kbd className="sidebar__cmd-kbd">⌘K</kbd>
+        <kbd className="sidebar__cmd-kbd">⌘P</kbd>
       </button>
       <nav className="sidebar__nav">{grouped}</nav>
       {/* 하단 분리 그룹 (환경설정) — 위젯은 하단 상태바로 옮겼다(StatusBar) */}

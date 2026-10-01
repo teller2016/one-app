@@ -176,7 +176,7 @@ export function AttendanceWidget() {
       </span>
     ) : null;
 
-  // ⌘K 팔레트 명령 — 출퇴근은 위젯과 같은 stamp(확인창 포함)를 거친다
+  // ⌘P 팔레트 명령 — 출퇴근은 위젯과 같은 stamp(확인창 포함)를 거친다
   useRegisterCommands('attendance', () => {
     const cmds: Command[] = [];
     if (nextAction && busy === null)

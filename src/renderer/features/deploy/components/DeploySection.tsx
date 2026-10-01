@@ -218,7 +218,7 @@ export function DeploySection() {
       });
   };
 
-  // ⌘K 팔레트의 배포 요청 — 목록이 뜬 뒤에 확인 모달을 연다(없는 대상이면 조용히 버린다).
+  // ⌘P 팔레트의 배포 요청 — 목록이 뜬 뒤에 확인 모달을 연다(없는 대상이면 조용히 버린다).
   // 섹션 밖에서 온 요청은 마운트 전에 도착해 있고, 섹션 안에서 연 팔레트는 구독으로 받는다.
   const openConfirmRef = useRef(openDeployConfirm);
   useEffect(() => {

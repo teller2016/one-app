@@ -83,7 +83,7 @@ export function MirrorWidget() {
   );
   const tooltip = `폰 미러링 — ${statusText}`;
 
-  // ⌘K 팔레트 명령 — 위젯 버튼과 같은 핸들러
+  // ⌘P 팔레트 명령 — 위젯 버튼과 같은 핸들러
   useRegisterCommands('mirror', () => {
     if (busy) return [];
     if (running)
