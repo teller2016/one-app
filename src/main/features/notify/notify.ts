@@ -25,11 +25,22 @@ export type NotifyResult = {
   checked: boolean; // checkbox 를 지정했을 때 체크 상태 (닫기로 닫아도 유지된다)
 };
 
+// 알럿 대기열 — 같은 창에 시트 알럿이 동시에 요청되면(예: 앱을 늦게 켜 출근 리마인더와
+// 일정 등록 누락 알림이 함께 발화) 겹침 처리를 macOS 에 맡기지 않고 하나씩 띄운다(2026-10-01).
+let alertQueue: Promise<unknown> = Promise.resolve();
+
 /**
- * 알림 표시 — 앱을 앞으로 가져와 알럿을 띄운다.
+ * 알림 표시 — 앱을 앞으로 가져와 알럿을 띄운다. 이미 떠 있는 알럿이 있으면 닫힌 뒤에 뜬다.
  * 어느 버튼으로 닫았는지(primary)와 체크박스 상태(checked)를 반환한다.
  */
-export async function notify({
+export function notify(options: NotifyOptions): Promise<NotifyResult> {
+  const result = alertQueue.then(() => showAlert(options));
+  // 앞 알럿이 실패해도 대기열이 멈추지 않게 결과와 무관하게 이어 붙인다
+  alertQueue = result.catch(() => undefined);
+  return result;
+}
+
+async function showAlert({
   title,
   body,
   section,

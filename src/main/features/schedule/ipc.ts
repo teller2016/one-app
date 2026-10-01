@@ -4,6 +4,10 @@ import { runMacro } from './runMacro';
 import { resolveBaseDate } from './scheduleUtils';
 import { recordScheduleToNotion } from './notion';
 import { SCHEDULE_CONFIG } from './config';
+import {
+  markScheduleRegistered,
+  startScheduleRegisterReminder,
+} from './registerReminder';
 import { getCredentials } from '../settings/store';
 import { readUserJson, writeUserJson } from '../../lib/store';
 import {
@@ -76,6 +80,14 @@ export function disposeScheduleBrowser(): void {
   closePage(currentPage);
   currentPage = null;
   running = false;
+}
+
+const readStartConfig = () =>
+  normalizeStartConfig(readUserJson<unknown>(START_CONFIG_FILE, null));
+
+/** 일정 등록 누락 알림 시작 — 앱 준비(ready) 뒤 main.ts 에서 호출 */
+export function startScheduleRegisterCheck(): void {
+  startScheduleRegisterReminder(readStartConfig);
 }
 
 /** 일정 등록 관련 IPC 핸들러 등록 (앱 내부 자동화 창으로 실행) */
@@ -154,7 +166,11 @@ export function registerScheduleIpc() {
         currentPage = pg;
       },
     })
-      .then(() => done(0))
+      .then(() => {
+        // 실제 등록만 기록한다 — 다음 평일 아침 누락 알림의 근거
+        if (!payload.testMode) markScheduleRegistered(baseDate);
+        done(0);
+      })
       .catch((err: unknown) => {
         send('stderr', `\n❌ 오류: ${(err as Error)?.message ?? String(err)}\n`);
         done(1);
@@ -175,9 +191,7 @@ export function registerScheduleIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('schedule:start-config:get', () =>
-    normalizeStartConfig(readUserJson<unknown>(START_CONFIG_FILE, null)),
-  );
+  ipcMain.handle('schedule:start-config:get', readStartConfig);
 
   ipcMain.handle(
     'schedule:start-config:set',

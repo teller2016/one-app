@@ -22,6 +22,7 @@ import { registerPrsIpc } from "./features/prs/ipc";
 import {
   registerScheduleIpc,
   disposeScheduleBrowser,
+  startScheduleRegisterCheck,
 } from "./features/schedule/ipc";
 import { registerSettingsIpc } from "./features/settings/ipc";
 import { getThemePref } from "./features/settings/store";
@@ -241,6 +242,8 @@ app.on("ready", () => {
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
   startReminderScheduler();
+  // 일정 등록 누락 알림 — 다음 평일 아침에 직전 평일 미등록을 알린다
+  startScheduleRegisterCheck();
   // 잠자기 상태 감시 — 덮개 닫힘 뒤 다크웨이크 동안 폴러를 멈추고, 복귀 때 폭주면 알린다
   startPowerWatch();
 });
