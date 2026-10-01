@@ -3,7 +3,7 @@
 import { notify } from '../notify/notify';
 import { isSystemAsleep } from '../power';
 import { readUserJson, writeUserJson } from '../../lib/store';
-import { localDateKey } from '../../lib/util';
+import { dayKey } from '../../../shared/date';
 import { formatShortDate, isCheckTime, previousWeekday } from './registerCheck';
 import type { ScheduleStartConfig } from '../../../shared/types';
 
@@ -13,7 +13,7 @@ const CHECK_INTERVAL_MS = 5 * 60_000;
 const FIRST_CHECK_DELAY_MS = 60_000; // 앱 시작 직후 알럿이 창보다 먼저 뜨지 않게
 
 type RegisteredState = {
-  dates: string[]; // 등록 성공한 날짜 (localDateKey)
+  dates: string[]; // 등록 성공한 날짜 (YYYY-MM-DD)
   notifiedOn?: string; // 누락 알럿을 띄운 날 — 하루 1회
 };
 
@@ -30,7 +30,7 @@ function readState(): RegisteredState {
 /** 일정 등록 성공 기록 — 테스트 모드는 부르지 않는다 */
 export function markScheduleRegistered(date: Date): void {
   const state = readState();
-  const key = localDateKey(date);
+  const key = dayKey(date);
   const dates = [...state.dates.filter((d) => d !== key), key].slice(-KEEP_DAYS);
   writeUserJson(REGISTERED_FILE, { ...state, dates });
 }
@@ -44,15 +44,15 @@ async function check(getStartConfig: () => ScheduleStartConfig) {
   if (!isCheckTime(now, getStartConfig())) return;
 
   const state = readState();
-  const today = localDateKey(now);
+  const today = dayKey(now);
   if (state.notifiedOn === today) return;
 
   const target = previousWeekday(now);
-  if (state.dates.includes(localDateKey(target))) return;
+  if (state.dates.includes(dayKey(target))) return;
 
   // 알럿을 띄우기 전에 먼저 기록 — 개발 인스턴스와 빌드 앱이 같은 파일을 보므로 중복 발화를 줄인다
   writeUserJson(REGISTERED_FILE, { ...state, notifiedOn: today });
-  console.log('[schedule] 등록 누락 알림:', localDateKey(target));
+  console.log('[schedule] 등록 누락 알림:', dayKey(target));
   alertOpen = true;
   try {
     await notify({
