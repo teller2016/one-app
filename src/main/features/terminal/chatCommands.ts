@@ -3,6 +3,7 @@
 //   · 계정:     `<CLAUDE_CONFIG_DIR>/skills/…` · `<CLAUDE_CONFIG_DIR>/commands/…`
 //   · 내장:     자주 쓰는 것만(아래 BUILTIN) — 전체 목록은 claude 버전마다 달라 손으로 고정하지 않는다
 // 설명은 frontmatter 의 `description:` 한 줄(없으면 본문 첫 줄). 플러그인 스킬(`plugin:skill`)은 싣지 않는다.
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ChatCommand } from '../../../shared/terminal-protocol';
@@ -89,4 +90,26 @@ export function listChatCommands(cwd: string, configDir: string): ChatCommand[] 
   const items = all.filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)));
   cache.set(key, { at: Date.now(), items });
   return items;
+}
+
+// ── `@` 파일 자동완성 — 이 위치 저장소의 파일 목록(git ls-files: 추적 + 추적 안 된 것, .gitignore 제외) ──
+
+const FILES_CACHE_MS = 30_000;
+/** 거대한 저장소에서도 목록이 폰까지 가므로 상한을 둔다 */
+const FILES_MAX = 20_000;
+const filesCache = new Map<string, { at: number; files: Promise<string[]> }>();
+
+export function listChatFiles(cwd: string): Promise<string[]> {
+  const hit = filesCache.get(cwd);
+  if (hit && Date.now() - hit.at < FILES_CACHE_MS) return hit.files;
+  const files = new Promise<string[]>((resolve) => {
+    execFile(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard'],
+      { cwd, timeout: 5000, maxBuffer: 32 * 1024 * 1024 },
+      (err, stdout) => resolve(err ? [] : String(stdout).split('\n').filter(Boolean).slice(0, FILES_MAX)),
+    );
+  });
+  filesCache.set(cwd, { at: Date.now(), files });
+  return files;
 }

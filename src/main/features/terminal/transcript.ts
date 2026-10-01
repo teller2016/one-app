@@ -135,7 +135,8 @@ function parseQuestions(input: Record<string, unknown>): ChatQuestion[] {
  * 명령 출력(`<local-command-stdout>`)·안내문(`<local-command-caveat>`)은 숨긴다.
  */
 function userTextItem(text: string, key: string, images: number, ts?: string): ChatItem | null {
-  const t = text.trim();
+  // 이미지 자리 표시(`[Image #1]`)는 걷는다 — 말풍선 머리의 '이미지 N장'이 대신한다
+  const t = (images ? text.replace(/\[Image #\d+\]\s*/g, '') : text).trim();
   if (!t && !images) return null;
   if (t.startsWith('<local-command-') || t.startsWith('<bash-stdout') || t.startsWith('<bash-stderr')) return null;
   const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);

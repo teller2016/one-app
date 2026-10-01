@@ -32,7 +32,7 @@ import {
   scrollSessionToBottom,
   writeSession,
 } from './pty';
-import { chatCommandsFor, sendChatText, subscribeChat } from './chat';
+import { chatCommandsFor, chatFilesFor, sendChatText, subscribeChat } from './chat';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
@@ -494,11 +494,17 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       state.chatOff = null;
       break;
     case 'chat-send':
-      sendChatText(msg.id, msg.text);
+      // 폰은 우리가 저장한 첨부만(임의 경로를 claude 에 읽히지 않게) — 지금 폰엔 첨부 UI 가 없다
+      sendChatText(msg.id, msg.text, msg.images ?? []);
       break;
     case 'chat-commands':
       send(ws, { type: 'chat-commands', id: msg.id, items: chatCommandsFor(msg.id) });
       break;
+    case 'chat-files': {
+      const id = msg.id;
+      void chatFilesFor(id).then((items) => send(ws, { type: 'chat-files', id, items }));
+      break;
+    }
   }
 }
 

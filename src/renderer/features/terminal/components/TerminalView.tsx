@@ -173,6 +173,8 @@ export const TerminalView = memo(function TerminalView({
   chatRef.current = chat;
   // ⌘F 를 채팅 보기에선 채팅 검색으로 — 올릴 때마다 ChatView 가 검색 줄을 연다
   const [chatFind, setChatFind] = useState(0);
+  // 채팅 보기에서 파일을 끌어다 놓으면 경로는 PTY 가 아니라 채팅 입력창으로
+  const [chatInsert, setChatInsert] = useState<{ text: string; images?: string[]; n: number } | null>(null);
   /** 이 pane 의 입력 자리 — 채팅 보기면 채팅 입력창, 아니면 xterm */
   const focusInput = useCallback(() => {
     if (chatRef.current) paneRef.current?.querySelector<HTMLTextAreaElement>('.term-chat__input')?.focus();
@@ -899,6 +901,9 @@ export const TerminalView = memo(function TerminalView({
       // Claude Code 는 `Ctrl+V`(0x16)를 받으면 시스템 클립보드를 직접 읽어 이미지를 첨부하므로
       // ⌘V 를 그 경로로 넘긴다. capture 단계라 xterm(element·textarea) 리스너보다 먼저다.
       onPasteCapture={(e) => {
+        // ⚠️ 채팅 보기면 손대지 않는다 — 채팅 입력창(ChatView onPaste)이 같은 0x16 을 보내고 '이미지 첨부' 칩까지 띄운다.
+        // 여기서 가로채면(capture + stopPropagation) 입력창 처리기가 아예 불리지 않아 칩이 안 떴다(2026-10-01 사용자 신고)
+        if (chatRef.current) return;
         const items = Array.from(e.clipboardData?.items ?? []);
         if (!items.some((it) => it.kind === 'file' && it.type.startsWith('image/')))
           return;
@@ -940,8 +945,20 @@ export const TerminalView = memo(function TerminalView({
           .filter(Boolean);
         if (!paths.length) return;
         // 말미 공백 — 경로에 이어서 바로 타이핑할 수 있게 (여러 개는 공백 연결)
-        window.oneApp.terminal.write(id, paths.map(shellQuotePath).join(' ') + ' ');
+        const text = paths.map(shellQuotePath).join(' ') + ' ';
         onFocusPane(id); // 경로를 넣었으니 이어서 입력할 곳도 이 pane 이다
+        if (chatRef.current) {
+          // 채팅 보기 — 이미지는 첨부 칩으로, 나머지 경로는 입력창에(PTY 에 바로 쓰면 보이지 않는 claude 입력란에 들어간다)
+          const isImage = (p: string) => /\.(png|jpe?g|gif|webp)$/i.test(p);
+          const rest = paths.filter((p) => !isImage(p));
+          setChatInsert((prev) => ({
+            text: rest.length ? rest.map(shellQuotePath).join(' ') + ' ' : '',
+            images: paths.filter(isImage),
+            n: (prev?.n ?? 0) + 1,
+          }));
+          return;
+        }
+        window.oneApp.terminal.write(id, text);
         termRef.current?.focus();
       }}
     >
@@ -1037,7 +1054,9 @@ export const TerminalView = memo(function TerminalView({
 
       {/* 보이는 pane 만 구독한다 — 숨은 탭·keep-alive 로 숨은 섹션까지 대화 기록을 1초마다 읽을 이유가 없다.
           다시 보이면 스냅샷부터 새로 받는다 */}
-      {chat && visible && <TerminalChatPane sessionId={id} busy={busy} findSignal={chatFind} />}
+      {chat && visible && (
+        <TerminalChatPane sessionId={id} busy={busy} findSignal={chatFind} insertSignal={chatInsert} />
+      )}
 
       <div className="terminal__host" ref={hostRef} />
     </div>

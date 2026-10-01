@@ -1046,13 +1046,16 @@
 
   // 보기 토글(터미널 ↔ 채팅) — 탭 안의 아주 작은 버튼(사용자 요청 2026-10-01). 평소엔 숨기고
   // 탭 hover·활성 탭·채팅 중인 탭에서만 보인다 — 고정폭 탭(150)의 제목 자리를 늘 뺏지 않게
+  // ⚠️ 숨어 있을 땐 **폭 0** — opacity 만 0 이면 자리(18px)를 차지해 에이전트 탭 제목이 셸 탭보다 일찍
+  //    잘렸다(2026-10-01 회귀 점검 실측: 같은 긴 제목 셸 104px · claude 72px). 보일 때만 18px.
   &__tab-view {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
+    width: 0;
     height: 18px;
     flex-shrink: 0;
+    overflow: hidden;
     padding: 0;
     border: 0;
     border-radius: var(--r-sm);
@@ -1071,11 +1074,13 @@
     }
 
     &:focus-visible {
+      width: 18px;
       opacity: 1;
     }
 
     // 채팅 중 — 늘 보이고 액센트로 표시한다(이 탭은 지금 채팅으로 보고 있다)
     &--on {
+      width: 18px;
       opacity: 1;
       color: var(--accent);
     }
@@ -1083,6 +1088,7 @@
 
   &__tab:hover &__tab-view,
   &__tab--active &__tab-view {
+    width: 18px;
     opacity: 1;
   }
 

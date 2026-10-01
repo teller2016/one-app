@@ -375,8 +375,10 @@ declare global {
         chat: {
           open: (id: string) => void;
           close: (id: string) => void;
-          send: (id: string, text: string) => void;
+          send: (id: string, text: string, images?: string[]) => void;
+          saveImage: (data: Uint8Array, mime: string) => Promise<string | null>;
           commands: (id: string) => Promise<ChatCommand[]>;
+          files: (id: string) => Promise<string[]>;
           onMessage: (cb: (msg: ChatServerMsg) => void) => () => void;
         };
         rename: (id: string, title: string) => Promise<{ ok: boolean }>;

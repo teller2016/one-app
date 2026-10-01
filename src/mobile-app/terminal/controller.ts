@@ -112,6 +112,8 @@ export type MoTermState = {
   };
   /** `/` 자동완성 목록 — 보고 있는 세션 것(요청할 때만 받는다) */
   chatCommands: { id: string; items: ChatCommand[] } | null;
+  /** `@` 자동완성 파일 목록 — 보고 있는 세션 것(요청할 때만) */
+  chatFiles: { id: string; items: string[] } | null;
 };
 
 type Listener = () => void;
@@ -181,6 +183,7 @@ class MoTerminalController {
       fontHud: null,
       view: 'term',
       chatCommands: null,
+      chatFiles: null,
       chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null },
     };
   }
@@ -558,6 +561,9 @@ class MoTerminalController {
       case 'chat-commands':
         this.set({ chatCommands: { id: msg.id, items: msg.items } });
         break;
+      case 'chat-files':
+        this.set({ chatFiles: { id: msg.id, items: msg.items } });
+        break;
       case 'chat-prompt':
         if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
         this.set({ chat: { ...this.state.chat, prompt: msg.prompt } });
@@ -659,6 +665,12 @@ class MoTerminalController {
   requestChatCommands() {
     const id = this.state.attachedId;
     if (id) this.send({ type: 'chat-commands', id });
+  }
+
+  /** `@` 파일 자동완성 목록 요청 — 입력창에서 @ 를 칠 때 */
+  requestChatFiles() {
+    const id = this.state.attachedId;
+    if (id) this.send({ type: 'chat-files', id });
   }
 
   /** 채팅 입력창 전송 — 붙여넣기 감싸기·Enter 는 서버가 한다 */

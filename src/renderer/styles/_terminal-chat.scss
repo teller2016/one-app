@@ -636,6 +636,184 @@
     font-size: var(--fs-caption);
   }
 
+  // ── 첨부 이미지 칩 — 입력 바 위 한 줄(읽기 단 폭), 낱장마다 미리보기 + × ──
+  &__attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: var(--chat-col-w);
+    margin: 0 auto 8px;
+  }
+
+  &__attach {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 2px 0 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: var(--fs-caption);
+
+    > svg {
+      flex-shrink: 0;
+      margin-left: 2px;
+      color: var(--text-3);
+    }
+  }
+
+  &__attach-thumb {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: var(--r-xs);
+    object-fit: cover;
+  }
+
+  &__attach-name {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__attach-x {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text-3);
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    &:hover {
+      background: var(--overlay-hover);
+      color: var(--text);
+    }
+  }
+
+  // ── 서브에이전트 호출 — 묶지 않은 한 줄, 진행 중이면 스피너 ──
+  &__tool--agent &__tool-name {
+    color: var(--accent);
+  }
+
+  // ── 할 일 고정 패널(TodoWrite) — 채팅 위 한 줄, 누르면 목록 ──
+  &__todos {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+  }
+
+  &__todos-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: calc(var(--chat-col-w) + 24px);
+    min-height: 34px;
+    margin: 0 auto;
+    padding: 0 12px;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--fs-ui);
+    text-align: left;
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+  }
+
+  &__todos-count {
+    flex-shrink: 0;
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 진행 막대 — 6 · 트랙 --surface-3 · 채움 --ok (signal-style '상태 표현')
+  &__todos-bar {
+    flex-shrink: 0;
+    width: 64px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: var(--surface-3);
+    overflow: hidden;
+
+    > i {
+      display: block;
+      height: 100%;
+      border-radius: var(--r-full);
+      background: var(--ok);
+    }
+  }
+
+  &__todos-now {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-2);
+  }
+
+  &__todos-list {
+    max-width: calc(var(--chat-col-w) + 24px);
+    max-height: 40vh;
+    margin: 0 auto;
+    padding: 0 12px 10px;
+    overflow-y: auto;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__todo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+
+    &--done {
+      color: var(--text-3);
+      text-decoration: line-through;
+    }
+
+    &--doing {
+      color: var(--text);
+      font-weight: 500;
+    }
+  }
+
+  &__todo-mark {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xs);
+    color: var(--ok);
+  }
+
+  &__todo--doing &__todo-mark {
+    border-color: var(--ok);
+  }
+
   // ── 대화 검색(⌘F) — 채팅 위 한 줄 ──
   &__find {
     flex-shrink: 0;

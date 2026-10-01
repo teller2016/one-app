@@ -13,6 +13,9 @@
 //   읽기 — 본문 760 단(CSS) · 연속 도구 호출 묶기 · Edit diff 색 · 내 메시지 시각
 //   조작 — Esc 중단 · 숫자 키 선택지 · ↑↓ 이전 입력 · 답변/코드 복사 · 위로 올려 읽는 중 '새 답변'
 //   더   — `/` 명령 자동완성 · 작업 중 상태 줄(화면에서 읽음) · ⌘F 검색(데스크톱 — findSignal)
+//   입력 — 이미지 ⌘V(데스크톱 — onPasteImage, 낱장 칩·× 삭제) · 파일 끌어다 놓기(insertSignal) · `@` 파일 자동완성
+//          쓰던 글·첨부는 세션별로 기억한다(lib/chatDrafts — 보기를 바꿔도 남게, persistKey)
+//   진행 — 할 일(TodoWrite) 고정 패널 · 서브에이전트(Agent) 호출은 묶지 않고 따로
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
@@ -20,6 +23,7 @@ import { Icon } from '../../../components/Icon';
 import { Markdown } from '../../../components/Markdown';
 import { useCopy } from '../../../lib/useCopy';
 import type { ChatCommand, ChatItem, ChatPrompt } from '../../../../shared/terminal-protocol';
+import { getChatDraft, setChatDraft, type ChatAttachment } from '../lib/chatDrafts';
 
 type AskItem = Extract<ChatItem, { kind: 'ask' }>;
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>;
@@ -30,8 +34,52 @@ const STICK_PX = 80;
 const FREE_TEXT_DELAY_MS = 120;
 /** 이만큼 이상 이어진 도구 호출은 한 줄로 묶는다 */
 const TOOL_GROUP_MIN = 2;
+/**
+ * 중단(Esc) 뒤 claude 입력란 비우기까지의 틈 — claude 는 중단하면 방금 보낸 글을 **입력란에 되돌려 놓는다**.
+ * 채팅 보기에선 그 입력란이 안 보여 다음 메시지가 그 뒤에 이어 붙었다(2026-10-01 재현). 되돌아온 뒤 Ctrl+U 로 비운다
+ */
+const STOP_CLEAR_DELAY_MS = 800;
+/**
+ * 중단을 누른 뒤 '작업 중' 을 숨겨 두는 최대 시간 — 세션 상태(busy)는 출력이 2.5초 멈춰야 내려가서 Esc 직후에도
+ * 몇 초 '작업 중…' 이 남았다. 그 사이 사용자가 Esc 를 거듭 누르게 되고, claude 에서 **Esc 두 번은 되감기(rewind)
+ * 메뉴**라 보이지 않는 메뉴가 열렸다(2026-10-01 사용자 신고). 누르는 즉시 숨기고, 이 시간 안의 Esc 는 삼킨다.
+ * busy 가 내려가면 바로 풀리고, 끝내 안 내려가면(멈추지 않았다) 이 시간 뒤 다시 보인다
+ */
+const STOP_HOLD_MS = 6000;
 /** `/` 자동완성 목록에 보일 최대 수 */
 const COMMAND_LIMIT = 8;
+
+const isAgentTool = (t: ToolItem) => t.name === 'Agent' || t.name === 'Task';
+
+/** 최신 TodoWrite 의 할 일 — 상세가 '[x] …' · '[~] …' · '[ ] …' 줄이다(main transcript.ts describeTool) */
+type Todo = { text: string; state: 'done' | 'doing' | 'todo' };
+function latestTodos(items: ChatItem[]): Todo[] {
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const it = items[i];
+    if (it.kind !== 'tool' || it.name !== 'TodoWrite') continue;
+    return (it.detail ?? '').split('\n').flatMap((l) => {
+      const m = /^\[(x|~| )\] (.*)$/.exec(l);
+      return m ? [{ text: m[2], state: m[1] === 'x' ? 'done' : m[1] === '~' ? 'doing' : 'todo' } as Todo] : [];
+    });
+  }
+  return [];
+}
+
+/** `@` 파일 후보 — 파일 이름이 질의로 시작 > 이름에 포함 > 경로에 포함 */
+function matchFiles(files: string[], q: string): string[] {
+  const a: string[] = [];
+  const b: string[] = [];
+  const c: string[] = [];
+  for (const f of files) {
+    const lf = f.toLowerCase();
+    const base = lf.slice(lf.lastIndexOf('/') + 1);
+    if (base.startsWith(q)) a.push(f);
+    else if (base.includes(q)) b.push(f);
+    else if (lf.includes(q)) c.push(f);
+    if (a.length >= COMMAND_LIMIT) break;
+  }
+  return [...a, ...b, ...c].slice(0, COMMAND_LIMIT);
+}
 
 /** 렌더 단위 — 말풍선 하나 또는 연속된 도구 호출 묶음 */
 type Block = { kind: 'item'; item: ChatItem } | { kind: 'tools'; key: string; tools: ToolItem[] };
@@ -45,7 +93,8 @@ function toBlocks(items: ChatItem[]): Block[] {
     run = [];
   };
   for (const it of items) {
-    if (it.kind === 'tool') run.push(it);
+    // 서브에이전트 호출은 묶지 않는다 — 오래 걸리고 결과가 중요해 한 줄로 따로 보인다
+    if (it.kind === 'tool' && !isAgentTool(it)) run.push(it);
     else {
       flush();
       out.push({ kind: 'item', item: it });
@@ -101,6 +150,11 @@ export function ChatView({
   status = null,
   commands = null,
   onRequestCommands,
+  files = null,
+  onRequestFiles,
+  onPasteImage,
+  insertSignal,
+  persistKey,
   findSignal = 0,
   onSend,
   onKey,
@@ -121,9 +175,22 @@ export function ChatView({
   /** `/` 자동완성 목록 — null 이면 아직 안 받았다(입력창에서 / 를 치면 onRequestCommands) */
   commands?: ChatCommand[] | null;
   onRequestCommands?: () => void;
+  /** `@` 파일 자동완성 목록 — null 이면 아직 안 받았다(@ 를 치면 onRequestFiles) */
+  files?: string[] | null;
+  onRequestFiles?: () => void;
+  /**
+   * 이미지 ⌘V — 호출부가 이미지를 저장하고 **경로**를 돌려준다(데스크톱 = main 임시 폴더). 칩으로 들고 있다가
+   * 보낼 때 onSend 의 images 로 넘긴다(main 이 claude 에 한 장씩 경로로 붙여넣는다). 없으면 가로채지 않는다
+   */
+  onPasteImage?: (file: File) => Promise<string | null>;
+  /** 끼워 넣기(파일 끌어다 놓기) — n 이 바뀔 때마다 text 는 입력창 뒤에, images(경로)는 첨부 칩으로 */
+  insertSignal?: { text: string; images?: string[]; n: number } | null;
+  /** 쓰던 글·첨부를 기억할 열쇠(세션 id) — 보기를 바꿨다 돌아와도 남는다 */
+  persistKey?: string;
   /** 바뀔 때마다 검색 줄을 연다(데스크톱 ⌘F — 0 은 무시) */
   findSignal?: number;
-  onSend: (text: string) => void;
+  /** images = 첨부 이미지 경로(없으면 빈 배열) */
+  onSend: (text: string, images: string[]) => void;
   onKey: (data: string) => void;
   onShowTerminal: () => void;
   /**
@@ -136,7 +203,21 @@ export function ChatView({
   const stickRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const [hasNew, setHasNew] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(() => getChatDraft(persistKey).text);
+  // 중단을 눌렀다 — 세션 상태가 따라 내려오기 전에 '작업 중' 을 먼저 숨긴다(STOP_HOLD_MS)
+  const [stopping, setStopping] = useState(false);
+  useEffect(() => {
+    if (!busy) setStopping(false);
+  }, [busy]);
+  useEffect(() => {
+    if (!stopping) return;
+    const t = window.setTimeout(() => setStopping(false), STOP_HOLD_MS);
+    return () => window.clearTimeout(t);
+  }, [stopping]);
+  const working = busy && !stopping;
+  const [attachments, setAttachments] = useState<ChatAttachment[]>(() => getChatDraft(persistKey).attachments);
+  // 화면 밖에 기억 — 보기를 터미널로 바꾸면 이 컴포넌트는 사라진다
+  useEffect(() => setChatDraft(persistKey, { text: draft, attachments }), [persistKey, draft, attachments]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 선택 화면이 떠 있는데 직접 입력 자리가 없으면(검토·권한 화면) 입력창 글이 갈 곳이 없다
   const promptBlocksInput = !!prompt && !prompt.freeText;
@@ -149,22 +230,59 @@ export function ChatView({
   );
   const histRef = useRef(-1);
 
-  // `/` 자동완성 — '/이름' 까지(공백 전)일 때만 연다. Esc 로 닫으면 글이 바뀔 때까지 다시 열지 않는다
-  const [cmdIdx, setCmdIdx] = useState(0);
-  const [cmdDismissed, setCmdDismissed] = useState<string | null>(null);
+  // 자동완성 — `/명령`(입력 전체가 '/이름' 일 때) · `@파일`(커서 앞 낱말이 '@…' 일 때).
+  // Esc 로 닫으면 글이 바뀔 때까지 다시 열지 않는다
+  const [caret, setCaret] = useState(0);
+  const [pickIdx, setPickIdx] = useState(0);
+  const [dismissed, setDismissed] = useState<string | null>(null);
   const slash = /^\/(\S*)$/.exec(draft);
   const cmdQuery = slash ? slash[1].toLowerCase() : null;
+  const at = slash ? null : /(^|\s)@([^\s@]*)$/.exec(draft.slice(0, caret));
+  const fileQuery = at ? at[2].toLowerCase() : null;
   const cmdMatches = useMemo(() => {
     if (cmdQuery === null || !commands) return [];
     const starts = commands.filter((c) => c.name.toLowerCase().startsWith(cmdQuery));
     const contains = commands.filter((c) => !c.name.toLowerCase().startsWith(cmdQuery) && c.name.toLowerCase().includes(cmdQuery));
     return [...starts, ...contains].slice(0, COMMAND_LIMIT);
   }, [cmdQuery, commands]);
-  const cmdOpen = cmdQuery !== null && cmdDismissed !== draft && cmdMatches.length > 0;
+  const fileMatches = useMemo(
+    () => (fileQuery === null || !files ? [] : matchFiles(files, fileQuery)),
+    [fileQuery, files],
+  );
+  const pickMode: 'cmd' | 'file' | null =
+    dismissed === draft ? null : cmdMatches.length ? 'cmd' : fileMatches.length ? 'file' : null;
+  const pickCount = pickMode === 'cmd' ? cmdMatches.length : pickMode === 'file' ? fileMatches.length : 0;
   useEffect(() => {
     if (cmdQuery !== null && commands === null) onRequestCommands?.();
   }, [cmdQuery, commands, onRequestCommands]);
-  useEffect(() => setCmdIdx(0), [cmdQuery]);
+  useEffect(() => {
+    if (fileQuery !== null && files === null) onRequestFiles?.();
+  }, [fileQuery, files, onRequestFiles]);
+  useEffect(() => setPickIdx(0), [cmdQuery, fileQuery]);
+
+  // 할 일(TodoWrite) — 남은 일이 있을 때만 채팅 위에 고정한다
+  const todos = useMemo(() => latestTodos(items), [items]);
+  const showTodos = todos.some((t) => t.state !== 'done');
+
+  const removeAttachment = (path: string) =>
+    setAttachments((list) => {
+      const gone = list.find((a) => a.path === path);
+      if (gone?.url) URL.revokeObjectURL(gone.url);
+      return list.filter((a) => a.path !== path);
+    });
+
+  // 파일 끌어다 놓기 — 이미지는 첨부 칩으로, 나머지 경로는 지금 쓰는 글 뒤에
+  useEffect(() => {
+    if (!insertSignal?.n) return;
+    const imgs = insertSignal.images ?? [];
+    if (imgs.length)
+      setAttachments((list) => [
+        ...list,
+        ...imgs.filter((p) => !list.some((a) => a.path === p)).map((p) => ({ path: p, name: p.slice(p.lastIndexOf('/') + 1) })),
+      ]);
+    if (insertSignal.text) setDraft((d) => (d && !/\s$/.test(d) ? `${d} ` : d) + insertSignal.text);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [insertSignal]);
 
   // 새 항목이 오면 바닥에 붙어 있을 때만 따라 내려간다(위로 올려 읽는 중이면 '새 답변' 표시)
   const lastCount = useRef(items.length);
@@ -257,17 +375,31 @@ export function ChatView({
 
   const send = () => {
     const text = draft.trim();
-    if (!text || promptBlocksInput) return;
+    if (promptBlocksInput) return;
     if (prompt?.freeText) {
-      // 질문에 직접 답한다 — 'Type something.' 으로 옮겨 글을 넣는다(그냥 쓰면 선택 화면이 글을 버린다)
+      // 질문에 직접 답한다 — 'Type something.' 으로 옮겨 글을 넣는다(그냥 쓰면 선택 화면이 글을 버린다).
+      // 선택지 답에는 이미지를 싣지 않는다 — 첨부는 남겨 두고 다음 메시지에 보낸다
+      if (!text) return;
       onKey(String(prompt.freeText));
-      window.setTimeout(() => onSend(text), FREE_TEXT_DELAY_MS);
+      window.setTimeout(() => onSend(text, []), FREE_TEXT_DELAY_MS);
     } else {
-      onSend(text);
+      if (!text && !attachments.length) return;
+      onSend(text, attachments.map((a) => a.path));
+      attachments.forEach((a) => a.url && URL.revokeObjectURL(a.url));
+      setAttachments([]);
     }
     setDraft('');
+    setStopping(false); // 새 일을 맡겼다 — '작업 중' 을 다시 보인다
     histRef.current = -1;
     stickRef.current = true; // 보낸 사람은 답을 보려 한다
+  };
+
+  /** claude 중단 — Esc, 그리고 되돌아온 글을 비운다(위 STOP_CLEAR_DELAY_MS). 중단 처리 중의 거듭 누름은 무시 */
+  const stop = () => {
+    if (stopping) return;
+    setStopping(true);
+    onKey('\x1b');
+    window.setTimeout(() => onKey('\x15'), STOP_CLEAR_DELAY_MS);
   };
 
   const applyCommand = (c: ChatCommand) => {
@@ -275,25 +407,43 @@ export function ChatView({
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
+  /** '@질의' 를 '@경로 ' 로 바꾸고 커서를 그 뒤로 */
+  const applyFile = (path: string) => {
+    if (!at) return;
+    const start = caret - at[2].length - 1;
+    const insert = `@${path} `;
+    setDraft(draft.slice(0, start) + insert + draft.slice(caret));
+    const pos = start + insert.length;
+    setCaret(pos);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const applyPick = (i: number) => {
+    if (pickMode === 'cmd') applyCommand(cmdMatches[i] ?? cmdMatches[0]);
+    else if (pickMode === 'file') applyFile(fileMatches[i] ?? fileMatches[0]);
+  };
+
   const onInputKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // ⚠️ 한글 조합 중 키는 IME 몫이다 — Enter 는 글자 확정, 방향키는 조합 이동
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    // `/` 자동완성이 떠 있으면 ↑↓·Enter·Tab·Esc 는 목록 조작
-    if (cmdOpen) {
+    // 자동완성(`/`·`@`)이 떠 있으면 ↑↓·Enter·Tab·Esc 는 목록 조작
+    if (pickMode) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        const n = cmdMatches.length;
-        setCmdIdx((i) => (i + (e.key === 'ArrowDown' ? 1 : -1) + n) % n);
+        setPickIdx((i) => (i + (e.key === 'ArrowDown' ? 1 : -1) + pickCount) % pickCount);
         return;
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault();
-        applyCommand(cmdMatches[cmdIdx] ?? cmdMatches[0]);
+        applyPick(pickIdx);
         return;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
-        setCmdDismissed(draft);
+        setDismissed(draft);
         return;
       }
     }
@@ -304,9 +454,10 @@ export function ChatView({
       return;
     }
     // Esc = claude 중단(작업 중일 때) — 터미널에서 Esc 를 누르는 것과 같다
-    if (e.key === 'Escape' && busy && !prompt) {
+    // 중단 처리 중(stopping)의 거듭 누름도 삼킨다 — claude 로 가면 Esc 두 번 = 되감기 메뉴다
+    if (e.key === 'Escape' && (working || stopping) && !prompt) {
       e.preventDefault();
-      onKey('\x1b');
+      stop();
       return;
     }
     // 숫자 키 = 선택지 고르기(입력창이 비어 있을 때만 — 글을 쓰는 중이면 그냥 숫자다)
@@ -386,6 +537,8 @@ export function ChatView({
         </div>
       )}
 
+      {showTodos && <TodoPanel todos={todos} />}
+
       <div className="term-chat__body">
         <div ref={listRef} className="term-chat__list" onScroll={onScroll}>
           {!loaded && <div className="term-chat__note">대화를 불러오는 중…</div>}
@@ -407,7 +560,7 @@ export function ChatView({
           {prompt ? (
             <PromptCard prompt={prompt} keyHints={enterToSend} onKey={onKey} onShowTerminal={onShowTerminal} />
           ) : (
-            busy && (
+            working && (
               <div className="term-chat__typing" role="status">
                 <span className="spinner spinner--xs" aria-hidden="true" />
                 <span className="term-chat__typing-text">{status ?? '작업 중…'}</span>
@@ -442,30 +595,75 @@ export function ChatView({
           inputRef.current?.focus();
         }}
       >
+        {attachments.length > 0 && (
+          // 첨부 이미지 — 보낼 때 함께 간다(claude 입력란엔 아직 없다). × 로 낱장 빼기
+          <div className="term-chat__attachments">
+            {attachments.map((a, i) => (
+              <span key={a.path} className="term-chat__attach" title={a.path}>
+                {a.url ? (
+                  <img className="term-chat__attach-thumb" src={a.url} alt="" />
+                ) : (
+                  <Icon name="paperclip" size={12} />
+                )}
+                <span className="term-chat__attach-name">{a.url ? `이미지 ${i + 1}` : a.name}</span>
+                <button
+                  type="button"
+                  className="term-chat__attach-x"
+                  aria-label={`첨부 ${a.url ? `이미지 ${i + 1}` : a.name} 빼기`}
+                  onMouseDown={(e) => e.preventDefault()} // 입력창 포커스 유지
+                  onClick={() => removeAttachment(a.path)}
+                >
+                  <Icon name="x" size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="term-chat__composer-inner">
-          {cmdOpen && (
-            <ul className="term-chat__cmds" role="listbox" aria-label="명령">
-              {cmdMatches.map((c, i) => (
-                <li key={c.name}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={i === cmdIdx}
-                    className={'term-chat__cmd' + (i === cmdIdx ? ' term-chat__cmd--on' : '')}
-                    // 입력창 포커스를 잃지 않게 mousedown 에서 처리
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      applyCommand(c);
-                    }}
-                  >
-                    <span className="term-chat__cmd-name">/{c.name}</span>
-                    {c.description && <span className="term-chat__cmd-desc">{c.description}</span>}
-                    {c.source !== 'builtin' && (
-                      <span className="term-chat__cmd-src">{c.source === 'project' ? '프로젝트' : '내 계정'}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
+          {pickMode && (
+            <ul className="term-chat__cmds" role="listbox" aria-label={pickMode === 'cmd' ? '명령' : '파일'}>
+              {pickMode === 'cmd'
+                ? cmdMatches.map((c, i) => (
+                    <li key={c.name}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={i === pickIdx}
+                        className={'term-chat__cmd' + (i === pickIdx ? ' term-chat__cmd--on' : '')}
+                        // 입력창 포커스를 잃지 않게 mousedown 에서 처리
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          applyCommand(c);
+                        }}
+                      >
+                        <span className="term-chat__cmd-name">/{c.name}</span>
+                        {c.description && <span className="term-chat__cmd-desc">{c.description}</span>}
+                        {c.source !== 'builtin' && (
+                          <span className="term-chat__cmd-src">{c.source === 'project' ? '프로젝트' : '내 계정'}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))
+                : fileMatches.map((f, i) => {
+                    const cut = f.lastIndexOf('/') + 1;
+                    return (
+                      <li key={f}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={i === pickIdx}
+                          className={'term-chat__cmd' + (i === pickIdx ? ' term-chat__cmd--on' : '')}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applyFile(f);
+                          }}
+                        >
+                          <span className="term-chat__cmd-name">{f.slice(cut)}</span>
+                          <span className="term-chat__cmd-desc">{f.slice(0, cut)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
             </ul>
           )}
           <textarea
@@ -485,17 +683,31 @@ export function ChatView({
             aria-label="메시지"
             onChange={(e) => {
               setDraft(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
               histRef.current = -1;
             }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={onInputKey}
+            onPaste={(e) => {
+              // 글이 없는 이미지 붙여넣기만 가로챈다(글이 함께 있으면 그게 사용자의 의도다) — 저장해 칩으로
+              if (!onPasteImage) return;
+              const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+              if (!files.length || e.clipboardData.getData('text')) return;
+              e.preventDefault();
+              for (const file of files) {
+                void onPasteImage(file).then((path) => {
+                  if (path) setAttachments((list) => [...list, { path, name: file.name, url: URL.createObjectURL(file) }]);
+                });
+              }
+            }}
           />
-          {busy && !prompt && !draft.trim() ? (
+          {working && !prompt && !draft.trim() && !attachments.length ? (
             // 작업 중이면 Esc = claude 중단 — 터미널에서 Esc 를 누르는 것과 같다
             <button
               type="button"
               className="term-chat__send term-chat__send--stop"
               aria-label="중단 (Esc)"
-              onClick={() => onKey('\x1b')}
+              onClick={stop}
             >
               <span className="term-chat__stop-mark" aria-hidden="true" />
             </button>
@@ -504,7 +716,7 @@ export function ChatView({
               type="submit"
               className="term-chat__send"
               aria-label="보내기"
-              disabled={!draft.trim() || promptBlocksInput}
+              disabled={(!draft.trim() && !attachments.length) || promptBlocksInput}
             >
               <Icon name="arrow-up-right" size={18} />
             </button>
@@ -612,7 +824,11 @@ function ToolRow({ item, nested = false }: { item: ToolItem; nested?: boolean })
   const state = !item.result ? 'run' : item.result.isError ? 'err' : 'ok';
   const hasMore = !!(item.detail || item.result?.text);
   return (
-    <div className={`term-chat__tool term-chat__tool--${state}${nested ? ' term-chat__tool--nested' : ''}`}>
+    <div
+      className={`term-chat__tool term-chat__tool--${state}${nested ? ' term-chat__tool--nested' : ''}${
+        isAgentTool(item) ? ' term-chat__tool--agent' : ''
+      }`}
+    >
       <button
         type="button"
         className="term-chat__tool-head"
@@ -620,8 +836,12 @@ function ToolRow({ item, nested = false }: { item: ToolItem; nested?: boolean })
         disabled={!hasMore}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="term-chat__tool-dot" aria-hidden="true" />
-        <span className="term-chat__tool-name">{item.name}</span>
+        {isAgentTool(item) && state === 'run' ? (
+          <span className="spinner spinner--xs" aria-hidden="true" />
+        ) : (
+          <span className="term-chat__tool-dot" aria-hidden="true" />
+        )}
+        <span className="term-chat__tool-name">{isAgentTool(item) ? '에이전트' : item.name}</span>
         <span className="term-chat__tool-sum">{item.summary}</span>
         {hasMore && <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />}
       </button>
@@ -721,6 +941,39 @@ function PromptCard({
           터미널에서 보기
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 할 일 고정 패널 — 채팅 위 한 줄 '할 일 3/7 · 지금: …', 누르면 목록. 남은 일이 없으면 부모가 감춘다 */
+function TodoPanel({ todos }: { todos: Todo[] }) {
+  const [open, setOpen] = useState(false);
+  const done = todos.filter((t) => t.state === 'done').length;
+  const now = todos.find((t) => t.state === 'doing') ?? todos.find((t) => t.state === 'todo');
+  return (
+    <div className="term-chat__todos">
+      <button type="button" className="term-chat__todos-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="term-chat__todos-count">
+          할 일 {done}/{todos.length}
+        </span>
+        <span className="term-chat__todos-bar" aria-hidden="true">
+          <i style={{ width: `${(done / todos.length) * 100}%` }} />
+        </span>
+        {now && <span className="term-chat__todos-now">{now.text}</span>}
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />
+      </button>
+      {open && (
+        <ul className="term-chat__todos-list">
+          {todos.map((t, i) => (
+            <li key={i} className={`term-chat__todo term-chat__todo--${t.state}`}>
+              <span className="term-chat__todo-mark" aria-hidden="true">
+                {t.state === 'done' ? <Icon name="check" size={12} /> : t.state === 'doing' ? <span className="spinner spinner--xs" /> : null}
+              </span>
+              {t.text}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -41,6 +41,26 @@ describe('parseTranscript', () => {
     expect(items).toEqual([{ kind: 'user', key: 'u', text: '안녕', ts: '2026-10-01T05:02:00.000Z' }]);
   });
 
+  it('이미지가 붙은 입력은 [Image #N] 자리 표시를 걷는다(이미지 N장 머리가 대신)', () => {
+    const { items } = parseTranscript(
+      [
+        line({
+          type: 'user',
+          uuid: 'm',
+          message: {
+            content: [
+              { type: 'text', text: '[Image #1] [Image #2] 두 이미지 색은?' },
+              { type: 'image', source: {} },
+              { type: 'image', source: {} },
+            ],
+          },
+        }),
+      ],
+      CWD,
+    );
+    expect(items).toEqual([{ kind: 'user', key: 'm', text: '두 이미지 색은?', images: 2 }]);
+  });
+
   it('서브에이전트(isSidechain)·주입문(isMeta)·기타 줄 type 은 숨긴다', () => {
     const { items } = parseTranscript(
       [

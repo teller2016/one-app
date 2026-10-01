@@ -187,6 +187,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
   const sendChat = useCallback((text: string) => controller.sendChat(text), []);
   const sendChatKey = useCallback((data: string) => controller.sendChatKey(data), []);
   const requestCommands = useCallback(() => controller.requestChatCommands(), []);
+  const requestFiles = useCallback(() => controller.requestChatFiles(), []);
 
   return (
     <div className={`moterm${active ? '' : ' moterm--hidden'}`} aria-hidden={!active}>
@@ -375,6 +376,9 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
       {/* 터미널 — 탭은 읽기(키보드를 열지 않는다). 선택 모드에선 드래그가 줄 선택 */}
       {chatView && (
         <ChatView
+          // 세션마다 쓰던 글을 따로 기억한다 — 세션을 바꾸면 새로 그린다(lib/chatDrafts)
+          key={attached.id}
+          persistKey={attached.id}
           items={chatItems?.items ?? []}
           loaded={chatItems?.loaded ?? false}
           unavailable={chatItems?.unavailable ?? null}
@@ -383,6 +387,8 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           status={chatItems?.status ?? null}
           commands={st.chatCommands?.id === attached?.id ? st.chatCommands.items : null}
           onRequestCommands={requestCommands}
+          files={st.chatFiles?.id === attached?.id ? st.chatFiles.items : null}
+          onRequestFiles={requestFiles}
           busy={!!attached && (attached.working || attached.status === 'busy')}
           onSend={sendChat}
           onKey={sendChatKey}

@@ -466,10 +466,15 @@ contextBridge.exposeInMainWorld("oneApp", {
     chat: {
       open: (id: string) => ipcRenderer.send("terminal:chat:open", id),
       close: (id: string) => ipcRenderer.send("terminal:chat:close", id),
-      send: (id: string, text: string) =>
-        ipcRenderer.send("terminal:chat:send", id, text),
+      send: (id: string, text: string, images?: string[]) =>
+        ipcRenderer.send("terminal:chat:send", id, text, images),
+      // 붙여넣은 이미지 저장 → 경로 (보낼 때 images 로 넘긴다)
+      saveImage: (data: Uint8Array, mime: string) =>
+        ipcRenderer.invoke("terminal:chat:save-image", data, mime),
       // `/` 자동완성 목록 — 이 세션의 위치·계정의 스킬·명령 + 자주 쓰는 내장
       commands: (id: string) => ipcRenderer.invoke("terminal:chat:commands", id),
+      // `@` 자동완성 — 세션 위치 저장소의 파일 목록(git ls-files)
+      files: (id: string) => ipcRenderer.invoke("terminal:chat:files", id),
       onMessage: makeMux<ChatServerMsg>("terminal:chat"),
     },
     // 세션 이름 변경 (tmux 백엔드면 재시작 후에도 유지)
