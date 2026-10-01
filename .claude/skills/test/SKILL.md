@@ -1,16 +1,14 @@
 ---
 name: test
-description: 개발 인스턴스(npm start)를 실제로 띄워 이슈가 없는지 확인한다. main 예외·렌더러 콘솔 에러를 감시하고, 필요하면 puppeteer 로 화면을 직접 조작해 검증한다. tester 에이전트가 백그라운드로 실행하고 보고서만 돌아온다. 사용법 - /test 또는 /test "확인할 것" 또는 /test --fix
+description: 개발 인스턴스(npm start)를 실제로 띄워 이슈가 없는지 확인한다. main 예외·렌더러 콘솔 에러를 감시하고, 필요하면 puppeteer 로 화면을 직접 조작해 검증한다. 메인 대화에서 직접 실행한다. 사용법 - /test 또는 /test "확인할 것" 또는 /test --fix
 argument-hint: [확인할 것] [--fix]
-context: fork
-agent: tester
-background: true
 ---
 
 # /test — 개발 인스턴스로 실제 구동 테스트
 
-> 🤖 **이 스킬은 `tester` 에이전트(`.claude/agents/tester.md`)가 분리된 컨텍스트에서 실행한다** — 메인 대화에는 보고서만 돌아온다.
-> 에이전트는 **사용자에게 묻지 못하고 코드를 고치지 않는다.** "사용자에게 확인" 지점에서는 멈추고 `⏸️ 확인 필요` 로 보고한다.
+> 💬 **메인 대화에서 직접 실행한다** — 서브에이전트(`tester`)로 넘기지 않는다(2026-10-01 사용자 지시).
+> 백그라운드 에이전트는 사용자에게 묻지 못해 dev 재시작 같은 확인 지점에서 구동 없이 멈췄고, 메인이 대신 묻고
+> 재개하는 왕복이 생겼다. "사용자에게 확인" 지점에서는 **`AskUserQuestion` 으로 바로 묻고** 이어서 진행한다.
 > 확인할 것: $ARGUMENTS
 
 `npm start` 로 앱을 **실제로 띄워** 이슈가 나는지 본다. 정적 검사만으로는 안 보이는 것 — 런타임 예외·렌더 실패·IPC 미연결·콘솔 에러 — 이 대상이다.
@@ -21,7 +19,7 @@ background: true
 
 - ⚠️ **개발 인스턴스는 userData(설정)를 빌드 앱과 공유한다.** 상태를 바꾸는 IPC(`set*`·`save*`·`delete*`)를 테스트로 부르면 **사용자의 진짜 설정이 바뀐다.** 부르기 전에 현재 값을 읽어 두고 **끝나면 원복**한다.
 - ⚠️ **떠 있는 dev 창에 사용자의 진짜 작업(터미널 세션)이 들어 있을 수 있다.** 말없이 내리지 말 것. 세션을 정리할 때는 내용을 먼저 확인하고(`tmux -L oneapp-dev capture-pane -p -t <이름>`) **내가 만든 것만** 지운다.
-- ⚠️ 그룹웨어 결재·근태처럼 **외부에 실제 기록을 남기는 기능**은 실행하지 않는다. 검증이 필요하면 `⏸️ 확인 필요` 로 넘기고, 사용자가 허락해 다시 불렀을 때만 실행한 뒤 남은 흔적의 정리 방법까지 보고한다.
+- ⚠️ 그룹웨어 결재·근태처럼 **외부에 실제 기록을 남기는 기능**은 묻지 않고 실행하지 않는다. 검증이 필요하면 사용자에게 먼저 묻고, 허락받았을 때만 실행한 뒤 남은 흔적의 정리 방법까지 보고한다.
 - ⚠️ **빌드 앱과 dev 가 동시에 떠 있으면 출퇴근 리마인더·알림이 2벌 돈다**(`devInstance` 가 가르는 건 포트·tmux 소켓·창 상태뿐이다). 테스트로 잠깐 띄우는 건 괜찮지만, 오래 켜둘 거면 사용자에게 알린다.
 - 끝나면 앱을 **원래 상태로 되돌려 둔다** — 원래 떠 있었으면 `npm start` 로 되살리고, 내가 띄운 것이면 내린다.
 - ⚠️ **이 Claude 세션이 설치본 One App 의 터미널 안에서 돌고 있을 수 있다** — 사용자는 One App 의 터미널 섹션에서 `claude` 를 띄운다(`tmux -L oneapp list-sessions` 에 attached 세션). 그때 설치본을 끄면(`osascript quit`·`pkill`) **사용자 화면이 사라지고** 사용자는 앱을 다시 연다(2026-09-07 — 세 번 반복하고서야 알아챔). 설치본을 꺼야만 검증되는 것(VPN 관리 소켓처럼 한 클라이언트만 받는 자원)은 dev 로 검증하지 말고 `/build` 로 설치본에 실어 확인한다.
@@ -47,7 +45,9 @@ pgrep -fl "electron-forge start"
 | `src/main/**` · `src/preload/**` · `src/shared/**` | **재시작 필요** — 핫리로드 안 됨 |
 | `vite.*.config.ts` · `forge.config.ts` · `package.json` | 재시작 필요 |
 
-- 재시작이 필요한데 **이미 떠 있으면** → 작업 세션이 있을 수 있으므로 **내리지 않는다.** 정적 검사·떠 있는 인스턴스로 볼 수 있는 것까지만 보고, `⏸️ 확인 필요: dev 재시작` 으로 보고한다 (메인이 사용자에게 묻고 다시 `/test` 를 부른다).
+- 재시작이 필요한데 **이미 떠 있으면** → 작업 세션이 있을 수 있으므로 **말없이 내리지 않는다.** 누가 띄웠는지(아래)와 dev tmux 세션 내용(`tmux -L oneapp-dev list-sessions` → `capture-pane -p`)을 확인해 `AskUserQuestion` 으로 재시작 여부를 묻는다. 거절하면 정적 검사·떠 있는 인스턴스로 볼 수 있는 것까지만 확인한다.
+  - 누가 띄웠나: `ps eww -o command= -p <dev Electron pid> | tr ' ' '\n' | grep TERM_PROGRAM` — `Apple_Terminal`·`iTerm.app` 이면 사용자가 직접, `tmux` 면 설치본 터미널(Claude 쪽)에서 띄운 것.
+  - ⚠️ dev tmux 서버(`oneapp-dev`)를 claude 세션 안에서 처음 띄우면 `CLAUDE_CODE_CHILD_SESSION` 등을 물려받을 수 있다 — `pty.ts` 의 `inheritableEnv()` 가 걸러내지만, 그 전에 뜬 서버는 옛 env 를 들고 있다. 상속 여부는 `ps eww` 로 판정할 수 없다(env 가 잘려 보인다) — pane 안에서 `env | grep CLAUDE` 또는 claude 기동 문구 "Transcript saving is off" 로 확인한다.
 - HMR 로 충분하면 재시작하지 않는다(재시작은 창 상태·세션 복원을 흔든다).
 
 ## 3. 띄우기
@@ -62,7 +62,7 @@ npm start -- -- --remote-debugging-port=9333 > <스크래치패드>/dev.log 2>&1
   for i in $(seq 1 120); do lsof -nP -iTCP:9333 -sTCP:LISTEN >/dev/null 2>&1 && exit 0; sleep 0.5; done; exit 1
   ```
 
-- 🤖 에이전트가 `run_in_background` 로 띄운 dev 는 **에이전트가 끝나도 살아 있다**(2026-09-29 실측). 단, 그 백그라운드 작업이 나중에 끝나면(메인이 dev 를 내리면) **에이전트가 알림으로 다시 깨어난다** — 그때는 새로 진단하지 말고 "dev 가 종료됨" 만 보고할 것(실측 때 메인의 `pkill` 을 하네스가 죽인 것으로 오진했다).
+- `run_in_background` 로 띄운 dev 는 나중에 내리면(`pkill`) 그 백그라운드 작업 종료 알림이 온다 — 내가 내린 것이니 새로 진단하지 않는다(2026-09-29 하네스가 죽인 것으로 오진한 적 있다).
 
 **⚠️ 내릴 때 (가장 크게 시간을 잃는 함정)**
 ```bash
@@ -112,6 +112,16 @@ node .claude/skills/test/smoke.mjs <스크래치패드>/shot.png
 - ⚠️ **상태를 바꾸는 호출은 전/후 값을 읽어 원복**한다(§0).
 - ⚠️ 외부에 기록이 남는 호출은 사용자 확인 후에만.
 
+### E. MO(폰) 화면 — 헤드리스 Chrome 으로 (2026-10-01 실측)
+- 별도 프로필로 `--headless=new --window-size=390,844 --ignore-certificate-errors` Chrome 을 띄우고, 접속 주소는
+  `window.oneApp.terminal.server.status()` 의 `urls[0]` 에서 **호스트만 `127.0.0.1:18318`(dev MO 포트)** 로 바꾼다.
+- `puppeteer.connect` 에 `defaultViewport: null` — 안 주면 800x600 으로 덮어써 폰 레이아웃이 아니다.
+- WS 프로토콜 단정(resize·attach·chat-*)은 CDP `Network.webSocketFrameSent/Received` 로 수집한다.
+- ⚠️ **claude 세션 테스트에서 `/model` 을 쓰지 말 것** — Claude Code 2.1.286 은 `/model` 선택을 "saved as your default
+  for new sessions" 로 **사용자 기본 모델에 저장**한다. `settings.json` 을 원복해도 새 세션이 Haiku 로 떴다
+  (로컬 파일에서 출처를 못 찾음 — 계정 쪽 저장으로 추정, 사용자가 `/model` 로 되돌려야 했다). 비용을 줄이려면
+  메시지를 짧게 하고, 모델은 사용자 기본값 그대로 둔다.
+
 ## 5. 창이 가려졌을 때의 함정 — 앱 버그로 오진하기 쉽다
 
 Electron 창이 다른 창에 가려지면 **앱은 멀쩡한데 테스트만 실패**한다.
@@ -144,11 +154,10 @@ Electron 창이 다른 창에 가려지면 **앱은 멀쩡한데 테스트만 �
 - **테스트하지 못한 것을 분명히 적는다** — 외부 기록이 남아 건너뛴 기능, 창이 가려져 확인 못 한 것 등. 안 본 것을 본 것처럼 쓰지 않는다.
 - 새로 알아낸 함정은 `.claude/rules/` 의 해당 파일에 기록할지 제안한다.
 
-## 8. 수정 — 에이전트는 하지 않는다
+## 8. 수정
 
-- 에이전트는 **보고서로 끝난다.** 수정은 보고를 받은 **메인 대화**가 한다 — 고친 맥락이 메인에 남아야 이어서 작업할 수 있다.
-- 기본: 메인이 보고를 받아 `AskUserQuestion` 으로 고칠지 묻는다.
-- `--fix`: 메인이 사용자에게 다시 묻지 않고 🔴 부터 고친 뒤 **`/test` 를 다시 불러** 사라졌는지 확인한다(렌더러는 HMR 로 즉시 반영, main/preload 는 재시작). 에이전트는 보고서 끝에 "`--fix` 요청됨" 을 적어 메인에 알린다.
+- 기본: 보고 뒤 `AskUserQuestion` 으로 고칠지 묻는다.
+- `--fix`: 다시 묻지 않고 🔴 부터 고친 뒤 **같은 확인을 다시 돌려** 사라졌는지 본다(렌더러는 HMR 로 즉시 반영, main/preload 는 재시작 — 재시작은 §2 규칙대로).
 - **커밋하지 않는다.** 커밋은 `/commit` 으로 지시받았을 때만.
 
 ---
@@ -201,6 +210,14 @@ Electron[<pid>:...] error messaging the mach port for IMKCFRunLoopWakeUpReliable
 ```
 macOS 입력기(InputMethodKit)가 찍는 것으로 **앱 코드와 무관**하다. 창이 포커스를 주고받을 때
 나오며, `error` 라는 낱말 때문에 grep 에 걸린다. 이슈로 세지 말 것.
+
+### MO(폰) 페이지 — dev 에서만 나는 노이즈 (2026-10-01)
+MO 페이지를 열 때마다(=로드 1회당) 나온다. **이번 변경과 무관한 dev 전용 노이즈**다(`mo-app` 규칙의 HMR 항목과 같은 것).
+- 폰 콘솔 3건: Vite HMR 소켓이 MO 서버에서 `403` → `wss://localhost:5173` `ERR_SSL_PROTOCOL_ERROR` → `[vite] failed to connect to websocket`
+- main `dev.log`: `[term:upgrade] read ECONNRESET` 한 줄 (HMR 소켓이 끊기는 것 — `server.ts` upgrade 핸들러)
+- 첫 로드 때 404 1건이 Vite 의 `optimized dependencies changed. reloading` 과 같은 시각에 날 수 있다
+- ⚠️ 그래서 **폰 페이지에는 HMR 이 오지 않는다** — 렌더러(`mobile-app/**`·`*.scss`)를 고친 뒤에는 폰 페이지를 **새로고침**해야 새 코드가 돈다.
+  안 하면 옛 JS 로 돌아 "서버는 보냈는데 화면에 없다"로 보인다(2026-10-01 — WS 프레임엔 `chat-prompt` 가 있는데 카드가 안 그려졌다).
 
 ### 확인된 기준값
 - 사이드바 섹션 **12개**: 터미널 / Jira / Nightwatch / PR / 포트 / 배포 / 프로젝트 / 딥링크 / 결재 / 일정 등록 / 주간보고 / 환경설정 (`App.tsx` 의 `SECTIONS` 가 정본 — 개수가 다르면 먼저 그걸 확인)

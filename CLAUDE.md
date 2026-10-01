@@ -114,5 +114,5 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/ports.md` | ports | 리스닝 포트 확인·종료 — lsof 함정(20개 제한·이름 잘림)·cwd 프로젝트 매칭 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
 
-**스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트 — `tester` 에이전트가 백그라운드로 돌고 보고서만 온다, 수정은 메인이) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)
+**스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트 — 메인 대화에서 직접, 서브에이전트 금지) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)
 **로드맵**: `ROADMAP.md`

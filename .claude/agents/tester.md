@@ -1,6 +1,6 @@
 ---
 name: tester
-description: One App 개발 인스턴스(npm start)를 띄워 실제 구동 테스트를 하고 이슈를 보고한다. /test 스킬이 이 에이전트로 실행된다. 코드는 고치지 않는다.
+description: One App 개발 인스턴스(npm start)를 띄워 실제 구동 테스트를 하고 이슈를 보고한다. 사용자가 이 에이전트를 직접 지목했을 때만 쓴다 — /test 스킬은 2026-10-01 부터 메인 대화에서 실행한다. 코드는 고치지 않는다.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
