@@ -16,6 +16,7 @@ import { presetsForWorkspace } from '../../shared/types';
 import type { TermWorkspaceNode } from '../../shared/terminal-protocol';
 import { controller, FONT_MAX, FONT_MIN, type MoScope } from './controller';
 import type { KeyName } from './logic';
+import { MoChatView } from './MoChatView';
 
 type GoTab = 'terminal' | 'changes' | 'jira' | 'prs' | 'more';
 type Sheet = 'menu' | 'workspace' | 'new' | null;
@@ -178,6 +179,12 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
   );
 
   const noSessions = st.connected && !chips.length;
+  // 채팅 보기 — 보는 세션이 있고 채팅을 골랐을 때. xterm 은 숨기기만 한다(attach·스크롤백 유지)
+  const chatView = !!attached && st.view === 'chat';
+  const chatItems = st.chat.id === attached?.id ? st.chat : null;
+  const showTerminal = useCallback(() => controller.setView('term'), []);
+  const sendChat = useCallback((text: string) => controller.sendChat(text), []);
+  const sendChatKey = useCallback((data: string) => controller.sendChatKey(data), []);
 
   return (
     <div className={`moterm${active ? '' : ' moterm--hidden'}`} aria-hidden={!active}>
@@ -206,19 +213,47 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           </span>
           <Icon name="chevron-down" size={14} />
         </button>
-        <button
-          type="button"
-          className={`moterm__icon-btn${searchOpen ? ' moterm__icon-btn--on' : ''}`}
-          aria-label="스크롤백 검색"
-          aria-pressed={searchOpen}
-          disabled={!attached}
-          onClick={() => {
-            if (searchOpen) controller.clearSearch();
-            setSearchOpen((v) => !v);
-          }}
-        >
-          <Icon name="search" size={18} />
-        </button>
+        {attached && (
+          <div className="moterm__view" role="group" aria-label="보기 방식">
+            <button
+              type="button"
+              className={`moterm__view-btn${chatView ? ' moterm__view-btn--on' : ''}`}
+              aria-pressed={chatView}
+              onClick={() => {
+                if (chatView) return;
+                controller.clearSearch();
+                setSearchOpen(false);
+                controller.setView('chat');
+              }}
+            >
+              채팅
+            </button>
+            <button
+              type="button"
+              className={`moterm__view-btn${chatView ? '' : ' moterm__view-btn--on'}`}
+              aria-pressed={!chatView}
+              onClick={() => chatView && controller.setView('term')}
+            >
+              터미널
+            </button>
+          </div>
+        )}
+        {/* 검색은 xterm 스크롤백 대상 — 채팅 보기에선 뺀다 */}
+        {!chatView && (
+          <button
+            type="button"
+            className={`moterm__icon-btn${searchOpen ? ' moterm__icon-btn--on' : ''}`}
+            aria-label="스크롤백 검색"
+            aria-pressed={searchOpen}
+            disabled={!attached}
+            onClick={() => {
+              if (searchOpen) controller.clearSearch();
+              setSearchOpen((v) => !v);
+            }}
+          >
+            <Icon name="search" size={18} />
+          </button>
+        )}
         <button
           type="button"
           className="moterm__icon-btn"
@@ -291,7 +326,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
         </button>
       </div>
 
-      {searchOpen && (
+      {searchOpen && !chatView && (
         <form
           className="moterm__search"
           onSubmit={(e) => {
@@ -336,7 +371,25 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
       )}
 
       {/* 터미널 — 탭은 읽기(키보드를 열지 않는다). 선택 모드에선 드래그가 줄 선택 */}
-      <div className={`moterm__term${st.connected ? '' : ' moterm__term--off'}`}>
+      {chatView && (
+        <MoChatView
+          items={chatItems?.items ?? []}
+          loaded={chatItems?.loaded ?? false}
+          unavailable={chatItems?.unavailable ?? null}
+          fresh={chatItems?.fresh ?? false}
+          prompt={chatItems?.prompt ?? null}
+          busy={!!attached && (attached.working || attached.status === 'busy')}
+          onSend={sendChat}
+          onKey={sendChatKey}
+          onShowTerminal={showTerminal}
+        />
+      )}
+
+      {/* ⚠️ 채팅 보기에서도 언마운트하지 않는다 — xterm 인스턴스·attach 를 그대로 두고 숨기기만(display:none).
+          숨은(폭 0) 호스트는 controller.refit 이 건너뛴다 */}
+      <div
+        className={`moterm__term${st.connected ? '' : ' moterm__term--off'}${chatView ? ' moterm__term--hidden' : ''}`}
+      >
         <div ref={hostRef} className="moterm__host" />
         {st.scrolledUp && (
           <button
@@ -377,7 +430,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
       </div>
 
       {/* 키 바 — 키보드 없이도 1단 고정 · 키보드가 뜨면 2단 · 선택 모드면 복사 바 */}
-      {st.selecting ? (
+      {chatView ? null : st.selecting ? (
         <div className="moterm__keybar moterm__keybar--select">
           <span className="moterm__select-info">
             {st.selectedLines ? `${st.selectedLines}줄 선택됨` : '복사할 줄을 끌어서 고르세요'}
@@ -502,6 +555,7 @@ function MenuSheet({
   onNextWaiting?: () => void;
 }) {
   const st = useTermState();
+  const chat = !!attached && st.view === 'chat'; // 출력 선택·붙여넣기는 xterm 대상이다
   const status = attached ? statusOf(attached) : null;
   const where = attached ? (attached.projectName ?? lastSeg(attached.cwd)) : '';
   const row = (icon: IconName, label: string, onClick: () => void, opts: { disabled?: boolean; sub?: string; danger?: boolean; chevron?: boolean } = {}) => (
@@ -548,7 +602,7 @@ function MenuSheet({
             onClose();
             controller.setSelecting(true);
           },
-          { disabled: !attached, chevron: true },
+          { disabled: !attached || chat, sub: chat ? '터미널 보기에서 쓸 수 있습니다' : undefined, chevron: true },
         )}
         {row(
           'clipboard',
@@ -558,8 +612,8 @@ function MenuSheet({
             void controller.paste();
           },
           {
-            disabled: !attached || !st.canPaste,
-            sub: st.canPaste ? undefined : 'HTTPS 접속에서만 됩니다',
+            disabled: !attached || !st.canPaste || chat,
+            sub: chat ? '터미널 보기에서 쓸 수 있습니다' : st.canPaste ? undefined : 'HTTPS 접속에서만 됩니다',
           },
         )}
         <div className="moterm__menu-row moterm__menu-row--static">

@@ -188,6 +188,22 @@ export async function tmuxPaneId(name: string): Promise<string | null> {
 }
 
 /**
+ * 세션 pane 의 셸 pid — 채팅 보기가 그 아래 프로세스 트리에서 claude 를 찾는 뿌리다(chat.ts).
+ * tmux 백엔드에서 node-pty 의 pid 는 tmux **클라이언트**라 pane 안 프로세스와 무관하다.
+ */
+export async function tmuxPanePid(name: string): Promise<number | null> {
+  const { ok, stdout } = await run(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}']);
+  const pid = Number(stdout.split('\n')[0]?.trim());
+  return ok && pid > 0 ? pid : null;
+}
+
+/** pane 의 지금 화면 글자 — 채팅 보기가 claude 의 번호 선택 화면을 읽는다(screenPrompt.ts). `-J` 감긴 줄 잇기 */
+export async function tmuxCapturePane(paneId: string): Promise<string | null> {
+  const { ok, stdout } = await run(['capture-pane', '-p', '-J', '-t', paneId]);
+  return ok ? stdout : null;
+}
+
+/**
  * 휠 스크롤을 tmux 로 위임한다 — **tmux 가 스크롤백의 주인**이기 때문이다.
  * tmux 클라이언트는 대체 화면으로 붙으므로 xterm 뷰포트엔 스크롤할 것이 없고,
  * xterm 은 그 상태에서 휠을 ↑↓ 키로 바꿔 보내 셸 히스토리가 롤링됐다(사용자 신고).

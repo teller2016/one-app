@@ -42,6 +42,8 @@ import {
   tmuxExitCopyMode,
   tmuxNewSessionArgs,
   tmuxPaneId,
+  tmuxPanePid,
+  tmuxCapturePane,
   tmuxScrollPane,
   tmuxSessionName,
 } from './tmux';
@@ -396,6 +398,17 @@ export function listSessions(): TerminalSessionInfo[] {
   return [...sessions.values()].map(toInfo);
 }
 
+/**
+ * 세션에 물려줄 환경 — **앱을 띄운 claude 세션의 표식은 뺀다**.
+ * 개발 인스턴스(`npm start`)를 claude 안에서 띄우면 `CLAUDECODE`·`CLAUDE_CODE_*` 가 그대로 상속돼, 세션
+ * 안에서 실행한 claude 가 자신을 **자식 세션으로 보고 대화 기록(jsonl) 저장을 끈다**("Transcript saving is
+ * off — inherited CLAUDE_CODE_CHILD_SESSION", 2026-10-01 실측) — MO 채팅 보기가 읽을 기록이 없어진다.
+ * `CLAUDE_CONFIG_DIR`(계정 선택)은 사용자의 설정이라 남긴다.
+ */
+const INHERITED_CLAUDE_RE = /^(CLAUDECODE|CLAUDE_CODE_.*|CLAUDE_PID|CLAUDE_AFK_TIMEOUT_MS|CLAUDE_EFFORT)$/;
+const inheritableEnv = () =>
+  Object.fromEntries(Object.entries(process.env).filter(([k]) => !INHERITED_CLAUDE_RE.test(k)));
+
 /** node-pty 공통 옵션 — 직접 spawn·tmux 클라이언트·재attach 가 전부 공유 */
 const ptyOptions = (cwd: string, cols: number, rows: number) => ({
   name: 'xterm-256color',
@@ -403,7 +416,7 @@ const ptyOptions = (cwd: string, cols: number, rows: number) => ({
   rows,
   cwd: fs.existsSync(cwd) ? cwd : os.homedir(),
   env: {
-    ...process.env,
+    ...inheritableEnv(),
     COLORTERM: 'truecolor',
     LANG: process.env.LANG ?? 'ko_KR.UTF-8',
   } as { [key: string]: string },
@@ -919,6 +932,25 @@ export async function scrollSession(
   const res = await tmuxScrollPane(s.paneId, lines);
   s.copyMode = res.scrolledUp;
   return res;
+}
+
+/**
+ * 세션 안 프로세스 트리의 뿌리 pid — 채팅 보기가 그 아래에서 claude 를 찾는다(chat.ts).
+ * tmux 면 pane 의 셸, 폴백이면 node-pty 가 띄운 셸 자신이다.
+ */
+export async function sessionRootPid(id: string): Promise<number | null> {
+  const s = sessions.get(id);
+  if (!s) return null;
+  if (s.tmuxName) return tmuxPanePid(s.tmuxName);
+  return s.pty.pid || null;
+}
+
+/** 세션의 지금 화면 글자 — tmux 만(폴백 세션은 화면 모델이 없어 null) */
+export async function sessionScreen(id: string): Promise<string | null> {
+  const s = sessions.get(id);
+  if (!s?.tmuxName) return null;
+  if (!s.paneId) s.paneId = (await tmuxPaneId(s.tmuxName)) ?? undefined;
+  return s.paneId ? tmuxCapturePane(s.paneId) : null;
 }
 
 /** 상단 바 [맨 아래로] — copy-mode 를 끝내면 tmux 가 현재 화면으로 돌아온다 */

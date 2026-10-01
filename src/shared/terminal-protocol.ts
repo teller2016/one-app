@@ -55,7 +55,12 @@ export type TermClientMsg =
       cols?: number;
       rows?: number;
     }
-  | { type: 'kill'; id: string };
+  | { type: 'kill'; id: string }
+  // ── 채팅 보기 — claude 대화 기록(jsonl)을 말풍선으로 (main `chat.ts`) ──
+  | { type: 'chat-open'; id: string } // 이 세션의 대화를 구독 — 응답은 'chat'(reset) 후 증분
+  | { type: 'chat-close' }
+  // 입력창 전송 — 서버가 붙여넣기 감싸기·Enter 지연까지 처리한다(여러 줄이 줄마다 제출되지 않게)
+  | { type: 'chat-send'; id: string; text: string };
 
 /** 서버 → 클라이언트 */
 export type TermServerMsg =
@@ -80,4 +85,53 @@ export type TermServerMsg =
   // scroll/scroll-bottom 응답 — 위로 올라가 있는지가 [맨 아래로] 버튼의 판정이다
   // (위임 스크롤은 tmux copy-mode 를 움직이므로 xterm 버퍼로는 알 수 없다)
   | { type: 'scrolled'; id: string; scrolledUp: boolean }
+  // 채팅 — reset 이면 통째 교체(구독 시작·대화가 바뀜), 아니면 뒤에 덧붙인다.
+  // results 는 앞서 보낸 도구 호출의 결과 — 클라이언트가 toolId 로 맞춰 붙인다
+  // fresh = claude 는 떠 있지만 대화 파일이 아직 없다(첫 메시지 전) — 빈 대화 + 입력창
+  | { type: 'chat'; id: string; reset: boolean; items: ChatItem[]; results: ChatToolResult[]; fresh?: boolean }
+  // 대화 기록을 못 찾았다(claude 가 아닌 세션·아직 시작 전) — 클라이언트는 안내 + 터미널 보기
+  | { type: 'chat-unavailable'; id: string; reason: string }
+  // claude 가 터미널에서 답을 기다린다(sessions/<pid>.json status 'waiting') — 화면에서 읽은 선택 화면.
+  // prompt 가 null 이면 대기가 끝났다. options 가 비면 읽지 못한 것 — '터미널에서 답 필요' 안내만
+  | { type: 'chat-prompt'; id: string; prompt: ChatPrompt | null }
   | { type: 'error'; message: string };
+
+// ── 채팅 항목 ──
+
+export type ChatQuestion = {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: { label: string; description?: string }[];
+};
+
+export type ChatToolResult = { toolId: string; text: string; isError?: boolean };
+
+/** 터미널의 번호 선택 화면(screenPrompt.ts) — 버튼 = 그 번호 키 */
+export type ChatPrompt = {
+  header?: string;
+  question: string;
+  options: { n: number; label: string; description?: string; current?: boolean }[];
+  /** 'Type something.' 번호 — 입력창 글은 이 번호로 옮긴 뒤 넣는다 */
+  freeText?: number;
+};
+
+export type ChatItem =
+  | { kind: 'user'; key: string; text: string; images?: number }
+  | { kind: 'assistant'; key: string; text: string }
+  /** 대화 흐름 표식(중단 등) — 말풍선이 아니라 가운데 회색 줄 */
+  | { kind: 'notice'; key: string; text: string }
+  /** 슬래시 명령(`/commit` 등) — 사용자가 친 명령 한 줄 */
+  | { kind: 'command'; key: string; text: string }
+  /** 도구 호출 — summary 는 한 줄 요약, detail 은 펼쳤을 때(입력 전문·diff) */
+  | {
+      kind: 'tool';
+      key: string;
+      toolId: string;
+      name: string;
+      summary: string;
+      detail?: string;
+      result?: ChatToolResult;
+    }
+  /** AskUserQuestion 기록 — 답한 뒤에야 기록된다(대기 중 선택지는 chat-prompt 가 화면에서 읽어 보낸다) */
+  | { kind: 'ask'; key: string; toolId: string; questions: ChatQuestion[]; result?: ChatToolResult };

@@ -12,6 +12,8 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type {
+  ChatItem,
+  ChatPrompt,
   TermClientMsg,
   TermCwdOption,
   TermServerMsg,
@@ -24,11 +26,14 @@ import {
   KEY_SEQ,
   StableWaiting,
   applyModifiers,
+  defaultView,
+  mergeChat,
   pickAutoAttach,
   stripDaReplies,
   visibleSessions,
   type KeyName,
   type Modifiers,
+  type MoView,
 } from './logic';
 
 const LAST_SESSION_KEY = 'mo:lastSession';
@@ -36,6 +41,8 @@ const LAST_SESSION_KEY = 'mo:lastSession';
 const SCOPE_KEY = 'mo:scope';
 const WS_EXPANDED_KEY = 'mo:wsExpanded';
 const NOTIFY_DISMISS_KEY = 'mo:notifyBarDismissed';
+// 세션별로 고른 보기(채팅/터미널) — 고른 적 없으면 defaultView(에이전트 종류)
+const VIEWS_KEY = 'mo:views';
 
 // 글자 크기 — 폰 화면·시야에 따라 편차가 커서 사용자가 조절하고 기억한다.
 // 기본 11px — 예전 기본(최소 6px)은 넓은 TUI 를 통째로 보려는 값이었지만 읽기엔 너무 작았다
@@ -87,6 +94,18 @@ export type MoTermState = {
   selectedLines: number;
   /** 핀치 중 잠깐 보이는 현재 글자 크기 */
   fontHud: number | null;
+  /** 보고 있는 세션의 보기 방식 */
+  view: MoView;
+  /** 채팅 보기 — 지금 구독 중인 세션의 대화 (id 가 attachedId 와 다르면 아직 안 받은 것) */
+  chat: {
+    id: string | null;
+    items: ChatItem[];
+    loaded: boolean;
+    unavailable: string | null;
+    fresh: boolean;
+    /** claude 가 터미널에서 답을 기다리는 선택 화면 (chat-prompt) */
+    prompt: ChatPrompt | null;
+  };
 };
 
 type Listener = () => void;
@@ -216,6 +235,8 @@ class MoTerminalController {
       selecting: false,
       selectedLines: 0,
       fontHud: null,
+      view: 'term',
+      chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null },
     };
   }
 
@@ -364,6 +385,9 @@ class MoTerminalController {
       if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         resizeTimer = null;
+        // 채팅 보기에선 xterm 이 데스크톱 크기를 **따라가기만** 한다 — 따라간 크기를 되돌려 보내면, 데스크톱 창을
+        // 끄는 중에 늦게 도착한 옛 크기가 최신 크기를 덮을 수 있다. 터미널로 돌아올 때 setView 가 주장한다
+        if (this.state.view !== 'term') return;
         this.send({ type: 'resize', cols, rows });
       }, 120);
     });
@@ -382,6 +406,7 @@ class MoTerminalController {
   /** 셸이 탭을 바꿨다 — 숨은 동안엔 크기 주장·화면 켜둠을 하지 않는다 */
   setActive(active: boolean) {
     this.active = active;
+    this.syncView();
     if (active) requestAnimationFrame(() => this.refit());
     else this.closeKeyboard();
     this.syncWakeLock();
@@ -443,6 +468,7 @@ class MoTerminalController {
       this.ws = null;
       this.pendingAttachId = null; // 못 받은 응답을 기다리며 재attach 를 막으면 안 된다
       this.releaseWake(); // 끊긴 화면을 켜 둘 이유가 없다
+      this.chatSubId = null; // 서버 쪽 구독도 소켓과 함께 끝났다 — 재attach 때 다시 연다
       this.set({ attachedId: null, connected: false, statusText: '연결 끊김 — 재연결 중…' });
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
@@ -462,6 +488,7 @@ class MoTerminalController {
             ? this.state.attachedId
             : null;
         this.set({ sessions, attachedId });
+        this.syncView();
         this.onWaitingChanged(this.stable.update(sessions));
         this.syncWakeLock();
         this.autoAttach();
@@ -509,6 +536,7 @@ class MoTerminalController {
             term.resize(msg.cols, msg.rows);
         }
         this.set({ attachedId: msg.id, selecting: false, selectedLines: 0 });
+        this.syncView();
         this.syncBottom();
         this.syncWakeLock();
         void this.closeNotificationsFor((id) => id === msg.id); // 열어 봤으면 그 알림은 용건이 끝났다
@@ -533,6 +561,7 @@ class MoTerminalController {
         if (
           document.visibilityState === 'visible' &&
           this.active &&
+          this.state.view === 'term' && // 채팅 보기는 크기를 주장하지 않는다 — 데스크톱 크기를 따른다
           mine &&
           mine.cols > 0 &&
           mine.rows > 0 &&
@@ -554,6 +583,31 @@ class MoTerminalController {
           this.term?.write(`\r\n\x1b[90m[세션이 종료되었습니다 — exit ${msg.exitCode}]\x1b[0m\r\n`);
           this.notice(`세션 종료 (exit ${msg.exitCode})`);
         }
+        break;
+      case 'chat': {
+        if (msg.id !== this.chatSubId) break; // 이미 다른 세션으로 옮겼다
+        const same = this.state.chat.id === msg.id && !msg.reset;
+        const prev = same ? this.state.chat.items : [];
+        this.set({
+          chat: {
+            id: msg.id,
+            items: mergeChat(prev, msg.items, msg.results),
+            loaded: true,
+            unavailable: null,
+            // 첫 메시지 전(대화 파일 없음) — 증분이 오면 항목이 생기므로 표시는 저절로 사라진다
+            fresh: msg.reset ? !!msg.fresh : this.state.chat.fresh,
+            prompt: this.state.chat.id === msg.id ? this.state.chat.prompt : null,
+          },
+        });
+        break;
+      }
+      case 'chat-unavailable':
+        if (msg.id !== this.chatSubId) break;
+        this.set({ chat: { id: msg.id, items: [], loaded: true, unavailable: msg.reason, fresh: false, prompt: null } });
+        break;
+      case 'chat-prompt':
+        if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
+        this.set({ chat: { ...this.state.chat, prompt: msg.prompt } });
         break;
       case 'error':
         // ⚠️ 연결 끊김으로 표시하지 말 것 — attach 실패 한 번에 UI 가 통째로 잠겨 "아무것도 안 된다"가
@@ -585,8 +639,79 @@ class MoTerminalController {
     // 소켓이 안 열렸으면 보내지도 대기 표시도 하지 않는다 — 표시만 남으면 이후 자동 attach 가 막힌다
     if (this.pendingAttachId === id || !this.term || this.ws?.readyState !== WebSocket.OPEN) return;
     this.pendingAttachId = id;
+    // 채팅 보기로 열 세션은 크기를 주장하지 않는다(0×0 = 주장 없음) — 숨은 xterm 의 크기(처음엔 80×24)로
+    // 데스크톱 claude 화면을 줄여 버리면 안 된다. 터미널로 바꾸는 순간 그때 크기를 주장한다(setView)
+    if (this.viewFor(id) === 'chat') {
+      this.send({ type: 'attach', id, cols: 0, rows: 0 });
+      return;
+    }
     this.refit();
     this.send({ type: 'attach', id, cols: this.term.cols, rows: this.term.rows });
+  }
+
+  // ── 채팅 보기 ──
+
+  /** 서버에 구독을 연 세션 — 'chat' 메시지를 이 세션 것만 받아들인다 */
+  private chatSubId: string | null = null;
+
+  private viewFor(id: string): MoView {
+    const saved = readJson<Record<string, MoView>>(VIEWS_KEY, {})[id];
+    return saved ?? defaultView(this.state.sessions.find((s) => s.id === id)?.agentId);
+  }
+
+  /** 보기 방식·채팅 구독을 보고 있는 세션에 맞춘다 — attach·세션 목록·탭 활성 변화마다 */
+  private syncView() {
+    const id = this.state.attachedId;
+    const view = id ? this.viewFor(id) : 'term';
+    if (view !== this.state.view) this.set({ view });
+    // 구독은 채팅을 **보는 동안만** — 숨은 탭·터미널 보기에서는 대화 기록을 읽을 이유가 없다
+    const want = id && view === 'chat' && this.active ? id : null;
+    if (want === this.chatSubId) return;
+    if (want) {
+      this.send({ type: 'chat-open', id: want });
+      // 다른 세션의 말풍선이 잠깐이라도 남지 않게 비우고 시작한다(같은 세션 재구독이면 유지)
+      if (this.state.chat.id !== want)
+        this.set({ chat: { id: want, items: [], loaded: false, unavailable: null, fresh: false, prompt: null } });
+      // 같은 세션 재구독(터미널에 갔다 옴) — 말풍선은 두되 선택 화면은 버린다. 그새 터미널에서 답했을 수 있다
+      // (서버가 곧 지금 상태를 다시 보낸다)
+      else if (this.state.chat.prompt) this.set({ chat: { ...this.state.chat, prompt: null } });
+    } else {
+      this.send({ type: 'chat-close' });
+    }
+    this.chatSubId = want;
+  }
+
+  setView(view: MoView) {
+    const id = this.state.attachedId;
+    if (!id) return;
+    const views = readJson<Record<string, MoView>>(VIEWS_KEY, {});
+    // 지금 있는 세션 것만 남긴다 — 종료된 세션 id 가 끝없이 쌓이지 않게
+    const live = new Set(this.state.sessions.map((s) => s.id));
+    const next = Object.fromEntries(Object.entries(views).filter(([k]) => live.has(k)));
+    next[id] = view;
+    localStorage.setItem(VIEWS_KEY, JSON.stringify(next));
+    this.syncView();
+    if (view === 'term') {
+      // 숨어 있던 xterm 을 맞추고 이 폰의 크기를 주장한다(채팅 보기 동안은 데스크톱 크기를 따랐다)
+      requestAnimationFrame(() => {
+        this.refit();
+        if (this.term) this.send({ type: 'resize', cols: this.term.cols, rows: this.term.rows });
+      });
+    } else {
+      this.closeKeyboard();
+    }
+  }
+
+  /** 채팅 입력창 전송 — 붙여넣기 감싸기·Enter 는 서버가 한다 */
+  sendChat(text: string) {
+    const id = this.state.attachedId;
+    if (!id || !text.trim()) return;
+    this.send({ type: 'chat-send', id, text });
+  }
+
+  /** 채팅 보기의 키 한 번 — 선택지 번호·Esc(중단) */
+  sendChatKey(data: string) {
+    this.input(data);
   }
 
   /** 지금 보여줄 세션 — 보고 있는 세션이 영역 밖이면(다른 영역에서 이어보는 중) 끝에 남긴다 */

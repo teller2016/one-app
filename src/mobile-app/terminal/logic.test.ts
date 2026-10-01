@@ -1,7 +1,18 @@
 // MO 터미널 순수 로직 — 키 매핑·수정 키·DA 필터·자동 attach 순서·입력 대기 안정화
 import { describe, expect, it } from 'vitest';
+import type { ChatItem } from '../../shared/terminal-protocol';
 import type { TerminalSessionInfo } from '../../shared/types';
-import { KEY_SEQ, StableWaiting, applyModifiers, pickAutoAttach, stripDaReplies, visibleSessions } from './logic';
+import {
+  CHAT_MAX_ITEMS,
+  KEY_SEQ,
+  StableWaiting,
+  applyModifiers,
+  defaultView,
+  mergeChat,
+  pickAutoAttach,
+  stripDaReplies,
+  visibleSessions,
+} from './logic';
 
 const sess = (id: string, cwd = '/a', status: TerminalSessionInfo['status'] = 'idle'): TerminalSessionInfo => ({
   id,
@@ -138,5 +149,34 @@ describe('StableWaiting', () => {
     w.update([]);
     expect(w.ids.size).toBe(0);
     expect(t.pending.size).toBe(0);
+  });
+});
+
+describe('채팅 보기', () => {
+  const tool = (key: string, toolId: string): ChatItem => ({ kind: 'tool', key, toolId, name: 'Bash', summary: 'ls' });
+
+  it('defaultView — claude 계열은 채팅, 그 외는 터미널', () => {
+    expect(defaultView('claude')).toBe('chat');
+    expect(defaultView('femc')).toBe('chat');
+    expect(defaultView('shell')).toBe('term');
+    expect(defaultView(undefined)).toBe('term');
+  });
+
+  it('mergeChat — 덧붙이고 결과는 같은 toolId 에 단다', () => {
+    const prev = [tool('a', 't1')];
+    const next = mergeChat(prev, [{ kind: 'assistant', key: 'b', text: '끝' }], [{ toolId: 't1', text: 'ok' }]);
+    expect(next).toHaveLength(2);
+    expect(next[0]).toMatchObject({ result: { text: 'ok' } });
+  });
+
+  it('mergeChat — 무변화면 원본 참조 · 같은 key 는 교체 · 상한을 넘으면 앞에서 버린다', () => {
+    const prev = [tool('a', 't1')];
+    expect(mergeChat(prev, [], [])).toBe(prev);
+    expect(mergeChat(prev, [], [{ toolId: 'zz', text: '' }])).toBe(prev);
+    expect(mergeChat(prev, [tool('a', 't2')], [])).toEqual([tool('a', 't2')]);
+    const many = Array.from({ length: CHAT_MAX_ITEMS + 5 }, (_, i) => tool(`k${i}`, `t${i}`));
+    const capped = mergeChat([], many, []);
+    expect(capped).toHaveLength(CHAT_MAX_ITEMS);
+    expect(capped[0].key).toBe('k5');
   });
 });

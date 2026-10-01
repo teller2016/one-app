@@ -32,6 +32,7 @@ import {
   scrollSessionToBottom,
   writeSession,
 } from './pty';
+import { subscribeChat } from './chat';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
@@ -76,6 +77,8 @@ type SocketState = {
   resyncing: boolean;
   /** attach 세대 — 재동기화 도중 폰이 다른 세션을 고르면 늦게 끝난 재동기화를 버린다 */
   attachGen: number;
+  /** 채팅 보기 구독 해제 (chat.ts) — 폰이 채팅을 보는 동안만 대화 기록을 읽는다 */
+  chatOff: (() => void) | null;
 };
 const socketState = new Map<WebSocket, SocketState>();
 
@@ -88,6 +91,7 @@ const newSocketState = (kind: SocketState['kind']): SocketState => ({
   needsResync: false,
   resyncing: false,
   attachGen: 0,
+  chatOff: null,
 });
 
 /**
@@ -478,7 +482,37 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'kill':
       killSession(msg.id);
       break;
+    case 'chat-open':
+      state.chatOff?.();
+      state.chatOff = null;
+      if (listSessions().some((s) => s.id === msg.id)) state.chatOff = subscribeChat(msg.id, (m) => send(ws, m));
+      // 없는 세션이면 조용히 버리지 않는다 — 폰은 '불러오는 중…' 에 멈춰 있게 된다
+      else send(ws, { type: 'chat-unavailable', id: msg.id, reason: '세션을 찾지 못했습니다.' });
+      break;
+    case 'chat-close':
+      state.chatOff?.();
+      state.chatOff = null;
+      break;
+    case 'chat-send':
+      sendChatText(msg.id, msg.text);
+      break;
   }
+}
+
+/** 채팅 입력의 Enter 지연 — 붙여넣기 직후의 Enter 를 claude 가 붙여넣기 일부로 삼키지 않게 */
+const CHAT_SUBMIT_DELAY_MS = 150;
+
+/**
+ * 채팅 입력창 전송 — 글을 넣고 잠시 뒤 Enter.
+ * 여러 줄은 **bracketed paste** 로 감싼다 — 그냥 쓰면 줄바꿈마다 제출된다. claude 는 붙여넣기를
+ * `[Pasted text #1 +N lines]` 로 접어 보여주지만 제출되는 내용은 전문이다.
+ */
+function sendChatText(id: string, text: string) {
+  if (typeof text !== 'string' || !text.trim()) return;
+  if (!listSessions().some((s) => s.id === id)) return;
+  const body = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
+  writeSession(id, body);
+  setTimeout(() => writeSession(id, '\r'), CHAT_SUBMIT_DELAY_MS);
 }
 
 // ── 바인딩 주소 ──
@@ -663,7 +697,10 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
         console.error('[term:ws] 메시지 처리 실패', err);
       }
     });
-    ws.on('close', () => socketState.delete(ws));
+    ws.on('close', () => {
+      socketState.get(ws)?.chatOff?.(); // 폰이 사라졌다 — 대화 기록 읽기도 멈춘다
+      socketState.delete(ws);
+    });
     ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
     send(ws, { type: 'sessions', sessions: listSessions() });
     send(ws, {

@@ -208,6 +208,30 @@ paths:
 - 폰트 JetBrains Mono NL + `lineHeight 1.0` + **Unicode11 + allowProposedApi 한 쌍**. 키보드: `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 작은 값 + `overscroll-behavior: none`. ⚠️ 텍스트 기호는 VS16 + 컬러 이모지 폰트.
 - 상세: 노트 'MO 터미널 페이지 UI'·'자리를 비운 동안 알기'.
 
+## MO 채팅 보기 (2026-10-01 — `main/.../chat.ts`·`transcript.ts` + `mobile-app/terminal/MoChatView.tsx`)
+claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미널] 토글, claude·femc 는 채팅이 기본 — `logic.ts` `defaultView`).
+- **화면을 긁지 않는다 — 대화 기록(jsonl)을 읽는다**: pane 셸 pid(`tmuxPanePid`) → 자손 중 `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`
+  이 있는 프로세스 → `sessionId`·`cwd` → `projects/<cwd 영숫자 외 '-'>/<sessionId>.jsonl`. 설정 폴더는 홈의 `.claude`·`.claude-*` 전부(계정 셸 함수).
+  구독(1초 주기, 늘어난 바이트만)은 **폰이 채팅을 보는 동안만**(`chat-open`/`chat-close`, 소켓 close 에서 해제). `/clear` 로 sessionId 가 바뀌면 메타를 다시 읽어 reset.
+- ⚠️ **jsonl 은 첫 메시지 때 생긴다**(sessions/<pid>.json 은 기동 즉시) — 파일이 없으면 '못 찾음'이 아니라 **빈 대화(`fresh`)** 로 보내 입력창을 연다.
+  폴더 신뢰 확인 같은 TUI 화면도 같은 상태라 구분 불가 → 폰이 '확인 화면이 있으면 터미널에서 먼저' 안내를 띄운다.
+- ⚠️ 대화 기록에 **TUI 상호작용은 없다**(계정 선택·폴더 신뢰·`/` 메뉴) — 그런 화면은 [터미널]로.
+- ⚠️ **AskUserQuestion 질문은 답하기 전까지 jsonl 에 없다**(답한 뒤에 질문+답이 함께 기록된다) — 대기 중임은 `sessions/<pid>.json` 의
+  `status: 'waiting'`(`waitingFor: 'input needed'`)로만 안다. 그때만 서버가 `capture-pane -p -J` 로 화면 끝을 읽어 **번호 선택 화면**을
+  `chat-prompt` 로 보낸다(`screenPrompt.ts` — `Enter to select|confirm` 안내 줄 + `1.` 부터 이어지는 번호. ⚠️ 머리·질문·선택지 사이에 빈 줄이 있다).
+  못 읽으면 선택지 없는 prompt = '터미널에서 답 필요' 카드. 버튼 = 그 번호 키 → 화면이 바뀌면 다음 prompt(여러 질문 → 검토 '1. Submit answers' 까지).
+  직접 답 = 'Type something.' 번호 → 글 → Enter. 번호 없는 화면(폴더 신뢰 `❯ No, exit`)은 읽지 않는다.
+  - ⚠️ **검토 화면('Ready to submit your answers?')엔 안내 줄이 없다**(`2. Cancel` 로 끝남) — 안내 줄이 없으면 '마지막 글자 줄이 선택지'일 때만 읽는다.
+  - ⚠️ **재구독 때 '대기 없음(null)'도 보낸다**(`promptKey` 초기값 `''`) — 터미널에서 답하고 채팅으로 돌아오면 폰이 예전 카드를 들고 있어
+    입력창까지 잠겼다(2026-10-01 사용자 신고). 폰도 같은 세션 재구독 시 prompt 를 비운다.
+- ⚠️ **채팅 보기는 PTY 크기를 주장하지 않는다** — attach 를 `0×0`(서버가 크기 변경 생략)으로, 따라간 크기를 `resize` 로 되돌려 보내지 않는다(데스크톱 창을 끄는 중 옛 크기가 최신을 덮는다).
+  터미널로 바꾸는 순간 `setView` 가 refit + 주장. xterm 은 언마운트하지 않고 `moterm__term--hidden`(display:none) — 숨은 호스트 fit 은 `refit` 이 건너뛴다.
+- 입력: `chat-send` → 서버가 여러 줄이면 **bracketed paste** 로 감싸고 **150ms 뒤 Enter**(바로 붙이면 붙여넣기에 삼켜진다). [중단] = `\x1b`.
+- ⚠️ **앱을 claude 안에서 띄우면 `CLAUDECODE`·`CLAUDE_CODE_*` 가 세션에 상속돼 그 안 claude 가 기록 저장을 끈다**("Transcript saving is off") —
+  `pty.ts` `inheritableEnv()` 가 걸러낸다(`CLAUDE_CONFIG_DIR` 은 남김). 그 전에 뜬 tmux 서버는 옛 env 를 들고 있다.
+- jsonl 은 Claude Code 내부 형식 — 파서(`transcript.ts`)는 모르는 줄·블록을 **조용히 건너뛴다**. `isSidechain`(서브에이전트)·`isMeta` 숨김,
+  `[Request interrupted by user…]` 는 사람 입력 자리에 오지만 `notice`(가운데 회색 줄). 규칙은 `transcript.test.ts` 가 고정.
+
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만**. 감지는 `zsh -lc "whence -p"` 1회 캐시, 미설치는 조용히 제외.
 - `presetsForWorkspace`·`agentIdFromCommand` 는 **`shared/types.ts`** — 데스크톱·MO 판정이 갈라지면 안 된다.
