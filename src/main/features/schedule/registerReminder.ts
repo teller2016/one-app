@@ -4,7 +4,12 @@ import { notify } from '../notify/notify';
 import { isSystemAsleep } from '../power';
 import { readUserJson, writeUserJson } from '../../lib/store';
 import { dayKey } from '../../../shared/date';
-import { formatShortDate, isCheckTime, previousWeekday } from './registerCheck';
+import {
+  formatShortDate,
+  isCheckTime,
+  normalizeDayKey,
+  previousWeekday,
+} from './registerCheck';
 import type { ScheduleStartConfig } from '../../../shared/types';
 
 const REGISTERED_FILE = 'schedule-registered.json';
@@ -17,17 +22,19 @@ type RegisteredState = {
   notifiedOn?: string; // 누락 알럿을 띄운 날 — 하루 1회
 };
 
+/** 저장본 읽기 — 날짜 키는 옛 형식(`2026-10-1`)도 `YYYY-MM-DD` 로 맞춰 읽는다 */
 function readState(): RegisteredState {
   const raw = readUserJson<Partial<RegisteredState> | null>(REGISTERED_FILE, null);
+  const dates = Array.isArray(raw?.dates)
+    ? raw.dates.map(normalizeDayKey).filter((d): d is string => d !== null)
+    : [];
   return {
-    dates: Array.isArray(raw?.dates)
-      ? raw.dates.filter((d): d is string => typeof d === 'string')
-      : [],
-    notifiedOn: typeof raw?.notifiedOn === 'string' ? raw.notifiedOn : undefined,
+    dates: [...new Set(dates)],
+    notifiedOn: normalizeDayKey(raw?.notifiedOn) ?? undefined,
   };
 }
 
-/** 일정 등록 성공 기록 — 테스트 모드는 부르지 않는다 */
+/** 일정 등록 성공 기록 — 테스트 모드는 부르지 않는다. 누락 알럿의 [이미 등록했어요] 도 쓴다 */
 export function markScheduleRegistered(date: Date): void {
   const state = readState();
   const key = dayKey(date);
@@ -55,11 +62,14 @@ async function check(getStartConfig: () => ScheduleStartConfig) {
   console.log('[schedule] 등록 누락 알림:', dayKey(target));
   alertOpen = true;
   try {
-    await notify({
+    const { checked } = await notify({
       title: '📝 일정 등록 확인',
       body: `${formatShortDate(target)} 일정을 등록한 기록이 없어요.`,
       section: 'schedule',
+      // 앱 밖에서 등록했거나 쉰 날 — 그 날을 등록한 것으로 남긴다
+      checkbox: '이미 등록했어요',
     });
+    if (checked) markScheduleRegistered(target);
   } finally {
     alertOpen = false;
   }

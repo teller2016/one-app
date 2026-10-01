@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatShortDate, isCheckTime, previousWeekday } from './registerCheck';
+import {
+  formatShortDate,
+  isCheckTime,
+  normalizeDayKey,
+  previousWeekday,
+} from './registerCheck';
 
 const cfg = { remoteDays: [1, 5], remoteStart: '09:00', officeStart: '09:30' };
 
@@ -33,4 +38,11 @@ describe('isCheckTime', () => {
 
 it('formatShortDate', () => {
   expect(formatShortDate(new Date(2026, 8, 29))).toBe('9/29(화)');
+});
+
+it('normalizeDayKey — 옛 0패딩 없는 키도 같은 날로 읽는다', () => {
+  expect(normalizeDayKey('2026-10-1')).toBe('2026-10-01');
+  expect(normalizeDayKey('2026-09-30')).toBe('2026-09-30');
+  expect(normalizeDayKey('2026/10/01')).toBeNull();
+  expect(normalizeDayKey(3)).toBeNull();
 });

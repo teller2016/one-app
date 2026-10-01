@@ -26,3 +26,14 @@ export function isCheckTime(now: Date, cfg: ScheduleStartConfig): boolean {
 export function formatShortDate(d: Date): string {
   return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KO[d.getDay()]})`;
 }
+
+/**
+ * 저장된 날짜 키를 `YYYY-MM-DD` 로 맞춘다 — 첫 버전이 0패딩 없는 `2026-10-1` 형식으로 썼고,
+ * 옛 설치본과 새 코드가 같은 파일을 번갈아 쓰면 서로의 '오늘 알림 함'을 못 알아봐 알림이
+ * 반복됐다(2026-10-01 실측). 형식이 아니면 null.
+ */
+export function normalizeDayKey(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
+}
