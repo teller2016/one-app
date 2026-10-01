@@ -235,7 +235,7 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
   `[Request interrupted by user…]` 는 사람 입력 자리에 오지만 `notice`(가운데 회색 줄). 규칙은 `transcript.test.ts` 가 고정.
 
 ### 데스크톱 채팅 보기 (2026-10-01)
-- **탭 안의 작은 토글**(`TabViewToggle` — 에이전트 세션만, hover·활성·채팅 중일 때만 보임)로 세션별 전환, 기본은 터미널(`lib/chatViews` — localStorage, 종료 세션은 `pruneChatViews`).
+- **탭 안의 작은 토글**(`TabViewToggle` — 에이전트 세션만, hover·활성·채팅 중일 때만 보임)로 세션별 전환, 단축키 **⌘E**(포커스 세션 — `useTerminalShortcuts`, `e.code === 'KeyE'` · 셸 세션은 무시), 기본은 터미널(`lib/chatViews` — localStorage, 종료 세션은 `pruneChatViews`).
 - 화면은 폰과 **공용 `ChatView`**(`features/terminal/components` — ⚠️ `window.oneApp` 호출 금지, 폰 번들에도 들어간다). 데이터는 `useTerminalChat` → IPC `terminal:chat:open/close/send` + `terminal:chat` 이벤트(main `ipc.ts` 가 창·세션별로 `subscribeChat`, 창 파괴·리로드 시 해제).
 - ⚠️ **xterm 은 그대로 두고 `TerminalChatPane` 이 pane 을 덮는다** — 언마운트 금지 규칙 유지, pane 크기가 같아 PTY 크기 주장 규칙도 그대로. **보이는 pane 만** 구독한다(`chat && visible`).
 - 포커스는 `focusInput`(채팅이면 `.term-chat__input`, 아니면 xterm) — attach·focused effect·핸들 `focus` 가 모두 이것. 채팅 보기에선 ⌘F 검색을 열지 않는다. ⚠️ 단축키 게이트(`useTerminalShortcuts`)는 `.term-chat__input` 을 xterm textarea 처럼 예외로 둔다(⌘1..9 탭 전환).

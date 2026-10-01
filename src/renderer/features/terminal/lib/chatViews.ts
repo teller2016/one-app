@@ -30,6 +30,12 @@ const subscribe = (fn: () => void) => {
 export const useChatView = (id: string): ChatViewMode =>
   useSyncExternalStore(subscribe, () => views[id] ?? 'term');
 
+/** 지금 보기 — 훅 밖(단축키 핸들러)에서 읽을 때 */
+export const getChatView = (id: string): ChatViewMode => views[id] ?? 'term';
+
+/** 터미널 ↔ 채팅 뒤집기 — 탭 토글·⌘E 공용 */
+export const toggleChatView = (id: string) => setChatView(id, getChatView(id) === 'chat' ? 'term' : 'chat');
+
 /** 보기 바꾸기 — 터미널로 돌아가면 항목을 지운다(기본값이라 기억할 필요가 없다) */
 export function setChatView(id: string, mode: ChatViewMode) {
   const next = { ...views };

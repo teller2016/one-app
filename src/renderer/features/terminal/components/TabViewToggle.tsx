@@ -3,13 +3,13 @@
 import { memo } from 'react';
 import { Icon } from '../../../components/Icon';
 import { Tooltip } from '../../../components/Tooltip';
-import { setChatView, useChatView } from '../lib/chatViews';
+import { toggleChatView, useChatView } from '../lib/chatViews';
 
 export const TabViewToggle = memo(function TabViewToggle({ id, title }: { id: string; title: string }) {
   const chat = useChatView(id) === 'chat';
   const label = chat ? '터미널로 보기' : '채팅으로 보기 (claude 대화)';
   return (
-    <Tooltip label={label}>
+    <Tooltip label={`${label} (⌘E)`}>
       <button
         type="button"
         className={'terminal__tab-view' + (chat ? ' terminal__tab-view--on' : '')}
@@ -17,7 +17,7 @@ export const TabViewToggle = memo(function TabViewToggle({ id, title }: { id: st
         aria-pressed={chat}
         onClick={(e) => {
           e.stopPropagation(); // 탭 선택(클릭)과 겹치지 않게 — 보기만 바꾼다
-          setChatView(id, chat ? 'term' : 'chat');
+          toggleChatView(id);
         }}
       >
         <Icon name={chat ? 'terminal' : 'message-square'} size={12} />

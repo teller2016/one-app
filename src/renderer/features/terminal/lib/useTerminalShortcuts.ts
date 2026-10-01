@@ -1,4 +1,4 @@
-// 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료 · ⌘B 변경사항 드로어.
+// 세션 단축키 — ⌘T 새 세션 · ⌘1..9 탭 전환 · ⌃Tab 순환 · ⌘⇧W 종료 · ⌘B 변경사항 드로어 · ⌘E 채팅 보기.
 // 메인 창(TerminalSection)과 팝아웃 창(TerminalPopoutApp)이 같은 키 규약을 쓰도록
 // TerminalSection 에서 떼어냈다 — 팝아웃엔 없는 동작(⌘T·⌘B)은 콜백을 비워 잡지 않는다.
 //
@@ -9,6 +9,7 @@
 // 세션 상태 브로드캐스트(초 단위)마다 걷었다 다시 달게 된다. 최신 클로저는 ref 로 넘긴다.
 import { useEffect, useRef } from 'react';
 import type { TerminalSessionInfo } from '../../../../shared/types';
+import { toggleChatView } from './chatViews';
 
 export type TerminalShortcutConfig = {
   /** 순회(⌃Tab)·번호(⌘1..9)의 대상 — 평탄화된 **표시 순서**(tabView.tabs) */
@@ -84,6 +85,12 @@ export function useTerminalShortcuts(
         if (!cfg.toggleChanges) return;
         claim();
         cfg.toggleChanges(); // 변경사항 드로어 열고 닫기 — 탑바 git 버튼과 같은 동작
+      } else if (e.code === 'KeyE' && !e.isComposing) {
+        // ⌘E — 포커스 세션의 보기(터미널 ↔ 채팅). 탭 토글과 같은 규칙: 에이전트 세션만.
+        // e.code 로 본다 — 한글 자판이면 e.key 가 'ㄷ' 다
+        if (!cfg.activeSession || cfg.activeSession.agentId === 'shell') return;
+        claim();
+        toggleChatView(cfg.activeSession.id);
       } else if (e.key >= '1' && e.key <= '9') {
         const target = tabs[Number(e.key) - 1];
         if (!target) return;
