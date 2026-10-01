@@ -1,5 +1,7 @@
-// MO 채팅 보기 — 터미널 세션 안 claude 의 대화 기록(jsonl)을 말풍선으로 보여준다.
-// 데이터는 controller(→ 서버 chat.ts)가 대고, 여기는 그린다. 입력은 서버가 붙여넣기·Enter 로 PTY 에 넣는다.
+// 채팅 보기 — 터미널 세션 안 claude 의 대화 기록(jsonl)을 말풍선으로 보여준다. 데스크톱 pane·폰 터미널 탭 공용.
+// ⚠️ 여기서 window.oneApp 을 부르지 말 것 — 폰 번들에도 들어가는 순수 화면이다(데이터는 호출부가 댄다:
+//    데스크톱 = useTerminalChat → IPC, 폰 = controller → WS — 둘 다 main chat.ts).
+// 입력은 서버가 붙여넣기·Enter 로 PTY 에 넣는다.
 //
 // ⚠️ 대화 기록에는 claude 의 **TUI 상호작용**이 남지 않는다 — 특히 AskUserQuestion 질문은 답하기 전까지 기록에
 //    없다(2026-10-01 실측). 그래서 claude 가 답을 기다리는 동안은 서버가 **터미널 화면에서 읽은 번호 선택 화면**
@@ -7,9 +9,11 @@
 //    넘어가며, 화면이 바뀌면 다음 prompt 가 온다(여러 질문 → 검토 화면 '1. Submit answers' 까지 같은 카드로).
 //    직접 답은 'Type something.' 번호 → 글 → Enter. 화면을 못 읽으면 선택지 없는 prompt — 터미널 안내만.
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Icon } from '../../renderer/components/Icon';
-import { Markdown } from '../../renderer/components/Markdown';
-import type { ChatItem, ChatPrompt } from '../../shared/terminal-protocol';
+import { Button } from '../../../components/Button';
+import { EmptyState } from '../../../components/EmptyState';
+import { Icon } from '../../../components/Icon';
+import { Markdown } from '../../../components/Markdown';
+import type { ChatItem, ChatPrompt } from '../../../../shared/terminal-protocol';
 
 type AskItem = Extract<ChatItem, { kind: 'ask' }>;
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>;
@@ -19,7 +23,7 @@ const STICK_PX = 80;
 /** 직접 답 — 'Type something.' 으로 옮긴 뒤 글을 넣기까지의 틈(선택 이동이 먼저 처리되게) */
 const FREE_TEXT_DELAY_MS = 120;
 
-export function MoChatView({
+export function ChatView({
   items,
   loaded,
   unavailable,
@@ -29,6 +33,7 @@ export function MoChatView({
   onSend,
   onKey,
   onShowTerminal,
+  enterToSend = false,
 }: {
   items: ChatItem[];
   loaded: boolean;
@@ -42,6 +47,11 @@ export function MoChatView({
   onSend: (text: string) => void;
   onKey: (data: string) => void;
   onShowTerminal: () => void;
+  /**
+   * Enter = 전송 · Shift+Enter = 줄바꿈 (데스크톱). 폰은 기본값 false — 소프트 키보드의 Enter 는 줄바꿈이 자연스럽고
+   * 전송은 버튼으로 한다.
+   */
+  enterToSend?: boolean;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -97,35 +107,31 @@ export function MoChatView({
 
   if (unavailable) {
     return (
-      <div className="mochat mochat--empty">
-        <span className="moterm__empty-icon" aria-hidden="true">
-          <Icon name="terminal" size={20} />
-        </span>
-        <span className="moterm__empty-title">채팅으로 볼 수 없는 세션입니다</span>
-        <span className="moterm__empty-hint">{unavailable}</span>
-        <button type="button" className="moterm__btn moterm__btn--primary moterm__btn--lg" onClick={onShowTerminal}>
-          <Icon name="terminal" size={16} />
+      <div className="term-chat term-chat--empty">
+        <EmptyState icon="terminal" message="채팅으로 볼 수 없는 세션입니다" hint={unavailable} />
+        <Button variant="primary" onClick={onShowTerminal}>
+          <Icon name="terminal" size={14} />
           터미널로 보기
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="mochat">
-      <div className="mochat__body">
-        <div ref={listRef} className="mochat__list" onScroll={onScroll}>
-          {!loaded && <div className="mochat__note">대화를 불러오는 중…</div>}
-          {loaded && !items.length && !fresh && <div className="mochat__note">아직 대화가 없습니다.</div>}
+    <div className="term-chat">
+      <div className="term-chat__body">
+        <div ref={listRef} className="term-chat__list" onScroll={onScroll}>
+          {!loaded && <div className="term-chat__note">대화를 불러오는 중…</div>}
+          {loaded && !items.length && !fresh && <div className="term-chat__note">아직 대화가 없습니다.</div>}
           {loaded && !items.length && fresh && !prompt && (
             // 첫 메시지 전 — 폴더 신뢰 확인 같은 TUI 화면도 이 상태라 구분할 수 없어 안내를 함께 둔다
-            <div className="mochat__fresh">
+            <div className="term-chat__fresh">
               <span>새 대화입니다. 아래 입력창으로 첫 메시지를 보내세요.</span>
-              <span className="mochat__fresh-hint">터미널에 확인 화면(폴더 신뢰 등)이 떠 있으면 먼저 답해야 합니다.</span>
-              <button type="button" className="moterm__btn moterm__btn--ghost" onClick={onShowTerminal}>
+              <span className="term-chat__fresh-hint">터미널에 확인 화면(폴더 신뢰 등)이 떠 있으면 먼저 답해야 합니다.</span>
+              <Button size="sm" onClick={onShowTerminal}>
                 <Icon name="terminal" size={14} />
                 터미널 확인
-              </button>
+              </Button>
             </div>
           )}
           {items.map((it) => (
@@ -135,7 +141,7 @@ export function MoChatView({
             <PromptCard prompt={prompt} onKey={onKey} onShowTerminal={onShowTerminal} />
           ) : (
             busy && (
-              <div className="mochat__typing" role="status">
+              <div className="term-chat__typing" role="status">
                 <span className="spinner spinner--xs" aria-hidden="true" />
                 작업 중…
               </div>
@@ -144,7 +150,7 @@ export function MoChatView({
         </div>
 
         {!atBottom && (
-          <button type="button" className="moterm__to-bottom" onClick={toBottom}>
+          <button type="button" className="term-chat__to-bottom" onClick={toBottom}>
             <Icon name="arrow-down-to-line" size={14} />
             맨 아래로
           </button>
@@ -152,36 +158,53 @@ export function MoChatView({
       </div>
 
       <form
-        className="mochat__composer"
+        className="term-chat__composer"
         onSubmit={(e) => {
           e.preventDefault();
           send();
         }}
+        // 입력 바의 빈 여백을 눌러도 입력창으로 — 입력창 테두리 바로 바깥을 누르는 일이 잦다
+        onMouseDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          e.preventDefault();
+          inputRef.current?.focus();
+        }}
       >
         <textarea
           ref={inputRef}
-          className="mochat__input"
+          className="term-chat__input"
           rows={1}
           value={draft}
           disabled={promptBlocksInput}
-          placeholder={promptBlocksInput ? '위 선택지에서 고르세요' : prompt ? '직접 답하기' : 'claude 에게 메시지'}
+          placeholder={
+            promptBlocksInput
+              ? '위 선택지에서 고르세요'
+              : (prompt ? '직접 답하기' : 'claude 에게 메시지') + (enterToSend ? ' (Enter 전송 · Shift+Enter 줄바꿈)' : '')
+          }
           aria-label="메시지"
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (!enterToSend || e.key !== 'Enter' || e.shiftKey) return;
+            // ⚠️ 한글 조합 중 Enter 는 글자 확정이다 — 전송하면 마지막 글자가 빠지거나 두 번 들어간다
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            e.preventDefault();
+            send();
+          }}
         />
         {busy && !prompt && !draft.trim() ? (
           // 작업 중이면 Esc = claude 중단 — 터미널에서 Esc 를 누르는 것과 같다
           <button
             type="button"
-            className="mochat__send mochat__send--stop"
+            className="term-chat__send term-chat__send--stop"
             aria-label="중단 (Esc)"
             onClick={() => onKey('\x1b')}
           >
-            <span className="mochat__stop-mark" aria-hidden="true" />
+            <span className="term-chat__stop-mark" aria-hidden="true" />
           </button>
         ) : (
           <button
             type="submit"
-            className="mochat__send"
+            className="term-chat__send"
             aria-label="보내기"
             disabled={!draft.trim() || promptBlocksInput}
           >
@@ -199,25 +222,25 @@ const ChatRow = memo(function ChatRow({ item }: { item: ChatItem }) {
   switch (item.kind) {
     case 'user':
       return (
-        <div className="mochat__row mochat__row--me">
-          <div className="mochat__bubble mochat__bubble--me">
-            {item.images ? <span className="mochat__img-tag">이미지 {item.images}장</span> : null}
+        <div className="term-chat__row term-chat__row--me">
+          <div className="term-chat__bubble term-chat__bubble--me">
+            {item.images ? <span className="term-chat__img-tag">이미지 {item.images}장</span> : null}
             {item.text}
           </div>
         </div>
       );
     case 'notice':
-      return <div className="mochat__notice">{item.text}</div>;
+      return <div className="term-chat__notice">{item.text}</div>;
     case 'command':
       return (
-        <div className="mochat__row mochat__row--me">
-          <span className="mochat__command">{item.text}</span>
+        <div className="term-chat__row term-chat__row--me">
+          <span className="term-chat__command">{item.text}</span>
         </div>
       );
     case 'assistant':
       return (
-        <div className="mochat__row">
-          <div className="mochat__bubble mochat__bubble--ai">
+        <div className="term-chat__row">
+          <div className="term-chat__bubble term-chat__bubble--ai">
             <Markdown>{item.text}</Markdown>
           </div>
         </div>
@@ -235,24 +258,24 @@ function ToolRow({ item }: { item: ToolItem }) {
   const state = !item.result ? 'run' : item.result.isError ? 'err' : 'ok';
   const hasMore = !!(item.detail || item.result?.text);
   return (
-    <div className={`mochat__tool mochat__tool--${state}`}>
+    <div className={`term-chat__tool term-chat__tool--${state}`}>
       <button
         type="button"
-        className="mochat__tool-head"
+        className="term-chat__tool-head"
         aria-expanded={hasMore ? open : undefined}
         disabled={!hasMore}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="mochat__tool-dot" aria-hidden="true" />
-        <span className="mochat__tool-name">{item.name}</span>
-        <span className="mochat__tool-sum">{item.summary}</span>
+        <span className="term-chat__tool-dot" aria-hidden="true" />
+        <span className="term-chat__tool-name">{item.name}</span>
+        <span className="term-chat__tool-sum">{item.summary}</span>
         {hasMore && <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} />}
       </button>
       {open && (
-        <div className="mochat__tool-body">
-          {item.detail && <pre className="mochat__pre">{item.detail}</pre>}
+        <div className="term-chat__tool-body">
+          {item.detail && <pre className="term-chat__pre">{item.detail}</pre>}
           {item.result?.text && (
-            <pre className={`mochat__pre mochat__pre--out${item.result.isError ? ' mochat__pre--err' : ''}`}>
+            <pre className={`term-chat__pre term-chat__pre--out${item.result.isError ? ' term-chat__pre--err' : ''}`}>
               {item.result.text}
             </pre>
           )}
@@ -269,20 +292,20 @@ function ToolRow({ item }: { item: ToolItem }) {
 function AskRecord({ item }: { item: AskItem }) {
   const answers = item.result?.text ? answerPairs(item.result.text) : [];
   return (
-    <div className="mochat__ask mochat__ask--done">
+    <div className="term-chat__ask term-chat__ask--done">
       {answers.length
         ? answers.map(([q, a], i) => (
-            <div key={i} className="mochat__ask-pair">
-              <span className="mochat__ask-q">{q}</span>
-              <span className="mochat__ask-answer">→ {a}</span>
+            <div key={i} className="term-chat__ask-pair">
+              <span className="term-chat__ask-q">{q}</span>
+              <span className="term-chat__ask-answer">→ {a}</span>
             </div>
           ))
         : item.questions.map((q, i) => (
-            <div key={i} className="mochat__ask-q">
+            <div key={i} className="term-chat__ask-q">
               {q.question}
             </div>
           ))}
-      {!answers.length && item.result?.text && <div className="mochat__ask-answer">{item.result.text}</div>}
+      {!answers.length && item.result?.text && <div className="term-chat__ask-answer">{item.result.text}</div>}
     </div>
   );
 }
@@ -304,36 +327,36 @@ function PromptCard({
 }) {
   if (!prompt.options.length) {
     return (
-      <div className="mochat__ask">
-        <div className="mochat__ask-q">claude 가 터미널에서 답을 기다립니다</div>
-        <button type="button" className="mochat__opt mochat__opt--primary" onClick={onShowTerminal}>
+      <div className="term-chat__ask">
+        <div className="term-chat__ask-q">claude 가 터미널에서 답을 기다립니다</div>
+        <button type="button" className="term-chat__opt term-chat__opt--primary" onClick={onShowTerminal}>
           터미널로 보기
         </button>
       </div>
     );
   }
   return (
-    <div className="mochat__ask">
-      {prompt.header && <span className="mochat__ask-step mochat__ask-step--on">{prompt.header}</span>}
-      {prompt.question && <div className="mochat__ask-q">{prompt.question}</div>}
-      <div className="mochat__ask-opts">
+    <div className="term-chat__ask">
+      {prompt.header && <span className="term-chat__ask-step term-chat__ask-step--on">{prompt.header}</span>}
+      {prompt.question && <div className="term-chat__ask-q">{prompt.question}</div>}
+      <div className="term-chat__ask-opts">
         {prompt.options.map((o) => (
           <button
             key={o.n}
             type="button"
-            className={`mochat__opt${o.n === prompt.freeText ? ' mochat__opt--free' : ''}`}
+            className={`term-chat__opt${o.n === prompt.freeText ? ' term-chat__opt--free' : ''}`}
             // 직접 답 자리는 버튼이 아니라 입력창으로 — 눌러도 커서만 옮겨 두고 글은 입력창에서
             onClick={() => (o.n === prompt.freeText ? undefined : onKey(String(o.n)))}
             disabled={o.n === prompt.freeText}
           >
-            <span className="mochat__opt-label">
+            <span className="term-chat__opt-label">
               {o.n}. {o.n === prompt.freeText ? '직접 답하기 — 아래 입력창' : o.label}
             </span>
-            {o.description && <span className="mochat__opt-desc">{o.description}</span>}
+            {o.description && <span className="term-chat__opt-desc">{o.description}</span>}
           </button>
         ))}
       </div>
-      <button type="button" className="mochat__ask-term" onClick={onShowTerminal}>
+      <button type="button" className="term-chat__ask-term" onClick={onShowTerminal}>
         <Icon name="terminal" size={12} />
         터미널에서 보기
       </button>

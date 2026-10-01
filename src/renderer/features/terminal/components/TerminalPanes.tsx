@@ -80,6 +80,8 @@ export function TerminalPanes({
               fontSize={fontSize}
               onRegisterHandle={onRegisterHandle}
               onScrolledChange={onScrolledChange}
+              // 채팅 보기의 진행 표시 — 원시값이라 상태가 바뀐 pane 만 다시 그린다
+              busy={s.working || s.status === 'busy'}
             />
           );
         })}

@@ -32,7 +32,7 @@ import {
   scrollSessionToBottom,
   writeSession,
 } from './pty';
-import { subscribeChat } from './chat';
+import { sendChatText, subscribeChat } from './chat';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
@@ -497,22 +497,6 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       sendChatText(msg.id, msg.text);
       break;
   }
-}
-
-/** 채팅 입력의 Enter 지연 — 붙여넣기 직후의 Enter 를 claude 가 붙여넣기 일부로 삼키지 않게 */
-const CHAT_SUBMIT_DELAY_MS = 150;
-
-/**
- * 채팅 입력창 전송 — 글을 넣고 잠시 뒤 Enter.
- * 여러 줄은 **bracketed paste** 로 감싼다 — 그냥 쓰면 줄바꿈마다 제출된다. claude 는 붙여넣기를
- * `[Pasted text #1 +N lines]` 로 접어 보여주지만 제출되는 내용은 전문이다.
- */
-function sendChatText(id: string, text: string) {
-  if (typeof text !== 'string' || !text.trim()) return;
-  if (!listSessions().some((s) => s.id === id)) return;
-  const body = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
-  writeSession(id, body);
-  setTimeout(() => writeSession(id, '\r'), CHAT_SUBMIT_DELAY_MS);
 }
 
 // ── 바인딩 주소 ──

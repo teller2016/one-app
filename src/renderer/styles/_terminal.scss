@@ -1044,6 +1044,76 @@
     flex-shrink: 0;
   }
 
+  // 보기 토글(터미널 ↔ 채팅) — 탭 안의 아주 작은 버튼(사용자 요청 2026-10-01). 평소엔 숨기고
+  // 탭 hover·활성 탭·채팅 중인 탭에서만 보인다 — 고정폭 탭(150)의 제목 자리를 늘 뺏지 않게
+  &__tab-view {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text-3);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity var(--dur-1) var(--ease),
+      color var(--dur-1) var(--ease);
+    @include focus-ring(0px);
+
+    &:hover {
+      color: var(--text);
+      background: var(--overlay-hover);
+    }
+
+    &:focus-visible {
+      opacity: 1;
+    }
+
+    // 채팅 중 — 늘 보이고 액센트로 표시한다(이 탭은 지금 채팅으로 보고 있다)
+    &--on {
+      opacity: 1;
+      color: var(--accent);
+    }
+  }
+
+  &__tab:hover &__tab-view,
+  &__tab--active &__tab-view {
+    opacity: 1;
+  }
+
+  // 활성 탭(터미널 면색) 위 — on-dark 계열
+  &__tab--active &__tab-view:not(&__tab-view--on) {
+    color: var(--on-dark-3);
+
+    &:hover {
+      color: var(--on-dark);
+      background: color-mix(in srgb, var(--on-dark) 10%, transparent);
+    }
+  }
+
+  &__tab--active &__tab-view--on {
+    color: var(--accent-on-dark);
+  }
+
+  // 채팅 보기 — pane 위를 덮는다(xterm 은 아래에 그대로 — attach·크기·스크롤백 유지).
+  // 말풍선 본체는 _terminal-chat.scss(폰과 공용)
+  &__chat {
+    position: absolute;
+    inset: 0;
+    // ⚠️ xterm 내부 레이어(링크 2 · 헬퍼 5 · 데코 6 · 오버뷰 8)보다 위여야 한다 — 1 이었을 땐 아래 xterm 의
+    // 링크 레이어가 채팅 전체의 클릭을 가로채 입력창 윗부분을 눌러도 포커스가 안 갔다(2026-10-01 사용자 신고,
+    // elementFromPoint 실측: 입력창 위 어디든 xterm-link-layer)
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   &__tab-close {
     display: inline-flex;
     align-items: center;

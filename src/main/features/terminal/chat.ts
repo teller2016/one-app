@@ -10,7 +10,7 @@
 // ⚠️ jsonl 은 **첫 메시지 때** 생긴다 — sessions/<pid>.json 은 claude 가 뜨자마자 있지만 대화 파일은 아직 없다
 //    (2026-10-01 /test 실측). 그 상태를 '못 찾음'으로 보내면 새 세션은 첫 메시지를 터미널로 쳐야 했다 →
 //    **빈 대화(fresh)** 로 보내 입력창을 연다. 폴더 신뢰 확인 같은 TUI 화면도 같은 상태라 구분할 수 없어,
-//    폰은 '확인 화면이 떠 있으면 터미널에서 먼저' 안내를 함께 띄운다(MoChatView).
+//    폰은 '확인 화면이 떠 있으면 터미널에서 먼저' 안내를 함께 띄운다(ChatView).
 //
 // ⚠️ AskUserQuestion 질문은 **답하기 전까지 jsonl 에 없다**(같은 날 실측) — 대기 중임은 sessions/<pid>.json 의
 //    `status: 'waiting'` 으로만 안다. 그때만 터미널 화면 끝을 읽어 번호 선택 화면을 보낸다(screenPrompt.ts, chat-prompt).
@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ChatPrompt, TermServerMsg } from '../../../shared/terminal-protocol';
-import { sessionRootPid, sessionScreen } from './pty';
+import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
 import { parseScreenPrompt } from './screenPrompt';
 import { parseTranscript } from './transcript';
 
@@ -343,4 +343,20 @@ function unsubscribe(termId: string, listener: Listener) {
   if (w.listeners.size) return;
   if (w.timer) clearInterval(w.timer);
   watches.delete(termId);
+}
+
+/** 채팅 입력의 Enter 지연 — 붙여넣기 직후의 Enter 를 claude 가 붙여넣기 일부로 삼키지 않게 */
+const CHAT_SUBMIT_DELAY_MS = 150;
+
+/**
+ * 채팅 입력창 전송 — 글을 넣고 잠시 뒤 Enter. 폰(server.ts WS)·데스크톱(ipc.ts) 공용.
+ * 여러 줄은 **bracketed paste** 로 감싼다 — 그냥 쓰면 줄바꿈마다 제출된다. claude 는 붙여넣기를
+ * `[Pasted text #1 +N lines]` 로 접어 보여주지만 제출되는 내용은 전문이다.
+ */
+export function sendChatText(id: string, text: string) {
+  if (typeof text !== 'string' || !text.trim()) return;
+  if (!listSessions().some((s) => s.id === id)) return;
+  const body = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
+  writeSession(id, body);
+  setTimeout(() => writeSession(id, '\r'), CHAT_SUBMIT_DELAY_MS);
 }

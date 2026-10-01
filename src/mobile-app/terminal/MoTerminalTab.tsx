@@ -16,7 +16,8 @@ import { presetsForWorkspace } from '../../shared/types';
 import type { TermWorkspaceNode } from '../../shared/terminal-protocol';
 import { controller, FONT_MAX, FONT_MIN, type MoScope } from './controller';
 import type { KeyName } from './logic';
-import { MoChatView } from './MoChatView';
+// 채팅 화면은 데스크톱 pane 과 공용 — 배럴이 아니라 파일을 직접(위 workspace 헬퍼와 같은 이유)
+import { ChatView } from '../../renderer/features/terminal/components/ChatView';
 
 type GoTab = 'terminal' | 'changes' | 'jira' | 'prs' | 'more';
 type Sheet = 'menu' | 'workspace' | 'new' | null;
@@ -372,7 +373,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
 
       {/* 터미널 — 탭은 읽기(키보드를 열지 않는다). 선택 모드에선 드래그가 줄 선택 */}
       {chatView && (
-        <MoChatView
+        <ChatView
           items={chatItems?.items ?? []}
           loaded={chatItems?.loaded ?? false}
           unavailable={chatItems?.unavailable ?? null}

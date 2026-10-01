@@ -96,6 +96,12 @@ export type TermServerMsg =
   | { type: 'chat-prompt'; id: string; prompt: ChatPrompt | null }
   | { type: 'error'; message: string };
 
+/** 채팅 보기로 오는 메시지 — 폰(WS)·데스크톱(IPC `terminal:chat`) 공용 */
+export type ChatServerMsg = Extract<
+  TermServerMsg,
+  { type: 'chat' } | { type: 'chat-unavailable' } | { type: 'chat-prompt' }
+>;
+
 // ── 채팅 항목 ──
 
 export type ChatQuestion = {

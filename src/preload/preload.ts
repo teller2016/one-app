@@ -41,6 +41,7 @@ import type {
   NightwatchConfig,
   PowerState,
 } from "../shared/types";
+import type { ChatServerMsg } from "../shared/terminal-protocol";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 // lite(standalone/lite)에도 실리는 브리지는 bridges/ 슬라이스로 조립한다 — 채널 문자열은 그쪽 한 곳에만
 import { approvalBridge } from "./bridges/approval";
@@ -461,6 +462,14 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("terminal:attach", id, cols, rows),
     // 세션 detach — pane 언마운트 시 호출해 안 보는 세션의 출력 방송을 멈춘다
     detach: (id: string) => ipcRenderer.send("terminal:detach", id),
+    // 채팅 보기 — claude 대화 기록 구독(main chat.ts). 메시지는 onChat 으로 온다(세션 id 로 거른다)
+    chat: {
+      open: (id: string) => ipcRenderer.send("terminal:chat:open", id),
+      close: (id: string) => ipcRenderer.send("terminal:chat:close", id),
+      send: (id: string, text: string) =>
+        ipcRenderer.send("terminal:chat:send", id, text),
+      onMessage: makeMux<ChatServerMsg>("terminal:chat"),
+    },
     // 세션 이름 변경 (tmux 백엔드면 재시작 후에도 유지)
     rename: (id: string, title: string) =>
       ipcRenderer.invoke("terminal:rename", id, title),

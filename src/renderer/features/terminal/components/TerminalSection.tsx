@@ -56,6 +56,7 @@ import { TerminalPanes } from './TerminalPanes';
 import { FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN } from './TerminalView';
 import { usePaneOrchestration } from '../lib/usePaneOrchestration';
 import { useTerminalShortcuts } from '../lib/useTerminalShortcuts';
+import { pruneChatViews } from '../lib/chatViews';
 import { WorkspaceNav } from './WorkspaceNav';
 import { errMsg } from '../../../lib/errMsg';
 
@@ -174,6 +175,10 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   // 다녀올 때마다(재마운트) 선택이 최상단 레포로 초기화됐다(2026-08-06 사용자 보고).
   const [wsReady, setWsReady] = useState(false);
   const [sessionsReady, setSessionsReady] = useState(false);
+  // 종료된 세션의 보기(채팅/터미널) 기록을 걷는다 — 목록이 처음 도착한 뒤부터(빈 초기값으로 다 지우지 않게)
+  useEffect(() => {
+    if (sessionsReady) pruneChatViews(sessions.map((x) => x.id));
+  }, [sessions, sessionsReady]);
   useEffect(() => {
     const api = window.oneApp?.workspaces;
     if (!api) return;

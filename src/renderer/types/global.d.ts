@@ -1,4 +1,5 @@
 // preload 에서 contextBridge 로 노출한 window.oneApp 타입 선언
+import type { ChatServerMsg } from '../../shared/terminal-protocol';
 import type { ApprovalBridge } from '../../preload/bridges/approval';
 import type { JiraReportBridge } from '../../preload/bridges/jiraReport';
 import type { SettingsBridge } from '../../preload/bridges/settings';
@@ -371,6 +372,12 @@ declare global {
         ) => Promise<TerminalAttachResult>;
         // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
         detach?: (id: string) => void;
+        chat: {
+          open: (id: string) => void;
+          close: (id: string) => void;
+          send: (id: string, text: string) => void;
+          onMessage: (cb: (msg: ChatServerMsg) => void) => () => void;
+        };
         rename: (id: string, title: string) => Promise<{ ok: boolean }>;
         revealCwd: (
           id: string,

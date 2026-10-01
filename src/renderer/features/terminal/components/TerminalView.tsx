@@ -18,6 +18,8 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
 import { terminalBackend } from '../lib/backend';
+import { useChatView } from '../lib/chatViews';
+import { TerminalChatPane } from './TerminalChatPane';
 import { buildTerminalTheme, searchDecorations } from '../lib/xtermTheme';
 
 const cssVar = (name: string) =>
@@ -127,6 +129,7 @@ export const TerminalView = memo(function TerminalView({
   fontSize,
   onRegisterHandle,
   onScrolledChange,
+  busy = false,
 }: {
   sessionId: string;
   /** 화면에 보이는 pane 인지 — 숨은 pane 은 크기를 주장하지 않는다(아래 visibleRef 참고).
@@ -149,6 +152,8 @@ export const TerminalView = memo(function TerminalView({
   onRegisterHandle: (sessionId: string, handle: TerminalPaneHandle | null) => void;
   /** 스크롤백을 위로 올렸는지 — 상단 바의 [맨 아래로] 노출 판정 (tmux 폴백 세션만 발화) */
   onScrolledChange: (sessionId: string, scrolledUp: boolean) => void;
+  /** 세션이 작업 중 — 채팅 보기의 진행 표시·[중단] 용 (원시값이라 memo 를 깨지 않는다) */
+  busy?: boolean;
 }) {
   const paneRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -161,6 +166,16 @@ export const TerminalView = memo(function TerminalView({
   visibleRef.current = visible;
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
+  // 채팅 보기 — 탭의 작은 토글이 바꾼다(lib/chatViews). xterm 은 그 아래 그대로 두고 채팅을 덮는다.
+  // 크기는 pane 크기 그대로라 PTY 크기 규칙(가시 pane 이 주장)은 바뀌지 않는다
+  const chat = useChatView(id) === 'chat';
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  /** 이 pane 의 입력 자리 — 채팅 보기면 채팅 입력창, 아니면 xterm */
+  const focusInput = useCallback(() => {
+    if (chatRef.current) paneRef.current?.querySelector<HTMLTextAreaElement>('.term-chat__input')?.focus();
+    else termRef.current?.focus();
+  }, []);
 
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
@@ -594,7 +609,8 @@ export const TerminalView = memo(function TerminalView({
           if (ev.seq > attachSeq) term.write(ev.data);
         }
         queue.length = 0;
-        if (focusedRef.current) term.focus(); // 포커스 pane 이 아니면 훔치지 않는다
+        // 포커스 pane 이 아니면 훔치지 않는다 · 채팅 보기면 입력은 채팅 입력창 몫이다
+        if (focusedRef.current && !chatRef.current) term.focus();
         // 마운트 직후엔 레이아웃이 아직 안정되지 않아 fit 이 좁게 잡힐 수 있다(탭바·스크롤바
         // 확정 전). 다음 프레임에 한 번 더 맞춰 잘못된 크기를 PTY 에 남기지 않는다.
         requestAnimationFrame(() => {
@@ -769,10 +785,11 @@ export const TerminalView = memo(function TerminalView({
   }, [visible]);
 
   // 포커스 pane 이 된 순간 — 키보드 입력을 이 xterm 으로 (분할 중에도 항상 하나만)
+  // 보기를 바꾼 순간(채팅 ↔ 터미널)도 — 입력 자리가 바뀐다
   useEffect(() => {
     if (!focused || !visible) return;
-    termRef.current?.focus();
-  }, [focused, visible]);
+    focusInput();
+  }, [focused, visible, chat, focusInput]);
 
   // 검색어가 바뀌면 첫 일치로 이동 — incremental 이라 타이핑 중 선택이 자연스럽게 늘어난다
   useEffect(() => {
@@ -809,6 +826,7 @@ export const TerminalView = memo(function TerminalView({
     if (!focused) return;
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey || e.altKey || e.ctrlKey) return;
+      if (chatRef.current) return; // 검색은 xterm 스크롤백 대상 — 채팅 보기에선 열지 않는다
       if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         openSearch();
@@ -822,7 +840,7 @@ export const TerminalView = memo(function TerminalView({
   useEffect(() => {
     onRegisterHandle(id, {
       openSearch,
-      focus: () => termRef.current?.focus(),
+      focus: focusInput,
       scrollToBottom: () => {
         termRef.current?.scrollToBottom(); // 폴백 세션(xterm 스크롤백)
         // tmux 세션은 copy-mode 를 끝내는 것이 곧 맨 아래로다
@@ -833,7 +851,7 @@ export const TerminalView = memo(function TerminalView({
       },
     });
     return () => onRegisterHandle(id, null);
-  }, [id, onRegisterHandle, openSearch]);
+  }, [id, onRegisterHandle, openSearch, focusInput]);
 
   // 분할 rect — 인라인 스타일 객체는 여기(컴포넌트 안)에서 조립한다.
   // props 로 객체를 받으면 memo 가 깨지지만 내부 생성은 memo 와 무관하다.
@@ -1009,6 +1027,10 @@ export const TerminalView = memo(function TerminalView({
           </span>
         </div>
       )}
+
+      {/* 보이는 pane 만 구독한다 — 숨은 탭·keep-alive 로 숨은 섹션까지 대화 기록을 1초마다 읽을 이유가 없다.
+          다시 보이면 스냅샷부터 새로 받는다 */}
+      {chat && visible && <TerminalChatPane sessionId={id} busy={busy} />}
 
       <div className="terminal__host" ref={hostRef} />
     </div>

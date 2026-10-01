@@ -79,6 +79,7 @@ export type IconName =
   | "eye-off"
   | "more-horizontal"
   | "keyboard"
+  | "message-square"
   | "keyboard-off"
   | "clipboard"
   | "type";
@@ -161,6 +162,7 @@ const PATHS: Record<IconName, ReactNode> = {
   "chevron-right": <path d="m9 18 6-6-6-6" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
   "chevron-left": <path d="m15 18-6-6 6-6" />,
+  "message-square": <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   "chevron-up": <path d="m18 15-6-6-6 6" />,
   "chevrons-up": (
     <>

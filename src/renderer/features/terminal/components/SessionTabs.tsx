@@ -26,6 +26,7 @@ import { StatusDot } from '../../../components/StatusDot';
 import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { errMsg } from '../../../lib/errMsg';
+import { TabViewToggle } from './TabViewToggle';
 
 // 작업 중 = 초록 펄스, 입력 대기 = 주황(펄스 없음) — 입력 대기는 "나를 부른다"는 주의 신호라
 // 사이드바 뱃지·토스트와 같은 주의색으로 맞춘다 (2026-09-30 Signal 리디자인 — 예전엔 대기=초록)
@@ -418,6 +419,8 @@ export const SessionTabs = memo(function SessionTabs({
           )}
           <span className="terminal__tab-title">{s.title}</span>
         </button>
+        {/* 보기 토글(터미널 ↔ 채팅) — 에이전트 세션만. 평소엔 숨고 hover·활성·채팅 중일 때 보인다 */}
+        {s.agentId !== 'shell' && <TabViewToggle id={s.id} title={s.title} />}
         {/* × 는 모든 탭에 늘 — 활성으로 전환하지 않고도 닫는다 (2026-08-06 요청 · 목업) */}
         <Tooltip label={s.id === activeId ? '세션 종료 (⌘⇧W)' : '세션 종료'}>
           <button

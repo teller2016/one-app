@@ -14,6 +14,7 @@ import { notifyToast, sendToast } from '../notify/notify';
 import { getNotifySound } from '../settings/store';
 import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
+import { sendChatText, subscribeChat } from './chat';
 import { sessionLocation, sessionLocationLabel } from './location';
 import {
   initTerminalWindows,
@@ -96,6 +97,43 @@ export function registerTerminalIpc() {
   ipcMain.on('terminal:detach', (e, id: string) => {
     attachedBySender.get(e.sender)?.delete(id);
   });
+
+  // ── 채팅 보기(데스크톱) — pane 이 채팅으로 바뀐 세션만 대화 기록을 구독한다(chat.ts, 폰과 같은 구독).
+  // 창(sender)·세션별로 해제 함수를 쥐고, 창이 사라지거나 리로드되면 그 창 몫을 전부 푼다.
+  const chatBySender = new Map<Electron.WebContents, Map<string, () => void>>();
+  const chatHooked = new WeakSet<Electron.WebContents>();
+  const releaseChats = (sender: Electron.WebContents) => {
+    chatBySender.get(sender)?.forEach((off) => off());
+    chatBySender.delete(sender);
+  };
+  ipcMain.on('terminal:chat:open', (e, id: string) => {
+    if (typeof id !== 'string' || !listSessions().some((s) => s.id === id)) return;
+    const sender = e.sender;
+    let subs = chatBySender.get(sender);
+    if (!subs) {
+      subs = new Map();
+      chatBySender.set(sender, subs);
+      // 수명 훅은 창마다 한 번만 — 리로드로 비웠다가 다시 구독해도 리스너가 쌓이지 않게
+      if (!chatHooked.has(sender)) {
+        chatHooked.add(sender);
+        sender.once('destroyed', () => releaseChats(sender));
+        sender.on('did-navigate', () => releaseChats(sender));
+      }
+    }
+    subs.get(id)?.(); // 같은 세션 재구독 — 새로 열어 스냅샷을 다시 받는다
+    subs.set(
+      id,
+      subscribeChat(id, (msg) => {
+        if (!sender.isDestroyed()) sender.send('terminal:chat', msg);
+      })
+    );
+  });
+  ipcMain.on('terminal:chat:close', (e, id: string) => {
+    const subs = chatBySender.get(e.sender);
+    subs?.get(id)?.();
+    subs?.delete(id);
+  });
+  ipcMain.on('terminal:chat:send', (_e, id: string, text: string) => sendChatText(id, text));
   // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
   ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
     renameSession(id, title);
