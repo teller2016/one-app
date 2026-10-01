@@ -28,7 +28,30 @@ export type SleepCycleSummary = {
   charging: boolean;
   batteryStart: number | null;
   batteryEnd: number | null;
+  /** 다크웨이크 사유별 횟수 — 토스트 힌트가 **실제로 깨운 것**을 가리키게 한다 */
+  causes: Record<WakeCause, number>;
 };
+
+/**
+ * 다크웨이크 사유 분류 — `due to …` 뒤 문구로 가른다.
+ * - `centauri-beta` = 블루투스 쪽(HID 재연결 루프, 2026-09-20 확정)
+ * - `centauri-alpha` / `E_RX_IP_PACKET` / `E_PFN_NET_FOUND` = Wi-Fi 쪽(수신 패킷·아는 네트워크 발견)
+ * - `rtc/Maintenance` = OS 정기 유지관리(시간당 1회 정도, 정상)
+ *
+ * ⚠️ 2026-10-01 실측: 블루투스 자동 끄기가 **정상 동작했는데도**(bluetoothd `peripheral manager isn't
+ * powered on`) 550회 폭주했다 — 전부 `centauri-alpha E_RX_IP_PACKET`(깨운 패킷은 ARP 응답)였다.
+ * 집에서 아는 Wi-Fi 에 다크웨이크 중 자동 접속한 뒤, 깰 때마다 로컬 Java 서버들이 DB(1521·3306·6379)
+ * 연결을 시도하고 그 응답이 다시 깨우는 루프가 1시간 이어졌다. 사유를 안 보던 힌트는 이걸 블루투스
+ * 조건 탓으로 안내했다.
+ */
+export type WakeCause = 'bluetooth' | 'wifi' | 'maintenance' | 'other';
+
+export function classifyWakeCause(rest: string): WakeCause {
+  if (rest.includes('centauri-beta')) return 'bluetooth';
+  if (/centauri-alpha|E_RX_IP_PACKET|E_PFN_NET_FOUND/.test(rest)) return 'wifi';
+  if (rest.includes('rtc/Maintenance')) return 'maintenance';
+  return 'other';
+}
 
 export type WakeStormVerdict =
   | { storm: false }
@@ -63,6 +86,7 @@ export function summarizeSleepCycle(
     charging: false,
     batteryStart: null,
     batteryEnd: null,
+    causes: { bluetooth: 0, wifi: 0, maintenance: 0, other: 0 },
   };
   let sawSleep = false;
   for (const line of logText.split('\n')) {
@@ -73,7 +97,10 @@ export function summarizeSleepCycle(
     const kind = m[4];
     const rest = m[5];
 
-    if (kind === 'DarkWake' && rest.startsWith('DarkWake from')) summary.darkWakes++;
+    if (kind === 'DarkWake' && rest.startsWith('DarkWake from')) {
+      summary.darkWakes++;
+      summary.causes[classifyWakeCause(rest)]++;
+    }
     else if (kind === 'Wake' && rest.startsWith('Wake from')) summary.fullWakes++;
     else if (kind === 'Sleep' && !sawSleep && rest.startsWith('Entering Sleep state')) {
       sawSleep = true;
@@ -112,6 +139,12 @@ export function formatDuration(ms: number): string {
   return mins > 0 ? `${hours}시간 ${mins}분` : `${hours}시간`;
 }
 
+/** 가장 많이 깨운 사유 — 동률이면 앞(블루투스 → Wi-Fi → …) 순 */
+export function dominantWakeCause(s: SleepCycleSummary): WakeCause {
+  const order: WakeCause[] = ['bluetooth', 'wifi', 'maintenance', 'other'];
+  return order.reduce((best, c) => (s.causes[c] > s.causes[best] ? c : best), order[0]);
+}
+
 /**
  * 폭주 토스트 문구 — 제목은 덮개 닫힘 여부로, 본문은 횟수·배터리·발열, 끝에 다음 조치 한 줄.
  *
@@ -119,6 +152,7 @@ export function formatDuration(ms: number): string {
  * 재연결 루프**로 확정됐고 그 설정은 이미 적용돼 있다. 자동 끄기를 켠 뒤 다크웨이크가 시간당
  * 20.7회 → 1.2회로 떨어진 것이 확인됐다(09-23). 그래서 힌트는 **그 토글을 켰는지**로 갈린다 —
  * 껐으면 켜라고 하고, 켰는데도 폭주했다면 조건(외부 모니터·전원)에 걸려 안 꺼진 것이다.
+ * 단, **Wi-Fi 가 주로 깨웠다면 블루투스 얘기를 하지 않는다**(2026-10-01, `WakeCause` 주석 참고).
  */
 export function formatWakeStormToast(
   s: SleepCycleSummary,
@@ -132,8 +166,11 @@ export function formatWakeStormToast(
     parts.push(`배터리 ${s.batteryStart}%→${s.batteryEnd}%`);
   }
   if (s.thermal) parts.push('발열 비상 잠자기 발생');
-  const hint = bluetoothOffEnabled
-    ? '외부 모니터나 전원이 연결돼 있으면 블루투스를 끄지 않습니다 — 연결을 확인하세요.'
-    : "환경설정 → 전원에서 '잠잘 때 블루투스 끄기'를 켜 보세요.";
+  const hint =
+    dominantWakeCause(s) === 'wifi'
+      ? 'Wi-Fi 수신 패킷이 주로 깨웠습니다 — 덮개를 닫기 전에 로컬 서버(DB 연결 등)를 꺼 두세요.'
+      : bluetoothOffEnabled
+        ? '외부 모니터나 전원이 연결돼 있으면 블루투스를 끄지 않습니다 — 연결을 확인하세요.'
+        : "환경설정 → 전원에서 '잠잘 때 블루투스 끄기'를 켜 보세요.";
   return { title, message: `${parts.join(' · ')}. ${hint}` };
 }

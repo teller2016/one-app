@@ -48,6 +48,8 @@ export async function reportSleepCycle(sinceMs: number, untilMs: number): Promis
     `[power] 잠자기 ${formatDuration(summary.durationMs)}: 다크웨이크 ${summary.darkWakes}회` +
       `${summary.lidClosed ? ' · 덮개 닫힘' : ''}${summary.thermal ? ' · 발열 비상' : ''}` +
       ` · 배터리 ${summary.batteryStart ?? '?'}%→${summary.batteryEnd ?? '?'}%` +
+      ` · 사유 BT ${summary.causes.bluetooth}/Wi-Fi ${summary.causes.wifi}` +
+      `/유지관리 ${summary.causes.maintenance}/기타 ${summary.causes.other}` +
       ` → ${verdict.storm ? `폭주(${verdict.reason})` : '정상'}`,
   );
   if (!verdict.storm) return;

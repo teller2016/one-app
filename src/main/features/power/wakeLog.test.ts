@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   WAKE_STORM_MIN_COUNT,
+  classifyWakeCause,
   formatDuration,
   formatWakeStormToast,
   judgeWakeStorm,
@@ -115,6 +116,7 @@ describe('judgeWakeStorm', () => {
     charging: false,
     batteryStart: 80,
     batteryEnd: 79,
+    causes: { bluetooth: 0, wifi: 0, maintenance: 0, other: 0 },
     ...over,
   });
 
@@ -189,5 +191,25 @@ describe('formatWakeStormToast', () => {
     const t = formatWakeStormToast(s, true);
     expect(t.message).toContain('외부 모니터');
     expect(t.message).not.toContain('tcpkeepalive');
+  });
+
+  // 2026-10-01: 블루투스는 꺼졌는데 Wi-Fi 패킷이 550번 깨웠다 — 블루투스 조건을 탓하면 안 된다
+  it('Wi-Fi 패킷이 주로 깨웠으면 블루투스가 아니라 Wi-Fi 를 안내한다', () => {
+    const wifi = storm(30).replace(/centauri-beta\//g, 'centauri-alpha E_RX_IP_PACKET ARPT/');
+    const s = summarizeSleepCycle(wifi, T('18:34:30'), T('19:31:40'));
+    expect(s.causes.wifi).toBe(30);
+    const t = formatWakeStormToast(s, true);
+    expect(t.message).toContain('Wi-Fi');
+    expect(t.message).not.toContain('블루투스');
+  });
+});
+
+describe('classifyWakeCause', () => {
+  it('실측 사유 문구를 갈래별로 나눈다', () => {
+    expect(classifyWakeCause('due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty centauri-beta/')).toBe('bluetooth');
+    expect(classifyWakeCause('due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty centauri-alpha E_RX_IP_PACKET ARPT/')).toBe('wifi');
+    expect(classifyWakeCause('due to smc.sysState.Wake(0x70070000) wifibt SMC.OutboxNotEmpty centauri-alpha E_PFN_NET_FOUND ARPT/')).toBe('wifi');
+    expect(classifyWakeCause('due to NUB.SPMI0Sw3IRQ nub-spmi0.0x02 rtc/Maintenance')).toBe('maintenance');
+    expect(classifyWakeCause('due to AOP.Outbox0_NotEmpty AOP.MBIEndpoint.38 spu_queue_overflow_ep38/')).toBe('other');
   });
 });

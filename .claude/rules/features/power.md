@@ -43,6 +43,12 @@ paths:
   있고 진짜 원인은 블루투스다. 힌트는 `formatWakeStormToast(summary, bluetoothOffEnabled)` 의 두 번째
   인자로 갈린다: 토글이 꺼져 있으면 켜라고, 켜져 있는데도 폭주했으면 조건(외부 모니터·전원)을 보라고
   안내한다. 순수 함수를 유지하려고 설정 값은 `wakeReport` 가 읽어 넘긴다. 두 갈래는 `wakeLog.test.ts` 가 고정한다.
+- ⚠️ **힌트는 깨운 사유부터 본다**(2026-10-01) — `classifyWakeCause` 가 다크웨이크를 `centauri-beta`=블루투스 ·
+  `centauri-alpha`/`E_RX_IP_PACKET`/`E_PFN_NET_FOUND`=Wi-Fi · `rtc/Maintenance`=유지관리로 나누고, **Wi-Fi 가 최다면
+  블루투스 얘기를 하지 않는다**. 실측: 블루투스 자동 끄기는 정상(bluetoothd `peripheral manager isn't powered on`)이었는데
+  14시간 55분 동안 550회 — 535회가 Wi-Fi. 00:21 다크웨이크 중 아는 Wi-Fi 에 자동 접속(`E_PFN_NET_FOUND`)한 뒤 1시간 동안
+  6초 간격으로 깼다. 깨운 패킷은 대부분 **ARP 응답**(airportd `_decodeWoWWakeUpDataPacket` 의 ethertype `0806`)이고,
+  깰 때마다 로컬 Java 서버가 DB(1521·3306·6379) 연결을 시도했다. 배터리 영향은 80→78% 로 작았다. `womp`(배터리)는 이미 0 이다.
 - `Sleep/Wakes since boot … Dark Wake Count in this sleep cycle:N` 요약 줄은 쓰지 않는다 — 잠든 시각 기준으로
   자를 수 없다. 표본 줄과 규칙은 `wakeLog.test.ts`.
 
