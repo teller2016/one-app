@@ -656,7 +656,7 @@
   }
 
   // 세션 수 뱃지 — 타일 우상단에 걸치는 필 (0 이면 렌더 안 함). 목업(TerminalCollapsed) 그대로:
-  // 기본 = 한 단 밝은 면 + 보조 글자, 입력 대기 = **주황 채움 + 어두운 글자**, 패널 면 색 2px 링으로
+  // 기본 = 한 단 밝은 면 + 보조 글자, 입력 대기 = 소프트 틴트(아래 --waiting), 패널 면 색 2px 링으로
   // 타일에서 떼어 낸다. (2026-09-30 사용자 지시 "디자인과 동일하게" — 예전 'soft 배경·링 금지'
   // 결정(2026-08-20)을 목업이 대체했다)
   // 워크트리 타일과 부모 워크스페이스 타일이 공용 (부모 = 자식 합계, 위치·크기만 아래에서 조정)
@@ -680,9 +680,14 @@
     font-variant-numeric: tabular-nums;
     color: var(--text-2);
 
+    // 입력 대기 = 옅은 주황 면 + 주황 글자 + 주황 헤어라인 (2026-10-01 사용자 선택 '소프트 틴트').
+    // 꽉 찬 주황 필은 레일에서 혼자 튀었고, 라이트 테마에선 진한 주황 위 어두운 글자라 읽기 어려웠다
     &--waiting {
-      background: var(--warning);
-      color: var(--surface-dark);
+      background: var(--warning-soft);
+      color: var(--warning);
+      box-shadow:
+        0 0 0 2px var(--surface-1),
+        inset 0 0 0 1px color-mix(in srgb, var(--warning) 35%, transparent);
     }
   }
 
