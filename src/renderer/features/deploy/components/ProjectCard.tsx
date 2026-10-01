@@ -89,10 +89,16 @@ export function ProjectCard({
               className={refreshing ? 'deploy__spin' : undefined}
             />
           </Button>
-          <Button size="xs" onClick={onEdit}>
+          {/* deploy__edit·__delete — 폰(MO)에서 숨기는 표식(저장·삭제 채널이 MO 에 막혀 있다) */}
+          <Button size="xs" className="deploy__edit" onClick={onEdit}>
             편집
           </Button>
-          <Button size="xs" variant="danger" onClick={onDelete}>
+          <Button
+            size="xs"
+            variant="danger"
+            className="deploy__delete"
+            onClick={onDelete}
+          >
             삭제
           </Button>
         </div>

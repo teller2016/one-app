@@ -2,7 +2,9 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <!-- 터미널 페이지(src/mobile/index.html)와 동일한 소프트 키보드·노치 대응 -->
+    <!-- 소프트 키보드·노치 대응 — interactive-widget: 안드로이드 Chrome 108+ 는 visual viewport 만 줄이는 게
+         기본이라 키 바가 키보드에 가려질 수 있다 → 레이아웃 뷰포트까지 줄인다(iOS 는 이 키를 무시하고
+         터미널 컨트롤러의 visualViewport 처리(--mo-vh)가 담당) -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
@@ -10,6 +12,11 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="One App" />
+    <!-- 상단 머리들이 safe-area-inset-top 만큼 내려 그리므로 상태바 아래까지 앱이 칠한다 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- 주소창·상태바 색 = --bg (라이트 #f4f5f7 · 다크 #0b0c0e) -->
+    <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)" />
     <title>One App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="icon-192.png" />

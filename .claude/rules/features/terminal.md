@@ -3,13 +3,13 @@ paths:
   - "src/main/features/terminal/**"
   - "src/renderer/features/terminal/**"
   - "src/main/features/workspaces/**"
-  - "src/mobile/**"
+  - "src/mobile-app/terminal/**"
   - "src/shared/terminal-protocol.ts"
 ---
 
 # 터미널 + MO(모바일) 연동 — 핵심 규칙
 
-`renderer/features/terminal` + `main/features/terminal` + `src/mobile`. Superset 스타일 **에이전트 세션 오케스트레이터** — 여러 claude 세션을 병렬 관리하고, 자리를 비우면 폰으로 같은 세션을 이어서 쓴다.
+`renderer/features/terminal` + `main/features/terminal` + `src/mobile-app/terminal`(폰 터미널 탭). Superset 스타일 **에이전트 세션 오케스트레이터** — 여러 claude 세션을 병렬 관리하고, 자리를 비우면 폰으로 같은 세션을 이어서 쓴다.
 
 > **경위·실측 수치·시도와 폐기 기록은 `docs/terminal-notes.md`** (절 제목 동일). 여기는 지금도 유효한 불변식·함정만 남긴다. 새 함정 발견 시: 여기에 한 줄 요약, 상세는 노트에.
 
@@ -127,7 +127,7 @@ paths:
 - 변경사항 드로어의 머리 띠는 `.terminal__changes::before`(left -8px ~ right, 높이 `--pane-head-h`, 탭바와 같은 선반+바닥선)로 탭바 선을 창 끝까지 잇고, `::after` 가 xterm 과의 세로 경계다 — aside 의 margin/padding 규칙은 그대로, `.changes__head` 높이만 `--pane-head-h - 8px`.
 - 리사이즈·`SIDE_SNAP_W`(140) 축소(패널 48·타일 34)·grip 토글은 **`Sidebar.tsx` 와 같은 규칙**. 저장은 놓을 때 1회 `Math.round`. ⚠️ 접힌 채 끝나면 펼침 폭을 드래그 시작 값으로.
 - 축소 타일 = 이니셜 2자(`initials(name, 2)` — 영문 ST·OA, CJK 는 1자), ⚠️ 닫기(×) 없음(`⌘⇧W`). ⚠️ `side-grip` 실폭 0(`margin: 0 -5px`). 드로어는 2026-09-30 사용자 지시로 목업 구조(패널 면 + border-left, 바깥 여백 없음)로 변경 — grip 은 경계선 위 실폭 0(`left: -6px`, `::after` 가 경계와 같은 x). 드로어 안쪽 모양은 `_changes.scss` 의 `.terminal__changes .changes` 스코프에만(폰 '변경' 탭과 공유 컴포넌트).
-- **상태 색(2026-09-30)**: 작업 중 = **초록**(`--ok` — 탭 점 `StatusDot run` 펄스·LNB 스피너·축소 아크) · 입력 대기 = **주황**(`--warning` — 탭 점 `StatusDot wait` 펄스 없음·세션 수 뱃지·브랜치 라벨). 예전 '대기=초록(준비됨)'으로 되돌리지 말 것 — 사이드바 뱃지·토스트의 주의색과 맞춘 것이다. MO 페이지(`src/mobile`)는 아직 옛 색.
+- **상태 색(2026-09-30)**: 작업 중 = **초록**(`--ok` — 탭 점 `StatusDot run` 펄스·LNB 스피너·축소 아크) · 입력 대기 = **주황**(`--warning` — 탭 점 `StatusDot wait` 펄스 없음·세션 수 뱃지·브랜치 라벨). 예전 '대기=초록(준비됨)'으로 되돌리지 말 것 — 사이드바 뱃지·토스트의 주의색과 맞춘 것이다. MO 터미널 탭(`mobile-app/terminal`)도 같은 색(2026-10-01).
 - 작업중 표시 = `spinner spinner--xs` / 축소 `BusyArc`(`terminal__sq-arc`). ⚠️ **`busy` 가 아니라 `working`** 을 볼 것(셸 제외). ⚠️ 아크를 원형 링·conic-gradient 로 바꾸지 말 것.
 - 세션 목록은 탭바(`SessionTabs`). 이름 변경 = **우클릭 [이름 변경]** → `Input bare`(`terminal:rename`), `select()`. ⚠️ `bare` 가 `min-height` 하한을 지워야 탭이 안 부푼다.
 - 패널 머리줄 `__side-head` 는 탭바와 같은 `--pane-head-h` 높이로 바닥선을 잇는다(패널 패딩 0 — 여백은 머리줄 0 12 0 16·목록 8 이 각자). LNB·축소 타일·뱃지 수치는 목업(Terminal·TerminalCollapsed 보드) 그대로 — 채운 색 타일(인디고 7번만 흰 글자 `--on-strong`), 세션 수 뱃지는 주황 채움 + 패널 면 2px 링(2026-09-30 목업이 08-20 'soft·링 금지' 결정을 대체).
@@ -187,16 +187,24 @@ paths:
 - ⚠️ **WS 백프레셔**(> 2MB): `/term` 은 data 만 버리고 `needsResync`, `/rpc` 는 소켓을 끊는다.
 - 상세: 노트 'MO 접속'.
 
-## MO 터미널 페이지 (`src/mobile`)
-- Vite 엔트리 `mobile_window`(base `/terminal/`). '버튼 하나 + 바텀시트'(`sheetMode`). 재접속 백오프 + `visibilitychange`.
-- ⚠️ `workspaces`·변경사항은 **요청 시에만**(폴링 금지). 변경사항은 **`/rpc`**(`handleShared`), **커밋 없음**, 경로는 `rtl` + ⚠️ `U+2066/2069`.
-- ⚠️ **뒤로가기는 오버레이만** — 열 때 `pushState`, 닫기는 언제나 `history.back()`, 숨김은 `popstate` 의 `hideTopOverlay()` 에서만. `closeSheet()` 는 `sheetMode` 즉시 비움.
-- ⚠️ 영역 밖 세션은 `(다른 영역)` 으로 남긴다. `mo:lastSession` 우선. ⚠️ 자동 attach 는 **`!attachedId && !pendingAttachId`** 일 때만.
-- **키바는 키보드가 떠 있을 때만** — 뷰포트 높이 감소(`KEYBOARD_MIN_DELTA` 120px) 판정, ⚠️ focus/blur 금지, 토글마다 `syncViewport()`.
-- 핀치 글자 크기(기본 6px), ⚠️ 핀치 touchend 를 탭 처리 금지. 붙여넣기는 secure context 만.
-- 대기 알림·배지·wakeLock 은 `stableWaiting` 하나를 본다. ⚠️ 안드로이드는 `public/sw.js`(fetch 미개입) `showNotification`. 권한은 `#notifyBar`. secure context 전용.
+## MO 터미널 탭 (`src/mobile-app/terminal` — 2026-10-01 리디자인, 목업 캔버스 'MO(폰)')
+옛 별도 페이지(`src/mobile`, Vite 엔트리 `mobile_window`)를 **셸의 첫 탭**으로 합쳤다 — 탭을 오갈 때 페이지 이동·xterm 재초기화·replay 를 다시 하지 않는다.
+- 구조: `controller.ts`(React 밖 싱글턴 — xterm·`/term` WS·타이머·알림·wakeLock, `subscribe`/`getState`) · `MoTerminalTab.tsx`(그리기만) · `logic.ts`(순수 판정 — `logic.test.ts`) · `index.ts`(셸용 `moTerminal` 요약: 입력 대기 수·연결·**target = 보는 워크트리** — 변경 탭이 따라간다).
+- ⚠️ **셸은 터미널 탭을 언마운트하지 않는다**(keep-alive, `hidden`) — `setActive(false)` 동안엔 크기 주장(`resized`)·wakeLock 을 하지 않고, 숨은(폭 0) 호스트로 `fit` 하지 않는다(0 열로 줄여 PTY 를 망가뜨린다).
+- 서버: `/terminal*`(옛 홈 화면 아이콘·북마크·데스크톱 '터미널만 바로 열기' URL)도 **셸 index.html** 을 준다(`server.ts` `shellPath`) — 그 아래 sw.js·manifest·아이콘만 셸 것을 같은 이름으로.
+- ⚠️ `?session=`(알림 클릭)은 **모듈 평가 시점**에 읽는다 — `main.tsx` 가 토큰 쿼리를 지울 때 함께 지워지기 전이다(import 가 본문보다 먼저 평가된다).
+- ⚠️ `workspaces` 는 **접속 시 1회 + 시트를 열 때만**(폴링 금지 — git 조회). 타일 색은 노드의 `color`(데스크톱 지정색) → `tileColor`.
+- 뒤로가기: 시트는 공용 **`useBackClose`**(셸 모달과 같은 규칙 — 옛 페이지의 자체 `hideTopOverlay` 구현은 없앴다).
+- ⚠️ 영역 밖 세션은 칩에 '다른 영역'으로 남긴다. `mo:lastSession` 우선. ⚠️ 자동 attach 는 **`!attachedId && !pendingAttachId`** 일 때만(`pickAutoAttach`).
+- **키 바는 키보드 없이도 1단 고정**(esc tab ctrl ↑↓←→ ⏎ + ⌨), 키보드가 뜨면 2단(⇧tab·alt·| ~ / -·home end pgup pgdn·^C). ctrl·alt 는 한 번 적용(`applyModifiers` — alt = ESC 접두). 키보드 판정은 **뷰포트 높이 감소**(`KEYBOARD_MIN_DELTA` 120px) — ⚠️ focus/blur 금지. 열림이면 `html.mo-kbd` + `--mo-vh` → 셸이 높이를 줄이고 탭바를 숨긴다.
+- ⚠️ **화면 탭은 읽기 — 키보드를 열지 않는다**: touchend 에서 `preventDefault` 로 합성 mousedown(=xterm 포커스)을 막는다. 키보드는 ⌨ 버튼으로만(`term.focus()`), 닫기는 `term.blur()`.
+- 출력 복사: 세션 메뉴 → 선택 모드(드래그 = **줄 단위** `selectLines`, 스크롤 대신) → [복사](`useCopy` — http 폴백 포함). 검색: `SearchAddon`(데스크톱과 같은 하이라이트 합성).
+- 핀치 글자 크기 6~22(**기본 11** — 옛 기본 6 은 읽기엔 작았다) + 메뉴 [A− A+]. ⚠️ 핀치 touchend 를 탭 처리 금지. 붙여넣기는 secure context 만(메뉴에서 비활성 + 이유).
+- 대기 알림·탭 배지·홈 아이콘 배지·wakeLock 은 `StableWaiting`(3초 유예) 하나를 본다. ⚠️ 안드로이드는 셸 `public/sw.js`(루트 스코프, fetch 미개입) `showNotification`. 알림 클릭 → 열린 창 `postMessage` → 셸이 터미널 탭으로(`onFocusRequest`). secure context 전용.
+- 세션 종료 확인은 공용 `useConfirm`, 안내는 공용 토스트(옛 페이지는 네이티브 confirm·상태 칸 2.2초).
 - ⚠️ **`DA_REPLY_RE` 는 MO·데스크톱 둘 다 필수**, ESC 는 `String.fromCharCode(27)`.
-- ⚠️ 예측 입력 억제 `autocomplete=off`+`autocapitalize=none`+`inputmode="url"`. `.composition-view` 는 **MO 에만**(15px, `!important`).
+- ⚠️ 예측 입력 억제 `autocomplete=off`+`autocapitalize=none`+`inputmode="url"`. `.composition-view` 는 **MO 에만**(`--fs-title` 고정, `!important`).
+- 터미널 색은 데스크톱 `buildTheme` 과 **같은 on-dark 토큰**에서 읽는다(폰도 이제 셸 테마를 따르고, 터미널 면은 두 테마 모두 `--surface-dark`).
 - 폰트 JetBrains Mono NL + `lineHeight 1.0` + **Unicode11 + allowProposedApi 한 쌍**. 키보드: `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 작은 값 + `overscroll-behavior: none`. ⚠️ 텍스트 기호는 VS16 + 컬러 이모지 폰트.
 - 상세: 노트 'MO 터미널 페이지 UI'·'자리를 비운 동안 알기'.
 

@@ -27,7 +27,7 @@ paths:
 | ok/warn/err/info (+ -soft) | `--ok` · `--warning` · `--danger` · `--info` (+ `-soft`) |
 | 글자 9 · 9.5 · 10.5 · 11 · 11.5 · 12 · 12.5 · 13 | `--fs-pico` · `--fs-nano` · `--fs-micro` · `--fs-caption` · `--fs-ui-sm` · `--fs-small` · `--fs-ui` · `--fs-body` |
 | 글자 14 · 15 · 16 · 18 · 20 · 22 | `--fs-emph` · `--fs-title` · `--fs-heading` · `--fs-detail-title` · `--fs-h2` · `--fs-metric` |
-| 모서리 3 · 4 · 5 · 6 · 7 · 8 · 9 · 10 · 14 | `--r-xs` · `--r-mark` · `--r-sm` · `--r-md` · `--r-tile` · `--r-tab` · `--r-rail` · `--r-lg` · `--r-xl` |
+| 모서리 3 · 4 · 5 · 6 · 7 · 8 · 9 · 10 · 12 · 14 | `--r-xs` · `--r-mark` · `--r-sm` · `--r-md` · `--r-tile` · `--r-tab` · `--r-rail` · `--r-lg` · `--r-card`(폰 카드) · `--r-xl` |
 | 높이 24 · 28 · 30 · 32 · 36 | `--control-h-xs` · `-sm` · `-btn`(버튼·세그) / `-field`(입력 30) · `--control-h`(입력) · `-lg` |
 | 머리 42 · 44 · 상태바 28 | `--panel-head-h` · `--pane-head-h` · `--statusbar-h` |
 | .shadow · .scrim | 떠 있는 레이어는 공용 `Modal`·`Toast`·팝오버가 이미 갖는다 — 직접 쓰지 말 것 · `--scrim` |

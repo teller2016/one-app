@@ -35,7 +35,7 @@ paths:
 3. **파일 diff**: 추적 파일은 `diff <ref>`, untracked 는 `--no-index /dev/null`(**exit 1 이 정상**), 커밋 한 건은 `show --format= -M <hash> -- <path>`(--format= 이 커밋 헤더 억제), 512KB 초과는 truncated
    - **증분 응답**(2026-08-09): 응답에 본문의 sha1 `hash` 를 함께 싣고, 호출부가 다음 조회에 `knownHash` 로 되돌려주면 내용이 같을 때 **본문 없이 `{unchanged:true}`** 만 준다 — 5초 폴링이 바뀌지도 않은 512KB 를 매번 IPC 로 실어 나르던 것을 없앤다(실측 351B → 0B). 해시는 **잘라낸 뒤의 최종 본문**으로 계산한다(화면에 가는 내용과 1:1).
    - ⚠️ `knownHash` 는 폰에도 열린 채널의 입력이라 **40자 hex 형식을 검증**한다(비교에만 쓰이지만 규칙은 규칙).
-   - MO 터미널 페이지(`src/mobile`)는 `knownHash` 를 보내지 않으므로 항상 전체를 받는다(하위 호환 — 거긴 폴링도 안 한다).
+   - (옛 MO 터미널 페이지 `src/mobile` 은 2026-10-01 셸 탭으로 합쳐 없어졌다 — 폰의 변경사항은 셸 '변경' 탭의 ChangesView 가 맡는다.)
 4. **커밋 목록**: `log --pretty=%h\t%ct\t%s`(커밋 0개면 log 자체가 실패 → 빈 목록), 미푸시 집합은 `@{u}..HEAD`(upstream 없으면 전부 미푸시)
 5. **커밋**: `add -A` 후 `commit -m`(통째 한 번 — 여러 -m 은 문단 분리) / **푸시**: upstream 이 없거나 **현재 브랜치와 다른 이름을 가리키면** `-u origin HEAD` 로 추적을 바로잡으며 푸시
    - ⚠️ 워크트리 `-b` 를 원격 베이스(origin/main)로 만들면 git 이 **origin/main 을 추적으로 잡는다** — 사용자 `push.default=current` 라 푸시는 제 이름 브랜치로 잘 가지만 `@{u}..HEAD` 가 안 비어 '푸시할 커밋'이 영영 남았다(2026-08-14 실측). 그래서 워크트리 생성은 `--no-track`(workspaces/git.ts), 푸시는 위 이름 불일치 교정. 확인 다이얼로그 문구도 같은 판정(`lib/push.ts` `pushConfirmMessage`)으로 실제 목적지를 보여준다.

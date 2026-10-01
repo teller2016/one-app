@@ -22,6 +22,7 @@ import { CreatePrModal, CreatedPr } from './CreatePrModal';
 import { PrList } from './PrList';
 import { PrDetail } from './PrDetail';
 import { errMsg } from '../../../lib/errMsg';
+import { useBackClose } from '../../../lib/useBackClose';
 
 const orgOf = (pr: PrItem) => pr.repo.split('/')[0];
 const keyOf = (pr: PrItem) => `${pr.repo}#${pr.number}`;
@@ -53,6 +54,9 @@ export function PrSection() {
     () => localStorage.getItem('prs:repoTab') ?? '',
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // 폰(MO)에선 상세를 펼친 채 뒤로가기를 누르면 앱을 벗어났다 — 상세만 접는다(데스크톱에선 아무 일도 안 한다)
+  const clearSelected = useCallback(() => setSelectedKey(null), []);
+  useBackClose(clearSelected, selectedKey !== null);
   // 방금 만든 PR — 목록 재조회가 끝나기 전에도 상세를 띄우기 위한 낙관적 항목
   const [justCreated, setJustCreated] = useState<PrItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);

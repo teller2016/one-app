@@ -42,7 +42,9 @@ const COOKIE_NAME = 'oneAppTerm';
 const COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
 const WS_PATH = '/term'; // 터미널 전용 upgrade 경로 — dev 모드 Vite HMR ws 와 구분
 const RPC_PATH = '/rpc'; // 폰 앱 셸의 IPC 중계 (rpc.ts)
-const TERMINAL_PREFIX = '/terminal'; // 터미널 페이지 (`/` 는 폰 앱 셸이 쓴다)
+// 옛 터미널 페이지 주소 — 2026-10-01 리디자인으로 셸의 첫 탭이 됐다. 홈 화면 아이콘·북마크·데스크톱의
+// '터미널만 바로 열기' URL 이 이 주소라 계속 받아서 셸을 연다(shellPath)
+const TERMINAL_PREFIX = '/terminal';
 const PING_INTERVAL_MS = 30_000;
 
 let server: http.Server | https.Server | null = null;
@@ -114,7 +116,7 @@ function timingEqual(a: string, b: string): boolean {
 
 // 홈 화면 추가 시 브라우저는 manifest·아이콘을 쿠키 없이 받아갈 수 있다(스펙상 credentials
 // 모드가 다름) — 비밀이 없는 이 파일들만 인증에서 제외한다. 앱 화면(index.html)은 그대로 보호.
-// 앱 셸(`/`)과 터미널(`/terminal/`)이 각자 manifest·아이콘을 가진다(홈 화면 아이콘 각각).
+// 옛 터미널 주소(`/terminal/…`) 아래의 같은 파일은 셸 것을 준다(shellPath) — 옛 홈 화면 아이콘용.
 const PUBLIC_FILES = ['manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 // ⚠️ basename 이 아니라 **정확한 경로**로 비교한다. basename 비교는 `/무엇이든/icon-192.png`
 // 처럼 이름만 맞춘 임의 경로를 인증 없이 통과시키고, dev 모드에서는 그것이 그대로 Vite dev
@@ -197,10 +199,28 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
+/** 셸 안에서도 이름 그대로 서빙하는 옛 터미널 주소 아래 파일 — 나머지는 전부 셸 index.html */
+const TERMINAL_KEEP = new Set(['/sw.js', ...PUBLIC_FILES.map((f) => `/${f}`)]);
+
 /**
- * 정적 서빙 — 엔트리 두 개(앱 셸 `/`, 터미널 `/terminal/`)를 경로로 분기한다.
- * @param viteName 렌더러 빌드 폴더명 (`MOBILE_APP_WINDOW_VITE_NAME` 등)
- * @param stripPrefix URL 접두어 제거 (`/terminal`) — ⚠️ normalize 전에 벗겨야 탈출 방어가 유효
+ * 요청 경로 → 셸 안의 경로. 옛 터미널 페이지(`/terminal`·`/terminal/…`)는 셸을 연다 — 셸의 첫 탭이
+ * 터미널이다. 그 아래 sw.js·manifest·아이콘은 셸 것을 같은 이름으로 준다(옛 `/terminal/` 스코프 워커가
+ * 갱신 확인으로 `/terminal/sw.js` 를 받아 가므로 같은 워커로 바뀐다). 옛 페이지의 해시 asset 은 없다.
+ */
+function shellPath(pathname: string): string {
+  if (pathname !== TERMINAL_PREFIX && !pathname.startsWith(`${TERMINAL_PREFIX}/`)) return pathname;
+  const tail = pathname.slice(TERMINAL_PREFIX.length);
+  if (TERMINAL_KEEP.has(tail)) return tail;
+  // ⚠️ 확장자가 있는 요청(파일)은 그대로 둔다 — 화면 주소(`/terminal`·`/terminal/`·`/terminal/x`)만 셸로.
+  //    셸 소스에 `src/mobile-app/terminal/` 폴더가 있어 dev 의 Vite 가 `/terminal/index.ts` 를 요청하는데,
+  //    전부 index.html 로 바꾸면 모듈 MIME 오류로 셸이 백지가 됐다(2026-10-01 /test). 빌드본엔 그런 파일이 없어 404.
+  return /\.[a-z0-9]+$/i.test(tail) ? pathname : '/';
+}
+
+/**
+ * 정적 서빙 — 폰 앱 셸 빌드 폴더.
+ * @param viteName 렌더러 빌드 폴더명 (`MOBILE_APP_WINDOW_VITE_NAME`)
+ * @param stripPrefix URL 접두어 제거 — ⚠️ normalize 전에 벗겨야 탈출 방어가 유효
  */
 function serveStatic(
   pathname: string,
@@ -246,13 +266,14 @@ function proxyToDevServer(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   extraHeaders: Record<string, string>,
-  devServerUrl: string
+  devServerUrl: string,
+  /** 셸 안의 경로(shellPath) — 옛 터미널 주소를 셸 경로로 바꿔 넘긴다 */
+  pathname: string
 ) {
   // dev 전용 — Vite 모듈 경로·쿼리를 그대로 넘기되 토큰만 제거 (HMR ws 는 미지원, 무해).
-  // 각 엔트리의 base 와 경로가 일치하므로 접두어는 벗기지 않고 그대로 전달한다.
   const url = new URL(req.url ?? '/', 'http://local');
   url.searchParams.delete('token');
-  const target = new URL(url.pathname + url.search, devServerUrl);
+  const target = new URL(pathname + url.search, devServerUrl);
   http
     .get(target, (up) => {
       res.writeHead(up.statusCode ?? 500, { ...up.headers, ...extraHeaders });
@@ -354,7 +375,7 @@ async function buildWorkspaceTree(): Promise<TermWorkspaceNode[]> {
       } catch {
         // 저장소가 사라졌거나 git 실패 — 워크스페이스는 남기고 목록만 비운다
       }
-      return { id: ws.id, name: ws.name, worktrees };
+      return { id: ws.id, name: ws.name, color: ws.color, worktrees };
     })
   );
 }
@@ -553,27 +574,12 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
         `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; ` +
         `Path=/; Max-Age=${COOKIE_MAX_AGE_SEC}${tls ? '; Secure' : ''}`;
     }
-    // 엔트리 분기 — `/terminal*` 은 터미널 페이지, 그 외는 폰 앱 셸.
-    // 각 엔트리의 Vite `base` 와 경로가 같아 asset(`/assets/*` vs `/terminal/assets/*`)이 안 겹친다.
-    const isTerminal =
-      url.pathname === TERMINAL_PREFIX ||
-      url.pathname.startsWith(`${TERMINAL_PREFIX}/`);
-    if (isTerminal) {
-      if (MOBILE_WINDOW_VITE_DEV_SERVER_URL) {
-        proxyToDevServer(req, res, extraHeaders, MOBILE_WINDOW_VITE_DEV_SERVER_URL);
-      } else {
-        serveStatic(
-          url.pathname,
-          res,
-          extraHeaders,
-          MOBILE_WINDOW_VITE_NAME,
-          TERMINAL_PREFIX
-        );
-      }
-    } else if (MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL) {
-      proxyToDevServer(req, res, extraHeaders, MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL);
+    // 폰 앱 셸 하나 — 옛 터미널 주소(`/terminal*`)도 셸을 연다(셸의 첫 탭이 터미널)
+    const pathname = shellPath(url.pathname);
+    if (MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL) {
+      proxyToDevServer(req, res, extraHeaders, MOBILE_APP_WINDOW_VITE_DEV_SERVER_URL, pathname);
     } else {
-      serveStatic(url.pathname, res, extraHeaders, MOBILE_APP_WINDOW_VITE_NAME);
+      serveStatic(pathname, res, extraHeaders, MOBILE_APP_WINDOW_VITE_NAME);
     }
   };
 

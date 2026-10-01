@@ -21,6 +21,8 @@ export type TermWorktreeNode = {
 export type TermWorkspaceNode = {
   id: string;
   name: string;
+  /** 타일 색 번호(1~10) — 데스크톱에서 고른 색. 없으면 이름 해시(tileColor) */
+  color?: number;
   worktrees: TermWorktreeNode[];
 };
 

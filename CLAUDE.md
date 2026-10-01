@@ -34,8 +34,7 @@ src/
 │   ├── lib/                  #   공용 훅 — theme · usePolling · useCopy · usePopover
 │   ├── features/<기능>/      #   components/ + lib/ + index.ts(공개 API)
 │   └── styles/               #   index.scss + _base.scss(토큰) + _<기능>.scss
-├── mobile/                   # 📱 MO 터미널 페이지 (Vite 엔트리 mobile_window, plain TS)
-├── mobile-app/               # 📱 MO 앱 셸 (Vite 엔트리 mobile_app_window, 렌더러 재사용)
+├── mobile-app/               # 📱 MO 앱 셸 (Vite 엔트리 mobile_app_window, 렌더러 재사용) — 첫 탭 터미널(terminal/)
 └── shared/                   # 🔗 프로세스 공용 — types.ts · terminal-protocol.ts · mo-protocol.ts
 
 standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" (결재 3종 + Jira 티켓 보고) — 본체 코드를 복사하지
@@ -98,7 +97,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `signal-style.md` | `**/*.scss` · `DESIGN.md` | **스타일 사전** — 목업→토큰 변환표·글자 역할·표면/페이지 패턴 값 (스타일 잡을 때 기준) |
 | `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |
 | `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
-| `features/terminal.md` | terminal · `src/mobile/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
+| `features/terminal.md` | terminal · `src/mobile-app/terminal/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
 | `features/mo-app.md` | `src/mobile-app/**` · moIpc · rpc | RPC shim·broadcast fan-out·폰 셸 |
 | `features/approval.md` | approval | 결재 3종(야근·휴가·지출결의서)·BrowserWindow 자동화 함정 |
 | `features/schedule.md` | schedule | 하루 일정 등록·노션 기록 |

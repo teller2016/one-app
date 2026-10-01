@@ -7,7 +7,7 @@ paths:
   - "src/shared/mo-protocol.ts"
 ---
 
-# MO 앱 셸 (폰에서 근태·Jira·PR·배포·메일)
+# MO 앱 셸 (폰 — 터미널 중심 · 변경·Jira·PR·더보기(근태·배포·메일))
 
 `src/mobile-app` + `main/lib/moIpc.ts` + `main/features/terminal/rpc.ts`
 
@@ -26,10 +26,16 @@ WS 클라이언트는 BrowserWindow 가 아니라 `broadcast()` 로도 안 닿�
 
 - ⚠️ `getNotifyWindow()` 자체는 지우지 말 것 — 알럿의 부모 창으로 쓰인다.
 
-## 폰 셸 (`mobile-app/`)
-하단 탭바 5개 + 터미널 링크.
+## 폰 셸 (`mobile-app/`) — 2026-10-01 재구성 (목업: 캔버스 'MO(폰)' 페이지)
+하단 탭 5개 **터미널(첫 화면) · 변경 · Jira · PR · 더보기**. 더보기 = 근태 카드 + 배포·메일 하위 화면(머리 [뒤로] + 폰 뒤로가기).
+화면 머리(52 · 제목 16/600 · 연결 점)는 셸이 그리고, 섹션 컨트롤은 지금처럼 `TopbarSlot` 제자리(`.topbar-inline`) 줄이다.
 
-- **활성 탭만 렌더**한다(데스크톱과 같은 규칙 — 5개를 동시에 마운트하면 각 섹션 폴러가 사내 서버를 동시에 두드린다).
+- **터미널 탭만 keep-alive**(`hidden` 으로 숨김 — xterm·attach 를 탭 전환마다 다시 하지 않게). 나머지는 **활성 탭만 렌더**한다(데스크톱과 같은 규칙 — 동시에 마운트하면 각 섹션 폴러가 사내 서버를 동시에 두드린다).
+- 탭 배지: 터미널 = 입력 대기 수(`moTerminal` 상태 — 주황), 더보기 = 안 읽은 메일(셸이 `mail.getUnreadCount` 를 데스크톱 상태바와 같은 30초 `usePolling`). 더보기의 '빌드 중 N' 은 `deploy:status` push 만 센다(셸 폴링 없음).
+- 키보드가 열리면 터미널이 `html.mo-kbd` + `--mo-vh` 를 건다 → 셸 높이 = `--mo-vh`, 탭바 숨김.
+- **변경 탭은 터미널에서 보는 워크트리를 따라간다**(`{workspaceId, worktreePath}` — main 이 워크트리 목록과 대조 검증). [바꾸기]로 프로젝트 레지스트리 대상도 고른다.
+- **Jira 는 내 이슈만**(`<JiraSection mineOnly />` — 주간·보고는 필터·템플릿·일괄 복사가 많은 데스크톱 작업이라 폰에서 뺐다).
+- 폰에서 **동작하지 않는** 진입점은 숨긴다(`mo.scss`): 배포 [프로젝트 추가]·카드 [편집]·[삭제](`deploy:projects:save/delete` 는 MO 에 안 열린 쓰기 채널), 메일 "비즈박스 메일함 열기"(`mail:open-web` 없음 — 예전엔 눌러도 undefined 호출로 무반응이었다).
 - `openExternal` 은 RPC 로 보내지 않고 **`window.open`** 으로 폰에서 연다(맥에서 열리면 폰은 무반응).
 - optional 후행 인자는 **`undefined` 를 잘라내 보낸다** — JSON 직렬화가 `null` 로 바꾸면 기본 파라미터(`getInbox(q = {})`)가 무력화돼 터진다.
 - 폰은 평문 http = insecure context 라 **`navigator.clipboard` 가 없다** → `lib/useCopy.ts` 에 `execCommand` 폴백을 넣었다(데스크톱은 기존 경로).
@@ -48,4 +54,6 @@ WS 클라이언트는 BrowserWindow 가 아니라 `broadcast()` 로도 안 닿�
 - 열릴 때 `history.pushState` 로 항목을 쌓고, **뒤로가기로 닫히면** `popstate` 가 `onClose` 를, **UI 로 닫히면** 언마운트 cleanup 이 `history.back()` 을 부른다. ⚠️ 후자를 빼먹으면 유령 항목이 쌓여 나중에 뒤로가기를 두 번 눌러야 나간다.
 - ⚠️ `onClose` 는 렌더마다 새 함수일 수 있어 **ref 로 참조**한다 — deps 에 넣으면 항목이 계속 쌓인다.
 - ⚠️ **데스크톱에서는 아무 일도 하지 않는다**(`html.mo` 가 있을 때만 동작). 처음엔 양쪽에 걸었는데, 데스크톱에서 히스토리 항목을 쌓으니 **마우스 X1/X2 의 Electron 기본 앞/뒤 동작과 겹쳐 섹션 이동이 뒤엉켰다** — "앞으로 가기하면 뒤로 간다"는 증상으로 나타났다(2026-08-08 사용자 지적). 데스크톱은 뒤로가기 버튼이 없어 이 기능이 필요 없고, 모달은 Escape·오버레이 클릭으로 닫는다.
-- MO 터미널 페이지(`src/mobile`)는 React 가 없어 같은 규칙을 자체 구현한다(`features/terminal.md`).
+- 터미널 탭의 시트·메뉴도 이 `useBackClose` 를 쓴다(옛 `src/mobile` 페이지의 자체 구현은 셸 탭으로 합치며 없앴다).
+- ⚠️ **닫자마자 다른 오버레이를 여는 흐름**(메뉴 → 확인창, 새 세션 시트 → 작업 영역 시트) — UI 로 닫을 때의 `back()` 을 **50ms 미루고**, 그 사이 열린 오버레이가 **그 항목을 물려받는다**(back·push 둘 다 생략). 바로 back() + 새 push 를 하면 ① 뒤늦은 popstate 가 새 확인창을 즉시 닫고 ② 새 오버레이의 항목이 사라져 닫는 순간 **앱 밖으로 나갔다**(2026-10-01 /test). 미룬 back 의 popstate 는 모듈 전역 리스너가 한 번 삼킨다(1초 만료) — 중첩 모달의 바깥이 함께 닫히는 것도 이것이 막는다. 검증은 `navigation.currentEntry.index` 가 오버레이마다 +1 → 닫으면 기준값인지로.
+- dev 에서 폰 화면(Tailscale 도메인:18318)을 볼 때의 `wss://…:18318` 403 · `wss://localhost:5173` SSL · `[vite] failed to connect to websocket` 은 HMR 클라이언트가 터널 너머로 붙으려다 나는 **무해한 노이즈**다(`/test` 에서 무시).

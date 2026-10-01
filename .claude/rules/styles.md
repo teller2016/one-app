@@ -45,7 +45,7 @@ paths:
 - NL(리가처 없음)을 고른 이유 — xterm 은 ligatures addon 없이 리가처를 그리지 않으므로, 리가처가 아예 없는 쪽이 폰트와 화면이 일치한다. 공식 배포에 **NL 은 ttf 만** 있어 woff2 는 `fontTools` 로 변환해 넣었다.
 - `font-display: block` 필수 — 폴백으로 먼저 그리면 xterm 이 그 폭으로 셀을 재고 굳는다(`features/terminal.md` 참고).
 - ⚠️ **`vite.renderer.config.ts` 의 `base: './'` 를 지우지 말 것** — prod 렌더러는 `loadFile`(= `file://`)이라 기본값 `'/'` 이면 CSS 안의 폰트 URL이 `file:///assets/…` 로 해석돼 로드에 실패한다.
-- `mobile-app/styles/mo.scss` 가 `_base.scss` 를 `@use` 하므로 **폰 셸도 같은 폰트를 받는다**(MO 서버 MIME 맵에 `.woff2` 가 이미 있다). `src/mobile` 의 MO 터미널 페이지는 별도 CSS 라 해당 없음.
+- `mobile-app/styles/mo.scss` 가 `_base.scss` 를 `@use` 하므로 **폰 셸도 같은 폰트를 받는다**(MO 서버 MIME 맵에 `.woff2` 가 이미 있다). MO 터미널 탭(`mobile-app/styles/_terminal.scss`)도 같은 토큰·폰트를 쓴다.
 
 ## 공통 레이아웃 클래스 (`_base.scss`)
 섹션 컨테이너 `.section`, 폼 액션 `.form-actions`, 독립 라벨 `.form-label`, 힌트 `.hint`, 주석 `.note`, 아이콘 버튼 `.icon-btn`, 중첩 패널 `.panel-sunken(--log)`, 빈 상태 `.empty-state`, 스피너 `.spinner`, 진행바 `.progress`, **상주 위젯 본체 `.sbw`**(VPN·미러링·근태 공용 — 상태바 팝오버 안에서 `[아이콘][점+텍스트][우측 액션]` 한 줄 + `__sub`/`__error` 확장).
@@ -67,6 +67,5 @@ bg-0=`--bg` · bg-1=`--surface-1` · bg-2=`--bg-sunken` · bg-3=`--surface-2` ·
 - 실측으로 덮어야 했던 것: `.jira-view` 의 `calc(100vw - 220px - 48px)`(사이드바 폭 하드코딩 → 폰에서 144px), `.mail-list__top` 의 `display:contents` 트릭(발신자 200px 고정이 제목을 130px 로 만든다 → 2줄 전환), `.mail-list__subject` 는 `display:flex` 라 `text-overflow` 가 안 먹어 블록으로, 메일 오버레이는 **탭바 위에서 끝내기**(안 하면 portal 이 탭바를 덮어 탭 전환 불가), 각 행의 `flex-wrap`.
 - ⚠️ `@use '../../renderer/styles/index'` 만으로는 **믹스인이 전달되지 않는다**(`Undefined mixin`) — `base` 를 따로 `as *` 로 함께 불러온다.
 
-## MO 터미널 CSS (`src/mobile/mobile.css`)
-- 앱 토큰 체계 밖의 모바일 전용 최소 CSS.
-- **첫 페인트 깜빡임(FOUC)**: `mobile.css` 는 `mobile.ts` 가 `import` 하므로 **dev 모드에선 JS 실행 후에야 주입**되고 그 사이 흰 배경·정렬 안 된 바가 한 프레임 보인다(prod 빌드는 Vite 가 head 에 `<link>` 를 넣어 대체로 없다). 그래서 `index.html` `<head>` 에 **크리티컬 CSS**(배경·색·flex 골격 최소)를 인라인으로 둔다 — 정본은 여전히 `mobile.css` 이고, **여기 규칙을 늘리지 말 것**(두 곳이 어긋나면 디버깅이 어려워진다).
+## MO 터미널 탭 스타일 (`mobile-app/styles/_terminal.scss`)
+- 2026-10-01 별도 페이지(`src/mobile/mobile.css`, 토큰 밖 자체 CSS)를 셸 탭으로 합치며 **Signal 토큰**으로 다시 썼다 — 테마도 셸 설정을 따른다. 목업은 캔버스 'MO(폰)' 페이지.

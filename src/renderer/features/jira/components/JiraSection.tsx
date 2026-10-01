@@ -279,8 +279,15 @@ const IssueRow = memo(function IssueRow({
 });
 
 /** Jira 내 이슈 — 프로젝트 탭 + 타입별 그룹 카드 + 해결됨 접힘 그룹. */
-export function JiraSection() {
+export function JiraSection({
+  mineOnly = false,
+}: {
+  /** 내 이슈만 — 폰(MO) 셸용. 주간·보고 세그를 숨기고 저장된 보기와 무관하게 내 이슈로 연다
+   *  (주간·보고는 필터·템플릿·일괄 복사가 많은 데스크톱 작업이라 폰에서 뺐다 — 2026-10-01) */
+  mineOnly?: boolean;
+} = {}) {
   const [view, setView] = useState<View>(() => {
+    if (mineOnly) return 'mine';
     const saved = localStorage.getItem(VIEW_KEY);
     return isView(saved) ? saved : 'mine';
   });
@@ -551,15 +558,17 @@ export function JiraSection() {
           탑바가 없는 폰 셸에선 TopbarSlot 이 제자리에 그린다 */}
       <TopbarSlot
         left={
-          <Segment<View>
-            options={[
-              { value: 'mine', label: '내 이슈' },
-              { value: 'week', label: '주간' },
-              { value: 'report', label: '보고' },
-            ]}
-            value={view}
-            onChange={changeView}
-          />
+          mineOnly ? undefined : (
+            <Segment<View>
+              options={[
+                { value: 'mine', label: '내 이슈' },
+                { value: 'week', label: '주간' },
+                { value: 'report', label: '보고' },
+              ]}
+              value={view}
+              onChange={changeView}
+            />
+          )
         }
         right={
           // 티켓 추가·새로고침은 내 이슈 화면 전용 — 주간·보고 화면은 자체 툴바를 갖는다

@@ -1,0 +1,1101 @@
+// MO 터미널 탭 — 목업(캔버스 MO(폰): MoTerminal·MoTerminalKeyboard·MoTerminalMenu·MoWorkspaceSheet·
+// MoNewSession·MoStates)의 인라인 수치를 Signal 토큰으로 옮겼다(.claude/rules/signal-style.md 변환표).
+// 높이·간격 px 는 목업 값 그대로다(토큰이 없는 폰 전용 치수 — 셸 머리 52 와 같은 원칙).
+@use '../../renderer/styles/base' as *;
+
+// 셸의 터미널 자리 — 숨김은 `hidden` 속성(keep-alive). display 를 주면 hidden 을 덮으므로 :not 으로
+.mo-app__term:not([hidden]) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.moterm {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--bg);
+  color: var(--text);
+
+  // ── 상단 (52 · 패널 면) — 작업 영역 · 검색 · 세션 메뉴 · 연결 점 ──
+  &__top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 52px;
+    padding: 0 8px 0 12px;
+    padding-top: env(safe-area-inset-top);
+    box-sizing: content-box;
+    background: var(--surface-1);
+  }
+
+  &__scope {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 10px 0 6px;
+    border: 0;
+    border-radius: var(--r-rail);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  &__scope-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  &__scope-name {
+    font-size: var(--fs-week-label); // 목업 13.5/600 — 같은 13.5 토큰
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__scope-sub {
+    font-family: var(--font-mono); // 브랜치·폴더 — 식별자
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // 이니셜 타일 26 · 모서리 7 · 11/700 — 데스크톱 타일과 같은 파스텔(--tile-N) + 어두운 잉크
+  &__tile {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-tile);
+    background: var(--tile-c, var(--tile-10));
+    color: var(--surface-dark);
+    font-size: var(--fs-caption);
+    font-weight: 700;
+    line-height: 1;
+
+    &--dim {
+      opacity: 0.45;
+    }
+
+    // 작업 영역 없음(전체 세션) · 위치 카드 — 아이콘 타일
+    &--all {
+      background: var(--surface-3);
+      color: var(--text-2);
+    }
+  }
+
+  @for $i from 1 through 10 {
+    &__tile--c#{$i} {
+      --tile-c: var(--tile-#{$i});
+    }
+  }
+
+  // 아이콘 버튼 40 (목업 btn-ghost btn-icon 40×40)
+  &__icon-btn {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    &:active:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    &--on {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+  }
+
+  // 연결 점 7 — 연결 ok · 끊김 흐림
+  &__conn {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    margin: 0 6px 0 2px;
+    border-radius: var(--r-full);
+    background: var(--text-3);
+
+    &--on {
+      background: var(--ok);
+    }
+  }
+
+  // ── 띠 — 연결 끊김(가라앉은 면) · 알림 권한(정보 틴트) ──
+  &__band {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0 16px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: var(--fs-ui);
+
+    > svg {
+      color: var(--text-3);
+    }
+  }
+
+  &__notify {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    padding: 10px 12px 10px 16px;
+    background: var(--info-soft);
+    color: var(--text-2);
+    font-size: var(--fs-ui);
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--info);
+    }
+  }
+
+  &__notify-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // ── 버튼 (시트·띠 안 — 터치 36, 목업 btn 36) ──
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    font: inherit;
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    &--primary {
+      background: var(--accent-btn);
+      border-color: var(--accent-btn);
+      color: var(--on-accent);
+      font-weight: 600;
+    }
+
+    &--ghost {
+      background: transparent;
+      color: var(--text-2);
+    }
+
+    &--lg {
+      height: 44px;
+      padding: 0 18px;
+      margin-top: 6px;
+      font-size: var(--fs-body);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  // ── 세션 칩 (46 · 가로 스크롤 · 바닥선) ──
+  &__chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 46px;
+    padding: 0 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    &--off {
+      opacity: 0.45;
+    }
+  }
+
+  &__chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--r-tab);
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    // 보는 세션 — 한 단 위 면 + 안쪽 윤곽 (목업 bg-3 + inset line-2)
+    &--on {
+      background: var(--surface-2);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
+      color: var(--text);
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  &__chip-name {
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__chip-meta {
+    font-size: var(--fs-micro);
+    color: var(--text-3);
+  }
+
+  &__chip-add {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r-tab);
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    @include focus-ring(0px);
+  }
+
+  // 상태 점 7 — 입력 대기 주황 · 작업 중 초록 + 링 (데스크톱 탭과 같은 색)
+  &__dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: var(--r-full);
+
+    &--wait {
+      background: var(--warning);
+    }
+
+    &--busy {
+      background: var(--ok);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+    }
+  }
+
+  // ── 검색 줄 (리디자인 신규) ──
+  &__search {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    height: 44px;
+    padding: 0 4px 0 14px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-3);
+
+    > svg {
+      flex-shrink: 0;
+      margin-right: 6px;
+    }
+  }
+
+  &__search-input {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-emph); // 16 미만이면 iOS 가 확대한다 — 뷰포트가 user-scalable=no 라 괜찮다
+    outline: none;
+
+    &::placeholder {
+      color: var(--text-3);
+    }
+
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+  }
+
+  // ── 터미널 면 ──
+  &__term {
+    flex: 1;
+    min-height: 0;
+    position: relative; // '맨 아래로'·HUD·빈 상태 기준
+    background: var(--surface-dark);
+
+    &--off {
+      opacity: 0.55;
+    }
+  }
+
+  &__host {
+    position: absolute;
+    inset: 0;
+    // 세로 드래그는 컨트롤러가 처리한다(스크롤 위임·합성 휠) — 브라우저 제스처에 넘기지 않는다
+    touch-action: none;
+
+    // ⚠️ 여백은 호스트가 아니라 `.xterm` 이 가진다 — FitAddon 은 부모 높이를 가용 높이로 쓰는데
+    // border-box 라 부모 padding 이 포함된 값을 돌려받아 행 하나를 더 잡고 **마지막 행이 잘린다**.
+    // `.xterm` 자신의 padding 은 FitAddon 이 정확히 뺀다(데스크톱도 같은 이유 — features/terminal.md)
+    .xterm {
+      height: 100%;
+      padding: 10px 6px 6px 12px;
+    }
+
+    // 배경은 패널(__term)이 칠한다 — xterm.css 의 viewport 검정 배경을 걷어낸다(데스크톱과 같은 선택자 특정도)
+    .xterm .xterm-viewport {
+      background-color: transparent;
+    }
+
+    // 한글 조합 중인 글자 — 조합 자체는 없앨 수 없으니(실시간 전송하면 `ㅎ하한` 이 남는다) 조합 중임이
+    // 보이게 한다. ⚠️ 크기 !important — xterm 이 매 갱신마다 fontSize·height 를 인라인으로 덮는다.
+    // 크기는 터미널을 따르지 않고 고정 — 작은 글자에서도 무엇을 치고 있는지 읽혀야 한다
+    .xterm .composition-view {
+      background: var(--accent-on-dark);
+      color: var(--surface-dark);
+      border-radius: var(--r-xs);
+      padding: 0 1px;
+      font-family: var(--font-display);
+      text-decoration: underline;
+      font-size: var(--fs-title) !important;
+      height: auto !important;
+      line-height: 1.3 !important;
+    }
+  }
+
+  // 위로 올려 본 동안만 — 맨 아래로 (필 · 액센트)
+  &__to-bottom {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--r-full);
+    background: var(--accent-btn);
+    color: var(--on-accent);
+    font: inherit;
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    box-shadow: var(--shadow-2);
+    cursor: pointer;
+  }
+
+  // 핀치 중 현재 글자 크기
+  &__hud {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    translate: -50% -50%;
+    padding: 8px 14px;
+    border-radius: var(--r-lg);
+    background: var(--surface-3);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+
+  // 세션 없음 — 가운데 정렬 빈 상태 (목업 MoStates ②)
+  &__empty {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 40px;
+    text-align: center;
+    background: var(--bg);
+  }
+
+  &__empty-icon {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-xl);
+    background: var(--surface-2);
+    color: var(--text-3);
+  }
+
+  &__empty-title {
+    font-size: var(--fs-title);
+    font-weight: 600;
+  }
+
+  &__empty-hint {
+    font-size: var(--fs-ui);
+    color: var(--text-3);
+  }
+
+  // ── 키 바 (48 · 1단 고정 / 키보드 열림 2단 / 선택 모드 복사 바) ──
+  &__keybar {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    flex-shrink: 0;
+    min-height: 48px;
+    padding: 6px;
+    box-sizing: border-box;
+    background: var(--surface-1);
+    border-top: 1px solid var(--border);
+
+    &--select {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px 0 14px;
+    }
+  }
+
+  &__keyrow {
+    display: flex;
+    gap: 4px;
+  }
+
+  &__key {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-tile);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-weight: 500;
+    cursor: pointer;
+    touch-action: manipulation; // 연타가 확대로 읽히지 않게
+    user-select: none;
+
+    &:active {
+      background: var(--surface-3);
+    }
+
+    // ctrl·alt 켜짐 — 다음 입력 한 번에 걸린다
+    &--on,
+    &--on:active {
+      background: var(--accent-btn);
+      color: var(--on-accent);
+    }
+  }
+
+  &__keybar--two &__key {
+    height: 38px;
+  }
+
+  &__kbd-btn {
+    flex-shrink: 0;
+    width: 40px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-tile);
+    background: var(--accent-soft);
+    color: var(--accent);
+    cursor: pointer;
+
+    &--on {
+      height: 38px;
+      background: var(--accent-btn);
+      color: var(--on-accent);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  &__select-info {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // ── 바텀시트 (스크림 + 패널 면 · 위 모서리 14 · 손잡이 36×4) ──
+  &__sheet-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 80; // 토스트·확인창(공용 z) 아래, 셸 위
+  }
+
+  &__scrim {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    border: 0;
+    background: var(--scrim);
+    @include fade-in;
+  }
+
+  &__sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 70%;
+    padding-bottom: max(26px, env(safe-area-inset-bottom));
+    background: var(--surface-1);
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    box-shadow: var(--shadow-2);
+    @include rise-in;
+
+    &--tall {
+      height: 70%;
+    }
+  }
+
+  &__grip {
+    width: 36px;
+    height: 4px;
+    flex-shrink: 0;
+    margin: 8px auto 4px;
+    border-radius: var(--r-xs);
+    background: var(--border-strong);
+  }
+
+  &__sheet-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 4px 8px 8px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__sheet-title {
+    flex: 1;
+    margin: 0;
+    font-size: var(--fs-title);
+    font-weight: 600;
+  }
+
+  &__sheet-empty {
+    margin: 0;
+    padding: 12px 10px;
+    font-size: var(--fs-ui);
+    color: var(--text-3);
+  }
+
+  &__sheet-hint {
+    margin: 0;
+    padding: 6px 8px 0;
+    font-size: var(--fs-ui-sm);
+    color: var(--text-3);
+  }
+
+  // ── 세션 메뉴 ──
+  &__menu-head {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  &__menu-head-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  &__menu-title {
+    font-size: var(--fs-emph);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__menu-sub {
+    font-size: var(--fs-ui-sm);
+    color: var(--text-3);
+  }
+
+  &__menu {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    overflow-y: auto;
+  }
+
+  &__menu-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--r-rail);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-emph);
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--text-2);
+    }
+
+    > svg:last-child:not(:first-child) {
+      color: var(--text-3);
+    }
+
+    &:active:not(:disabled) {
+      background: var(--surface-2);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    &--static {
+      cursor: default;
+
+      &:active {
+        background: transparent;
+      }
+    }
+
+    &--danger,
+    &--danger > svg {
+      color: var(--danger);
+    }
+  }
+
+  &__menu-label {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  &__menu-divider {
+    height: 1px;
+    flex-shrink: 0;
+    margin: 6px 8px;
+    background: var(--border);
+  }
+
+  &__font {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__font-btn {
+    width: 40px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+  }
+
+  &__font-val {
+    min-width: 40px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui);
+    color: var(--text-2);
+  }
+
+  // 스위치 30×18 (목업 .switch)
+  &__switch {
+    position: relative;
+    width: 30px;
+    height: 18px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-full);
+    background: var(--surface-3);
+    cursor: pointer;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: var(--r-full);
+      background: var(--text-2);
+      transition: left var(--dur-1) var(--ease);
+    }
+
+    &--on {
+      background: var(--accent-btn);
+
+      &::after {
+        left: 14px;
+        background: var(--on-strong);
+      }
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  // ── 작업 영역 시트 ──
+  &__ws-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px 0;
+  }
+
+  &__ws-all,
+  &__ws-head,
+  &__wt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--r-rail);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+
+    &:active {
+      background: var(--surface-2);
+    }
+  }
+
+  &__ws-all {
+    gap: 12px;
+
+    > svg {
+      color: var(--text-2);
+    }
+
+    &--on {
+      background: var(--accent-soft);
+    }
+  }
+
+  &__ws-all-label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fs-emph);
+    line-height: 1.3;
+  }
+
+  &__ws-name {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-emph);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__chev {
+    display: inline-flex;
+    color: var(--text-3);
+    transition: transform var(--dur-2) var(--ease);
+
+    &--open {
+      transform: rotate(90deg);
+    }
+  }
+
+  &__count-text {
+    flex-shrink: 0;
+    font-size: var(--fs-small);
+    color: var(--text-3);
+  }
+
+  &__num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__wt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 0 4px 26px;
+  }
+
+  &__wt {
+    padding: 4px 10px;
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+
+    &--on {
+      background: var(--accent-soft);
+
+      > svg {
+        color: var(--accent);
+      }
+    }
+  }
+
+  &__wt-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  &__wt-name {
+    font-size: var(--fs-week-label);
+    font-weight: 500;
+  }
+
+  &__wt-branch {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // ── 새 세션 시트 ──
+  &__new {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 10px 0;
+    overflow-y: auto;
+  }
+
+  &__label {
+    padding: 0 8px;
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--text-2);
+
+    &--gap {
+      padding-top: 6px;
+    }
+  }
+
+  &__where {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    margin: 0 8px;
+    padding: 6px 8px 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--bg-sunken);
+  }
+
+  &__where-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  &__where-name {
+    font-size: var(--fs-week-label);
+    font-weight: 600;
+  }
+
+  &__where-path {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl; // 긴 경로는 앞쪽을 줄인다(끝 폴더가 보이게)
+    text-align: left;
+  }
+
+  &__pick-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__pick {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: var(--r-lg);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+
+    > svg:last-child {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+
+    &:active {
+      background: var(--surface-2);
+    }
+  }
+
+  &__pick-box {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-rail);
+    background: var(--surface-2);
+    color: var(--text-2);
+
+    &--accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+  }
+
+  &__pick-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  &__pick-name {
+    font-size: var(--fs-emph);
+    font-weight: 500;
+  }
+
+  &__pick-sub {
+    font-size: var(--fs-small);
+    color: var(--text-3);
+  }
+
+  &__pick-mono {
+    font-family: var(--font-mono);
+    font-size: var(--fs-ui-sm);
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

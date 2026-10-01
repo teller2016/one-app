@@ -35,13 +35,13 @@ paths:
 - 남는 `com.apple.provenance` 는 지워지지 않지만 codesign 이 문제 삼지 않는다.
 
 ## ⚠️ Vite 엔트리별 cacheDir 분리
-렌더러 엔트리가 3개(`main_window`·`mobile_window`·`mobile_app_window`)인데 Vite 의존성 캐시 기본값(`node_modules/.vite`)을 공유하면 한 서버의 재최적화가 다른 서버 페이지의 URL 을 무효화해 **dev 모드에서 빈 화면(`504 Outdated Optimize Dep`)** 이 된다. 그래서 각 설정에 **`cacheDir` 을 분리**해 뒀다(`.vite-mobile`·`.vite-mobile-app`). **엔트리를 더 추가할 때도 반드시 분리할 것.** 그래도 빈 화면이 나면 `rm -rf node_modules/.vite*` 후 재시작.
+렌더러 엔트리가 2개(`main_window`·`mobile_app_window` — 2026-10-01 `mobile_window` 는 셸 탭으로 합쳐 없앴다)인데 Vite 의존성 캐시 기본값(`node_modules/.vite`)을 공유하면 한 서버의 재최적화가 다른 서버 페이지의 URL 을 무효화해 **dev 모드에서 빈 화면(`504 Outdated Optimize Dep`)** 이 된다. 그래서 각 설정에 **`cacheDir` 을 분리**해 뒀다(`.vite-mobile-app` — 옛 `.vite-mobile` 폴더가 남아 있으면 지워도 된다). **엔트리를 더 추가할 때도 반드시 분리할 것.** 그래도 빈 화면이 나면 `rm -rf node_modules/.vite*` 후 재시작.
 
 ## 진입점 파일명 고정
 `src/main/main.ts`, `src/preload/preload.ts`, `src/renderer/renderer.tsx` 의 **파일 이름**이 빌드 산출물 이름(`main.js`/`preload.js`)이 된다. 바꾸면 실행이 깨진다.
 
 ## MO 페이지 서빙
-모바일 페이지는 별도 Vite 엔트리(`forge.config.ts` renderer 배열의 `mobile_window`, base `/terminal/`) — prod 는 main 이 asar 안 산출물을 `fs` 로 읽어 서빙(경로 정규화로 루트 밖 차단), dev 는 Vite dev 서버로 프록시한다.
+폰 셸은 Vite 엔트리 `mobile_app_window`(base `/`) 하나 — prod 는 main 이 asar 안 산출물을 `fs` 로 읽어 서빙(경로 정규화로 루트 밖 차단), dev 는 Vite dev 서버로 프록시한다. 옛 터미널 주소 `/terminal*` 도 셸을 준다(`server.ts` `shellPath`).
 
 ## 개발 인스턴스와 빌드 앱을 **동시에** 띄운다 (2026-08-11)
 실사용은 `/Applications/One App.app`, 확인은 `npm start`(HMR) — 두 개를 나란히 켜 두는 것이 기본 사용법이다.

@@ -7,38 +7,70 @@
 // 전달되지 않아 `Undefined mixin` 이 난다(2026-08 실측).
 @use '../../renderer/styles/index';
 @use '../../renderer/styles/base' as *;
+// 터미널 탭(셸 안으로 들어온 MO 터미널 — 머리·세션 칩·키 바·시트) 전용 스타일
+@use './terminal';
 
-// ── 셸 ──
+// ── 셸 ── (목업: 캔버스 MO(폰) — 화면별 머리 52 · 하단 탭바 5개)
 
+// ⚠️ 높이는 터미널 탭이 키보드 열림을 감지해 html 에 거는 `--mo-vh`(보이는 뷰포트) — 없으면 100dvh.
+//    키보드가 열리면(`html.mo-kbd`) 탭바를 숨겨 터미널·키 바가 키보드 바로 위에 붙는다.
 .mo-app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: var(--mo-vh, 100dvh);
   background: var(--bg);
   color: var(--text);
 
-  &__bar {
+  // 화면 머리 — 제목 16/600 · 하위 화면은 [뒤로] · 오른쪽 끝 연결 점
+  &__head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    padding-top: calc(8px + env(safe-area-inset-top));
+    gap: 4px;
+    flex-shrink: 0;
+    height: 52px;
+    padding: 0 16px;
+    padding-top: env(safe-area-inset-top);
+    box-sizing: content-box;
     background: var(--surface-1);
     border-bottom: 1px solid var(--border);
+
+    &--sub {
+      padding-left: 4px;
+    }
+  }
+
+  &__back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
     flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--text-2);
+    cursor: pointer;
+    @include focus-ring(0px);
   }
 
   &__title {
-    @include type-title;
-    font-weight: 600;
     flex: 1;
     min-width: 0;
+    margin: 0;
+    font-size: var(--fs-heading);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  // 연결 상태 — 끊기면 회색, 붙으면 초록
+  // 연결 상태 — 끊기면 회색, 붙으면 초록 (목업 .dot 7px)
   &__conn {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: var(--r-full);
     background: var(--idle);
     flex-shrink: 0;
@@ -48,62 +80,308 @@
     }
   }
 
+  // 터미널 탭 — keep-alive 라 hidden 으로만 숨긴다(언마운트 금지). 머리·키 바는 터미널이 그린다
+  &__term {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
   &__body {
     flex: 1;
     min-height: 0;
     overflow: auto;
   }
 
+  // 하단 탭바 — 목업 MoTabBar: 5칸 · 칸 50 · 아이콘 20 · 라벨 10.5/500 · 활성 액센트
   &__tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     flex-shrink: 0;
+    padding: 6px 6px max(6px, env(safe-area-inset-bottom));
     background: var(--surface-1);
     border-top: 1px solid var(--border);
-    padding-bottom: env(safe-area-inset-bottom);
   }
 
   &__tab {
-    flex: 1;
-    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 7px 2px;
+    justify-content: center;
+    gap: 3px;
+    height: 50px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-lg);
     background: none;
-    border: none;
     color: var(--text-3);
-    text-decoration: none;
-    @include type-caption;
+    font: inherit;
+    cursor: pointer;
+    @include focus-ring(0px);
 
     &--active {
       color: var(--accent);
     }
   }
+
+  &__tab-icon {
+    position: relative;
+    display: inline-flex;
+  }
+
+  &__tab-label {
+    font-size: var(--fs-micro);
+    font-weight: 500;
+  }
+
+  // 탭 배지 — 터미널 = 입력 대기(주황 채움 + 어두운 글자), 더보기 = 안 읽은 메일(액센트 채움)
+  &__badge {
+    position: absolute;
+    top: -5px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 0 0 2px var(--surface-1);
+    font-family: var(--font-mono);
+    font-size: var(--fs-nano);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+
+    &--wait {
+      background: var(--warning);
+      color: var(--on-warn);
+    }
+  }
 }
 
-.mo-view {
-  padding: 12px 12px 20px;
+// 키보드가 열려 있는 동안 — 탭바를 접어 터미널에 자리를 준다
+html.mo-kbd .mo-app__tabs {
+  display: none;
 }
 
-// 위젯을 카드로 승격 (사이드바에서는 배경이 재질이었다)
-.mo-card {
-  @include card-surface;
-  padding: 10px 12px;
+// ── 더보기 — 근태 카드 + 배포·메일 진입 (목업 MoMore: 본문 16 12 · 사이 16 · 카드 모서리 12) ──
+.mo-more {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 12px;
+
+  // 근태 — 상태바 위젯 본체(.sbw)를 카드로 승격
+  &__att {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    background: var(--surface-1);
+
+    .sbw__row {
+      min-height: 40px;
+      gap: 10px;
+    }
+
+    // 목업: 36 아이콘 상자(ok-soft) + 요약 15/600
+    .sbw__icon {
+      width: 36px;
+      height: 36px;
+      justify-content: center;
+      align-items: center;
+      border-radius: var(--r-rail);
+      background: var(--ok-soft);
+      color: var(--ok);
+
+      svg {
+        width: 18px;
+        height: 18px;
+      }
+    }
+
+    .sbw__text {
+      font-size: var(--fs-title);
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .sbw__buttons {
+      padding-top: 14px;
+    }
+
+    // 출근하기/퇴근하기 — 목업은 카드 폭 전체의 큰 버튼(44)
+    .sbw__buttons .btn {
+      height: 44px;
+      font-size: var(--fs-body);
+    }
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    background: var(--surface-1);
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+    padding: 0 14px 0 16px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    @include focus-ring(-2px);
+
+    & + & {
+      border-top: 1px solid var(--border);
+    }
+
+    > svg {
+      color: var(--text-2);
+      flex-shrink: 0;
+    }
+
+    > svg:last-child {
+      color: var(--text-3);
+    }
+  }
+
+  &__label {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-emph);
+    font-weight: 500;
+  }
+
+  // 배포 — 빌드 중 N (액센트 soft 뱃지 + 점)
+  &__busy {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--r-sm);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: var(--fs-ui-sm);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__busy-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: currentColor;
+  }
+
+  // 메일 — 안 읽은 수 카운트 캡슐(액센트 채움)
+  &__count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-// ── 변경 탭 — 프로젝트 선택 + 데스크톱 ChangesView 재사용 ──
+// ── 변경 탭 — 대상(터미널 워크트리 / 프로젝트) + 데스크톱 ChangesView 재사용 (목업 MoChanges) ──
 .mo-changes {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   height: 100%;
   min-height: 0;
-  padding: 12px 14px;
+
+  &__target {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 4px 12px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+  }
+
+  // 워크스페이스 이니셜 타일 — 터미널과 같은 파스텔 팔레트(--tile-N) · 어두운 잉크
+  &__tile {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-tile);
+    background: var(--tile-c, var(--tile-10));
+    color: var(--surface-dark);
+    font-size: var(--fs-caption);
+    font-weight: 700;
+  }
+
+  @for $i from 1 through 10 {
+    &__tile--c#{$i} {
+      --tile-c: var(--tile-#{$i});
+    }
+  }
+
+  &__names {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+
+  &__name {
+    font-size: var(--fs-emph);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__branch {
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__project {
+    flex-shrink: 0;
+    margin: 8px 12px 0;
+  }
 
   .changes {
     flex: 1;
     min-height: 0;
+    padding: 0 12px;
   }
 }
 
@@ -112,8 +390,11 @@
 html.mo {
   // 터치 타겟 — 데스크톱의 30px 컨트롤은 폰에서 너무 작다
   --control-h-sm: 36px;
-  // 하단 탭바 높이 — 메일처럼 portal 로 뜨는 화면이 탭바를 덮지 않게 기준값을 공유한다
-  --mo-tabbar: 54px;
+  // 하단 탭바 높이(안전 영역 포함) — 메일처럼 portal 로 뜨는 화면이 탭바를 덮지 않게 기준값을 공유한다.
+  // = 윗선 1 + 위 여백 6 + 칸 50 + 아래 여백 max(6, 안전 영역) — `.mo-app__tabs` 와 같은 식
+  --mo-tabbar: calc(57px + max(6px, env(safe-area-inset-bottom)));
+  // 화면 머리 높이(안전 영역·바닥선 포함) — `.mo-app__head` 와 같은 식. 메일처럼 portal 로 뜨는 화면이 머리를 덮지 않게
+  --mo-head: calc(53px + env(safe-area-inset-top));
 
   // 섹션 컨테이너: 좌우 44px 패딩·800px 상한을 걷어낸다
   .section {
@@ -129,7 +410,7 @@ html.mo {
   // 토스트(우측 아래 스택)가 하단 탭바를 덮지 않게 탭바 위로 올린다
   .toasts {
     right: 12px;
-    bottom: calc(var(--mo-tabbar) + env(safe-area-inset-bottom) + 12px);
+    bottom: calc(var(--mo-tabbar) + 12px);
   }
 
   // 섹션 헤더 버튼("프로젝트 추가" 등)이 좁은 폭에서 두 줄로 쪼개진다
@@ -140,6 +421,42 @@ html.mo {
   // 사이드바 위젯의 야근결재 진입 — 상신(쓰기) 흐름이라 1단계에서는 폰에 노출하지 않는다
   .sbw__overtime {
     display: none;
+  }
+
+  // 폰에서 **동작하지 않는** 진입점 — 눌러도 오류로 끝나 숨긴다(2026-10-01 MO 재구성)
+  // · 배포 [프로젝트 추가](탑바 슬롯 — 이 섹션의 유일한 슬롯 내용) · 카드 [편집]·[삭제]:
+  //   `deploy:projects:save/delete` 는 젠킨스 시크릿을 담는 쓰기 채널이라 main 이 MO 에 열지 않는다
+  // · 메일 "비즈박스 메일함 열기": `mail:open-web` 은 맥에서 브라우저를 여는 채널이라 MO 에 없다
+  .deploy > .topbar-inline,
+  .deploy__edit,
+  .deploy__delete,
+  .mail-modal__web {
+    display: none;
+  }
+
+  // 탑바 없는 셸의 화면 컨트롤 줄(TopbarSlot 제자리) — 목업의 머리 아래 두 번째 줄
+  // 목업: 검색은 남는 폭을 채우고(높이 40) 액션은 오른쪽 끝 40px 아이콘
+  .topbar-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    .topbar__slot-gap {
+      flex: 1;
+    }
+
+    .topbar__slot-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    // 데스크톱 탑바용 버튼(24·30)도 폰 터치 높이로 — 옆 새로고침·검색칸(36)과 맞춘다
+    .btn {
+      height: var(--control-h-sm);
+    }
   }
 
   // 모달은 풀스크린 시트로 (오버레이 여백·640px 상한 제거)
@@ -185,7 +502,24 @@ html.mo {
     left: 0;
     width: auto;
     border-radius: 0;
-    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    // 목업(MoJiraDetail): 셸 머리와 같은 52 띠 + 왼쪽 [×] — 본문은 그 아래에서 시작
+    padding: calc(var(--mo-head) + 12px) 14px calc(12px + env(safe-area-inset-bottom));
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto;
+      height: var(--mo-head);
+      box-sizing: border-box;
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border);
+    }
+  }
+
+  .jira-view__close {
+    top: calc(env(safe-area-inset-top) + (var(--mo-head) - env(safe-area-inset-top) - var(--control-h-sm)) / 2);
+    right: auto;
+    left: 8px;
   }
 
   // 행이 6열 단일 flex(키·우선순위·제목·상위항목·상태…)라 폰에서 제목이 0 으로 눌린다
@@ -208,7 +542,8 @@ html.mo {
   }
 
   // ⚠️ `.jira__title` 은 보고 표(`.jira-report__cell--title`)에서도 쓰인다 — 이 규칙이 거기까지
-  //    새서 제목이 여러 줄로 감싸졌다(2026-09-10 실측). 아래 '보고' 절에서 표 안만 되돌린다.
+  //    새서 제목이 여러 줄로 감싸졌다(2026-09-10 실측). 폰은 2026-10-01 부터 내 이슈만 열려
+  //    (JiraSection mineOnly) 보고 표가 없지만, 보고를 되살리면 표 안에서 되돌리는 규칙도 함께.
   .jira__title {
     flex: 1 1 100%;
     order: -1;
@@ -226,96 +561,11 @@ html.mo {
     max-width: 80vw;
   }
 
-  // 주간 활동 행도 단일 flex(마크·키·제목·시각·상태·토글)라 폰에서 제목이 눌린다
-  // → 내 이슈 행과 같은 규칙으로 제목을 첫 줄 전폭에 올린다
-  .jira-week__row {
-    flex-wrap: wrap;
-    row-gap: 4px;
-    padding: 10px 12px;
-  }
-
-  .jira-week__row .jira__title {
-    flex: 1 1 100%;
-    order: -1;
-    white-space: normal;
-  }
-
-  // 주 표시 폭 고정(176px)은 데스크톱 기준 — 좁은 화면에서는 남는 만큼만 쓴다
-  .jira-week__label {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .jira-week__events {
-    padding-left: 24px; // 마크 폭만큼의 들여쓰기는 폰에서 과하다
-  }
-
-  .jira-week__event {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-
-  .jira-week__event-from,
-  .jira-week__event-to {
-    max-width: 60vw;
-  }
-
   // 작업 시작(행 끝 ▶ · 상세 패널 버튼) — 맥에 femc 세션을 만드는 데스크톱 흐름이라 폰에서는 숨긴다.
   // 폰 셸에는 `workspaces`·`terminal` 네임스페이스가 없어, 열려도 오류 문구만 남는 모달이다.
   .jira__work,
   .jira-view__work {
     display: none;
-  }
-
-  // ── Jira › 보고 ── (2026-09-03 추가된 패널 — 폰에서는 2026-09-10 부터 열린다)
-
-  // 결과 표는 7열 grid(고정폭 합 ≈ 780px)라 폰 폭에 들어갈 수 없다 — 열을 쌓지 않고
-  // 가로 스크롤로 둔다(변경사항 diff 와 같은 규칙). 행 폭을 내용에 맞춰야 구분선·헤더
-  // 배경이 트랙 끝까지 이어진다.
-  .jira-report__table {
-    overflow-x: auto;
-  }
-
-  // ⚠️ 제목 트랙을 고정폭으로 못박는다 — 데스크톱의 `minmax(200px, 1fr)` 을 그대로 두고
-  //    `width: max-content` 만 주면 1fr 이 **행마다 제 제목 폭으로 따로** 늘어나 열이 어긋난다
-  //    (2026-09-10 실측: 494행에 폭 226종, 200px~817px — 헤더는 일찍 끝나고 데이터 행만 이어졌다).
-  //    제목 셀은 `overflow:hidden; text-overflow:ellipsis` 라 잘림 처리가 이미 돼 있다.
-  .jira-report__trow {
-    grid-template-columns: 28px 100px 240px 84px 112px 96px 92px;
-    width: max-content;
-    min-width: 100%;
-  }
-
-  // 내 이슈 행용 `.jira__title` 오버라이드(위 — 전폭·줄바꿈·order)가 보고 표의 제목 셀에도 걸려
-  // 240px 트랙 안에서 제목이 최대 5줄로 감싸졌다(2026-09-10 실측: 493행 중 58% 가 두 줄 이상,
-  // 행 높이 39~113px). 표에서는 데스크톱 값으로 되돌려 말줄임(…)이 다시 동작하게 한다.
-  .jira-report__cell--title .jira__title {
-    flex: 0 1 auto;
-    order: 0;
-    white-space: nowrap;
-  }
-
-  // 결과 검색은 데스크톱 고정폭(180px) 대신 **한 줄 전폭**을 쓴다 — 툴바가 wrap 이라 `flex: 1`
-  // 만 주면 필터 3개 뒤에 남은 89px 만 받는다(실측)
-  .jira-report__search {
-    flex: 1 1 100%;
-    width: auto;
-    min-width: 0;
-  }
-
-  // 복사 줄 [프리셋][템플릿](i)[N건 복사] 은 한 줄에 안 들어간다 — 줄바꿈을 허용하고
-  // 프리셋(200px 고정)과 템플릿이 각자 한 줄씩 쓴다(실측 — 버튼 둘은 그 아래로 내려간다)
-  .jira-report__copybar {
-    flex-wrap: wrap;
-  }
-
-  .jira-report__preset {
-    flex: 1 1 140px;
-    width: auto;
-  }
-
-  .jira-report__template {
-    flex: 1 1 100%;
   }
 
   // ── PR ──
@@ -344,16 +594,29 @@ html.mo {
     padding: 14px 12px;
   }
 
+  // 고르기 전 빈 상세('왼쪽 목록에서 고르면…')는 데스크톱 2열 문구라 폰 1열에선 숨긴다
+  .prs__detail--empty {
+    display: none;
+  }
+
   // 탑바가 없는 셸 — TopbarSlot 이 제자리(.topbar-inline)에 그린다. 검색은 남는 폭을 채운다
   .topbar-inline .prs__search {
     flex: 1;
     width: auto;
     min-width: 0;
+    height: var(--control-h-lg);
   }
 
-  .topbar-inline .topbar__slot-right {
-    flex: 1;
-    min-width: 0;
+  // PR 은 검색칸이 오른쪽 묶음 안에 있다 — 빈칸(gap) 대신 그 묶음이 남는 폭을 다 받는다
+  .prs .topbar-inline {
+    .topbar__slot-gap {
+      display: none;
+    }
+
+    .topbar__slot-right {
+      flex: 1;
+      min-width: 0;
+    }
   }
 
   // 필터 줄 — 저장소 탭이 여러 개면 폰 폭을 넘는다. 줄바꿈 대신 가로 스크롤(바는 감춘다)
@@ -364,6 +627,12 @@ html.mo {
       max-width: 100%;
       overflow-x: auto;
       scrollbar-width: none;
+
+      // 저장소 이름이 두 줄로 감기지 않게 — 넘치면 가로 스크롤
+      .seg {
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
 
       &::-webkit-scrollbar {
         display: none;
@@ -390,10 +659,23 @@ html.mo {
 
   // 메일은 탭 화면이라 오버레이가 하단 탭바를 덮으면 탭 전환이 막힌다 →
   // 오버레이를 탭바 위에서 끝내고 스크림도 없앤다(뒤에 가릴 화면이 없다)
+  // 위도 셸 머리(뒤로·제목) 아래에서 시작한다 — 덮으면 [뒤로]가 사라져 폰 뒤로가기로만 나갈 수 있었다(2026-10-01 /test)
   .modal-overlay:has(.mail-modal) {
-    bottom: calc(var(--mo-tabbar) + env(safe-area-inset-bottom));
+    top: var(--mo-head);
+    bottom: var(--mo-tabbar);
     padding: 0;
     background: none;
+  }
+
+  // 모달 자체 머리('메일' + ×)는 감춘다 — 셸 머리([뒤로] · '메일')가 대신한다. 둘 다 보이면 머리가 두 번이다
+  .modal--wide:has(.mail-modal) > .modal__head {
+    display: none;
+  }
+
+  // 탭 화면이라 떠 있는 면의 윤곽(양옆 1px)도 걷는다
+  .modal--wide:has(.mail-modal) {
+    border: 0;
+    box-shadow: none;
   }
 
   // 탭 화면으로 쓰므로 모달 껍데기를 남은 영역에 꽉 채운다

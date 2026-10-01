@@ -76,7 +76,12 @@ export type IconName =
   | "arrow-up-to-line"
   | "code-xml"
   | "eye"
-  | "eye-off";
+  | "eye-off"
+  | "more-horizontal"
+  | "keyboard"
+  | "keyboard-off"
+  | "clipboard"
+  | "type";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -476,6 +481,12 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="m2 2 20 20" />
     </>
   ),
+  // MO 터미널 (2026-10-01 폰 리디자인 목업) — 세션 메뉴 · 키보드 열기/닫기 · 붙여넣기 · 글자 크기
+  "more-horizontal": <path d="M5 12h.01 M12 12h.01 M19 12h.01" />,
+  keyboard: <path d="M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10" />,
+  "keyboard-off": <path d="M3 4h18v10H3z M7 8h.01 M11 8h.01 M15 8h.01 M7 11h10 M9 18l3 3 3-3" />,
+  clipboard: <path d="M9 3h6v3H9z M7 4.5H5V21h14V4.5h-2" />,
+  type: <path d="M4 18L9 6l5 12 M6 14h6 M15 18l3-7 3 7 M16 16h4" />,
 };
 
 export function Icon({
