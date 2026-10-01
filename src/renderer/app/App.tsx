@@ -93,18 +93,18 @@ const SECTIONS: AppSection[] = [
     render: () => <PrSection />,
   },
   {
-    id: "ports",
-    group: "개발",
-    label: "포트",
-    icon: <Icon name="network" size={16} />,
-    render: () => <PortsSection />,
-  },
-  {
     id: "deploy",
     group: "개발",
     label: "배포",
     icon: <Icon name="rocket" size={16} />,
     render: () => <DeploySection />,
+  },
+  {
+    id: "ports",
+    group: "개발",
+    label: "포트",
+    icon: <Icon name="network" size={16} />,
+    render: () => <PortsSection />,
   },
   {
     id: "projects",
