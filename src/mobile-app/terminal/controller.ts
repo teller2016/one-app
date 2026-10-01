@@ -35,6 +35,7 @@ import {
   type Modifiers,
   type MoView,
 } from './logic';
+import { buildTerminalTheme, searchDecorations } from '../../renderer/features/terminal/lib/xtermTheme';
 
 const LAST_SESSION_KEY = 'mo:lastSession';
 // 선택한 작업 영역(워크트리) — 데스크톱 LNB 선택에 해당한다
@@ -117,68 +118,6 @@ const readJson = <T>(key: string, fallback: T): T => {
   } catch {
     return fallback; // 형식이 깨졌으면 기본값
   }
-};
-
-const cssVar = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-/**
- * 터미널 색 — 데스크톱 TerminalView 의 buildTheme 과 **같은 토큰**(다크 패널 on-dark 계열)에서 읽는다.
- * 폰은 이제 앱 셸 테마(라이트/다크)를 따르고, 터미널 면은 두 테마 모두 `--surface-dark` 다.
- * 마젠타·시안·bright 일부는 대응 토큰이 없어 데스크톱과 같은 값을 쓴다.
- */
-const buildTheme = () => ({
-  // 배경은 패널 CSS(--surface-dark)에 맡긴다 — 칸 단위로 맞추고 남는 오른쪽·아래 자리가 다른 톤의 띠로 보였다
-  // (2026-10-01 /test). 데스크톱 TerminalView 와 같은 방식 — 'transparent' 는 xterm 이 못 읽어 검정이 된다
-  background: 'rgba(0, 0, 0, 0)',
-  foreground: cssVar('--on-dark-2'),
-  cursor: cssVar('--on-dark'),
-  cursorAccent: cssVar('--surface-dark'),
-  selectionBackground: 'rgba(140, 155, 255, 0.35)', // --accent-on-dark 틴트
-  black: cssVar('--border-dark'),
-  red: cssVar('--danger-on-dark'),
-  green: cssVar('--ok-on-dark'),
-  yellow: cssVar('--warning-on-dark'),
-  magenta: '#ff7ab6',
-  cyan: '#5ac8fa',
-  blue: cssVar('--accent-on-dark'),
-  white: cssVar('--on-dark-2'),
-  brightBlack: cssVar('--on-dark-3'),
-  brightRed: '#ff8a80',
-  brightGreen: '#66d97e',
-  brightYellow: '#ffe23f',
-  brightMagenta: '#ff9ac9',
-  brightCyan: '#8fdcff',
-  brightBlue: cssVar('--accent-hover-on-dark'),
-  brightWhite: cssVar('--on-dark'),
-});
-
-/** #RRGGBB 두 색을 비율로 섞는다 — 검색 하이라이트는 알파를 못 받아 미리 합성한다(데스크톱과 같은 방식) */
-const mixHex = (fg: string, bg: string, ratio: number) => {
-  const parse = (h: string) => {
-    const v = parseInt(h.replace('#', ''), 16);
-    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-  };
-  const a = parse(fg);
-  const b = parse(bg);
-  return `#${a
-    .map((x, i) =>
-      Math.round(x * ratio + b[i] * (1 - ratio))
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('')}`;
-};
-
-const searchDecorations = () => {
-  const accent = cssVar('--accent-on-dark') || '#8c9bff';
-  const surface = cssVar('--surface-dark') || '#08090b';
-  return {
-    matchBackground: mixHex(accent, surface, 0.22),
-    activeMatchBackground: mixHex(accent, surface, 0.85),
-    matchOverviewRuler: cssVar('--on-dark-3'),
-    activeMatchColorOverviewRuler: accent,
-  };
 };
 
 const notifySupported = () =>
@@ -337,8 +276,8 @@ class MoTerminalController {
       scrollback: 3000,
       // ⚠️ Unicode11Addon 이 쓰는 term.unicode 는 proposed API — 없으면 addon load 가 throw 한다
       allowProposedApi: true,
-      allowTransparency: true, // 배경을 패널 CSS 에 맡긴다 (buildTheme 주석 참고)
-      theme: buildTheme(),
+      allowTransparency: true, // 배경을 패널 CSS(--surface-dark)에 맡긴다 — 데스크톱과 같은 팔레트(xtermTheme.ts)
+      theme: buildTerminalTheme(),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

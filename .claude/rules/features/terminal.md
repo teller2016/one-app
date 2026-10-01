@@ -19,6 +19,7 @@ paths:
 
 ## tmux 백엔드 불변식
 - ⚠️ conf 의 `terminal-features ",xterm-256color:RGB:sync:hyperlinks"` **지우지 말 것**(`sync` 없으면 중간 프레임 노출).
+- ⚠️ conf 의 배열 옵션은 **`set -su` 로 되돌린 뒤 `set -as`** — 살아있는 서버에 `source-file` 로 재적용하므로 `-as` 만 두면 앱 시작마다 같은 항목이 쌓인다(2026-10-01 실측 15중복).
 - 같은 크기 attach 는 SIGWINCH 토글 대신 **`refresh-client`**, 마지막 PTY 크기를 sidecar 에 기억해 그 크기로 attach.
 - ⚠️ **대체 화면(TUI) 세션은 attach replay 생략**(잔상), 일반 셸은 유지. 그래서 `attachSession` 은 **async**.
 - ⚠️ `=이름` 정확 매칭은 **target-session 계열(has/kill/attach)만** — pane 타깃(`send-keys`)엔 안 먹어 pane id 를 캐시한다.
@@ -31,7 +32,7 @@ paths:
 - 형태 고정: `env -u TMUX -u TMUX_PANE <sh> -ic 'trap '\''true'\'' INT; <명령>; exec <sh> -il'`
   - ⚠️ 명령과 `exec` 는 **같은 셸 안**(두 번 띄우면 tty pgrp 을 잃어 pane 이 죽는다). ⚠️ `env -u TMUX` 는 **셸 바깥**. ⚠️ `trap '' INT` 금지(자식 상속).
   - `-ic` 필수(PATH). `agentCommand()`(`agents.ts`)는 **원시 명령** 반환, 래핑은 `pty.ts`.
-- ⚠️ **에이전트는 `TMUX` 를 지우고 실행**(남기면 256색 폴백), 셸 세션은 안 감싼다. 색이 이상하면 SGR 유형(`38;2`/`38;5`)부터. 상세: 노트 '⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)'.
+- ⚠️ **`TMUX` 를 지우고 실행**(남기면 256색 폴백) — 에이전트 세션은 위 형태, **셸 세션도 `env -u TMUX -u TMUX_PANE <sh> -il`**(2026-10-01 — 셸 탭에서 손으로 친 claude 가 분홍 로고·칙칙한 화면이 됐다). 색이 이상하면 SGR 유형(`38;2`/`38;5`)부터. 상세: 노트 '⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)'.
 - tmux 미설치 폴백만 PTY write — 첫 출력 후 350ms 잠잠하면 전송, 상한 3초.
 - `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 싣는다(재조회 없음).
 - ⚠️ **PTY 쓰기는 `ptyWrite()` 경유**(`s.pty.write` 직접 금지) — 동기 throw 가 앱 전체를 내린다.
@@ -141,7 +142,7 @@ paths:
 - 검색 하이라이트는 `#RRGGBB` → `mixHex` 선합성. ⚠️ 검색바는 **오버레이**(PTY 행 불변).
 - ⚠️ **xterm 6**: 네이티브 스크롤 없음(`scrollLines`·`viewportY`·`onScroll`) · 전역 스크롤바 CSS 안 먹음 · 배경은 `theme.background: 'rgba(0,0,0,0)'`(`'transparent'` 금지) + `allowTransparency`. 오버라이드는 특정도 한 단계 좁게.
 - ⚠️ **텍스처 아틀라스는 pane 공유물** — `clearTextureAtlas()` 는 **마운트 시 `monoFontLoaded` false 일 때만**. 복귀는 `term.refresh(0, rows-1)` + ⚠️ **rAF 한 번 더**(DEC 2026).
-- 색은 `buildTheme()` 이 다크 패널 토큰에서(hex 금지, 마젠타·시안 예외). **JetBrains Mono NL 13px / lineHeight 1.0** ⚠️ 자연 줄높이에 곱해지고 `<1` 거부. 폰트 로드 후 `fit()`.
+- 색은 **`lib/xtermTheme.ts`**(`buildTerminalTheme`·`searchDecorations`) 한 벌을 데스크톱·MO 가 함께 쓴다 — 다크 패널 토큰에서(hex 금지, 마젠타·시안 예외), 선택 틴트도 `--accent-on-dark` 파생. ⚠️ 복사본을 두지 말 것(리디자인 때 MO 만 고쳐져 어긋났다). **JetBrains Mono NL 13px / lineHeight 1.0** ⚠️ 자연 줄높이에 곱해지고 `<1` 거부. 폰트 로드 후 `fit()`.
 - 상세: 노트 'xterm addon 구성 (2026-08-05)'·'색·글꼴'.
 
 ## 스크롤 (tmux 위임)
@@ -205,7 +206,7 @@ paths:
 - 세션 종료 확인은 공용 `useConfirm`, 안내는 공용 토스트(옛 페이지는 네이티브 confirm·상태 칸 2.2초).
 - ⚠️ **`DA_REPLY_RE` 는 MO·데스크톱 둘 다 필수**, ESC 는 `String.fromCharCode(27)`.
 - ⚠️ 예측 입력 억제 `autocomplete=off`+`autocapitalize=none`+`inputmode="url"`. `.composition-view` 는 **MO 에만**(`--fs-title` 고정, `!important`).
-- 터미널 색은 데스크톱 `buildTheme` 과 **같은 on-dark 토큰**에서 읽는다(폰도 이제 셸 테마를 따르고, 터미널 면은 두 테마 모두 `--surface-dark`).
+- 터미널 색은 데스크톱과 **같은 모듈**(`renderer/features/terminal/lib/xtermTheme.ts`)에서 읽는다(폰도 이제 셸 테마를 따르고, 터미널 면은 두 테마 모두 `--surface-dark`).
 - 폰트 JetBrains Mono NL + `lineHeight 1.0` + **Unicode11 + allowProposedApi 한 쌍**. 키보드: `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 작은 값 + `overscroll-behavior: none`. ⚠️ 텍스트 기호는 VS16 + 컬러 이모지 폰트.
 - 상세: 노트 'MO 터미널 페이지 UI'·'자리를 비운 동안 알기'.
 

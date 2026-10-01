@@ -18,6 +18,7 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
 import { terminalBackend } from '../lib/backend';
+import { buildTerminalTheme, searchDecorations } from '../lib/xtermTheme';
 
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -98,80 +99,6 @@ export const FONT_SIZE_KEY = 'terminal:fontSize';
 export const FONT_SIZE_DEFAULT = 13;
 export const FONT_SIZE_MIN = 9;
 export const FONT_SIZE_MAX = 22;
-
-/**
- * 터미널 색 — DESIGN.md 의 **다크 패널(panel-dark)** 토큰에서 가져온다.
- * 로그·코드 패널과 같은 계열이라 라이트/다크 테마 모두에서 앱의 일부처럼 보인다.
- *
- * ⚠️ 배경은 여기서 칠하지 않고 `transparent` + `allowTransparency` 로 두어 **패널의 CSS 배경**
- * (`panel-dark` → `--surface-dark`)이 그대로 비치게 한다. xterm 은 생성 후 `options.theme` 을
- * 바꿔도 뷰포트 배경을 다시 칠하지 않아서, JS 로 동기화하면 테마 전환 시 패널(#272729)과
- * 터미널(검정)이 어긋난다(2026-08 실측). 나머지 색은 on-dark 토큰이라 테마와 무관하다.
- * 마젠타·시안은 대응 토큰이 없어 애플 시스템 색을 그대로 쓴다(그 둘만 예외).
- */
-const buildTheme = () => {
-  return {
-    background: 'rgba(0, 0, 0, 0)', // 'transparent' 는 xterm 색 파서가 못 읽고 검정으로 폴백한다
-    foreground: cssVar('--on-dark-2'),
-    cursor: cssVar('--on-dark'),
-    cursorAccent: cssVar('--surface-dark'),
-    // --accent-on-dark(#2997ff) 에서 파생한 선택 영역 틴트
-    selectionBackground: 'rgba(41, 151, 255, 0.35)',
-    black: cssVar('--border-dark'),
-    red: cssVar('--danger-on-dark'),
-    green: cssVar('--ok-on-dark'),
-    yellow: cssVar('--warning-on-dark'),
-    magenta: '#ff7ab6',
-    cyan: '#5ac8fa',
-    blue: cssVar('--accent-on-dark'),
-    white: cssVar('--on-dark-2'),
-    brightBlack: cssVar('--on-dark-3'),
-    brightRed: '#ff8a80',
-    brightGreen: '#66d97e',
-    brightYellow: '#ffe23f',
-    brightMagenta: '#ff9ac9',
-    brightCyan: '#8fdcff',
-    brightBlue: cssVar('--accent-hover-on-dark'),
-    brightWhite: cssVar('--on-dark'),
-  };
-};
-
-/** #RRGGBB 두 색을 비율로 섞는다 (ratio = 앞 색의 비중) */
-const mixHex = (fg: string, bg: string, ratio: number) => {
-  const parse = (h: string) => {
-    const v = parseInt(h.replace('#', ''), 16);
-    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-  };
-  const [fr, fg2, fb] = parse(fg);
-  const [br, bg2, bb] = parse(bg);
-  const ch = (a: number, b: number) =>
-    Math.round(a * ratio + b * (1 - ratio))
-      .toString(16)
-      .padStart(2, '0');
-  return `#${ch(fr, br)}${ch(fg2, bg2)}${ch(fb, bb)}`;
-};
-
-/**
- * 검색 하이라이트 — 액센트를 패널 배경에 얹은 색을 **미리 합성**해서 쓴다.
- * addon 규격이 `#RRGGBB` 만 받아(알파 불가) 선택 영역처럼 rgba 틴트를 줄 수 없는데,
- * 경고색(노랑) 같은 밝은 배경을 그대로 쓰면 그 위의 밝은 글자가 안 읽힌다(2026-08-05 실측).
- * 비활성 일치는 옅게(22%), 현재 일치는 진하게(85%) — 둘 다 밝은 글자와 대비가 남는다.
- *
- * ⚠️ 두 값을 크게 벌려야 한다 — xterm 은 현재 일치에 **선택 영역 틴트까지 겹쳐** 그려서,
- * 비활성 일치 색을 선택 틴트(액센트 35%)와 비슷하게 잡으면 셋이 똑같이 보이고
- * "몇 번째 일치를 보고 있는지"가 화면에서 사라진다(2026-08-05 실측).
- */
-const searchDecorations = () => {
-  const accent = cssVar('--accent-on-dark');
-  const surface = cssVar('--surface-dark');
-  return {
-    matchBackground: mixHex(accent, surface, 0.22),
-    activeMatchBackground: mixHex(accent, surface, 0.85),
-    // 오버뷰 룰러는 글자가 없는 얇은 막대라 토큰 색을 그대로 쓴다
-    matchOverviewRuler: cssVar('--on-dark-3'),
-    activeMatchColorOverviewRuler: accent,
-  };
-};
 
 /** 상단 공용 바가 포커스 pane 을 조작할 때 쓰는 핸들 — pane 이 마운트 중에만 등록된다 */
 export type TerminalPaneHandle = {
@@ -278,8 +205,8 @@ export const TerminalView = memo(function TerminalView({
       // 없으면 addon 을 load 하는 순간 throw 하고, 그 예외가 effect 를 타고 올라가
       // React 루트가 통째로 언마운트된다(터미널 섹션 진입 시 앱이 하얗게 죽음 — 2026-08-05 실측).
       allowProposedApi: true,
-      allowTransparency: true, // 배경을 패널 CSS 에 맡긴다 (buildTheme 주석 참고)
-      theme: buildTheme(),
+      allowTransparency: true, // 배경을 패널 CSS 에 맡긴다 (lib/xtermTheme.ts 주석 참고)
+      theme: buildTerminalTheme(),
       // OSC 8 하이퍼링크 — tmux conf 에서 hyperlinks 를 켜 둔 만큼(terminal.md) 받을 쪽이 필요하다.
       // 앱 창에서 열면 워크스페이스가 깨지므로 항상 기본 브라우저로 넘긴다.
       linkHandler: {

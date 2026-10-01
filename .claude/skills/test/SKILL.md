@@ -115,6 +115,11 @@ node .claude/skills/test/smoke.mjs <스크래치패드>/shot.png
 ### E. MO(폰) 화면 — 헤드리스 Chrome 으로 (2026-10-01 실측)
 - 별도 프로필로 `--headless=new --window-size=390,844 --ignore-certificate-errors` Chrome 을 띄우고, 접속 주소는
   `window.oneApp.terminal.server.status()` 의 `urls[0]` 에서 **호스트만 `127.0.0.1:18318`(dev MO 포트)** 로 바꾼다.
+- ⚠️ **내릴 때는 자기 스크래치패드 전체 경로로만** — `pkill -f "user-data-dir=<내 스크래치패드>/<프로필>"`. 병렬 세션도
+  같은 스킬로 같은 이름의 프로필(`chrome-mo` 등)을 쓰고, 스크래치패드 경로 앞부분(`/private/tmp/claude-501/-Users-…`)도
+  같아서 **프로필 이름이나 짧은 패턴으로 죽이면 다른 세션의 Chrome 까지 내린다**(2026-10-01 — 남은 프로세스를 `pkill -9 -f chrome-mo`
+  로 지웠다가 다른 세션이 16:30 에 띄운 Chrome 을 끊었다). 내 것이 다 죽었는지는 띄운 백그라운드 작업의 종료 알림으로 판정한다.
+  디버깅 포트도 9444 고정이면 세션끼리 부딪히니 비어 있는지(`lsof -iTCP:<포트> -sTCP:LISTEN`) 먼저 본다.
 - `puppeteer.connect` 에 `defaultViewport: null` — 안 주면 800x600 으로 덮어써 폰 레이아웃이 아니다.
 - WS 프로토콜 단정(resize·attach·chat-*)은 CDP `Network.webSocketFrameSent/Received` 로 수집한다.
 - ⚠️ **claude 세션 테스트에서 `/model` 을 쓰지 말 것** — Claude Code 2.1.286 은 `/model` 선택을 "saved as your default

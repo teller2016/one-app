@@ -14,6 +14,7 @@ Superset(superset.sh) 스타일 **에이전트 세션 오케스트레이터** �
 tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux -L oneapp -f userData/tmux.conf new-session -A -s oneapp-<id>`)를 spawn — 실제 셸은 tmux 서버 소유라 **앱 재시작·크래시에도 세션·에이전트가 살아있고**, 시작 시 `restoreSessions()`(`pty.ts`) 가 `list-sessions` 와 sidecar(`userData/terminal-sessions.json` — 제목·cwd·에이전트·프로젝트 메타, 평문)를 대조해 재접속 복원한다(E2E 실측: 재시작 전 심은 셸 변수가 복원 후 그대로 — 동일 프로세스). 전용 소켓(`-L oneapp`)·전용 conf(`tmux.ts` 가 시작 시 덮어쓰고 **살아있는 서버엔 `source-file` 로 재적용**: `prefix None`·`status off`·`escape-time 0`·truecolor)로 **사용자 개인 tmux 와 분리 + 완전 투명**(상태바·단축키 없음, claude 마우스 트래킹·BEL 은 기존과 동일 패스스루).
 
 - ⚠️ conf 의 `terminal-features ",xterm-256color:RGB:sync:hyperlinks"` 는 **지우면 안 된다** — tmux 기본 features(xterm*)엔 `sync` 가 없어 claude 의 동기화 출력(DEC 2026)이 무력화되고 xterm.js 에 그리다 만 중간 프레임(반쪽 구분선 등)이 노출된다(2026-08-05 실측, hyperlinks 도 없으면 OSC 8 링크 소거).
+- ⚠️ conf 의 배열 옵션(`terminal-features`·`terminal-overrides`)은 **`set -su` 로 기본값을 되돌린 뒤 `set -as`** 로 덧붙인다 — conf 는 살아있는 서버에 `source-file` 로 재적용되는데, `-as` 만 두면 그때마다 같은 항목이 하나씩 쌓였다(2026-10-01 실측: 서버 2.2일 가동에 각각 15중복 — 값이 같아 기능 영향은 없었지만 끝없이 는다). `-su` 가 쌓인 것까지 지우므로 서버를 재시작할 필요는 없다(임시 소켓에서 14개 → 4개 확인).
 - attach 시 같은 크기면 rows±1 SIGWINCH 토글 대신 **`refresh-client`**(tmux 가 화면 모델로 전체 재전송 — claude 이중 리플로우 없음)를 쓰고, **마지막 PTY 크기를 sidecar 에 기억**해 복원 attach 를 그 크기로 한다(80x24 왕복 리플로우 제거).
 - ⚠️ **tmux 세션이 대체 화면(TUI, `alternate_on=1`)이면 attach replay 를 생략한다** — 옛 프레임을 재생하면 크기가 달랐던 시점의 글자가 우측 끝에 눌어붙고, TUI 는 자기 모델과의 diff 만 그려서 그 잔상을 영영 못 지운다(2026-08-05 실측: ◉ × 조각·잘린 에이전트 칩). 빈 xterm + tmux 전체 리드로 한 프레임이 superset 식 클린 attach 고, 일반 셸은 스크롤백 가치가 있어 replay 유지. alt 질의는 `list-panes -s -t '=이름'`(pane 타깃 명령은 `=세션명` 불가 — 실측) 경유라 `attachSession` 은 **async** 다.
 - 세션 [x]=`kill-session`(onExit 흐름으로 정리+sidecar 제거), `before-quit`(`disposeAll`)은 **클라이언트만 끊는다**(detach — sidecar 유지). 외부 detach 로 클라이언트만 죽으면 `has-session` 확인 후 조용히 재attach.
@@ -266,7 +267,7 @@ TUI 구간은 attach 가 어차피 replay 를 버리니 링버퍼에 안 쌓으�
 ②③ 의 오버라이드는 xterm 선택자와 **동률 특정도면 나중에 주입되는 xterm.css 가 이기므로** 한 단계 더 좁게 쓴다.
 
 ## 색·글꼴
-데스크톱 터미널 색은 `TerminalView.buildTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 글자는 `--font-mono`(= 번들한 **JetBrains Mono NL**, `styles.md` 참고) **13px/1.0**.
+터미널 색은 `renderer/features/terminal/lib/xtermTheme.ts` 의 `buildTerminalTheme()` 이 **다크 패널 토큰**(`--on-dark-*`·`--ok/danger/warning-on-dark`·`--accent-on-dark`)에서 읽는다 — hex 하드코딩 금지(마젠타·시안만 대응 토큰이 없어 예외). 데스크톱(`TerminalView`)·MO(`controller.ts`)가 같은 모듈을 쓴다 — 예전엔 두 벌이었는데, 2026-09-30 리디자인(액센트 `#2997ff` → `#8c9bff`) 뒤 MO 만 선택 틴트를 고쳐 데스크톱 선택 영역이 옛 애플 블루로 남았다(2026-10-01 점검에서 발견, 합치면서 선택 틴트도 액센트 토큰 파생으로 바꿨다). 글자는 `--font-mono`(= 번들한 **JetBrains Mono NL**, `styles.md` 참고) **13px/1.0**.
 
 ### ⚠️ `lineHeight` 는 fontSize 가 아니라 **폰트의 자연 줄높이**에 곱해진다
 그래서 폰트를 바꾸면 같은 `lineHeight` 여도 행간이 통째로 달라진다. 13px 기준 실측 자연 줄높이는 **JetBrains Mono 17.5px(1.346배)** vs **Menlo 15px(1.154배)** — 자폭(7.7 vs 7.73)은 거의 같은데 세로만 17% 크다.
@@ -282,7 +283,8 @@ TUI 구간은 attach 가 어차피 replay 를 버리니 링버퍼에 안 쌓으�
 
 - 실측 근거: 출력 바이트에 `38;2;…`(트루컬러) 가 **0개**이고 `38;5;174` 만 왔다. `FORCE_COLOR=3` 도, `TERM=xterm-256color` 도 소용없었고 **`TMUX` 를 지운 경우에만** 트루컬러가 나왔다(`#d77757` 12회).
 - 그래서 `agents.ts` 의 `agentCommand()` 가 실행 명령을 **`env -u TMUX -u TMUX_PANE <cmd>`** 로 감싼다. 설치 감지(`detectAgents`)는 원시 `command` 를 쓰므로 영향받지 않는다.
-- tmux 는 사용자에게 보이지 않는 영속화 백엔드라 에이전트가 그 안에 있음을 알 이유가 없고, 지워도 세션·pane 동작에는 영향이 없다(실측). **셸 세션(`shell`)은 감싸지 않아 `TMUX` 가 그대로 남는다.**
+- tmux 는 사용자에게 보이지 않는 영속화 백엔드라 에이전트가 그 안에 있음을 알 이유가 없고, 지워도 세션·pane 동작에는 영향이 없다(실측).
+- ⚠️ **셸 세션도 지운다**(2026-10-01) — 예전엔 셸 세션(`shell`)은 감싸지 않아 `TMUX` 가 남았고, 셸 탭에서 `claude` 를 손으로 치면 같은 2.1.286 이 **`38;2` 0개 · `38;5` 41개**(로고 `38;5;174`)로 떨어져 프리셋 세션(트루컬러)보다 화면 전체가 칙칙했다(사용자 신고 — 설치본·dev 나란히 비교). 지금은 `launchShellCommand(shell)` 가 명령 없이도 `env -u TMUX -u TMUX_PANE <sh> -il` 을 shell-command 로 준다(셸 하나 — pgrp 함정 없음). 검증: 새 셸 세션 pane = `/bin/zsh -il`, `TMUX` unset, 손으로 띄운 claude `38;2` 35개 · `38;5` 0개, `ls`·Ctrl+C·claude 종료 뒤에도 셸 유지. ⚠️ 이미 떠 있던 셸 세션은 그대로다(새로 만든 세션부터).
 - 앱 렌더링(xterm)은 무관하다 — 같은 화면에서 직접 보낸 `\033[38;2;…` 코랄 블록은 정확히 코랄로 그려졌다. 색이 이상해 보이면 **먼저 출력 바이트의 SGR 유형부터 확인할 것.**
 
 ## MO 접속

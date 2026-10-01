@@ -587,9 +587,15 @@ function reattach(s: Session) {
  *   즉시 취소되는 것 실측). 없으면 명령 실행 중 Ctrl+C 가 셸까지 끊어 `exec` 에 도달하지 못한다.
  *   `trap '' INT`(무시)는 자식이 그 설정을 상속하므로 쓰면 안 된다.
  * - 명령이 끝나거나 실패해도 `exec <shell> -il` 로 셸이 남는다 — 의도했던 동작이 이제 실제로 된다.
+ *
+ * ⚠️ **명령이 없는 셸 세션도 `TMUX` 를 지우고 띄운다**(2026-10-01) — 예전엔 셸 세션은 감싸지
+ * 않았는데, 셸 탭에서 `claude` 를 손으로 치면 `TMUX` 를 보고 256색으로 떨어져 로고가 분홍빛
+ * (`38;5;174`)·화면 전체가 칙칙해졌다(사용자 신고 — 같은 버전이 프리셋 세션에선 트루컬러).
+ * tmux 는 보이지 않는 영속화 계층이라 그 안의 셸이 tmux 를 알 이유가 없다. 셸은 하나만 띄운다.
  */
-function launchShellCommand(shell: string, rawCommand: string): string {
+function launchShellCommand(shell: string, rawCommand?: string): string {
   const sh = shQuote(shell);
+  if (!rawCommand) return `env -u TMUX -u TMUX_PANE ${sh} -il`;
   const inner = `trap 'true' INT; ${rawCommand}; exec ${sh} -il`;
   return `env -u TMUX -u TMUX_PANE ${sh} -ic ${shQuote(inner)}`;
 }
@@ -618,7 +624,7 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
     bin && tmuxName
       ? pty.spawn(
           bin,
-          tmuxNewSessionArgs(tmuxName, cwd, autoRun ? launchShellCommand(shell, autoRun) : undefined),
+          tmuxNewSessionArgs(tmuxName, cwd, launchShellCommand(shell, autoRun || undefined)),
           ptyOptions(cwd, cols, rows)
         )
       : pty.spawn(shell, ['-il'], ptyOptions(cwd, cols, rows));

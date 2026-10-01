@@ -28,12 +28,17 @@ const CANDIDATES = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/bin/t
 // claude 의 동기화 출력(DEC 2026)이 무력화되고, xterm.js 에 그리다 만 중간 프레임이
 // 노출돼 화면이 깨져 보인다(반쪽 구분선 등 — 2026-08-05 실측). hyperlinks 도 같은 이유
 // (기본값에 없으면 OSC 8 링크가 tmux 에서 소거된다).
+// ⚠️ 배열 옵션(`-a` 덧붙이기)은 **`-u` 로 기본값을 되돌린 뒤** 덧붙인다 — 이 conf 는 살아있는
+// 서버에 `source-file` 로 다시 적용되므로, `-as` 만 두면 앱을 켤 때마다 같은 항목이 하나씩
+// 쌓인다(2026-10-01 실측: 서버 2.2일 가동에 terminal-features·overrides 가 각각 15중복).
 const CONF = `# One App 전용 tmux 설정 — 앱이 시작 시마다 덮어쓴다 (직접 수정 금지)
 set -g prefix None
 set -g status off
 set -s escape-time 0
 set -g default-terminal "tmux-256color"
+set -su terminal-overrides
 set -as terminal-overrides ",xterm-256color:RGB"
+set -su terminal-features
 set -as terminal-features ",xterm-256color:RGB:sync:hyperlinks"
 set -g history-limit 10000
 set -g bell-action any
