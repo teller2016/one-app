@@ -17,6 +17,8 @@ export function MirrorWidget() {
   const [status, setStatus] = useState<MirrorStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 연결에 성공하면 올린다 — 상태바 팝업을 닫는다(폰 창을 볼 차례라 팝업이 가리기만 한다)
+  const [closeSignal, setCloseSignal] = useState(0);
 
   const refresh = async () => {
     setError(''); // 새로고침하면 지난 실패 사유는 지운다
@@ -36,6 +38,7 @@ export function MirrorWidget() {
     try {
       const res = await window.oneApp.mirror.start(mode);
       if (!res.ok) setError(res.error ?? 'scrcpy 실행에 실패했습니다.');
+      else setCloseSignal((n) => n + 1);
       await refresh();
     } catch (err) {
       setError(errMsg(err, 'scrcpy 실행에 실패했습니다.'));
@@ -120,6 +123,7 @@ export function MirrorWidget() {
   return (
     // 사이드바를 접으면 글자가 감춰지므로 툴팁이 상태를 대신하고, 조작은 팝오버로 넘어간다
     <StatusWidget
+      closeSignal={closeSignal}
       icon={icon}
       dot={dot}
       label={<span className="statusbar__meta">{statusText}</span>}

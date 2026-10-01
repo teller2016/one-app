@@ -43,6 +43,7 @@ paths:
 
 - ⚠️ **본체는 열림 여부와 무관하게 항상 마운트**한다(닫힘은 언마운트가 아니라 `hidden`). 재마운트되면 위젯 초기 조회가 다시 도는데, 근태는 그게 **headless 브라우저 그룹웨어 조회**다. 그래서 팝오버도 `body` portal 이 아니라 제자리 `fixed` 다.
 - ⚠️ 외부 클릭 판정에서 `.modal-overlay`·`.picker__pop`·`.toasts` 는 제외한다 — 위젯이 띄운 모달·확인창은 `body` portal 이라 좌표상 '팝오버 밖'이고, 그대로 닫으면 야근 결재 모달을 여는 순간 배경이 사라진다.
+- 할 일이 끝나면 팝업을 닫게 하려면 `closeSignal`(숫자)을 올린다 — 폰 제어·미러링 연결 성공 시 `MirrorWidget` 이 쓴다. 동작 함수가 ⌘K 명령과 공용이라 본체 안 훅이 아니라 셸 prop 이다.
 - 모달을 바로 여는 항목(메일·MO)은 셸 없이 `StatusBarItem` 만 쓴다.
 
 - ⚠️ **옵션 스타일을 조상 스코프(`.picker--select .picker__option`·`.terminal-new__select .picker__option`)로 걸면 안 먹는다** — 팝오버 자신의 클래스(`.picker__pop--select`·`--sm`·`--search`)에 쓸 것.
