@@ -84,8 +84,10 @@
     fill: var(--accent);
   }
 
+  // 꺼진 타일 — border-strong 은 바탕(surface-3)과 한 단 차이라 22px 에서 묻혔다(2×2 격자가 안 보임).
+  // text-3 를 반쯤 섞어 양 테마 모두 격자가 읽히게 한다 (켜진 타일보다는 확실히 약하게)
   &__brand-off {
-    fill: var(--border-strong);
+    fill: color-mix(in srgb, var(--text-3) 45%, var(--surface-3));
   }
 
   &__brand-name {
