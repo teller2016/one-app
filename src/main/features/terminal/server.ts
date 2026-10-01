@@ -32,7 +32,7 @@ import {
   scrollSessionToBottom,
   writeSession,
 } from './pty';
-import { sendChatText, subscribeChat } from './chat';
+import { chatCommandsFor, sendChatText, subscribeChat } from './chat';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
@@ -495,6 +495,9 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       break;
     case 'chat-send':
       sendChatText(msg.id, msg.text);
+      break;
+    case 'chat-commands':
+      send(ws, { type: 'chat-commands', id: msg.id, items: chatCommandsFor(msg.id) });
       break;
   }
 }

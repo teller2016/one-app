@@ -60,7 +60,8 @@ export type TermClientMsg =
   | { type: 'chat-open'; id: string } // 이 세션의 대화를 구독 — 응답은 'chat'(reset) 후 증분
   | { type: 'chat-close' }
   // 입력창 전송 — 서버가 붙여넣기 감싸기·Enter 지연까지 처리한다(여러 줄이 줄마다 제출되지 않게)
-  | { type: 'chat-send'; id: string; text: string };
+  | { type: 'chat-send'; id: string; text: string }
+  | { type: 'chat-commands'; id: string }; // `/` 자동완성 목록 요청 — 입력창에서 / 를 칠 때
 
 /** 서버 → 클라이언트 */
 export type TermServerMsg =
@@ -94,13 +95,19 @@ export type TermServerMsg =
   // claude 가 터미널에서 답을 기다린다(sessions/<pid>.json status 'waiting') — 화면에서 읽은 선택 화면.
   // prompt 가 null 이면 대기가 끝났다. options 가 비면 읽지 못한 것 — '터미널에서 답 필요' 안내만
   | { type: 'chat-prompt'; id: string; prompt: ChatPrompt | null }
+  // 작업 중 상태 줄(화면에서 읽음 — `Garnishing… · 7s · ↓ 527 tokens`). null = 일하지 않거나 못 읽음
+  | { type: 'chat-status'; id: string; text: string | null }
+  | { type: 'chat-commands'; id: string; items: ChatCommand[] }
   | { type: 'error'; message: string };
 
 /** 채팅 보기로 오는 메시지 — 폰(WS)·데스크톱(IPC `terminal:chat`) 공용 */
 export type ChatServerMsg = Extract<
   TermServerMsg,
-  { type: 'chat' } | { type: 'chat-unavailable' } | { type: 'chat-prompt' }
+  { type: 'chat' } | { type: 'chat-unavailable' } | { type: 'chat-prompt' } | { type: 'chat-status' }
 >;
+
+/** `/` 자동완성 한 줄 — main chatCommands.ts 가 모은다 */
+export type ChatCommand = { name: string; description?: string; source: 'project' | 'user' | 'builtin' };
 
 // ── 채팅 항목 ──
 
@@ -123,7 +130,8 @@ export type ChatPrompt = {
 };
 
 export type ChatItem =
-  | { kind: 'user'; key: string; text: string; images?: number }
+  /** ts = 보낸 시각(ISO) — 턴 머리에 HH:MM 으로 */
+  | { kind: 'user'; key: string; text: string; images?: number; ts?: string }
   | { kind: 'assistant'; key: string; text: string }
   /** 대화 흐름 표식(중단 등) — 말풍선이 아니라 가운데 회색 줄 */
   | { kind: 'notice'; key: string; text: string }

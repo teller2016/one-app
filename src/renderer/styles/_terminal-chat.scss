@@ -44,6 +44,11 @@
     font-weight: 600;
     box-shadow: var(--shadow-2);
     cursor: pointer;
+
+    // 위로 올려 읽는 중 새 답변이 왔다 — 눈에 띄게 한 단 밝게
+    &--new {
+      background: var(--accent);
+    }
   }
 
   &__list {
@@ -54,7 +59,9 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 12px 12px 16px;
+    // 읽기 단 — 넓은 pane 에서도 가운데 --chat-col-w(760) 폭으로 모은다(한 줄이 100자를 넘지 않게).
+    // 좁으면(폰·분할) 좌우 12 가 남는다
+    padding: 12px max(12px, calc((100% - var(--chat-col-w)) / 2)) 16px;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -408,17 +415,267 @@
     align-items: center;
     gap: 8px;
     align-self: flex-start;
+    max-width: 100%;
     padding: 4px 2px;
     color: var(--text-3);
     font-size: var(--fs-ui);
   }
 
-  // ── 입력 바 — 터미널 키 바 자리(패널 면 + 윗선) ──
-  &__composer {
+  // claude 상태 줄(화면에서 읽음) — 'Garnishing… · 7s · ↓ 527 tokens'
+  &__typing-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__typing-hint {
     flex-shrink: 0;
+    color: var(--text-3);
+    font-size: var(--fs-caption);
+    opacity: 0.8;
+  }
+
+  // 입력 바 안쪽 — 대화와 같은 읽기 단 폭. `/` 자동완성 목록의 기준
+  &__composer-inner {
+    position: relative;
     display: flex;
     align-items: flex-end;
     gap: 8px;
+    max-width: var(--chat-col-w);
+    margin: 0 auto;
+  }
+
+  // ── 내 메시지 시각 · 턴 구분 ──
+  &__row--me {
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  // 새 턴(내 메시지)은 앞 답변과 한 칸 더 띄운다 — 대화 단위가 보이게
+  &__row--me:not(:first-child) {
+    margin-top: 10px;
+  }
+
+  &__time {
+    flex-shrink: 0;
+    padding-bottom: 2px;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  // ── 답변 복사(마우스를 올리면) ──
+  &__bubble--ai {
+    position: relative;
+  }
+
+  &__copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    color: var(--text-2);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--dur-1) var(--ease);
+    @include focus-ring(0px);
+
+    &:hover {
+      color: var(--text);
+    }
+
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
+
+  &__bubble--ai:hover &__copy {
+    opacity: 1;
+  }
+
+  // ── 도구 묶음 — '도구 N개 · Read 3 · Bash 2' 한 줄, 펼치면 안에 도구 줄들 ──
+  &__tools {
+    min-width: 0;
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+  }
+
+  &__tools-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--fs-ui);
+    text-align: left;
+    cursor: pointer;
+    @include focus-ring(0px);
+
+    > svg {
+      flex-shrink: 0;
+      color: var(--text-3);
+    }
+  }
+
+  &__tools--run &__tools-head &__tool-dot {
+    background: var(--ok);
+  }
+
+  &__tools--err &__tools-head &__tool-dot {
+    background: var(--danger);
+  }
+
+  // 묶음 안 도구 줄 — 카드 테두리를 빼고 윗선만
+  &__tool--nested {
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+  }
+
+  // ── Edit diff 색 ──
+  &__pre--diff {
+    color: var(--on-dark-2);
+  }
+
+  &__add {
+    color: var(--ok-on-dark);
+  }
+
+  &__del {
+    color: var(--danger-on-dark);
+  }
+
+  // ── 선택지 카드 아래 줄 — 숫자 키 안내 · 터미널에서 보기 ──
+  &__ask-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__ask-hint {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-3);
+    font-size: var(--fs-caption);
+  }
+
+  // ── `/` 자동완성 — 입력창 위에 뜨는 목록 ──
+  &__cmds {
+    position: absolute;
+    left: 0;
+    right: 48px; // 보내기 버튼 자리는 비운다
+    bottom: calc(100% + 6px);
+    z-index: 2;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-2);
+    @include pop-in;
+  }
+
+  &__cmd {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--fs-ui);
+    text-align: left;
+    cursor: pointer;
+
+    &--on {
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+  }
+
+  &__cmd-name {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    color: var(--text);
+  }
+
+  &__cmd-desc {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-3);
+  }
+
+  &__cmd-src {
+    flex-shrink: 0;
+    color: var(--text-3);
+    font-size: var(--fs-caption);
+  }
+
+  // ── 대화 검색(⌘F) — 채팅 위 한 줄 ──
+  &__find {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-3);
+  }
+
+  &__find-input {
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--bg-sunken);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-ui);
+    outline: none;
+
+    &:focus {
+      border-color: var(--accent);
+    }
+  }
+
+  &__find-count {
+    min-width: 40px;
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  // ── 입력 바 — 터미널 키 바 자리(패널 면 + 윗선) ──
+  &__composer {
+    flex-shrink: 0;
     padding: 8px 10px;
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
     background: var(--surface-1);
@@ -489,4 +746,14 @@
     border-radius: var(--r-xs);
     background: currentColor;
   }
+}
+
+// 대화 검색 일치 — CSS Custom Highlight API(ChatView 가 range 를 등록한다)
+::highlight(term-chat-find) {
+  background-color: var(--warning-soft);
+}
+
+::highlight(term-chat-find-on) {
+  background-color: var(--warning);
+  color: var(--surface-dark);
 }

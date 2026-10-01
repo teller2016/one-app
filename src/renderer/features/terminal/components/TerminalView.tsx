@@ -171,6 +171,8 @@ export const TerminalView = memo(function TerminalView({
   const chat = useChatView(id) === 'chat';
   const chatRef = useRef(chat);
   chatRef.current = chat;
+  // ⌘F 를 채팅 보기에선 채팅 검색으로 — 올릴 때마다 ChatView 가 검색 줄을 연다
+  const [chatFind, setChatFind] = useState(0);
   /** 이 pane 의 입력 자리 — 채팅 보기면 채팅 입력창, 아니면 xterm */
   const focusInput = useCallback(() => {
     if (chatRef.current) paneRef.current?.querySelector<HTMLTextAreaElement>('.term-chat__input')?.focus();
@@ -826,8 +828,13 @@ export const TerminalView = memo(function TerminalView({
     if (!focused) return;
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey || e.altKey || e.ctrlKey) return;
-      if (chatRef.current) return; // 검색은 xterm 스크롤백 대상 — 채팅 보기에선 열지 않는다
       if (e.key === 'f' || e.key === 'F') {
+        if (chatRef.current) {
+          // 채팅 보기 — xterm 스크롤백 검색 대신 대화 검색
+          e.preventDefault();
+          setChatFind((n) => n + 1);
+          return;
+        }
         e.preventDefault();
         openSearch();
       }
@@ -1030,7 +1037,7 @@ export const TerminalView = memo(function TerminalView({
 
       {/* 보이는 pane 만 구독한다 — 숨은 탭·keep-alive 로 숨은 섹션까지 대화 기록을 1초마다 읽을 이유가 없다.
           다시 보이면 스냅샷부터 새로 받는다 */}
-      {chat && visible && <TerminalChatPane sessionId={id} busy={busy} />}
+      {chat && visible && <TerminalChatPane sessionId={id} busy={busy} findSignal={chatFind} />}
 
       <div className="terminal__host" ref={hostRef} />
     </div>

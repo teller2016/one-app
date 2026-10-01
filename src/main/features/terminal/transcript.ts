@@ -33,6 +33,7 @@ type Line = {
   isSidechain?: boolean;
   isMeta?: boolean;
   isCompactSummary?: boolean;
+  timestamp?: string;
   message?: { content?: unknown };
 };
 
@@ -133,7 +134,7 @@ function parseQuestions(input: Record<string, unknown>): ChatQuestion[] {
  * 사람이 친 문자열 입력 — 슬래시 명령은 `<command-name>` 태그로 기록된다.
  * 명령 출력(`<local-command-stdout>`)·안내문(`<local-command-caveat>`)은 숨긴다.
  */
-function userTextItem(text: string, key: string, images: number): ChatItem | null {
+function userTextItem(text: string, key: string, images: number, ts?: string): ChatItem | null {
   const t = text.trim();
   if (!t && !images) return null;
   if (t.startsWith('<local-command-') || t.startsWith('<bash-stdout') || t.startsWith('<bash-stderr')) return null;
@@ -149,7 +150,7 @@ function userTextItem(text: string, key: string, images: number): ChatItem | nul
   // `!` 셸 명령 입력
   const bash = t.match(/^<bash-input>([\s\S]*?)<\/bash-input>$/);
   if (bash) return { kind: 'command', key, text: `! ${bash[1].trim()}` };
-  return { kind: 'user', key, text: t, ...(images ? { images } : {}) };
+  return { kind: 'user', key, text: t, ...(images ? { images } : {}), ...(ts ? { ts } : {}) };
 }
 
 /**
@@ -172,7 +173,7 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
     const content = o.message?.content;
     if (o.type === 'user') {
       if (typeof content === 'string') {
-        const it = userTextItem(content, uuid, 0);
+        const it = userTextItem(content, uuid, 0, o.timestamp);
         if (it) items.push(it);
         continue;
       }
@@ -190,7 +191,7 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
         else if (b?.type === 'image') images += 1;
       }
       if (texts.length || images) {
-        const it = userTextItem(texts.join('\n'), uuid, images);
+        const it = userTextItem(texts.join('\n'), uuid, images, o.timestamp);
         if (it) items.push(it);
       }
       continue;

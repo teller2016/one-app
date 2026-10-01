@@ -12,6 +12,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type {
+  ChatCommand,
   ChatItem,
   ChatPrompt,
   TermClientMsg,
@@ -106,7 +107,11 @@ export type MoTermState = {
     fresh: boolean;
     /** claude 가 터미널에서 답을 기다리는 선택 화면 (chat-prompt) */
     prompt: ChatPrompt | null;
+    /** 작업 중 상태 줄 (chat-status) */
+    status: string | null;
   };
+  /** `/` 자동완성 목록 — 보고 있는 세션 것(요청할 때만 받는다) */
+  chatCommands: { id: string; items: ChatCommand[] } | null;
 };
 
 type Listener = () => void;
@@ -175,7 +180,8 @@ class MoTerminalController {
       selectedLines: 0,
       fontHud: null,
       view: 'term',
-      chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null },
+      chatCommands: null,
+      chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null },
     };
   }
 
@@ -536,13 +542,21 @@ class MoTerminalController {
             // 첫 메시지 전(대화 파일 없음) — 증분이 오면 항목이 생기므로 표시는 저절로 사라진다
             fresh: msg.reset ? !!msg.fresh : this.state.chat.fresh,
             prompt: this.state.chat.id === msg.id ? this.state.chat.prompt : null,
+            status: this.state.chat.id === msg.id ? this.state.chat.status : null,
           },
         });
         break;
       }
       case 'chat-unavailable':
         if (msg.id !== this.chatSubId) break;
-        this.set({ chat: { id: msg.id, items: [], loaded: true, unavailable: msg.reason, fresh: false, prompt: null } });
+        this.set({ chat: { id: msg.id, items: [], loaded: true, unavailable: msg.reason, fresh: false, prompt: null, status: null } });
+        break;
+      case 'chat-status':
+        if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
+        this.set({ chat: { ...this.state.chat, status: msg.text } });
+        break;
+      case 'chat-commands':
+        this.set({ chatCommands: { id: msg.id, items: msg.items } });
         break;
       case 'chat-prompt':
         if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
@@ -610,7 +624,7 @@ class MoTerminalController {
       this.send({ type: 'chat-open', id: want });
       // 다른 세션의 말풍선이 잠깐이라도 남지 않게 비우고 시작한다(같은 세션 재구독이면 유지)
       if (this.state.chat.id !== want)
-        this.set({ chat: { id: want, items: [], loaded: false, unavailable: null, fresh: false, prompt: null } });
+        this.set({ chat: { id: want, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null } });
       // 같은 세션 재구독(터미널에 갔다 옴) — 말풍선은 두되 선택 화면은 버린다. 그새 터미널에서 답했을 수 있다
       // (서버가 곧 지금 상태를 다시 보낸다)
       else if (this.state.chat.prompt) this.set({ chat: { ...this.state.chat, prompt: null } });
@@ -639,6 +653,12 @@ class MoTerminalController {
     } else {
       this.closeKeyboard();
     }
+  }
+
+  /** `/` 자동완성 목록 요청 — 입력창에서 / 를 칠 때(서버가 위치·계정 기준으로 모은다) */
+  requestChatCommands() {
+    const id = this.state.attachedId;
+    if (id) this.send({ type: 'chat-commands', id });
   }
 
   /** 채팅 입력창 전송 — 붙여넣기 감싸기·Enter 는 서버가 한다 */

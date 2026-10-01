@@ -186,6 +186,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
   const showTerminal = useCallback(() => controller.setView('term'), []);
   const sendChat = useCallback((text: string) => controller.sendChat(text), []);
   const sendChatKey = useCallback((data: string) => controller.sendChatKey(data), []);
+  const requestCommands = useCallback(() => controller.requestChatCommands(), []);
 
   return (
     <div className={`moterm${active ? '' : ' moterm--hidden'}`} aria-hidden={!active}>
@@ -379,6 +380,9 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           unavailable={chatItems?.unavailable ?? null}
           fresh={chatItems?.fresh ?? false}
           prompt={chatItems?.prompt ?? null}
+          status={chatItems?.status ?? null}
+          commands={st.chatCommands?.id === attached?.id ? st.chatCommands.items : null}
+          onRequestCommands={requestCommands}
           busy={!!attached && (attached.working || attached.status === 'busy')}
           onSend={sendChat}
           onKey={sendChatKey}

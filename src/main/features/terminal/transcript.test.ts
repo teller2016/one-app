@@ -33,6 +33,14 @@ describe('parseTranscript', () => {
     expect(results).toEqual([{ toolId: 't1', text: '내용' }]);
   });
 
+  it('사람 입력에는 보낸 시각(ISO)을 싣는다', () => {
+    const { items } = parseTranscript(
+      [line({ type: 'user', uuid: 'u', timestamp: '2026-10-01T05:02:00.000Z', message: { content: '안녕' } })],
+      CWD,
+    );
+    expect(items).toEqual([{ kind: 'user', key: 'u', text: '안녕', ts: '2026-10-01T05:02:00.000Z' }]);
+  });
+
   it('서브에이전트(isSidechain)·주입문(isMeta)·기타 줄 type 은 숨긴다', () => {
     const { items } = parseTranscript(
       [

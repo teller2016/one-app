@@ -14,7 +14,7 @@ import { notifyToast, sendToast } from '../notify/notify';
 import { getNotifySound } from '../settings/store';
 import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
-import { sendChatText, subscribeChat } from './chat';
+import { chatCommandsFor, sendChatText, subscribeChat } from './chat';
 import { sessionLocation, sessionLocationLabel } from './location';
 import {
   initTerminalWindows,
@@ -134,6 +134,7 @@ export function registerTerminalIpc() {
     subs?.delete(id);
   });
   ipcMain.on('terminal:chat:send', (_e, id: string, text: string) => sendChatText(id, text));
+  ipcMain.handle('terminal:chat:commands', (_e, id: string) => chatCommandsFor(id));
   // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
   ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
     renameSession(id, title);

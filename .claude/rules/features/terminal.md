@@ -238,7 +238,15 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
 - **탭 안의 작은 토글**(`TabViewToggle` — 에이전트 세션만, hover·활성·채팅 중일 때만 보임)로 세션별 전환, 단축키 **⌘E**(포커스 세션 — `useTerminalShortcuts`, `e.code === 'KeyE'` · 셸 세션은 무시), 기본은 터미널(`lib/chatViews` — localStorage, 종료 세션은 `pruneChatViews`).
 - 화면은 폰과 **공용 `ChatView`**(`features/terminal/components` — ⚠️ `window.oneApp` 호출 금지, 폰 번들에도 들어간다). 데이터는 `useTerminalChat` → IPC `terminal:chat:open/close/send` + `terminal:chat` 이벤트(main `ipc.ts` 가 창·세션별로 `subscribeChat`, 창 파괴·리로드 시 해제).
 - ⚠️ **xterm 은 그대로 두고 `TerminalChatPane` 이 pane 을 덮는다** — 언마운트 금지 규칙 유지, pane 크기가 같아 PTY 크기 주장 규칙도 그대로. **보이는 pane 만** 구독한다(`chat && visible`).
-- 포커스는 `focusInput`(채팅이면 `.term-chat__input`, 아니면 xterm) — attach·focused effect·핸들 `focus` 가 모두 이것. 채팅 보기에선 ⌘F 검색을 열지 않는다. ⚠️ 단축키 게이트(`useTerminalShortcuts`)는 `.term-chat__input` 을 xterm textarea 처럼 예외로 둔다(⌘1..9 탭 전환).
+- 포커스는 `focusInput`(채팅이면 `.term-chat__input`, 아니면 xterm) — attach·focused effect·핸들 `focus` 가 모두 이것. 채팅 보기의 ⌘F 는 xterm 검색 대신 대화 검색(아래). ⚠️ 단축키 게이트(`useTerminalShortcuts`)는 `.term-chat__input` 을 xterm textarea 처럼 예외로 둔다(⌘1..9 탭 전환).
+
+### 채팅 보기 읽기·조작 (2026-10-01 — `ChatView` 공용)
+- 읽기 단 `--chat-col-w`(760) — 목록 좌우 padding 을 `max(12px, (100% - 760)/2)` 로, 입력 바 안쪽도 같은 폭. 연속 도구 호출 2개 이상은 `ToolGroup`(진행 중인 것만 펼쳐 둠), Edit 상세는 diff 색, 내 메시지에 시각(`ChatItem.ts` — 파서가 jsonl `timestamp` 를 싣는다).
+- 키(데스크톱 `enterToSend` 일 때만): Enter 전송 · Esc 중단(작업 중) · 숫자 키 = 선택지(입력창 빔) · ↑↓ 이전 입력. ⚠️ 모두 `isComposing`/`keyCode 229` 면 건너뛴다(한글 IME).
+- `/` 자동완성 — main `chatCommands.ts`(프로젝트·계정 `skills`/`commands` + 내장 몇 개, 30초 캐시) → IPC `terminal:chat:commands` · WS `chat-commands`. 처음 `/` 를 칠 때 한 번 받는다.
+- 작업 중 상태 줄 — `sessions/<pid>.json` status `busy` 일 때만 화면을 읽어 `parseScreenStatus`(말줄임 `…` + 괄호 꼬리, ⚠️ `❯` 입력창 줄 제외) → `chat-status`. 선택 화면과 같은 캡처 한 번.
+- ⌘F(채팅 보기) = 대화 검색 — `TerminalView` 가 `findSignal` 을 올리고 `ChatView` 가 CSS Custom Highlight API(`::highlight(term-chat-find)`)로 칠한다(DOM 무변경). ⚠️ 검색창은 `focus()` 후 `select()` — select 만으로는 포커스가 안 온다(실측).
+- 답변·코드 블록 [복사] — `Markdown copyCode`.
 
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만**. 감지는 `zsh -lc "whence -p"` 1회 캐시, 미설치는 조용히 제외.

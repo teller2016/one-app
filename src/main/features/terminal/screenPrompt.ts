@@ -98,3 +98,22 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
     ...(freeText ? { freeText } : {}),
   };
 }
+
+// ── 작업 중 상태 줄 ──
+// claude 가 일하는 동안 입력창 위에 도는 한 줄(2026-10-01 실측):
+//   `✶ Garnishing… (7s · ↓ 527 tokens)` · `· Precipitating… (7s · ↓ 252 tokens · thinking)`
+// 기호(스피너 글자)는 매 프레임 바뀌고 동사도 매번 다르다 — '…'(말줄임) + 괄호 꼬리로 알아본다.
+// 채팅 보기의 '작업 중…' 자리에 그대로 보여 준다. 못 읽으면 null(그 자리는 '작업 중…' 으로 둔다).
+const STATUS_RE = /^\s*\S\s+([^\s()][^()]*…)\s*(?:\(([^)]*)\))?\s*$/;
+
+export function parseScreenStatus(screen: string): string | null {
+  const lines = screen.split('\n');
+  for (let i = lines.length - 1; i >= 0 && lines.length - i <= 30; i -= 1) {
+    // 입력창 줄(❯ …)은 사용자가 친 글이다 — '…' 로 끝나도 상태가 아니다(입력창이 상태 줄보다 아래라 먼저 걸린다)
+    if (/^\s*[❯>]/.test(lines[i])) continue;
+    const m = lines[i].match(STATUS_RE);
+    if (!m) continue;
+    return m[2] ? `${m[1]} · ${m[2]}` : m[1];
+  }
+  return null;
+}

@@ -10,9 +10,11 @@ export type TerminalChatState = {
   unavailable: string | null;
   fresh: boolean;
   prompt: ChatPrompt | null;
+  /** 작업 중 상태 줄(화면에서 읽음) — 없으면 '작업 중…' */
+  status: string | null;
 };
 
-const EMPTY: TerminalChatState = { items: [], loaded: false, unavailable: null, fresh: false, prompt: null };
+const EMPTY: TerminalChatState = { items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null };
 
 export function useTerminalChat(id: string): TerminalChatState {
   const [state, setState] = useState<TerminalChatState>(EMPTY);
@@ -36,6 +38,10 @@ export function useTerminalChat(id: string): TerminalChatState {
             return { ...EMPTY, loaded: true, unavailable: msg.reason };
           case 'chat-prompt':
             return { ...prev, prompt: msg.prompt };
+          case 'chat-status':
+            return { ...prev, status: msg.text };
+          default:
+            return prev;
         }
       });
     });

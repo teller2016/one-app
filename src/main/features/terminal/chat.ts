@@ -21,9 +21,10 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ChatPrompt, TermServerMsg } from '../../../shared/terminal-protocol';
+import type { ChatCommand, ChatPrompt, ChatServerMsg } from '../../../shared/terminal-protocol';
+import { listChatCommands } from './chatCommands';
 import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
-import { parseScreenPrompt } from './screenPrompt';
+import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
 import { parseTranscript } from './transcript';
 
 const TICK_MS = 1000;
@@ -35,7 +36,7 @@ const INITIAL_ITEMS = 300;
 const MAX_DELTA_BYTES = 4 * 1024 * 1024;
 const MISSING_REASON = 'claude 대화 기록을 찾지 못했습니다 — claude 가 실행 중일 때만 채팅으로 볼 수 있습니다.';
 
-type ChatMsg = Extract<TermServerMsg, { type: 'chat' } | { type: 'chat-unavailable' } | { type: 'chat-prompt' }>;
+type ChatMsg = ChatServerMsg;
 type Listener = (msg: ChatMsg) => void;
 
 type Found = {
@@ -198,6 +199,8 @@ type Watch = {
   lastSearchAt: number;
   /** 마지막으로 보낸 선택 화면(JSON) — 바뀔 때만 보낸다. 'null' = 대기 없음, '' = 아직 안 보냄(첫 주기엔 null 도 보낸다) */
   promptKey: string;
+  /** 마지막으로 보낸 작업 중 상태 줄 — 바뀔 때만. null = 일하지 않거나 못 읽음 */
+  statusText: string | null;
 };
 
 const watches = new Map<string, Watch>();
@@ -255,14 +258,23 @@ function syncTranscript(w: Watch, found: Found) {
 /** 대기 중이면 화면에서 선택 화면을 읽는다 — 읽지 못하면 선택지 없는 prompt(= 터미널에서 답 필요) */
 async function syncPrompt(w: Watch, found: Found | null) {
   let prompt: ChatPrompt | null = null;
-  if (found?.status === 'waiting') {
+  let status: string | null = null;
+  // 화면은 대기·작업 중일 때만 읽는다(한가하면 읽을 것이 없다) — 한 번 읽어 선택 화면·상태 줄을 함께 뽑는다
+  if (found?.status === 'waiting' || found?.status === 'busy') {
     const screen = await sessionScreen(w.termId);
-    prompt = (screen && parseScreenPrompt(screen)) || { question: '', options: [] };
+    if (found.status === 'waiting') prompt = (screen && parseScreenPrompt(screen)) || { question: '', options: [] };
+    else status = screen ? parseScreenStatus(screen) : null;
   }
+  if (!watches.has(w.termId)) return;
   const key = JSON.stringify(prompt);
-  if (key === w.promptKey || !watches.has(w.termId)) return;
-  w.promptKey = key;
-  emit(w, { type: 'chat-prompt', id: w.termId, prompt });
+  if (key !== w.promptKey) {
+    w.promptKey = key;
+    emit(w, { type: 'chat-prompt', id: w.termId, prompt });
+  }
+  if (status !== w.statusText) {
+    w.statusText = status;
+    emit(w, { type: 'chat-status', id: w.termId, text: status });
+  }
 }
 
 async function tick(w: Watch) {
@@ -314,6 +326,7 @@ export function subscribeChat(termId: string, listener: Listener): () => void {
       // ⚠️ 대기 없음(null)도 보낸다 — 폰은 다시 구독할 때 예전 카드를 들고 있을 수 있다(터미널에서 답하고 돌아온 경우)
       if (existing.promptKey)
         listener({ type: 'chat-prompt', id: termId, prompt: JSON.parse(existing.promptKey) as ChatPrompt | null });
+      if (existing.statusText) listener({ type: 'chat-status', id: termId, text: existing.statusText });
     } catch (err) {
       console.error('[term:chat] 스냅샷 실패', err);
     }
@@ -328,6 +341,7 @@ export function subscribeChat(termId: string, listener: Listener): () => void {
       reportedMissing: false,
       lastSearchAt: 0,
       promptKey: '',
+      statusText: null,
     };
     w.timer = setInterval(() => void tick(w), TICK_MS);
     watches.set(termId, w);
@@ -359,4 +373,15 @@ export function sendChatText(id: string, text: string) {
   const body = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
   writeSession(id, body);
   setTimeout(() => writeSession(id, '\r'), CHAT_SUBMIT_DELAY_MS);
+}
+
+/**
+ * `/` 자동완성 목록 — 이 세션의 위치·claude 계정 기준. 대화를 구독 중이면 찾아 둔 claude 의 cwd·계정을,
+ * 아니면 세션 위치와 기본 계정(~/.claude)을 쓴다.
+ */
+export function chatCommandsFor(termId: string): ChatCommand[] {
+  const found = watches.get(termId)?.found;
+  const cwd = found?.cwd ?? listSessions().find((s) => s.id === termId)?.cwd;
+  if (!cwd) return [];
+  return listChatCommands(cwd, found?.configDir ?? path.join(os.homedir(), '.claude'));
 }

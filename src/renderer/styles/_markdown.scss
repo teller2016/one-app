@@ -145,3 +145,39 @@
     max-width: 100%;
   }
 }
+
+// 코드 블록 [복사] — Markdown copyCode(채팅 보기). 마우스를 올리면 오른쪽 위에 보인다
+.md__code {
+  position: relative;
+
+  &:hover .md__copy {
+    opacity: 1;
+  }
+}
+
+.md__copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &:focus-visible {
+    opacity: 1;
+  }
+}

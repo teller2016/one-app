@@ -1,7 +1,7 @@
 // claude 번호 선택 화면 읽기 테스트 — 화면은 Claude Code 2.1.286 실측(폰 폭 54열, `capture-pane -p -J`)을
 // 빈 줄까지 그대로 옮겼다. 빈 줄을 빼고 옮기면 질문을 놓치는 버그가 테스트에서 안 보인다(2026-10-01 실제로 그랬다).
 import { describe, expect, it } from 'vitest';
-import { parseScreenPrompt } from './screenPrompt';
+import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
 
 const QUESTION_SCREEN = [
   '❯ AskUserQuestion 도구로 질문 1개만 해줘: 좋아하는',
@@ -89,5 +89,27 @@ describe('parseScreenPrompt', () => {
       { n: 1, label: '가', description: '3. 본문 속 번호', current: true },
       { n: 2, label: '나' },
     ]);
+  });
+});
+
+describe('parseScreenStatus', () => {
+  it('작업 중 상태 줄 — 스피너 기호·동사가 바뀌어도 말줄임 + 괄호로 읽는다(실측)', () => {
+    const screen = [
+      '⏺ User answered Claude\'s questions:',
+      '  ⎿  · 좋아하는 계절이 무엇인가요? → 겨울',
+      '· Precipitating… (7s · ↓ 252 tokens · thinking)',
+      '────────────────────────────────────────',
+      '❯ ',
+      '────────────────────────────────────────',
+    ].join('\n');
+    expect(parseScreenStatus(screen)).toBe('Precipitating… · 7s · ↓ 252 tokens · thinking');
+    expect(parseScreenStatus('✶ Garnishing… (7s · ↓ 527 tokens)\n❯ ')).toBe('Garnishing… · 7s · ↓ 527 tokens');
+  });
+
+  it('상태 줄이 없으면 null — 일반 글의 말줄임은 기호로 시작하지 않으면 걸리지 않는다', () => {
+    expect(parseScreenStatus('그래서 이렇게 했습니다…\n❯ ')).toBeNull();
+    expect(parseScreenStatus('❯ 입력 중\n')).toBeNull();
+    // 입력창에 친 글이 '…' 로 끝나도 상태로 읽지 않는다 — 위의 진짜 상태 줄을 읽는다
+    expect(parseScreenStatus('✶ Garnishing… (3s)\n───\n❯ 그래서 이렇게…\n───')).toBe('Garnishing… · 3s');
   });
 });
