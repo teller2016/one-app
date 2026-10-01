@@ -85,6 +85,7 @@
     font-size: var(--fs-body);
     text-align: center;
     text-wrap: balance; // '요.' 만 홀로 다음 줄로 떨어지지 않게
+    word-break: keep-all; // '터미널|에서' 처럼 낱말 가운데서 끊지 않게
   }
 
   &__fresh-hint {
@@ -430,13 +431,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  &__typing-hint {
-    flex-shrink: 0;
-    color: var(--text-3);
-    font-size: var(--fs-caption);
-    opacity: 0.8;
-  }
-
   // 입력 바 안쪽 — 대화와 같은 읽기 단 폭. `/` 자동완성 목록의 기준
   &__composer-inner {
     position: relative;
@@ -563,18 +557,11 @@
     color: var(--danger-on-dark);
   }
 
-  // ── 선택지 카드 아래 줄 — 숫자 키 안내 · 터미널에서 보기 ──
+  // ── 선택지 카드 아래 줄 — 터미널에서 보기 ──
   &__ask-foot {
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  &__ask-hint {
-    flex: 1;
-    min-width: 0;
-    color: var(--text-3);
-    font-size: var(--fs-caption);
   }
 
   // ── `/` 자동완성 — 입력창 위에 뜨는 목록 ──
@@ -634,69 +621,6 @@
     flex-shrink: 0;
     color: var(--text-3);
     font-size: var(--fs-caption);
-  }
-
-  // ── 첨부 이미지 칩 — 입력 바 위 한 줄(읽기 단 폭), 낱장마다 미리보기 + × ──
-  &__attachments {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    max-width: var(--chat-col-w);
-    margin: 0 auto 8px;
-  }
-
-  &__attach {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 2px 0 4px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-md);
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-size: var(--fs-caption);
-
-    > svg {
-      flex-shrink: 0;
-      margin-left: 2px;
-      color: var(--text-3);
-    }
-  }
-
-  &__attach-thumb {
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-    border-radius: var(--r-xs);
-    object-fit: cover;
-  }
-
-  &__attach-name {
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__attach-x {
-    width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 0;
-    border-radius: var(--r-sm);
-    background: none;
-    color: var(--text-3);
-    cursor: pointer;
-    @include focus-ring(0px);
-
-    &:hover {
-      background: var(--overlay-hover);
-      color: var(--text);
-    }
   }
 
   // ── 서브에이전트 호출 — 묶지 않은 한 줄, 진행 중이면 스피너 ──

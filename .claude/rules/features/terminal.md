@@ -228,7 +228,7 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
     입력창까지 잠겼다(2026-10-01 사용자 신고). 폰도 같은 세션 재구독 시 prompt 를 비운다.
 - ⚠️ **채팅 보기는 PTY 크기를 주장하지 않는다** — attach 를 `0×0`(서버가 크기 변경 생략)으로, 따라간 크기를 `resize` 로 되돌려 보내지 않는다(데스크톱 창을 끄는 중 옛 크기가 최신을 덮는다).
   터미널로 바꾸는 순간 `setView` 가 refit + 주장. xterm 은 언마운트하지 않고 `moterm__term--hidden`(display:none) — 숨은 호스트 fit 은 `refit` 이 건너뛴다.
-- 입력: `chat-send` → 서버(`chat.ts sendChatText`)가 **한 줄이어도 bracketed paste 로 감싸고 250ms 뒤 Enter**. ⚠️ 감싸지 않으면 claude 가 글자 덩어리 뒤 Enter 를 붙여넣기로 삼켜 **글이 입력란에 남고 제출되지 않았다**(2026-10-01 재현 — 이 탓에 Esc 로 멈출 작업도 없었다). [중단] = `\x1b` 후 800ms 뒤 Ctrl+U · 누르는 즉시 '작업 중' 을 숨기고(`stopping`, busy 가 내려가면 풀림·최대 6초) **그동안의 Esc 는 삼킨다**(⚠️ claude 에서 Esc 두 번 = 되감기 메뉴 — 표시가 늦게 꺼져 사용자가 거듭 눌렀다, 2026-10-01) — ⚠️ claude 는 중단하면 보낸 글을 입력란에 되돌려 놓는데 채팅 보기에선 안 보여 다음 메시지에 붙는다. ⚠️ 비우기를 전송 때 하지 말 것(먼저 붙인 `[Image #1]` 이 지워진다).
+- 입력(폰만 — 데스크톱은 아래 '데스크톱 채팅 보기'): `chat-send` → 서버(`chat.ts sendChatText`)가 **한 줄이어도 bracketed paste 로 감싸고 250ms 뒤 Enter**. ⚠️ 감싸지 않으면 claude 가 글자 덩어리 뒤 Enter 를 붙여넣기로 삼켜 **글이 입력란에 남고 제출되지 않았다**(2026-10-01 재현 — 이 탓에 Esc 로 멈출 작업도 없었다). [중단] = `\x1b` 후 800ms 뒤 Ctrl+U · 누르는 즉시 '작업 중' 을 숨기고(`stopping`, busy 가 내려가면 풀림·최대 6초) **그동안의 Esc 는 삼킨다**(⚠️ claude 에서 Esc 두 번 = 되감기 메뉴 — 표시가 늦게 꺼져 사용자가 거듭 눌렀다, 2026-10-01) — ⚠️ claude 는 중단하면 보낸 글을 입력란에 되돌려 놓는데 채팅 보기에선 안 보여 다음 메시지에 붙는다. ⚠️ 비우기를 전송 때 하지 말 것(claude 입력란에 사용자가 직접 넣어 둔 것이 지워진다).
 - ⚠️ **앱을 claude 안에서 띄우면 `CLAUDECODE`·`CLAUDE_CODE_*` 가 세션에 상속돼 그 안 claude 가 기록 저장을 끈다**("Transcript saving is off") —
   `pty.ts` `inheritableEnv()` 가 걸러낸다(`CLAUDE_CONFIG_DIR` 은 남김). 그 전에 뜬 tmux 서버는 옛 env 를 들고 있다.
 - jsonl 은 Claude Code 내부 형식 — 파서(`transcript.ts`)는 모르는 줄·블록을 **조용히 건너뛴다**. `isSidechain`(서브에이전트)·`isMeta` 숨김,
@@ -236,18 +236,22 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
 
 ### 데스크톱 채팅 보기 (2026-10-01)
 - **탭 안의 작은 토글**(`TabViewToggle` — 에이전트 세션만, hover·활성·채팅 중일 때만 보임 · ⚠️ 숨었을 땐 **폭 0**(opacity 만 0 이면 자리를 차지해 에이전트 탭 제목이 일찍 잘렸다))로 세션별 전환, 단축키 **⌘E**(포커스 세션 — `useTerminalShortcuts`, `e.code === 'KeyE'` · 셸 세션은 무시), 기본은 터미널(`lib/chatViews` — localStorage, 종료 세션은 `pruneChatViews`).
-- 화면은 폰과 **공용 `ChatView`**(`features/terminal/components` — ⚠️ `window.oneApp` 호출 금지, 폰 번들에도 들어간다). 데이터는 `useTerminalChat` → IPC `terminal:chat:open/close/send` + `terminal:chat` 이벤트(main `ipc.ts` 가 창·세션별로 `subscribeChat`, 창 파괴·리로드 시 해제).
-- ⚠️ **xterm 은 그대로 두고 `TerminalChatPane` 이 pane 을 덮는다** — 언마운트 금지 규칙 유지, pane 크기가 같아 PTY 크기 주장 규칙도 그대로. **보이는 pane 만** 구독한다(`chat && visible`).
-- 포커스는 `focusInput`(채팅이면 `.term-chat__input`, 아니면 xterm) — attach·focused effect·핸들 `focus` 가 모두 이것. 채팅 보기의 ⌘F 는 xterm 검색 대신 대화 검색(아래). ⚠️ 단축키 게이트(`useTerminalShortcuts`)는 `.term-chat__input` 을 xterm textarea 처럼 예외로 둔다(⌘1..9 탭 전환).
+- **위는 채팅(읽기 전용), 아래는 진짜 터미널**(2026-10-01 사용자 결정) — `ChatView composer={false}`. 입력창을 흉내 내던 시절 Enter 씹힘·Esc 지연·이미지 칩 문제가 줄줄이 나서 걷어냈다: 이미지 ⌘V·`/`·`@`·↑·Esc·질문/권한 선택이 전부 claude 그대로다. 폰은 소프트 키보드라 입력창을 유지한다.
+- 화면은 폰과 **공용 `ChatView`**(`features/terminal/components` — ⚠️ `window.oneApp` 호출 금지, 폰 번들에도 들어간다). 데이터는 `useTerminalChat` → IPC `terminal:chat:open/close` + `terminal:chat` 이벤트(main `ipc.ts` 가 창·세션별로 `subscribeChat`, 창 파괴·리로드 시 해제). 데스크톱엔 보내기·자동완성 IPC 가 없다(폰 WS 만).
+- ⚠️ **xterm 은 그대로 두고 `TerminalChatPane` 이 pane 의 위쪽만 덮는다**(`.terminal__chat--split`, `bottom: --term-chat-strip`) — 언마운트 금지 규칙 유지. **보이는 pane 만** 구독한다(`chat && visible`).
+  - ⚠️ **PTY 를 줄여 아래 칸에 맞추지 말 것** — 크기는 폰·전체 터미널과 공유(last-claim-wins)라 같이 작아지고, ⌘E 마다 claude 가 다시 그리며 긴 권한 창이 잘린다. 크기는 pane 그대로, **가리기만** 한다.
+  - 드러낼 높이는 `TerminalView` 가 xterm 버퍼 글자를 `lib/claudeLiveRegion.ts liveRegionTop` 에 넣어 잰다(쓰기·크기 변화 rAF 코얼레스, 줄→px 는 `.xterm-screen` 기준이라 폰 크기 여백에도 맞다). 못 찾으면 직전 값 유지. 판정(2.1.286 실측 — tmux 안에선 전체 화면 모드라 입력 상자가 늘 맨 아래):
+    입력 상자 = 0열 전체 폭 `─` 두 줄 사이 첫 줄이 `❯`/`!`(선택지 `❯ 1.` 제외) → 위 경계부터, 작업 중이면 그 위 **스피너 줄**(`[·✢✳✶✻✽*] … …`)부터 · 대화상자(질문·권한·폴더 신뢰) = 마지막 줄에서 위로 `⏺`/`✻ ` 기록 줄 전까지의 **가장 위** 전체 폭 줄(⚠️ 질문 창 안에도 전체 폭 줄이 있다 · 권한 창의 `╌` 점선은 경계 아님 · ⚠️ `❯ 글` 을 기록 줄로 보지 말 것 — 폴더 신뢰의 번호 없는 선택지 `❯ No, exit` 와 같은 모양). 화면이 덜 차면 대화상자가 중간에 떠 아래 칸이 커질 뿐이다. 작업 중 도구 줄(`⎿ $ …`)은 스피너 위라 안 넣는다(채팅에 진행 중 도구로 보인다).
+  - 아래 칸 **휠은 막는다**(터미널이 스크롤되면 드러난 줄이 어긋난다 — 대화는 위 채팅에서). 채팅 보기로 들어갈 때 tmux copy-mode 를 끝낸다(올려 둔 채면 옛 화면이 보이고 키가 claude 로 안 간다).
+- 포커스는 늘 xterm(`focusInput`) — 채팅을 눌러도 mouseup 에 터미널로 돌려준다(글자를 끌어 고른 중·검색 줄은 제외 — 복사). 채팅 보기의 ⌘F 는 대화 검색(아래), 닫으면 터미널로(`onReturnFocus`). 붙여넣기(⌘V 이미지 = Ctrl+V 위임)·파일 끌어다 놓기는 **터미널 보기와 같은 경로** — 단 `.terminal__chat` 안(검색 줄)의 붙여넣기는 비킨다.
 
 ### 채팅 보기 읽기·조작 (2026-10-01 — `ChatView` 공용)
 - 읽기 단 `--chat-col-w`(760) — 목록 좌우 padding 을 `max(12px, (100% - 760)/2)` 로, 입력 바 안쪽도 같은 폭. 연속 도구 호출 2개 이상은 `ToolGroup`(진행 중인 것만 펼쳐 둠), Edit 상세는 diff 색, 내 메시지에 시각(`ChatItem.ts` — 파서가 jsonl `timestamp` 를 싣는다).
-- 키(데스크톱 `enterToSend` 일 때만): Enter 전송 · Esc 중단(작업 중) · 숫자 키 = 선택지(입력창 빔) · ↑↓ 이전 입력. ⚠️ 모두 `isComposing`/`keyCode 229` 면 건너뛴다(한글 IME).
-- `/` 자동완성 — main `chatCommands.ts`(프로젝트·계정 `skills`/`commands` + 내장 몇 개, 30초 캐시) → IPC `terminal:chat:commands` · WS `chat-commands`. 처음 `/` 를 칠 때 한 번 받는다.
-- 작업 중 상태 줄 — `sessions/<pid>.json` status `busy` 일 때만 화면을 읽어 `parseScreenStatus`(말줄임 `…` + 괄호 꼬리, ⚠️ `❯` 입력창 줄 제외) → `chat-status`. 선택 화면과 같은 캡처 한 번.
+- 입력창(폰 — `composer`)의 자동완성: ⚠️ 키 처리는 `isComposing`/`keyCode 229` 면 건너뛴다(한글 IME). `/` = main `chatCommands.ts`(프로젝트·계정 `skills`/`commands` + 내장 몇 개, 30초 캐시) → WS `chat-commands`, `@` = `listChatFiles`(`git ls-files --cached --others --exclude-standard`, 30초 캐시, 2만 개 상한) → WS `chat-files`. 처음 칠 때 한 번 받는다. 쓰던 글은 `lib/chatDrafts`(세션별 메모리, `persistKey`)라 보기를 바꿔도 남는다. 입력창 높이(`fitInput`)는 ⚠️ **숨은 채 재지 않는다** — display:none 에서 재면 `0px` 로 박혀 min-height 가 테두리 몫(2px) 모자라 스크롤이 생겼다(2026-10-01 사용자 신고) → 보이게 될 때·폭이 바뀔 때 `ResizeObserver` 로 다시 잰다. 스크롤은 max-height 를 넘을 때만(`overflow-y` 를 JS 가 정한다 — 소수 줄높이 반올림 대비).
+- 작업 중 상태 줄(폰) — `sessions/<pid>.json` status `busy` 일 때만 화면을 읽어 `parseScreenStatus`(말줄임 `…` + 괄호 꼬리, ⚠️ `❯` 입력창 줄 제외) → `chat-status`. 선택 화면과 같은 캡처 한 번. 데스크톱은 스피너·선택 화면이 아래 터미널에 그대로 보여 그리지 않는다.
 - ⌘F(채팅 보기) = 대화 검색 — `TerminalView` 가 `findSignal` 을 올리고 `ChatView` 가 CSS Custom Highlight API(`::highlight(term-chat-find)`)로 칠한다(DOM 무변경). ⚠️ 검색창은 `focus()` 후 `select()` — select 만으로는 포커스가 안 온다(실측).
 - 답변·코드 블록 [복사] — `Markdown copyCode`.
-- 입력 보강(데스크톱): **이미지 ⌘V = 채팅이 들고 있다가 보낼 때 넘긴다** — 붙인 이미지는 main `chatImages.ts` 가 임시 폴더에 저장하고 경로를 칩(미리보기 + ×)으로 둔다. 보낼 때 `sendChatText` 가 경로를 **한 장씩 따로 붙여넣으면** claude 가 `[Image #N]` 으로 바꿔 첨부한다(실측 — 한 번에 여러 경로를 붙이면 맨 앞 하나만 바뀐다). 폰(WS)은 우리 임시 폴더 경로만 허용. ⚠️ 예전처럼 ⌘V 순간 claude 에 Ctrl+V(`\x16`)를 보내지 말 것 — 이미지가 claude 입력란에만 있어 낱장 칩·삭제·보기 전환 뒤 유지가 안 됐다(2026-10-01 사용자 신고 3건). ⚠️ pane 의 `onPasteCapture`(xterm 용)는 **채팅 보기면 비켜야 한다**(capture + stopPropagation 이라 입력창 처리기가 안 불렸다). 쓰던 글·첨부는 `lib/chatDrafts`(세션별 메모리, `persistKey`)라 보기를 바꿔도 남는다. 파인더에서 끌어다 놓은 이미지도 칩, 나머지 파일은 경로 글자. 파서는 이미지가 있는 입력의 `[Image #N]` 자리 표시를 걷는다. `@` 파일 자동완성 = main `listChatFiles`(`git ls-files --cached --others --exclude-standard`, 30초 캐시, 2만 개 상한) → IPC `terminal:chat:files` · WS `chat-files`.
+- 이미지 첨부 흉내(임시 폴더 저장 → 칩 → 경로 붙여넣기, `chatImages.ts`)는 2026-10-01 데스크톱을 진짜 터미널 입력으로 바꾸며 걷어냈다 — 되살리지 말 것. 파서는 이미지가 있는 입력의 `[Image #N]` 자리 표시를 걷고 '이미지 N장' 꼬리표로 보인다.
 - 서브에이전트(Agent/Task) 호출은 도구 묶음에서 빼 한 줄로(진행 중 스피너). 할 일 패널은 최신 TodoWrite 상세(`[x]/[~]/[ ]` 줄)를 읽는다 — ⚠️ 2026-10-01 기준 이 환경의 claude(2.1.286)엔 TodoWrite 가 없어(최근 기록 200개에 0회) 실제로는 뜨지 않는다.
 
 ## 에이전트 추가

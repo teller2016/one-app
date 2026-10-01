@@ -45,14 +45,12 @@ export function useTerminalShortcuts(
       // ⚠️ TEXTAREA 도 막아야 한다 — 변경사항 드로어의 커밋 메시지가 공용 Textarea 라
       // 예전엔 작성 중 ⌘⇧W 가 확인 없이 세션을 죽였다. 단 xterm 의 입력도 textarea
       // (`.xterm-helper-textarea`)이므로 그것만 예외 — 아니면 터미널에 포커스가 있는
-      // 동안 단축키가 전부 죽는다. 채팅 보기의 입력창(`.term-chat__input`)도 같은 이유로 예외 —
-      // 그 세션의 '입력'이라 터미널에 포커스가 있는 것과 같다(⌘1..9 탭 전환이 살아 있어야 한다).
+      // 동안 단축키가 전부 죽는다.
       const focused = document.activeElement as HTMLElement | null;
       if (focused?.tagName === 'INPUT') return;
       if (
         focused?.tagName === 'TEXTAREA' &&
-        !focused.classList.contains('xterm-helper-textarea') &&
-        !focused.classList.contains('term-chat__input')
+        !focused.classList.contains('xterm-helper-textarea')
       )
         return;
       const claim = () => {

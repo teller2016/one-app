@@ -19,6 +19,7 @@ import { Input } from '../../../components/Input';
 import { Tooltip } from '../../../components/Tooltip';
 import { terminalBackend } from '../lib/backend';
 import { useChatView } from '../lib/chatViews';
+import { liveRegionTop } from '../lib/claudeLiveRegion';
 import { TerminalChatPane } from './TerminalChatPane';
 import { buildTerminalTheme, searchDecorations } from '../lib/xtermTheme';
 
@@ -166,20 +167,18 @@ export const TerminalView = memo(function TerminalView({
   visibleRef.current = visible;
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
-  // 채팅 보기 — 탭의 작은 토글이 바꾼다(lib/chatViews). xterm 은 그 아래 그대로 두고 채팅을 덮는다.
+  // 채팅 보기 — 탭의 작은 토글이 바꾼다(lib/chatViews). xterm 은 그 아래 그대로 두고 채팅이 **위쪽만** 덮는다 —
+  // 아래로 드러난 claude 입력 부분이 그대로 입력 자리다(읽기는 채팅, 입력은 진짜 터미널 — 2026-10-01 사용자 결정).
   // 크기는 pane 크기 그대로라 PTY 크기 규칙(가시 pane 이 주장)은 바뀌지 않는다
   const chat = useChatView(id) === 'chat';
   const chatRef = useRef(chat);
   chatRef.current = chat;
   // ⌘F 를 채팅 보기에선 채팅 검색으로 — 올릴 때마다 ChatView 가 검색 줄을 연다
   const [chatFind, setChatFind] = useState(0);
-  // 채팅 보기에서 파일을 끌어다 놓으면 경로는 PTY 가 아니라 채팅 입력창으로
-  const [chatInsert, setChatInsert] = useState<{ text: string; images?: string[]; n: number } | null>(null);
-  /** 이 pane 의 입력 자리 — 채팅 보기면 채팅 입력창, 아니면 xterm */
-  const focusInput = useCallback(() => {
-    if (chatRef.current) paneRef.current?.querySelector<HTMLTextAreaElement>('.term-chat__input')?.focus();
-    else termRef.current?.focus();
-  }, []);
+  // 채팅 보기에서 아래로 드러낼 터미널 높이(px) — claude 화면의 입력 상자·스피너·대화상자 시작 줄부터 pane 바닥까지
+  const [chatStrip, setChatStrip] = useState<number | null>(null);
+  /** 이 pane 의 입력 자리 — 채팅 보기에서도 xterm 이다(아래 칸) */
+  const focusInput = useCallback(() => termRef.current?.focus(), []);
 
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
@@ -539,6 +538,9 @@ export const TerminalView = memo(function TerminalView({
         });
     };
     term.attachCustomWheelEventHandler((ev) => {
+      // 채팅 보기의 아래 칸(입력 부분)은 굴리지 않는다 — 터미널이 스크롤되면 드러난 줄이 입력 부분에서 어긋난다.
+      // 대화는 위 채팅에서 굴린다
+      if (chatRef.current) return false;
       // 폴백(tmux 미설치) 세션은 xterm 에 스크롤백이 쌓이므로 기본 동작이 옳다
       if (!tmuxRef.current) return true;
       // ⚠️ 마우스 트래킹을 켠 앱(claude 등)에는 휠을 **그대로 넘긴다** — 그 앱들이 자체
@@ -613,8 +615,8 @@ export const TerminalView = memo(function TerminalView({
           if (ev.seq > attachSeq) term.write(ev.data);
         }
         queue.length = 0;
-        // 포커스 pane 이 아니면 훔치지 않는다 · 채팅 보기면 입력은 채팅 입력창 몫이다
-        if (focusedRef.current && !chatRef.current) term.focus();
+        // 포커스 pane 이 아니면 훔치지 않는다
+        if (focusedRef.current) term.focus();
         // 마운트 직후엔 레이아웃이 아직 안정되지 않아 fit 이 좁게 잡힐 수 있다(탭바·스크롤바
         // 확정 전). 다음 프레임에 한 번 더 맞춰 잘못된 크기를 PTY 에 남기지 않는다.
         requestAnimationFrame(() => {
@@ -795,6 +797,45 @@ export const TerminalView = memo(function TerminalView({
     focusInput();
   }, [focused, visible, chat, focusInput]);
 
+  // 채팅 보기 — 아래로 드러낼 터미널 높이를 claude 화면 글자에서 잰다(lib/claudeLiveRegion). 화면이 바뀔 때마다
+  // (쓰기·크기) rAF 로 모아 한 번. 못 찾으면 직전 값을 둔다 — 다시 그리는 중의 반쪽 화면에 칸이 출렁이지 않게.
+  // 들어오는 순간 tmux 스크롤(copy-mode)도 끝낸다 — 올려 둔 채면 드러난 칸이 옛 화면이고 키도 claude 로 안 간다
+  useEffect(() => {
+    const term = termRef.current;
+    const pane = paneRef.current;
+    if (!chat || !visible || !term || !pane) return;
+    if (tmuxRef.current) {
+      void window.oneApp.terminal.scrollToBottom?.(id).then(() => onScrolledChangeRef.current(id, false));
+    }
+    let raf: number | null = null;
+    let top: number | null = null;
+    const measure = () => {
+      raf = null;
+      const buf = term.buffer.active;
+      const lines: string[] = [];
+      for (let i = 0; i < term.rows; i += 1) lines.push(buf.getLine(buf.viewportY + i)?.translateToString(true) ?? '');
+      top = liveRegionTop(lines, term.cols) ?? top;
+      // 줄 → px 는 xterm 화면 요소 기준 — 폰이 더 작은 크기를 잡아 화면 아래 여백이 있어도(remoteFit) 맞는다
+      const screen = pane.querySelector('.xterm-screen');
+      if (top === null || !screen) return;
+      const sr = screen.getBoundingClientRect();
+      const lineTop = sr.top + (top * sr.height) / term.rows;
+      setChatStrip(Math.max(0, Math.round(pane.getBoundingClientRect().bottom - lineTop)));
+    };
+    const schedule = () => {
+      if (raf === null) raf = requestAnimationFrame(measure);
+    };
+    schedule();
+    const subs = [term.onWriteParsed(schedule), term.onResize(schedule)];
+    const ro = new ResizeObserver(schedule);
+    ro.observe(pane);
+    return () => {
+      subs.forEach((sub) => sub.dispose());
+      ro.disconnect();
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, [chat, visible, id]);
+
   // 검색어가 바뀌면 첫 일치로 이동 — incremental 이라 타이핑 중 선택이 자연스럽게 늘어난다
   useEffect(() => {
     const search = searchRef.current;
@@ -901,9 +942,8 @@ export const TerminalView = memo(function TerminalView({
       // Claude Code 는 `Ctrl+V`(0x16)를 받으면 시스템 클립보드를 직접 읽어 이미지를 첨부하므로
       // ⌘V 를 그 경로로 넘긴다. capture 단계라 xterm(element·textarea) 리스너보다 먼저다.
       onPasteCapture={(e) => {
-        // ⚠️ 채팅 보기면 손대지 않는다 — 채팅 입력창(ChatView onPaste)이 같은 0x16 을 보내고 '이미지 첨부' 칩까지 띄운다.
-        // 여기서 가로채면(capture + stopPropagation) 입력창 처리기가 아예 불리지 않아 칩이 안 떴다(2026-10-01 사용자 신고)
-        if (chatRef.current) return;
+        // 채팅 보기의 검색 줄에 붙여넣는 것은 그 입력의 몫이다(아래 칸 터미널에 붙여넣으면 그대로 claude 로 간다)
+        if ((e.target as Element).closest('.terminal__chat')) return;
         const items = Array.from(e.clipboardData?.items ?? []);
         if (!items.some((it) => it.kind === 'file' && it.type.startsWith('image/')))
           return;
@@ -947,17 +987,7 @@ export const TerminalView = memo(function TerminalView({
         // 말미 공백 — 경로에 이어서 바로 타이핑할 수 있게 (여러 개는 공백 연결)
         const text = paths.map(shellQuotePath).join(' ') + ' ';
         onFocusPane(id); // 경로를 넣었으니 이어서 입력할 곳도 이 pane 이다
-        if (chatRef.current) {
-          // 채팅 보기 — 이미지는 첨부 칩으로, 나머지 경로는 입력창에(PTY 에 바로 쓰면 보이지 않는 claude 입력란에 들어간다)
-          const isImage = (p: string) => /\.(png|jpe?g|gif|webp)$/i.test(p);
-          const rest = paths.filter((p) => !isImage(p));
-          setChatInsert((prev) => ({
-            text: rest.length ? rest.map(shellQuotePath).join(' ') + ' ' : '',
-            images: paths.filter(isImage),
-            n: (prev?.n ?? 0) + 1,
-          }));
-          return;
-        }
+        // 채팅 보기여도 같다 — 아래 칸의 claude 입력란에 들어가는 것이 보인다
         window.oneApp.terminal.write(id, text);
         termRef.current?.focus();
       }}
@@ -1055,7 +1085,13 @@ export const TerminalView = memo(function TerminalView({
       {/* 보이는 pane 만 구독한다 — 숨은 탭·keep-alive 로 숨은 섹션까지 대화 기록을 1초마다 읽을 이유가 없다.
           다시 보이면 스냅샷부터 새로 받는다 */}
       {chat && visible && (
-        <TerminalChatPane sessionId={id} busy={busy} findSignal={chatFind} insertSignal={chatInsert} />
+        <TerminalChatPane
+          sessionId={id}
+          busy={busy}
+          findSignal={chatFind}
+          strip={chatStrip}
+          onFocusTerminal={focusInput}
+        />
       )}
 
       <div className="terminal__host" ref={hostRef} />

@@ -1120,6 +1120,13 @@
     min-height: 0;
   }
 
+  // 위쪽만 덮는다 — 아래로 claude 입력 부분(진짜 터미널)이 드러난다. 높이는 TerminalView 가 화면에서 잰
+  // --term-chat-strip(px). 재기 전 한 프레임은 40% 로 둔다
+  &__chat--split {
+    bottom: var(--term-chat-strip, 40%);
+    border-bottom: 1px solid var(--border);
+  }
+
   &__tab-close {
     display: inline-flex;
     align-items: center;

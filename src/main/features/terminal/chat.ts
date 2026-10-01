@@ -23,7 +23,6 @@ import os from 'node:os';
 import path from 'node:path';
 import type { ChatCommand, ChatPrompt, ChatServerMsg } from '../../../shared/terminal-protocol';
 import { listChatCommands, listChatFiles } from './chatCommands';
-import { IMAGE_EXT_RE, isChatImagePath } from './chatImages';
 import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
 import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
 import { parseTranscript } from './transcript';
@@ -362,44 +361,22 @@ function unsubscribe(termId: string, listener: Listener) {
 
 /** 채팅 입력의 Enter 지연 — 붙여넣기 끝을 claude 가 처리한 뒤에 Enter 가 오도록 */
 const CHAT_SUBMIT_DELAY_MS = 250;
-/** 첨부 이미지 붙여넣기 사이 틈 — claude 가 경로를 읽어 `[Image #N]` 으로 바꿀 시간(실측 0.4초 간격으로 확인) */
-const CHAT_IMAGE_GAP_MS = 300;
-/** 한 번에 보낼 이미지 상한 */
-const CHAT_IMAGE_MAX = 10;
 
 const paste = (s: string) => `\x1b[200~${s}\x1b[201~`;
 
 /**
- * 채팅 입력창 전송 — [이미지 경로들] + 글을 claude 입력란에 붙여넣고 Enter. 폰(server.ts WS)·데스크톱(ipc.ts) 공용.
+ * 폰 채팅 입력창 전송 — 글을 claude 입력란에 붙여넣고 Enter(server.ts WS). 데스크톱은 채팅이 읽기 전용이라
+ * 아래로 드러난 터미널에 직접 친다(이미지·`/`·`@` 도 claude 그대로 — 예전 이미지 첨부 흉내는 걷어냈다).
  * ⚠️ 한 줄 글도 **bracketed paste 로 감싼다** — 감싸지 않은 글자 덩어리 뒤의 Enter 를 claude 가 붙여넣기 일부로
  *    삼켜 **글이 입력란에 남고 제출되지 않았다**(2026-10-01 재현). 붙여넣기 끝 표시가 있으면 Enter 가 제출로 읽힌다.
  *    여러 줄도 이 방식이라 줄마다 제출되지 않는다(claude 는 긴 붙여넣기를 `[Pasted text #1 +N lines]` 로 접는다).
- * ⚠️ 이미지는 **한 장씩 따로** 붙여넣는다 — 경로 여러 개를 한 번에 붙이면 claude 가 맨 앞 하나만 `[Image #N]` 으로
- *    바꾸고 나머지는 글자로 남겼다(실측). 공백은 터미널 끌어다 놓기처럼 `\ ` 로.
- * ⚠️ claude 입력란을 비우지 말 것 — 중단 뒤 되돌아온 글은 ChatView 의 중단(Esc)이 직후에 비운다.
- * @param anyImagePath 데스크톱은 파인더에서 끌어다 놓은 이미지도 보낸다. 폰(WS)은 우리가 저장한 첨부만(chatImages.ts)
+ * ⚠️ claude 입력란을 비우지 말 것 — 중단 뒤 되돌아온 글은 ChatView 의 [중단]이 직후에 비운다.
  */
-export function sendChatText(id: string, text: string, images: unknown = [], anyImagePath = false) {
-  if (typeof text !== 'string') return;
+export function sendChatText(id: string, text: string) {
+  if (typeof text !== 'string' || !text.trim()) return;
   if (!listSessions().some((s) => s.id === id)) return;
-  const imgs = (Array.isArray(images) ? images : [])
-    .filter(
-      (p): p is string =>
-        typeof p === 'string' &&
-        IMAGE_EXT_RE.test(p) &&
-        (anyImagePath || isChatImagePath(p)) &&
-        fs.existsSync(p),
-    )
-    .slice(0, CHAT_IMAGE_MAX);
-  if (!text.trim() && !imgs.length) return;
-  let at = 0;
-  for (const p of imgs) {
-    setTimeout(() => writeSession(id, paste(p.replace(/ /g, '\\ '))), at);
-    at += CHAT_IMAGE_GAP_MS;
-  }
-  // 이미지 뒤에 바로 붙으면 '[Image #2]두 이미지…' 처럼 붙어 보인다 — 한 칸 띄운다
-  if (text.trim()) setTimeout(() => writeSession(id, paste((imgs.length ? ' ' : '') + text)), at);
-  setTimeout(() => writeSession(id, '\r'), at + CHAT_SUBMIT_DELAY_MS);
+  writeSession(id, paste(text));
+  setTimeout(() => writeSession(id, '\r'), CHAT_SUBMIT_DELAY_MS);
 }
 
 /**

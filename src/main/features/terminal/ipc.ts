@@ -14,8 +14,7 @@ import { notifyToast, sendToast } from '../notify/notify';
 import { getNotifySound } from '../settings/store';
 import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
-import { chatCommandsFor, chatFilesFor, sendChatText, subscribeChat } from './chat';
-import { saveChatImage } from './chatImages';
+import { subscribeChat } from './chat';
 import { sessionLocation, sessionLocationLabel } from './location';
 import {
   initTerminalWindows,
@@ -134,14 +133,7 @@ export function registerTerminalIpc() {
     subs?.get(id)?.();
     subs?.delete(id);
   });
-  // 데스크톱은 파인더에서 끌어다 놓은 이미지 경로도 보낸다(anyImagePath)
-  ipcMain.on('terminal:chat:send', (_e, id: string, text: string, images?: string[]) =>
-    sendChatText(id, text, images ?? [], true)
-  );
-  // 붙여넣은 이미지 저장 → 경로(보낼 때 claude 에 경로로 붙여넣는다 — chatImages.ts)
-  ipcMain.handle('terminal:chat:save-image', (_e, data: Uint8Array, mime: string) => saveChatImage(data, mime));
-  ipcMain.handle('terminal:chat:commands', (_e, id: string) => chatCommandsFor(id));
-  ipcMain.handle('terminal:chat:files', (_e, id: string) => chatFilesFor(id));
+  // 데스크톱 채팅 보기는 읽기 전용 — 입력은 아래로 드러난 터미널이 받는다(보내기·자동완성은 폰 WS 경로만, server.ts)
   // 세션 이름 변경 — 목록 갱신은 onSessionsChanged 브로드캐스트가 담당
   ipcMain.handle('terminal:rename', (_e, id: string, title: string) => {
     renameSession(id, title);

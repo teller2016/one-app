@@ -495,7 +495,7 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       break;
     case 'chat-send':
       // 폰은 우리가 저장한 첨부만(임의 경로를 claude 에 읽히지 않게) — 지금 폰엔 첨부 UI 가 없다
-      sendChatText(msg.id, msg.text, msg.images ?? []);
+      sendChatText(msg.id, msg.text);
       break;
     case 'chat-commands':
       send(ws, { type: 'chat-commands', id: msg.id, items: chatCommandsFor(msg.id) });

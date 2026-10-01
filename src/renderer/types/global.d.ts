@@ -1,5 +1,5 @@
 // preload 에서 contextBridge 로 노출한 window.oneApp 타입 선언
-import type { ChatCommand, ChatServerMsg } from '../../shared/terminal-protocol';
+import type { ChatServerMsg } from '../../shared/terminal-protocol';
 import type { ApprovalBridge } from '../../preload/bridges/approval';
 import type { JiraReportBridge } from '../../preload/bridges/jiraReport';
 import type { SettingsBridge } from '../../preload/bridges/settings';
@@ -375,10 +375,6 @@ declare global {
         chat: {
           open: (id: string) => void;
           close: (id: string) => void;
-          send: (id: string, text: string, images?: string[]) => void;
-          saveImage: (data: Uint8Array, mime: string) => Promise<string | null>;
-          commands: (id: string) => Promise<ChatCommand[]>;
-          files: (id: string) => Promise<string[]>;
           onMessage: (cb: (msg: ChatServerMsg) => void) => () => void;
         };
         rename: (id: string, title: string) => Promise<{ ok: boolean }>;

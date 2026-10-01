@@ -60,7 +60,7 @@ export type TermClientMsg =
   | { type: 'chat-open'; id: string } // 이 세션의 대화를 구독 — 응답은 'chat'(reset) 후 증분
   | { type: 'chat-close' }
   // 입력창 전송 — 서버가 붙여넣기 감싸기·Enter 지연까지 처리한다(여러 줄이 줄마다 제출되지 않게)
-  | { type: 'chat-send'; id: string; text: string; images?: string[] }
+  | { type: 'chat-send'; id: string; text: string }
   | { type: 'chat-commands'; id: string } // `/` 자동완성 목록 요청 — 입력창에서 / 를 칠 때
   | { type: 'chat-files'; id: string }; // `@` 파일 자동완성 목록 요청 — 입력창에서 @ 를 칠 때
 

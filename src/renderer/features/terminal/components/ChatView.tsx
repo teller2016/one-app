@@ -1,7 +1,12 @@
 // 채팅 보기 — 터미널 세션 안 claude 의 대화 기록(jsonl)을 말풍선으로 보여준다. 데스크톱 pane·폰 터미널 탭 공용.
 // ⚠️ 여기서 window.oneApp 을 부르지 말 것 — 폰 번들에도 들어가는 순수 화면이다(데이터는 호출부가 댄다:
 //    데스크톱 = useTerminalChat → IPC, 폰 = controller → WS — 둘 다 main chat.ts).
-// 입력은 서버가 붙여넣기·Enter 로 PTY 에 넣는다.
+//
+// 입력은 둘로 갈린다(2026-10-01 사용자 결정):
+//   폰       — 이 화면의 입력창(composer). 서버가 붙여넣기·Enter 로 PTY 에 넣는다(소프트 키보드로 터미널 입력은 고역).
+//   데스크톱 — `composer={false}`: 읽기만 하고, 입력은 아래로 드러난 **진짜 터미널**이 맡는다(TerminalView ·
+//             lib/claudeLiveRegion). 입력을 흉내 내던 시절 Enter 씹힘·Esc 지연·이미지 칩 같은 문제가 줄줄이 났다 —
+//             진짜 터미널이면 이미지·`/`·`@`·↑·Esc·선택지가 전부 claude 그대로다.
 //
 // ⚠️ 대화 기록에는 claude 의 **TUI 상호작용**이 남지 않는다 — 특히 AskUserQuestion 질문은 답하기 전까지 기록에
 //    없다(2026-10-01 실측). 그래서 claude 가 답을 기다리는 동안은 서버가 **터미널 화면에서 읽은 번호 선택 화면**
@@ -9,13 +14,12 @@
 //    넘어가며, 화면이 바뀌면 다음 prompt 가 온다(여러 질문 → 검토 화면 '1. Submit answers' 까지 같은 카드로).
 //    직접 답은 'Type something.' 번호 → 글 → Enter. 화면을 못 읽으면 선택지 없는 prompt — 터미널 안내만.
 //
-// 읽기·조작 개선(2026-10-01 사용자 선택 A·B·C 전부):
-//   읽기 — 본문 760 단(CSS) · 연속 도구 호출 묶기 · Edit diff 색 · 내 메시지 시각
-//   조작 — Esc 중단 · 숫자 키 선택지 · ↑↓ 이전 입력 · 답변/코드 복사 · 위로 올려 읽는 중 '새 답변'
-//   더   — `/` 명령 자동완성 · 작업 중 상태 줄(화면에서 읽음) · ⌘F 검색(데스크톱 — findSignal)
-//   입력 — 이미지 ⌘V(데스크톱 — onPasteImage, 낱장 칩·× 삭제) · 파일 끌어다 놓기(insertSignal) · `@` 파일 자동완성
-//          쓰던 글·첨부는 세션별로 기억한다(lib/chatDrafts — 보기를 바꿔도 남게, persistKey)
+// 읽기 개선(2026-10-01):
+//   읽기 — 본문 760 단(CSS) · 연속 도구 호출 묶기 · Edit diff 색 · 내 메시지 시각 · 답변/코드 복사
+//          위로 올려 읽는 중 '새 답변' · ⌘F 검색(데스크톱 — findSignal)
 //   진행 — 할 일(TodoWrite) 고정 패널 · 서브에이전트(Agent) 호출은 묶지 않고 따로
+//   입력창(폰) — `/` 명령·`@` 파일 자동완성 · 작업 중 상태 줄(화면에서 읽음) · [중단] · 선택지 버튼
+//          쓰던 글은 세션별로 기억한다(lib/chatDrafts — 보기를 바꿔도 남게, persistKey)
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
@@ -23,7 +27,7 @@ import { Icon } from '../../../components/Icon';
 import { Markdown } from '../../../components/Markdown';
 import { useCopy } from '../../../lib/useCopy';
 import type { ChatCommand, ChatItem, ChatPrompt } from '../../../../shared/terminal-protocol';
-import { getChatDraft, setChatDraft, type ChatAttachment } from '../lib/chatDrafts';
+import { getChatDraft, setChatDraft } from '../lib/chatDrafts';
 
 type AskItem = Extract<ChatItem, { kind: 'ask' }>;
 type ToolItem = Extract<ChatItem, { kind: 'tool' }>;
@@ -40,9 +44,9 @@ const TOOL_GROUP_MIN = 2;
  */
 const STOP_CLEAR_DELAY_MS = 800;
 /**
- * 중단을 누른 뒤 '작업 중' 을 숨겨 두는 최대 시간 — 세션 상태(busy)는 출력이 2.5초 멈춰야 내려가서 Esc 직후에도
- * 몇 초 '작업 중…' 이 남았다. 그 사이 사용자가 Esc 를 거듭 누르게 되고, claude 에서 **Esc 두 번은 되감기(rewind)
- * 메뉴**라 보이지 않는 메뉴가 열렸다(2026-10-01 사용자 신고). 누르는 즉시 숨기고, 이 시간 안의 Esc 는 삼킨다.
+ * 중단을 누른 뒤 '작업 중' 을 숨겨 두는 최대 시간 — 세션 상태(busy)는 출력이 2.5초 멈춰야 내려가서 중단 직후에도
+ * 몇 초 '작업 중…' 이 남았다. 그 사이 [중단]을 거듭 누르게 되고, claude 에서 **Esc 두 번은 되감기(rewind)
+ * 메뉴**라 보이지 않는 메뉴가 열렸다(2026-10-01 사용자 신고). 누르는 즉시 숨기고, 이 시간 안의 거듭 누름은 삼킨다.
  * busy 가 내려가면 바로 풀리고, 끝내 안 내려가면(멈추지 않았다) 이 시간 뒤 다시 보인다
  */
 const STOP_HOLD_MS = 6000;
@@ -104,6 +108,23 @@ function toBlocks(items: ChatItem[]): Block[] {
   return out;
 }
 
+/**
+ * 입력창 높이를 내용에 맞춘다(폰 입력창).
+ * ⚠️ 숨은 채(display:none — 다른 탭에 있는 동안 쓰던 글 복원·재마운트) 재면 scrollHeight 가 0 이라 높이가 `0px` 로 박히고,
+ *    min-height(40, border-box)가 테두리 몫만큼 모자라 **입력창에 2px 스크롤**이 생겼다(2026-10-01 사용자 신고, 재현). 숨었으면 건너뛰고
+ *    보이게 될 때(ResizeObserver) 다시 잰다.
+ * ⚠️ 스크롤은 max-height 를 넘을 때만 — 줄높이가 소수(1.35 × 16 = 21.6)라 기기에 따라 1px 남짓 넘쳐 스크롤 막대가 보일 수 있다.
+ */
+function fitInput(el: HTMLTextAreaElement | null) {
+  if (!el || !el.clientWidth) return;
+  el.style.height = 'auto';
+  // scrollHeight 는 테두리를 뺀 값이다 — border-box 라 테두리만큼 더해야 넘치지 않는다
+  const full = el.scrollHeight + el.offsetHeight - el.clientHeight;
+  const max = parseFloat(getComputedStyle(el).maxHeight);
+  el.style.height = `${full}px`;
+  el.style.overflowY = full > max ? 'auto' : 'hidden';
+}
+
 /** ISO → 'HH:MM' (오늘이 아니면 'M/D HH:MM') */
 function clock(ts?: string): string | null {
   if (!ts) return null;
@@ -152,14 +173,13 @@ export function ChatView({
   onRequestCommands,
   files = null,
   onRequestFiles,
-  onPasteImage,
-  insertSignal,
   persistKey,
   findSignal = 0,
+  composer = true,
+  onReturnFocus,
   onSend,
   onKey,
   onShowTerminal,
-  enterToSend = false,
 }: {
   items: ChatItem[];
   loaded: boolean;
@@ -178,32 +198,27 @@ export function ChatView({
   /** `@` 파일 자동완성 목록 — null 이면 아직 안 받았다(@ 를 치면 onRequestFiles) */
   files?: string[] | null;
   onRequestFiles?: () => void;
-  /**
-   * 이미지 ⌘V — 호출부가 이미지를 저장하고 **경로**를 돌려준다(데스크톱 = main 임시 폴더). 칩으로 들고 있다가
-   * 보낼 때 onSend 의 images 로 넘긴다(main 이 claude 에 한 장씩 경로로 붙여넣는다). 없으면 가로채지 않는다
-   */
-  onPasteImage?: (file: File) => Promise<string | null>;
-  /** 끼워 넣기(파일 끌어다 놓기) — n 이 바뀔 때마다 text 는 입력창 뒤에, images(경로)는 첨부 칩으로 */
-  insertSignal?: { text: string; images?: string[]; n: number } | null;
-  /** 쓰던 글·첨부를 기억할 열쇠(세션 id) — 보기를 바꿨다 돌아와도 남는다 */
+  /** 쓰던 글을 기억할 열쇠(세션 id) — 보기를 바꿨다 돌아와도 남는다 */
   persistKey?: string;
   /** 바뀔 때마다 검색 줄을 연다(데스크톱 ⌘F — 0 은 무시) */
   findSignal?: number;
-  /** images = 첨부 이미지 경로(없으면 빈 배열) */
-  onSend: (text: string, images: string[]) => void;
-  onKey: (data: string) => void;
-  onShowTerminal: () => void;
   /**
-   * Enter = 전송 · Shift+Enter = 줄바꿈 (데스크톱). 폰은 기본값 false — 소프트 키보드의 Enter 는 줄바꿈이 자연스럽고
-   * 전송은 버튼으로 한다. ↑↓ 이전 입력·숫자 키 선택지·Esc 중단도 이 값이 켜졌을 때(=하드웨어 키보드)만 쓴다.
+   * 입력창·선택지 카드·작업 중 줄을 그린다(폰). false 면 읽기만 — 입력은 아래의 진짜 터미널이 맡고(데스크톱),
+   * 대기 중 선택 화면·스피너도 거기 그대로 보이므로 여기서 다시 그리지 않는다
    */
-  enterToSend?: boolean;
+  composer?: boolean;
+  /** 검색 줄을 닫을 때 키보드를 돌려줄 곳 — 입력창이 없을 때(데스크톱 = 터미널) */
+  onReturnFocus?: () => void;
+  /** 입력창이 있을 때만 쓴다(composer) */
+  onSend?: (text: string) => void;
+  onKey?: (data: string) => void;
+  onShowTerminal: () => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const [hasNew, setHasNew] = useState(false);
-  const [draft, setDraft] = useState(() => getChatDraft(persistKey).text);
+  const [draft, setDraft] = useState(() => getChatDraft(persistKey));
   // 중단을 눌렀다 — 세션 상태가 따라 내려오기 전에 '작업 중' 을 먼저 숨긴다(STOP_HOLD_MS)
   const [stopping, setStopping] = useState(false);
   useEffect(() => {
@@ -215,20 +230,13 @@ export function ChatView({
     return () => window.clearTimeout(t);
   }, [stopping]);
   const working = busy && !stopping;
-  const [attachments, setAttachments] = useState<ChatAttachment[]>(() => getChatDraft(persistKey).attachments);
   // 화면 밖에 기억 — 보기를 터미널로 바꾸면 이 컴포넌트는 사라진다
-  useEffect(() => setChatDraft(persistKey, { text: draft, attachments }), [persistKey, draft, attachments]);
+  useEffect(() => setChatDraft(persistKey, draft), [persistKey, draft]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 선택 화면이 떠 있는데 직접 입력 자리가 없으면(검토·권한 화면) 입력창 글이 갈 곳이 없다
   const promptBlocksInput = !!prompt && !prompt.freeText;
   const blocks = useMemo(() => toBlocks(items), [items]);
-
-  // ↑↓ 이전 입력 — 내가 보낸 글(최근 것부터). -1 = 지금 쓰는 글
-  const sent = useMemo(
-    () => items.filter((i): i is Extract<ChatItem, { kind: 'user' }> => i.kind === 'user').map((i) => i.text).reverse(),
-    [items],
-  );
-  const histRef = useRef(-1);
+  const sendKey = (data: string) => onKey?.(data);
 
   // 자동완성 — `/명령`(입력 전체가 '/이름' 일 때) · `@파일`(커서 앞 낱말이 '@…' 일 때).
   // Esc 로 닫으면 글이 바뀔 때까지 다시 열지 않는다
@@ -264,26 +272,6 @@ export function ChatView({
   const todos = useMemo(() => latestTodos(items), [items]);
   const showTodos = todos.some((t) => t.state !== 'done');
 
-  const removeAttachment = (path: string) =>
-    setAttachments((list) => {
-      const gone = list.find((a) => a.path === path);
-      if (gone?.url) URL.revokeObjectURL(gone.url);
-      return list.filter((a) => a.path !== path);
-    });
-
-  // 파일 끌어다 놓기 — 이미지는 첨부 칩으로, 나머지 경로는 지금 쓰는 글 뒤에
-  useEffect(() => {
-    if (!insertSignal?.n) return;
-    const imgs = insertSignal.images ?? [];
-    if (imgs.length)
-      setAttachments((list) => [
-        ...list,
-        ...imgs.filter((p) => !list.some((a) => a.path === p)).map((p) => ({ path: p, name: p.slice(p.lastIndexOf('/') + 1) })),
-      ]);
-    if (insertSignal.text) setDraft((d) => (d && !/\s$/.test(d) ? `${d} ` : d) + insertSignal.text);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [insertSignal]);
-
   // 새 항목이 오면 바닥에 붙어 있을 때만 따라 내려간다(위로 올려 읽는 중이면 '새 답변' 표시)
   const lastCount = useRef(items.length);
   useLayoutEffect(() => {
@@ -311,13 +299,20 @@ export function ChatView({
   };
 
   // 입력창 높이 — 내용에 맞춰 늘리되 다섯 줄 남짓에서 멈춘다(CSS max-height)
+  useEffect(() => fitInput(inputRef.current), [draft]);
+  // 숨어 있다 보이게 됐을 때·폭이 바뀌었을 때(회전 — 줄바꿈이 달라진다)도 다시 맞춘다
   useEffect(() => {
     const el = inputRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    // scrollHeight 는 테두리를 뺀 값이다 — border-box 라 테두리만큼 더해야 넘치지 않는다(안 더하면 늘 2px 스크롤)
-    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
-  }, [draft]);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let width = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return; // 높이 변화는 fitInput 자신이 만든 것
+      width = el.clientWidth;
+      fitInput(el);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [composer]);
 
   // ── 검색 ──
   const [findOpen, setFindOpen] = useState(false);
@@ -370,27 +365,22 @@ export function ChatView({
     setFindOpen(false);
     setFindQ('');
     setFindAt(0);
-    inputRef.current?.focus();
+    if (composer) inputRef.current?.focus();
+    else onReturnFocus?.();
   };
 
   const send = () => {
     const text = draft.trim();
-    if (promptBlocksInput) return;
+    if (!text || promptBlocksInput || !onSend) return;
     if (prompt?.freeText) {
-      // 질문에 직접 답한다 — 'Type something.' 으로 옮겨 글을 넣는다(그냥 쓰면 선택 화면이 글을 버린다).
-      // 선택지 답에는 이미지를 싣지 않는다 — 첨부는 남겨 두고 다음 메시지에 보낸다
-      if (!text) return;
-      onKey(String(prompt.freeText));
-      window.setTimeout(() => onSend(text, []), FREE_TEXT_DELAY_MS);
+      // 질문에 직접 답한다 — 'Type something.' 으로 옮겨 글을 넣는다(그냥 쓰면 선택 화면이 글을 버린다)
+      sendKey(String(prompt.freeText));
+      window.setTimeout(() => onSend(text), FREE_TEXT_DELAY_MS);
     } else {
-      if (!text && !attachments.length) return;
-      onSend(text, attachments.map((a) => a.path));
-      attachments.forEach((a) => a.url && URL.revokeObjectURL(a.url));
-      setAttachments([]);
+      onSend(text);
     }
     setDraft('');
     setStopping(false); // 새 일을 맡겼다 — '작업 중' 을 다시 보인다
-    histRef.current = -1;
     stickRef.current = true; // 보낸 사람은 답을 보려 한다
   };
 
@@ -398,8 +388,8 @@ export function ChatView({
   const stop = () => {
     if (stopping) return;
     setStopping(true);
-    onKey('\x1b');
-    window.setTimeout(() => onKey('\x15'), STOP_CLEAR_DELAY_MS);
+    sendKey('\x1b');
+    window.setTimeout(() => sendKey('\x15'), STOP_CLEAR_DELAY_MS);
   };
 
   const applyCommand = (c: ChatCommand) => {
@@ -444,46 +434,7 @@ export function ChatView({
       if (e.key === 'Escape') {
         e.preventDefault();
         setDismissed(draft);
-        return;
       }
-    }
-    if (!enterToSend) return;
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-      return;
-    }
-    // Esc = claude 중단(작업 중일 때) — 터미널에서 Esc 를 누르는 것과 같다
-    // 중단 처리 중(stopping)의 거듭 누름도 삼킨다 — claude 로 가면 Esc 두 번 = 되감기 메뉴다
-    if (e.key === 'Escape' && (working || stopping) && !prompt) {
-      e.preventDefault();
-      stop();
-      return;
-    }
-    // 숫자 키 = 선택지 고르기(입력창이 비어 있을 때만 — 글을 쓰는 중이면 그냥 숫자다)
-    if (prompt?.options.length && !draft && /^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      const n = Number(e.key);
-      const opt = prompt.options.find((o) => o.n === n);
-      if (opt && n !== prompt.freeText) {
-        e.preventDefault();
-        onKey(e.key);
-      }
-      return;
-    }
-    // ↑↓ 이전 입력 — 비어 있거나 이미 불러온 글을 보는 중일 때, 커서가 맨 앞이면
-    const ta = e.currentTarget;
-    if (e.key === 'ArrowUp' && (!draft || histRef.current >= 0) && ta.selectionStart === 0 && sent.length) {
-      e.preventDefault();
-      const next = Math.min(histRef.current + 1, sent.length - 1);
-      histRef.current = next;
-      setDraft(sent[next]);
-      return;
-    }
-    if (e.key === 'ArrowDown' && histRef.current >= 0 && ta.selectionEnd === draft.length) {
-      e.preventDefault();
-      const next = histRef.current - 1;
-      histRef.current = next;
-      setDraft(next >= 0 ? sent[next] : '');
     }
   };
 
@@ -543,7 +494,13 @@ export function ChatView({
         <div ref={listRef} className="term-chat__list" onScroll={onScroll}>
           {!loaded && <div className="term-chat__note">대화를 불러오는 중…</div>}
           {loaded && !items.length && !fresh && <div className="term-chat__note">아직 대화가 없습니다.</div>}
-          {loaded && !items.length && fresh && !prompt && (
+          {loaded && !items.length && fresh && !composer && (
+            // 첫 메시지 전(데스크톱) — 입력 자리는 아래 터미널이다. 폴더 신뢰 같은 확인 화면도 거기 그대로 보인다
+            <div className="term-chat__fresh">
+              <span>새 대화입니다. 아래 터미널에서 첫 메시지를 보내세요.</span>
+            </div>
+          )}
+          {loaded && !items.length && fresh && composer && !prompt && (
             // 첫 메시지 전 — 폴더 신뢰 확인 같은 TUI 화면도 이 상태라 구분할 수 없어 안내를 함께 둔다
             <div className="term-chat__fresh">
               <span>새 대화입니다. 아래 입력창으로 첫 메시지를 보내세요.</span>
@@ -557,17 +514,17 @@ export function ChatView({
           {blocks.map((b) =>
             b.kind === 'tools' ? <ToolGroup key={b.key} tools={b.tools} /> : <ChatRow key={b.item.key} item={b.item} />,
           )}
-          {prompt ? (
-            <PromptCard prompt={prompt} keyHints={enterToSend} onKey={onKey} onShowTerminal={onShowTerminal} />
-          ) : (
-            working && (
-              <div className="term-chat__typing" role="status">
-                <span className="spinner spinner--xs" aria-hidden="true" />
-                <span className="term-chat__typing-text">{status ?? '작업 중…'}</span>
-                {enterToSend && <span className="term-chat__typing-hint">Esc 로 중단</span>}
-              </div>
-            )
-          )}
+          {composer &&
+            (prompt ? (
+              <PromptCard prompt={prompt} onKey={sendKey} onShowTerminal={onShowTerminal} />
+            ) : (
+              working && (
+                <div className="term-chat__typing" role="status">
+                  <span className="spinner spinner--xs" aria-hidden="true" />
+                  <span className="term-chat__typing-text">{status ?? '작업 중…'}</span>
+                </div>
+              )
+            ))}
         </div>
 
         {!atBottom && (
@@ -582,147 +539,107 @@ export function ChatView({
         )}
       </div>
 
-      <form
-        className="term-chat__composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        // 입력 바의 빈 여백을 눌러도 입력창으로 — 입력창 테두리 바로 바깥을 누르는 일이 잦다
-        onMouseDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          e.preventDefault();
-          inputRef.current?.focus();
-        }}
-      >
-        {attachments.length > 0 && (
-          // 첨부 이미지 — 보낼 때 함께 간다(claude 입력란엔 아직 없다). × 로 낱장 빼기
-          <div className="term-chat__attachments">
-            {attachments.map((a, i) => (
-              <span key={a.path} className="term-chat__attach" title={a.path}>
-                {a.url ? (
-                  <img className="term-chat__attach-thumb" src={a.url} alt="" />
-                ) : (
-                  <Icon name="paperclip" size={12} />
-                )}
-                <span className="term-chat__attach-name">{a.url ? `이미지 ${i + 1}` : a.name}</span>
-                <button
-                  type="button"
-                  className="term-chat__attach-x"
-                  aria-label={`첨부 ${a.url ? `이미지 ${i + 1}` : a.name} 빼기`}
-                  onMouseDown={(e) => e.preventDefault()} // 입력창 포커스 유지
-                  onClick={() => removeAttachment(a.path)}
-                >
-                  <Icon name="x" size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="term-chat__composer-inner">
-          {pickMode && (
-            <ul className="term-chat__cmds" role="listbox" aria-label={pickMode === 'cmd' ? '명령' : '파일'}>
-              {pickMode === 'cmd'
-                ? cmdMatches.map((c, i) => (
-                    <li key={c.name}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={i === pickIdx}
-                        className={'term-chat__cmd' + (i === pickIdx ? ' term-chat__cmd--on' : '')}
-                        // 입력창 포커스를 잃지 않게 mousedown 에서 처리
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          applyCommand(c);
-                        }}
-                      >
-                        <span className="term-chat__cmd-name">/{c.name}</span>
-                        {c.description && <span className="term-chat__cmd-desc">{c.description}</span>}
-                        {c.source !== 'builtin' && (
-                          <span className="term-chat__cmd-src">{c.source === 'project' ? '프로젝트' : '내 계정'}</span>
-                        )}
-                      </button>
-                    </li>
-                  ))
-                : fileMatches.map((f, i) => {
-                    const cut = f.lastIndexOf('/') + 1;
-                    return (
-                      <li key={f}>
+      {composer && (
+        <form
+          className="term-chat__composer"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          // 입력 바의 빈 여백을 눌러도 입력창으로 — 입력창 테두리 바로 바깥을 누르는 일이 잦다
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
+          <div className="term-chat__composer-inner">
+            {pickMode && (
+              <ul className="term-chat__cmds" role="listbox" aria-label={pickMode === 'cmd' ? '명령' : '파일'}>
+                {pickMode === 'cmd'
+                  ? cmdMatches.map((c, i) => (
+                      <li key={c.name}>
                         <button
                           type="button"
                           role="option"
                           aria-selected={i === pickIdx}
                           className={'term-chat__cmd' + (i === pickIdx ? ' term-chat__cmd--on' : '')}
+                          // 입력창 포커스를 잃지 않게 mousedown 에서 처리
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            applyFile(f);
+                            applyCommand(c);
                           }}
                         >
-                          <span className="term-chat__cmd-name">{f.slice(cut)}</span>
-                          <span className="term-chat__cmd-desc">{f.slice(0, cut)}</span>
+                          <span className="term-chat__cmd-name">/{c.name}</span>
+                          {c.description && <span className="term-chat__cmd-desc">{c.description}</span>}
+                          {c.source !== 'builtin' && (
+                            <span className="term-chat__cmd-src">{c.source === 'project' ? '프로젝트' : '내 계정'}</span>
+                          )}
                         </button>
                       </li>
-                    );
-                  })}
-            </ul>
-          )}
-          <textarea
-            ref={inputRef}
-            className="term-chat__input"
-            rows={1}
-            value={draft}
-            disabled={promptBlocksInput}
-            placeholder={
-              promptBlocksInput
-                ? enterToSend
-                  ? '위 선택지에서 고르세요 (숫자 키)'
-                  : '위 선택지에서 고르세요'
-                : (prompt ? '직접 답하기' : 'claude 에게 메시지 · / 명령') +
-                  (enterToSend ? ' (Enter 전송 · Shift+Enter 줄바꿈 · ↑ 이전 입력)' : '')
-            }
-            aria-label="메시지"
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setCaret(e.target.selectionStart ?? e.target.value.length);
-              histRef.current = -1;
-            }}
-            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-            onKeyDown={onInputKey}
-            onPaste={(e) => {
-              // 글이 없는 이미지 붙여넣기만 가로챈다(글이 함께 있으면 그게 사용자의 의도다) — 저장해 칩으로
-              if (!onPasteImage) return;
-              const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
-              if (!files.length || e.clipboardData.getData('text')) return;
-              e.preventDefault();
-              for (const file of files) {
-                void onPasteImage(file).then((path) => {
-                  if (path) setAttachments((list) => [...list, { path, name: file.name, url: URL.createObjectURL(file) }]);
-                });
+                    ))
+                  : fileMatches.map((f, i) => {
+                      const cut = f.lastIndexOf('/') + 1;
+                      return (
+                        <li key={f}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={i === pickIdx}
+                            className={'term-chat__cmd' + (i === pickIdx ? ' term-chat__cmd--on' : '')}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              applyFile(f);
+                            }}
+                          >
+                            <span className="term-chat__cmd-name">{f.slice(cut)}</span>
+                            <span className="term-chat__cmd-desc">{f.slice(0, cut)}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+              </ul>
+            )}
+            <textarea
+              ref={inputRef}
+              className="term-chat__input"
+              rows={1}
+              value={draft}
+              disabled={promptBlocksInput}
+              placeholder={
+                promptBlocksInput ? '위 선택지에서 고르세요' : prompt ? '직접 답하기' : 'claude 에게 메시지 · / 명령'
               }
-            }}
-          />
-          {working && !prompt && !draft.trim() && !attachments.length ? (
-            // 작업 중이면 Esc = claude 중단 — 터미널에서 Esc 를 누르는 것과 같다
-            <button
-              type="button"
-              className="term-chat__send term-chat__send--stop"
-              aria-label="중단 (Esc)"
-              onClick={stop}
-            >
-              <span className="term-chat__stop-mark" aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="term-chat__send"
-              aria-label="보내기"
-              disabled={(!draft.trim() && !attachments.length) || promptBlocksInput}
-            >
-              <Icon name="arrow-up-right" size={18} />
-            </button>
-          )}
-        </div>
-      </form>
+              aria-label="메시지"
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setCaret(e.target.selectionStart ?? e.target.value.length);
+              }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+              onKeyDown={onInputKey}
+            />
+            {working && !prompt && !draft.trim() ? (
+              // 작업 중이면 [중단] = Esc — 터미널에서 Esc 를 누르는 것과 같다
+              <button
+                type="button"
+                className="term-chat__send term-chat__send--stop"
+                aria-label="중단 (Esc)"
+                onClick={stop}
+              >
+                <span className="term-chat__stop-mark" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="term-chat__send"
+                aria-label="보내기"
+                disabled={!draft.trim() || promptBlocksInput}
+              >
+                <Icon name="arrow-up-right" size={18} />
+              </button>
+            )}
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -893,13 +810,10 @@ function answerPairs(text: string): [string, string][] {
 /** claude 가 터미널에서 답을 기다리는 선택 화면 — 버튼 = 그 번호 키. 못 읽었으면 터미널 안내만 */
 function PromptCard({
   prompt,
-  keyHints,
   onKey,
   onShowTerminal,
 }: {
   prompt: ChatPrompt;
-  /** 하드웨어 키보드(데스크톱) — 숫자 키로 고를 수 있음을 알린다 */
-  keyHints: boolean;
   onKey: (data: string) => void;
   onShowTerminal: () => void;
 }) {
@@ -935,7 +849,6 @@ function PromptCard({
         ))}
       </div>
       <div className="term-chat__ask-foot">
-        {keyHints && <span className="term-chat__ask-hint">숫자 키로 고르기 (입력창이 비어 있을 때)</span>}
         <button type="button" className="term-chat__ask-term" onClick={onShowTerminal}>
           <Icon name="terminal" size={12} />
           터미널에서 보기
