@@ -59,7 +59,7 @@ paths:
 - ⚠️ **재빌드 뒤 첫 실행마다 키체인 프롬프트(허용·로그인 비밀번호)가 뜬다 — 구조적이다.** `One App Safe Storage` 항목의 접근이 **빌드별 cdhash** 에 묶여(자가서명이라 teamid 파티션을 못 씀) 빌드마다 새 해시가 추가된다(2026-09-07 `security dump-keychain -a` 실측: 60개 누적). 없애는 길은 항목을 '모든 앱 허용'으로 재생성하는 것뿐이고 보안 약화라 하지 않았다. 대신 **첫 키체인 접근을 창이 그려진 뒤로 미룬다** — `lib/store.ts` 의 `warmUpSecrets`(main.ts 가 메인 창 `did-finish-load` 에서 1회)·`whenSecretsReady`. 앱을 앞으로 가져오는 것(`app.focus({steal:true})`)은 `lib/store.ts` 의 **첫 접근 게이트**가 어떤 경로(워밍업·위젯 IPC)든 프로세스 첫 safeStorage 호출 직전에 1회 한다 — did-finish-load 에만 붙이면 위젯 마운트 IPC 가 먼저 도착할 때 프롬프트가 뒤에 숨는다. 동기 호출이 main 을 멈추므로 ready 시점에 부르면 **빈 창·먹통**으로 보인다(MO 서버 자동 시작의 토큰 복호화가 그랬다). 기동 경로에서 `decryptSecret` 을 부르는 코드는 `whenSecretsReady()` 를 기다릴 것.
 - ⚠️ **`app.setName()`·`app.setPath('userData')` 로 프로필을 가르지 말 것** — 앱 이름이 바뀌면 `safeStorage` 가 쓰는 키체인 항목(`<앱이름> Safe Storage`)도 달라져 **저장된 계정·비밀번호를 전부 복호화하지 못한다.**
 - ⚠️ **공유 userData 에서는 파일 캐시를 그냥 믿으면 안 된다** — `lib/store.ts` 의 `readUserJson` 은 매 읽기마다 mtime·size 를 확인한다. 없으면 상대가 저장한 변경을 못 보고 **오래된 값으로 통째 덮어쓴다**.
-- **Dock 구분**: 아이콘 하단 오렌지 `DEV` 밴드(`assets/icon-dev.png` — `npm run icon:dev` 로 생성, 원본 아이콘을 바꾸면 다시 돌린다) + Dock 뱃지 `DEV` + 창 제목 `One App — DEV`.
-  - 뱃지는 터미널 입력대기 수와 자리를 나눠 쓰므로 **`lib/dockBadge.ts` 한 곳에서만** `setBadge` 를 부른다(각자 부르면 서로를 지운다 — 대기 0 이 되는 순간 DEV 표식이 사라졌다).
+- **Dock 구분**: 아이콘 하단 오렌지 `DEV` 밴드(`assets/icon-dev.png` — `npm run icon:dev` 로 생성, 원본 아이콘을 바꾸면 다시 돌린다) + 창 제목 `One App — DEV`. Dock 뱃지 `DEV` 는 밴드와 겹쳐 2026-10-01 뺐다.
+  - 뱃지(터미널 입력대기 수)는 **`lib/dockBadge.ts` 한 곳에서만** `setBadge` 를 부른다.
   - 창 제목은 `page-title-updated` 를 `preventDefault` 해야 유지된다 — 안 하면 `index.html` 의 `<title>One App</title>` 이 덮어쓴다.
 - `scripts/make-dev-icon.mjs` 는 Node 내장 `zlib` 만으로 PNG 를 디코드·합성·인코드한다(sharp·jimp 등 **의존성 추가 없음**, macOS `sips` 는 합성을 못 한다). 원본은 8bit RGBA·비인터레이스 PNG 여야 하고 아니면 명시적으로 실패한다.

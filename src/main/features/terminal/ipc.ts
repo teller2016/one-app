@@ -54,7 +54,7 @@ import {
 } from './store';
 
 // 독(Dock) 뱃지 — 입력대기 세션 수. 0 이면 반드시 비워 잔존을 막는다.
-// 실제 setBadge 는 lib/dockBadge.ts 가 전담한다(개발 인스턴스의 'DEV' 표식과 한 자리를 나눠 쓴다)
+// 실제 setBadge 는 lib/dockBadge.ts 가 전담한다(뱃지는 앱 전역에 하나뿐인 자원)
 function updateDockBadge(sessions: TerminalSessionInfo[]) {
   setWaitingBadge(sessions.filter((s) => s.status === 'waiting').length);
 }
