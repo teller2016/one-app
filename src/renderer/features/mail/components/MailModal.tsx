@@ -7,11 +7,11 @@ import type {
 } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
+import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
 import { Modal } from '../../../components/Modal';
 import { Pagination } from '../../../components/Pagination';
 import { RefreshButton } from '../../../components/RefreshButton';
-import { Segment } from '../../../components/Segment';
 import { Tooltip } from '../../../components/Tooltip';
 import { mailTime, senderName } from '../lib/format';
 import { AuthCodePanel } from './AuthCodePanel';
@@ -50,8 +50,10 @@ function bodyDoc(html: string, webUrl: string): string {
 }
 
 /**
- * 메일 리더 모달 — 목록(받은편지함·스팸 세그먼트 전환)은 항상 전체폭(배치 유지),
- * 메일을 선택하면 본문(sandbox iframe) 패널이 오른쪽에서 슬라이드로 떠오른다. [×]로 패널만 닫힌다.
+ * 메일 리더 모달 — 목업 MailModal(1000×680 → 사용자 요청으로 1280×820): 머리에 밑줄 탭(받은편지함·스팸메일함·인증코드),
+ * 본문은 [목록 360 | 읽기 창] 2단. 메일을 고르기 전 읽기 창은 빈 안내다.
+ * 폰(MO 메일 탭)은 같은 컴포넌트를 쓰되 mo.scss 가 읽기 창을 목록 위로 덮는 전환(슬라이드)으로 바꾼다 —
+ * 그래서 viewOpen 상태를 남겨 둔다(데스크톱에선 '목록으로' = 선택 해제).
  * 열릴 때 받은편지함을 새로 불러오고, 안읽은 메일을 열면 읽음 처리 후 onRead 로 알린다.
  */
 export function MailModal({
@@ -182,26 +184,32 @@ export function MailModal({
     void window.oneApp.openExternal(url);
   };
 
-  // 본문 패널 닫기 — body 는 유지한 채 슬라이드아웃 (목록 배치는 애초에 안 바뀐다)
+  // 읽기 창 닫기('목록으로') — 데스크톱은 빈 안내로, 폰은 목록으로 슬라이드아웃(body 는 남겨 둔다)
   const closeView = () => {
     setSelected(null);
     setViewOpen(false);
   };
 
-  /** 세그먼트 라벨 — 안읽은 메일이 있는 폴더에만 개수 뱃지를 붙인다(세 자리는 99+ 로 클램프) */
-  const folderLabel = (f: MailFolder, text: string) => {
-    const n = unread[f];
+  /** 탭 라벨 — 안읽은 메일이 있는 폴더에만 개수를 붙인다(세 자리는 99+ 로 클램프) */
+  const tabLabel = (t: Tab, text: string) => {
+    const n = t === 'authcode' ? 0 : unread[t];
     return (
       <>
         {text}
         {n > 0 && (
-          <span className="mail-modal__seg-count" title={`안읽은 메일 ${n}통`}>
+          <span className="mail-modal__tab-count" title={`안읽은 메일 ${n}통`}>
             {n > 99 ? '99+' : n}
           </span>
         )}
       </>
     );
   };
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'inbox', label: '받은편지함' },
+    { id: 'spam', label: '스팸메일함' },
+    { id: 'authcode', label: '인증코드' },
+  ];
 
   return (
     <Modal
@@ -211,32 +219,36 @@ export function MailModal({
           메일
         </span>
       }
+      // 목업은 1000 이지만 읽는 화면이라 넓힌다(2026-10-01 사용자 "좀 더 넓었으면") — 좁은 창에선 그대로 줄어든다
+      width={1280}
       onClose={onClose}
-      wide
-    >
-      <div className="mail-modal">
-        {/* 메일 목록 — 항상 전체폭 (본문 패널이 위로 떠오른다) */}
-        <div className="mail-modal__list">
-          <div className="mail-modal__list-head">
-            <Segment<Tab>
-              options={[
-                { value: 'inbox', label: folderLabel('inbox', '받은편지함') },
-                { value: 'spam', label: folderLabel('spam', '스팸메일함') },
-                { value: 'authcode', label: '인증코드' },
-              ]}
-              value={tab}
-              onChange={changeTab}
+      tabs={
+        <div className="mail-modal__tabs" role="tablist" aria-label="메일함">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={'mail-modal__tab' + (tab === t.id ? ' mail-modal__tab--on' : '')}
+              onClick={() => changeTab(t.id)}
+            >
+              {tabLabel(t.id, t.label)}
+            </button>
+          ))}
+        </div>
+      }
+      actions={
+        // 인증코드 탭은 목록이 없다 — 새로고침·메일함 열기도 함께 감춘다
+        tab !== 'authcode' && (
+          <>
+            <RefreshButton
+              size={14}
+              spinning={loading}
+              onClick={() => void loadList(folder, page)}
+              title="목록 새로고침"
             />
-            {/* 인증코드 탭은 목록이 없다 — 새로고침 버튼도 함께 감춘다 */}
-            {tab !== 'authcode' && (
-              <RefreshButton
-                size={13}
-                spinning={loading}
-                onClick={() => void loadList(folder, page)}
-                title="목록 새로고침"
-              />
-            )}
-            {/* 브라우저로 메일함 — 예전 사이드바 메일 아이콘 타일의 동작(상태바로 옮기며 여기로) */}
+            {/* 브라우저로 메일함 — 예전 사이드바 메일 아이콘 타일의 동작(상태바로 옮기며 여기로). 목업엔 없지만 기능 유지 */}
             <Tooltip label="비즈박스 메일함 열기 (브라우저)">
               <button
                 type="button"
@@ -247,138 +259,123 @@ export function MailModal({
                 <Icon name="arrow-up-right" size={14} />
               </button>
             </Tooltip>
+          </>
+        )
+      }
+    >
+      {tab === 'authcode' ? (
+        <div className="mail-modal mail-modal--authcode">
+          <AuthCodePanel />
+        </div>
+      ) : (
+        <div className="mail-modal">
+          {/* 왼쪽 목록 — 360 · 행 2줄(발신자·시각 / 제목) · 아래 페이지 줄 */}
+          <div className="mail-modal__list">
+            {listError && <Banner variant="danger">{listError}</Banner>}
+
+            {loading && items.length === 0 ? (
+              <p className="hint mail-modal__note">불러오는 중...</p>
+            ) : items.length === 0 && !listError ? (
+              <EmptyState
+                icon="mail"
+                message={folder === 'spam' ? '스팸 메일이 없습니다.' : '받은 메일이 없습니다.'}
+              />
+            ) : (
+              <ul className="mail-list" ref={listRef}>
+                {items.map((m) => (
+                  <li key={m.muid}>
+                    <button
+                      type="button"
+                      className={
+                        'mail-list__item' +
+                        (m.muid === selected ? ' mail-list__item--active' : '') +
+                        (m.seen ? '' : ' mail-list__item--unread')
+                      }
+                      onClick={() => void openMail(m)}
+                    >
+                      <span className="mail-list__dot" aria-hidden="true" />
+                      <span className="mail-list__main">
+                        <span className="mail-list__top">
+                          <span className="mail-list__from">{senderName(m.from)}</span>
+                          {m.hasAttach && (
+                            <Icon name="paperclip" size={12} className="mail-list__clip" />
+                          )}
+                          <span className="mail-list__time">{mailTime(m.date)}</span>
+                        </span>
+                        <span className="mail-list__subject">{m.subject}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* 과거 메일 — 서버 페이징(폴더 전체 건수 기준). 한 페이지면 줄 자체가 없다 */}
+            {total > PAGE_SIZE && (
+              <div className="mail-modal__pager">
+                <Pagination
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  total={total}
+                  onChange={changePage}
+                  disabled={loading}
+                />
+              </div>
+            )}
           </div>
 
-          {tab === 'authcode' ? (
-            <AuthCodePanel />
-          ) : (
-            <>
-              {listError && <Banner variant="danger">{listError}</Banner>}
-
-              {loading && items.length === 0 ? (
-                <p className="hint">불러오는 중...</p>
-              ) : items.length === 0 && !listError ? (
-                <div className="empty-state">
-                  <span className="empty-state__icon">
-                    <Icon name="mail" size={20} />
-                  </span>
-                  <p>
-                    {folder === 'spam'
-                      ? '스팸 메일이 없습니다.'
-                      : '받은 메일이 없습니다.'}
-                  </p>
-                </div>
-              ) : (
-                <ul className="mail-list" ref={listRef}>
-                  {items.map((m) => (
-                    <li key={m.muid}>
-                      <button
-                        type="button"
-                        className={
-                          'mail-list__item' +
-                          (m.muid === selected
-                            ? ' mail-list__item--active'
-                            : '') +
-                          (m.seen ? '' : ' mail-list__item--unread')
-                        }
-                        onClick={() => void openMail(m)}
-                      >
-                        <span className="mail-list__dot" aria-hidden="true" />
-                        <span className="mail-list__main">
-                          <span className="mail-list__top">
-                            <span className="mail-list__from">
-                              {senderName(m.from)}
-                            </span>
-                            <span className="mail-list__time">
-                              {mailTime(m.date)}
-                            </span>
-                          </span>
-                          <span className="mail-list__subject">
-                            {m.hasAttach && (
-                              <Icon
-                                name="paperclip"
-                                size={11}
-                                className="mail-list__clip"
-                              />
-                            )}
-                            {m.subject}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* 과거 메일 — 서버 페이징(폴더 전체 건수 기준) */}
-              <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onChange={changePage}
-                disabled={loading}
-              />
-            </>
-          )}
-        </div>
-
-        {/* 본문 패널 — 오른쪽에서 슬라이드 인 (닫힘 애니메이션을 위해 항상 마운트) */}
-        <div
-          className={
-            'mail-modal__view' + (viewOpen ? ' mail-modal__view--open' : '')
-          }
-          aria-hidden={!viewOpen}
-        >
-          <button
-            type="button"
-            className="icon-btn mail-modal__view-close"
-            title="목록으로"
-            onClick={closeView}
-          >
-            <Icon name="x" size={14} />
-          </button>
-          {body.kind === 'idle' ? null : body.kind === 'loading' ? (
-            <div className="mail-modal__placeholder">
-              <span className="spinner" />
-              <p className="hint">본문 불러오는 중...</p>
+          {/* 오른쪽 읽기 창 — 데스크톱은 늘 보인다(고르기 전엔 빈 안내). 폰은 열릴 때 목록을 덮는다 */}
+          <div className={'mail-modal__view' + (viewOpen ? ' mail-modal__view--open' : '')}>
+            <div className="mail-modal__empty">
+              <EmptyState icon="mail" message="읽을 메일을 고르세요" />
             </div>
-          ) : body.kind === 'error' ? (
-            <Banner variant="danger">{body.message}</Banner>
-          ) : (
-            <div className="mail-view">
-              <div className="mail-view__head">
-                <h4 className="mail-view__subject">{body.body.subject}</h4>
-                <div className="mail-view__meta">
-                  <span className="mail-view__from">
-                    {senderName(body.body.from)}
-                  </span>
-                  {body.body.date && (
-                    <span className="mail-view__date">{body.body.date}</span>
+            {body.kind !== 'idle' && (
+              <div className="mail-view">
+                <div className="mail-view__bar">
+                  <Button variant="plain" size="xs" onClick={closeView}>
+                    <Icon name="chevron-left" size={14} />
+                    목록으로
+                  </Button>
+                  <span className="mail-view__bar-gap" />
+                  {body.kind === 'ok' && (
+                    <Button size="xs" onClick={() => openInBrowser(body.body.webUrl)}>
+                      <Icon name="arrow-up-right" size={14} />
+                      그룹웨어에서 열기
+                    </Button>
                   )}
                 </div>
-                <div className="mail-view__actions">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openInBrowser(body.body.webUrl)}
-                  >
-                    <Icon name="arrow-up-right" size={13} />
-                    그룹웨어에서 열기
-                  </Button>
-                </div>
+                {body.kind === 'loading' ? (
+                  <div className="mail-view__state">
+                    <span className="spinner" />
+                    <p className="hint">본문 불러오는 중...</p>
+                  </div>
+                ) : body.kind === 'error' ? (
+                  <div className="mail-view__state">
+                    <Banner variant="danger">{body.message}</Banner>
+                  </div>
+                ) : (
+                  <div className="mail-view__content">
+                    <h2 className="mail-view__subject">{body.body.subject}</h2>
+                    <div className="mail-view__meta">
+                      <span className="mail-view__from">{senderName(body.body.from)}</span>
+                      {body.body.date && <span className="mail-view__date">{body.body.date}</span>}
+                    </div>
+                    <div className="mail-view__divider" />
+                    {/* 스크립트는 계속 차단하고 링크 클릭(팝업)만 허용 — 실제 창 생성은
+                        main 의 setWindowOpenHandler 가 가로채 기본 브라우저로 연다 */}
+                    <iframe
+                      className="mail-view__frame"
+                      title="메일 본문"
+                      sandbox="allow-popups allow-popups-to-escape-sandbox"
+                      srcDoc={bodyDoc(body.body.html, body.body.webUrl)}
+                    />
+                  </div>
+                )}
               </div>
-              {/* 스크립트는 계속 차단하고 링크 클릭(팝업)만 허용 — 실제 창 생성은
-                  main 의 setWindowOpenHandler 가 가로채 기본 브라우저로 연다 */}
-              <iframe
-                className="mail-view__frame"
-                title="메일 본문"
-                sandbox="allow-popups allow-popups-to-escape-sandbox"
-                srcDoc={bodyDoc(body.body.html, body.body.webUrl)}
-              />
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </Modal>
   );
 }

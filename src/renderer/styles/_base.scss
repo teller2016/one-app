@@ -194,6 +194,7 @@
   --fs-detail-title: 18px; // 상세 패널 제목 (Jira 이슈 등 — 목업)
   --fs-h2: 20px; // 섹션 제목 — 조밀한 도구라 크게 키우지 않는다
   --fs-metric: 22px;
+  --fs-code-lg: 26px; // 큰 코드 숫자 — 메일 인증코드(목업 MailAuthCode 26/600 · 자간 .12em)
   // 번들 폰트가 정본 — 뒤 후보는 폰트 로드 실패 시 폴백용 (위 @font-face 주석 참고)
   --font-mono: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
   // 디스플레이 = 본문과 같은 IBM Plex Sans KR (lib/fonts.ts 번들)
@@ -1925,6 +1926,30 @@ input.input--bare {
     gap: 2px;
     min-width: 0;
     flex: 1;
+  }
+
+  // 머리 오른쪽 버튼 묶음 — [actions…][닫기]
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  // 탭 줄이 있는 모달(목업 MailModal) — 머리가 바닥선을 갖고, 탭이 그 선에 붙는다.
+  // 제목과 탭 사이 10 · 오른쪽 버튼은 탭 줄 높이에 맞춰 바닥에서 10 띄운다
+  &--tabbed &__head {
+    align-items: flex-end;
+    padding-bottom: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &--tabbed &__titles {
+    gap: 10px;
+  }
+
+  &--tabbed &__actions {
+    padding-bottom: 10px;
   }
 
   &__title {

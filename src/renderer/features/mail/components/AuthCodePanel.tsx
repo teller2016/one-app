@@ -83,15 +83,13 @@ export function AuthCodePanel() {
           return (
             <li key={a.loginId} className="mail-authcode__row">
               <div className="mail-authcode__head">
-                <span className="mail-authcode__id">
-                  <Icon name="key" size={14} />
-                  {a.loginId}
-                </span>
+                <Icon name="key" size={14} className="mail-authcode__key" />
+                <span className="mail-authcode__id">{a.loginId}</span>
                 <div className="mail-authcode__actions">
                   {AUTH_CODE_SERVICES.map((svc) => (
                     <Button
                       key={svc.id}
-                      size="sm"
+                      size="xs"
                       loading={
                         state.kind === 'loading' && state.service === svc.id
                       }
@@ -120,11 +118,11 @@ export function AuthCodePanel() {
                       {shown?.label} · {relativeTime(done.receivedAt ?? 0)} 도착
                     </span>
                     <Button
-                      variant="ghost"
-                      size="sm"
+                      variant="plain"
+                      size="xs"
                       onClick={() => void copy(done.code ?? '')}
                     >
-                      <Icon name="copy" size={13} />
+                      <Icon name="copy" size={14} />
                       복사
                     </Button>
                   </div>

@@ -1,4 +1,5 @@
-// 메일 — 리더 모달(전체폭 목록 + 오른쪽 슬라이드 본문 패널). 진입점은 상태바 항목(StatusBarItem)
+// 메일 — 리더 모달(목업 MailModal·MailAuthCode — 1000×680 을 1280×820 으로 넓힘, 머리 밑줄 탭 + [목록 360 | 읽기 창] 2단).
+// 진입점은 상태바 항목(StatusBarItem). 폰(MO 메일 탭)은 mo.scss 가 읽기 창을 목록 위로 덮는 전환으로 바꾼다.
 @use './base' as *;
 
 // ===== 리더 모달 =====
@@ -8,98 +9,146 @@
   gap: 8px;
 }
 
-// 메일 리더는 읽는 화면이라 크게 — Modal 기본 wide(880px)보다 넓고 세로도 시원하게.
-// (Modal 컴포넌트에 size prop 이 없어, 이 모달을 담은 .modal--wide 만 선택자로 확장)
-.modal--wide:has(.mail-modal) {
-  max-width: 1600px;
-  width: 96vw;
+// 높이 고정 — 목업 680 을 읽는 화면이라 820 으로 키웠다(2026-10-01 사용자 요청, 작은 창에선 화면 안으로).
+// 목록·읽기 창이 각자 스크롤한다.
+// 인증코드 탭은 목업이 높이 자동이라 고정하지 않는다.
+// 본문 여백은 두 단이 모달 끝까지 닿도록 0 (Modal 에 본문 여백 옵션이 없어 :has 후크 — 배포·Nightwatch 모달과 같은 방식)
+.modal:has(.mail-modal:not(.mail-modal--authcode)) {
+  height: min(820px, calc(100vh - 96px));
+}
+
+.modal:has(.mail-modal) .modal__body {
+  display: flex;
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+// 밑줄 탭(목업 .tabs) — 34 · padding 0 12 · 13/500 · 선택 = 글자 --text + 2px 액센트 밑줄(머리 바닥선 위에 겹친다)
+.mail-modal__tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: -1px; // 선택 밑줄이 머리 바닥선을 덮는다
+}
+
+.mail-modal__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-body);
+  font-weight: 500;
+  cursor: pointer;
+  @include focus-ring(0px);
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &--on {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+}
+
+// 탭 안 안읽음 수 — 목업 .count-accent(16 · 모노 · 액센트 면). 0 이면 렌더하지 않는다
+.mail-modal__tab-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  background: var(--accent-btn);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
 }
 
 .mail-modal {
-  position: relative; // 본문 슬라이드 패널의 기준
-  overflow: hidden; // 닫힌 패널(translateX 100%)이 모달 밖으로 비치지 않게
-  // 오버레이 상하 여백(48*2) + 헤더·본문 패딩을 뺀 만큼 세로를 꽉 채운다
-  height: calc(100vh - 200px);
-  min-height: 440px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative; // 폰: 읽기 창이 목록 위로 덮는 기준
 
-  &__list {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-width: 0;
+  // 인증코드 — 한 단, 목업 padding 16 20 20
+  &--authcode {
+    display: block;
+    padding: 16px 20px 20px;
+    overflow-y: auto;
   }
 
-  &__list-head {
+  // 왼쪽 목록 — 목업 360 + 오른쪽 경계선
+  &__list {
+    width: 360px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+
+    > .banner {
+      margin: 10px 12px 0;
+    }
+
+    > .empty-state {
+      margin: auto;
+    }
+  }
+
+  &__note {
+    padding: 14px 16px;
+  }
+
+  // 페이지 줄 — 목업 44 · padding 0 12 · 윗선
+  &__pager {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 10px;
+    height: var(--pane-head-h);
+    padding: 0 12px;
+    border-top: 1px solid var(--border);
 
-    // 세그먼트는 왼쪽, 새로고침·브라우저 열기는 오른쪽에 붙인다
-    > :first-child {
-      margin-right: auto;
+    .pagination {
+      flex: 1;
+      padding-top: 0;
     }
   }
 
-  // 세그먼트 라벨 뒤 안읽음 개수 — 탭을 전환하기 전에 어느 편지함에 안읽은 메일이
-  // 있는지 알린다(0 이면 렌더하지 않는다). 상태바 카운트(statusbar__count)와 같은 규칙.
-  &__seg-count {
-    min-width: 16px;
-    padding: 0 5px;
-    border-radius: var(--r-full);
-    background: var(--accent-btn);
-    color: var(--on-accent);
-    font-size: var(--fs-caption);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    line-height: 16px;
-    text-align: center;
-  }
-
-  // 본문 패널 — 목록 배치는 그대로 두고 오른쪽에서 떠오르는 레이어.
-  // 닫힘 애니메이션을 위해 항상 마운트 — visibility 는 슬라이드가 끝난 뒤에 꺼진다.
+  // 오른쪽 읽기 창
   &__view {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(68%, 980px);
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    padding: 14px 16px;
     background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    box-shadow: var(--shadow-2); // 떠 있는 레이어 전용 그림자
-    transform: translateX(calc(100% + 40px)); // +40px: 그림자까지 완전히 밖으로
-    visibility: hidden;
-    transition:
-      transform var(--dur-2) var(--ease),
-      visibility 0s linear var(--dur-2);
-
-    &--open {
-      transform: none;
-      visibility: visible;
-      transition: transform var(--dur-2) var(--ease);
-    }
   }
 
-  // 본문 우상단 [×] — 패널 닫기
-  &__view-close {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    z-index: 1;
+  // 메일을 고르기 전 — 데스크톱에서만(폰은 목록이 보이므로 mo.scss 가 감춘다)
+  &__empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  // idle/loading 안내 — 오른쪽 영역 가운데 정렬
-  &__placeholder {
-    margin: auto;
-    text-align: center;
+  // 데스크톱: 열려 있으면 본문, 아니면 빈 안내 — '목록으로'를 누르면 body 는 남지만 안내로 돌아간다
+  &__view--open &__empty,
+  &__view:not(&__view--open) .mail-view {
+    display: none;
   }
 }
 
-// ===== 왼쪽 목록 =====
+// ===== 왼쪽 목록 — 목업 행: padding 10 16 · gap 10 · 점 7(위 7) · [발신자 · 📎 · 시각] / [제목] =====
 .mail-list {
   list-style: none;
   margin: 0;
@@ -109,209 +158,243 @@
   min-height: 0;
 
   &__item {
-    position: relative; // 안읽음 점(absolute)의 기준
     display: flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
-    padding: 9px 10px;
-    border: none;
-    border-radius: var(--r-md);
+    padding: 10px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    font-family: inherit;
+    font: inherit;
     text-align: left;
     cursor: pointer;
     transition: background var(--dur-1) var(--ease);
 
     &:hover {
-      background: var(--overlay-hover);
+      background: var(--bg-sunken);
     }
 
-    &--active {
-      background: var(--overlay-hover);
+    // 선택 행 — 목업 .row-item.sel
+    &--active,
+    &--active:hover {
+      background: var(--accent-soft);
+      box-shadow: inset 2px 0 0 var(--accent);
     }
   }
 
-  // 안읽음 표시 점 — 행 패딩 위에 겹쳐 띄워 텍스트 들여쓰기를 만들지 않는다 (읽음이면 투명)
+  li:last-child &__item {
+    border-bottom: 0;
+  }
+
+  // 안읽음 점 — 읽음이면 자리만 차지(투명)해서 행마다 글자 시작점이 같다
   &__dot {
-    position: absolute;
-    left: 2px;
-    top: 50%; // 한 줄 행 세로 중앙
-    transform: translateY(-50%);
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+    border-radius: var(--r-full);
     background: transparent;
   }
 
   &__item--unread &__dot {
-    background: var(--accent-btn);
+    background: var(--accent);
   }
 
-  // 한 줄 레이아웃: 발신자(고정폭) · 제목(가변) · 시간(우측) — 본문 패널이 떠도 유지
   &__main {
     flex: 1;
     min-width: 0;
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 2px;
   }
 
   &__top {
-    display: contents; // 발신자·시간을 행의 직접 항목으로 풀어 배치
-  }
-
-  // 발신자|제목 구분 — 발신자는 굵은 라벨 + 열 구분선.
-  // 읽음 행은 전체를 회색 톤으로 낮춰, 안읽음(잉크색+굵게+점)이 확실히 튀게 한다.
-  &__from {
-    width: 200px;
-    flex-shrink: 0;
-    padding-right: 12px;
-    border-right: 1px solid var(--border);
-    @include type-small;
-    font-weight: 600;
-    color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__time {
-    order: 2;
-    flex-shrink: 0;
-    @include type-small;
-    color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__subject {
-    order: 1;
-    flex: 1;
-    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 5px;
-    @include type-body;
-    color: var(--text-2);
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &__from {
+    flex: 0 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  // 안읽음은 제목·발신자를 진하게
-  &__item--unread &__from,
-  &__item--unread &__subject {
-    color: var(--text);
-    font-weight: 600;
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    color: var(--text-2);
   }
 
   &__clip {
     flex-shrink: 0;
     color: var(--text-3);
   }
-}
 
-// ===== 오른쪽 본문 =====
-.mail-view {
-  display: flex;
-  flex-direction: column;
-  // 그리드 항목(flex column)인 __view 를 flex 로 꽉 채운다.
-  // (height:100% 는 부모 높이가 그리드 stretch 라 percentage 가 auto 로 풀려 내용만큼 커진다)
-  flex: 1;
-  min-height: 0;
-
-  &__head {
+  // 시각 — 모노 11 · 오른쪽 끝
+  &__time {
     flex-shrink: 0;
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--border);
+    margin-left: auto;
+    padding-left: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
   }
 
   &__subject {
-    margin: 0 0 6px;
-    padding-right: 32px; // 우상단 [×] 버튼과 겹치지 않게
-    @include type-title;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-ui);
+    color: var(--text-3);
+  }
+
+  // 안읽음 — 발신자 600 · 제목 잉크색 (읽음은 발신자 500 --text-2 · 제목 --text-3)
+  &__item--unread &__from {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  &__item--unread &__subject {
+    color: var(--text);
+  }
+}
+
+// ===== 오른쪽 읽기 창 =====
+.mail-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  // 머리 줄 — 목업 44 · padding 0 20 · [‹ 목록으로] … [그룹웨어에서 열기] · 바닥선
+  &__bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: var(--pane-head-h);
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__bar-gap {
+    flex: 1;
+  }
+
+  &__state {
+    margin: auto;
+    padding: 20px;
+    text-align: center;
+  }
+
+  // 본문 — 목업 padding 22 28 · gap 18 · 제목 18/600 · 메타 줄 · 구분선 · 내용
+  &__content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px 28px;
+  }
+
+  &__subject {
+    margin: 0;
+    font-size: var(--fs-detail-title);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
     word-break: break-word;
   }
 
   &__meta {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: 10px;
+    font-size: var(--fs-ui);
   }
 
   &__from {
-    @include type-body;
-    color: var(--text-2);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 500;
+    color: var(--text);
   }
 
   &__date {
     flex-shrink: 0;
-    @include type-small;
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
     color: var(--text-3);
   }
 
-  &__actions {
-    display: flex;
-    gap: 8px;
+  &__divider {
+    height: 1px;
+    flex-shrink: 0;
+    background: var(--border);
   }
 
-  // 본문 iframe — sandbox 흰 배경 문서. 남는 영역을 채우고 내부 스크롤
+  // 본문 iframe — 메일 HTML 은 흰 바탕을 전제로 쓰여 있어 sandbox 문서는 흰 배경을 유지한다
   &__frame {
     flex: 1;
     min-height: 0;
     width: 100%;
     border: 1px solid var(--border);
     border-radius: var(--r-md);
-    background: #fff;
+    background: #fff; // 메일 HTML 은 흰 바탕을 전제로 쓰여 있다(이전과 같은 예외)
   }
 }
 
-// ===== 인증코드 탭 (팀 공용 계정의 피그마·유데미 로그인 코드) =====
+// ===== 인증코드 탭 — 목업 MailAuthCode: 계정마다 패널(padding 14 16 · gap 12) =====
 .mail-authcode {
-  // 목록 자리를 그대로 물려받는다 — 계정이 늘어나면 이 안에서만 스크롤한다
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-
   &__list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   &__row {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
+    gap: 12px;
+    padding: 14px 16px;
+    @include card-surface;
   }
 
+  // 머리 — 열쇠(--text-3) · 아이디(모노 13/500) · [피그마][유데미]
   &__head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
   }
 
-  // 서비스 버튼(피그마·유데미) — 계정 줄이 좁아지면 아래로 흐른다
+  &__key {
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+
+  &__id {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  // 서비스 버튼 — 계정 줄이 좁아지면 아래로 흐른다
   &__actions {
     display: flex;
     align-items: center;
@@ -319,36 +402,29 @@
     flex-wrap: wrap;
   }
 
-  &__id {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text);
-    font-size: var(--fs-body);
-    font-weight: 600;
-  }
-
   &__result {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     flex-wrap: wrap;
   }
 
-  // 코드 자체가 복사 버튼이다 — 자동 복사가 실패했을 때 눈에 띄는 재시도 표적이 된다.
-  // 고정폭 + 넓은 자간: 7자리를 눈으로 세어 옮겨 적을 수도 있어야 한다.
+  // 코드 자체가 복사 버튼 — 목업: 모노 26/600 · 자간 .12em · padding 4 14 · 모서리 8 · 점선 --border-strong · 가라앉은 면.
+  // 7자리를 눈으로 세어 옮겨 적을 수도 있어야 해 고정폭·넓은 자간이다
   &__code {
-    padding: 4px 12px;
-    border: 1px solid var(--accent-soft);
-    border-radius: var(--r-md);
-    background: var(--accent-soft);
-    color: var(--accent);
+    padding: 4px 14px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r-tab);
+    background: var(--bg-sunken);
+    color: var(--text);
     font-family: var(--font-mono);
-    font-size: var(--fs-title);
+    font-size: var(--fs-code-lg);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     cursor: pointer;
     transition: border-color var(--dur-1) var(--ease);
+    @include focus-ring(2px);
 
     &:hover {
       border-color: var(--accent);
@@ -356,8 +432,10 @@
   }
 
   &__meta {
-    color: var(--text-3);
-    font-size: var(--fs-small);
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-ui);
+    color: var(--text-2);
   }
 }
 

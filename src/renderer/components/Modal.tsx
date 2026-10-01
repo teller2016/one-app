@@ -14,6 +14,8 @@ export function Modal({
   onClose,
   children,
   footer,
+  tabs,
+  actions,
   wide = false,
   width,
 }: {
@@ -24,6 +26,13 @@ export function Modal({
   children: ReactNode;
   /** 하단 액션 바 — 가라앉은 면 + 윗선, 버튼은 오른쪽 정렬 (목업 .modal-foot) */
   footer?: ReactNode;
+  /**
+   * 제목 아래 탭 줄(목업 MailModal — 밑줄 탭). 주면 머리가 바닥선을 갖고 탭이 그 선에 붙는다.
+   * 탭 버튼 자체는 호출부가 그린다(밑줄 탭은 아직 이 모달 하나뿐이다).
+   */
+  tabs?: ReactNode;
+  /** 머리 오른쪽, 닫기 버튼 앞의 아이콘 버튼들(새로고침 등) */
+  actions?: ReactNode;
   /** 넓은 콘텐츠(로그·표)용 확장 폭 */
   wide?: boolean;
   /** 목업 폭(px) — 최대 폭을 이 값으로 (wide 보다 우선). 좁은 창에선 그대로 줄어든다 */
@@ -51,7 +60,7 @@ export function Modal({
       }}
     >
       <div
-        className={'modal' + (wide ? ' modal--wide' : '')}
+        className={'modal' + (wide ? ' modal--wide' : '') + (tabs ? ' modal--tabbed' : '')}
         style={width ? ({ '--modal-w': `${width}px` } as CSSProperties) : undefined}
         role="dialog"
         aria-modal="true"
@@ -60,15 +69,19 @@ export function Modal({
           <div className="modal__titles">
             <h3 className="modal__title">{title}</h3>
             {subtitle && <p className="modal__sub">{subtitle}</p>}
+            {tabs}
           </div>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="닫기"
-            onClick={onClose}
-          >
-            <Icon name="x" size={16} />
-          </button>
+          <div className="modal__actions">
+            {actions}
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="닫기"
+              onClick={onClose}
+            >
+              <Icon name="x" size={16} />
+            </button>
+          </div>
         </div>
         <div className="modal__body">{children}</div>
         {footer && <div className="modal__foot">{footer}</div>}

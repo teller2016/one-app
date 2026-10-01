@@ -655,9 +655,9 @@ html.mo {
     }
   }
 
-  // ── 메일 ──
-  // MailModal 은 이미 [목록] + [본문 슬라이드오버] 구조라 폰에서 필요한 전환이 들어 있다.
-  // 고쳐야 하는 건 셋 뿐: 모달 크기 · 본문 패널 폭(68%→100%) · 목록 행의 display:contents 트릭.
+  // ── 메일 ── (목업 MoMail)
+  // 데스크톱 MailModal(머리 밑줄 탭 + [목록 360 | 읽기 창] 2단)을 그대로 쓰되 폰에서는:
+  // 모달 껍데기 = 탭 화면 · 머리 = 꽉 찬 세그먼트 한 줄 · 목록 전폭 · 읽기 창은 목록을 덮는 전환(슬라이드).
 
   // 메일은 탭 화면이라 오버레이가 하단 탭바를 덮으면 탭 전환이 막힌다 →
   // 오버레이를 탭바 위에서 끝내고 스크림도 없앤다(뒤에 가릴 화면이 없다)
@@ -669,67 +669,125 @@ html.mo {
     background: none;
   }
 
-  // 모달 자체 머리('메일' + ×)는 감춘다 — 셸 머리([뒤로] · '메일')가 대신한다. 둘 다 보이면 머리가 두 번이다
-  .modal--wide:has(.mail-modal) > .modal__head {
-    display: none;
-  }
-
-  // 탭 화면이라 떠 있는 면의 윤곽(양옆 1px)도 걷는다
-  .modal--wide:has(.mail-modal) {
-    border: 0;
-    box-shadow: none;
-  }
-
-  // 탭 화면으로 쓰므로 모달 껍데기를 남은 영역에 꽉 채운다
-  .modal--wide:has(.mail-modal) {
+  // 탭 화면으로 쓰므로 모달 껍데기를 남은 영역에 꽉 채우고 떠 있는 면의 윤곽도 걷는다
+  .modal:has(.mail-modal) {
     max-width: none;
     width: 100%;
     height: 100%;
     max-height: none;
+    border: 0;
     border-radius: 0;
+    box-shadow: none;
   }
 
-  // 데스크톱은 `height: calc(100vh - 200px); min-height: 440px` 로 고정 — 폰에서는 넘친다
-  .mail-modal {
-    height: auto;
-    min-height: 0;
-    flex: 1;
-  }
-
-  // 본문 패널이 목록을 완전히 덮어야 '목록↔본문 전환'이 된다 (데스크톱은 오른쪽 68%)
-  .mail-modal__view {
-    left: 0;
-    width: 100%;
-    border-radius: 0;
+  // 머리 — 제목·닫기는 셸 머리([뒤로] · '메일')가 대신한다. 남는 것은 탭 줄(+ 새로고침) 한 줄 — 목업 padding 10 12
+  .modal:has(.mail-modal) .modal__head {
+    align-items: center;
     padding: 10px 12px;
   }
 
-  // `.mail-list__top { display: contents }` 가 발신자(200px 고정)·시각을 행에 펼쳐
-  // 제목 자리를 130px 대로 만든다 → 트릭을 풀어 [발신자 … 시각] / [제목] 2줄로
-  .mail-list__top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
+  .modal:has(.mail-modal) .modal__title,
+  .modal:has(.mail-modal) .modal__actions > button[aria-label='닫기'] {
+    display: none;
   }
 
-  .mail-list__main {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
+  .modal:has(.mail-modal) .modal__titles {
+    gap: 0;
   }
 
-  .mail-list__from {
-    width: auto;
-    max-width: 60%;
-    padding-right: 0;
+  .modal:has(.mail-modal) .modal__actions {
+    padding-bottom: 0;
+  }
+
+  // 밑줄 탭 → 꽉 찬 세그먼트(목업 MoMail — 공용 .seg 트랙과 같은 값, 칩 30 · 균등 폭)
+  .mail-modal__tabs {
+    margin-bottom: 0;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-tile);
+    background: var(--bg-sunken);
+  }
+
+  .mail-modal__tab {
+    flex: 1;
+    justify-content: center;
+    height: 30px;
+    border-bottom: 0;
+    border-radius: var(--r-sm);
+    font-size: var(--fs-ui);
+    white-space: nowrap;
+
+    &--on {
+      background: var(--seg-on);
+      box-shadow: var(--shadow-1);
+    }
+  }
+
+  // 목록 전폭 — 데스크톱의 360 단·경계선을 풀고, 읽기 창이 그 위로 덮는다
+  .mail-modal__list {
+    width: 100%;
     border-right: 0;
   }
 
-  // 제목이 `display: flex` 라 text-overflow 가 동작하지 않아 말줄임 없이 잘린다
-  // (첨부 아이콘 배치용 flex) → 폰에서는 블록으로 바꿔 "…" 가 보이게 한다
+  .mail-modal__view {
+    position: absolute;
+    inset: 0;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition:
+      transform var(--dur-2) var(--ease),
+      visibility 0s linear var(--dur-2);
+
+    &--open {
+      transform: none;
+      visibility: visible;
+      transition: transform var(--dur-2) var(--ease);
+    }
+  }
+
+  // 빈 안내는 데스크톱 전용(폰은 그 자리에 목록이 보인다). 닫히는 동안에도 본문을 남겨 슬라이드아웃이 비지 않게
+  .mail-modal__empty {
+    display: none;
+  }
+
+  .mail-modal__view:not(.mail-modal__view--open) .mail-view {
+    display: flex;
+  }
+
+  .mail-view__bar {
+    padding: 0 12px;
+  }
+
+  .mail-view__content {
+    gap: 14px;
+    padding: 16px;
+  }
+
+  // 목록 행 — 목업 MoMail: padding 11 16 · 패널 면 · 점 6 · 제목 13.5/1.45(안읽음 600 · 읽음 --text-2)
+  .mail-list__item {
+    padding: 11px 16px;
+    background: var(--surface-1);
+  }
+
+  .mail-list__dot {
+    width: 6px;
+    height: 6px;
+  }
+
   .mail-list__subject {
-    display: block;
+    font-size: var(--fs-week-label);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  .mail-list__item--unread .mail-list__subject {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  // 인증코드 — 폰 폭 여백
+  .mail-modal--authcode {
+    padding: 12px;
   }
 
   // ── 배포 ──

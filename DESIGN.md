@@ -45,6 +45,7 @@ typography:
   title:   { size: 15px, weight: 600 }
   h2:      { size: 20px, weight: 600, tracking: -0.01em }
   metric:  { size: 22px, weight: 500, numeric: tabular-nums }
+  code-lg: { size: 26px, weight: 600, mono, tracking: .12em }   # --fs-code-lg — 메일 인증코드 (목업 MailAuthCode)
 
 radius: { xs: 3px, sm: 5px, md: 6px, tile: 7px, tab: 8px, rail: 9px, lg: 10px, card: 12px, xl: 14px, full: 999px }   # 모달만 lg 보다 한 단 더 (컴포넌트에서)
 spacing: [4, 8, 12, 16, 20, 24, 32]
