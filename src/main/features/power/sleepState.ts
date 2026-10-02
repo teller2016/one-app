@@ -11,6 +11,7 @@ import { broadcast } from '../../lib/broadcast';
 import { isSleepBluetoothOffEnabled, isSleepWifiOffEnabled } from '../settings/store';
 import { bluetoothSwitch } from './bluetooth';
 import type { RadioSwitch } from './radioSwitch';
+import { judgeUnattended } from './unattended';
 import { reportSleepCycle } from './wakeReport';
 import { wifiSwitch } from './wifi';
 
@@ -73,8 +74,15 @@ function onSuspend(): void {
   cancelProbe();
   if (!asleep) sleptAt = Date.now();
   setAsleep(true);
-  // 다크웨이크에서 다시 잠들 때도 온다 — 그때 이미 껐다면 powerOffForSleep 이 스스로 걸러낸다
-  for (const r of RADIOS) if (r.enabled()) r.sw.powerOffForSleep();
+  // 덮개를 열자마자 다시 닫은 경우 — 남은 복구 재시도가 잠든 사이(다크웨이크)에 켜지 않게 먼저 거둔다.
+  // 토글과 무관하다(끈 뒤에 토글을 꺼도 복구는 돈다)
+  for (const r of RADIOS) r.sw.cancelRestore();
+  // 다크웨이크에서 다시 잠들 때도 온다 — 그때 이미 껐다면 powerOffForSleep 이 스스로 걸러낸다.
+  // 판정(ioreg 동기 실행)은 한 번만 — 잠들기 직전 main 을 붙잡는 시간을 줄인다
+  const targets = RADIOS.filter((r) => r.enabled());
+  if (!targets.length) return;
+  const verdict = judgeUnattended();
+  for (const r of targets) r.sw.powerOffForSleep(verdict);
 }
 
 /**

@@ -3,10 +3,10 @@
 // 장치별 차이(무슨 명령으로 읽고 쓰는지)는 드라이버(bluetooth.ts·wifi.ts)가 맡고, 여기에는 둘이
 // 똑같이 지켜야 하는 순서만 둔다 — 끄기: 조건 판정 → 켜져 있을 때만 → **기록 먼저** → 끄기,
 // 되돌리기: **우리가 끈 것만** · 다크웨이크가 아니라 **덮개가 열렸을 때만** · 재시도하며 켜기.
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import { sendToast } from '../notify/notify';
 import { clearRadioOff, didWeTurnRadioOff, markRadioOff, type RadioKind } from './store';
-import { isLidClosed, judgeUnattended } from './unattended';
+import { isLidClosed, type UnattendedVerdict } from './unattended';
 
 // ⚠️ 잠들기 직전(suspend 핸들러)에 동기로 부르므로 짧게 끊는다. 비동기로 미루면
 // 맥이 먼저 잠들어 결과를 못 받는다 — blueutil·networksetup 은 정상이면 수십 ms 다.
@@ -46,8 +46,17 @@ export interface RadioDriver {
 }
 
 export interface RadioSwitch {
-  /** 잠들기 직전 — 조건이 맞고 켜져 있을 때만 끈다 */
-  powerOffForSleep(): void;
+  /**
+   * 잠들기 직전 — 조건이 맞고 켜져 있을 때만 끈다.
+   * 판정(`judgeUnattended` — ioreg 동기 실행)은 호출부가 한 번 해서 장치마다 나눠 준다.
+   */
+  powerOffForSleep(verdict: UnattendedVerdict): void;
+  /**
+   * 잠들기 시작 — 진행 중인 복구(재시도 타이머·켜기 명령)를 거둔다. 토글과 무관하게 부른다.
+   * ⚠️ 안 거두면 덮개를 열었다 곧 다시 닫았을 때 남은 재시도가 다음 다크웨이크에서 장치를 켜고(재연결 루프·
+   * ARP 연쇄 재현), 잠들기와 엇갈린 켜기 결과가 방금 남긴 "껐다" 기록을 지워 아침에 복구가 안 된다.
+   */
+  cancelRestore(): void;
   /** 복귀 — 우리가 끈 경우에만 되돌린다 */
   restoreAfterWake(why: string): void;
   /** 깨어남 직후 — 덮개가 열렸을 때만 되돌린다 */
@@ -57,6 +66,11 @@ export interface RadioSwitch {
 export function createRadioSwitch(d: RadioDriver): RadioSwitch {
   /** 복구 재시도가 도는 중인가 — resume 과 fullWake 가 연달아 불러 중복 실행되는 것을 막는다 */
   let restoring = false;
+  /** 복구 세대 — cancelRestore 가 올린다. 늦게 끝난 시도는 자기 세대가 아니면 아무것도 하지 않는다 */
+  let restoreGen = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 진행 중인 켜기 명령 — 잠들기 시작하면 죽인다(잠든 뒤에 켜지지 않게) */
+  let inflight: ChildProcess | null = null;
   /** 복구 실패 토스트는 장치마다 한 장만 — 다음 시도 결과가 같은 자리를 교체한다 */
   const toastKey = `power-${d.kind}-restore`;
 
@@ -90,7 +104,8 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
   /** 켜기(비동기) — 복구 경로 전용. 잠들기 직전이 아니라 main 을 멈출 이유가 없다 */
   function writePowerAsync(cmd: RadioCommand, on: boolean): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile(cmd.bin, cmd.writeArgs(on), { timeout: EXEC_TIMEOUT_MS }, (err) => {
+      const child = execFile(cmd.bin, cmd.writeArgs(on), { timeout: EXEC_TIMEOUT_MS }, (err) => {
+        if (inflight === child) inflight = null;
         if (err) {
           console.warn(`[power] ${d.label}를 ${on ? '켜지' : '끄지'} 못했습니다:`, err);
           resolve(false);
@@ -103,6 +118,7 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
         // 확인 읽기는 동기지만 짧다(수십 ms) — 복구 경로라 잠들기 직전 제약도 없다
         resolve(readPower(cmd) === on);
       });
+      inflight = child;
     });
   }
 
@@ -110,15 +126,15 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
    * 잠들기 직전 — 조건이 맞고 **켜져 있을 때만** 끈다.
    * 원래 꺼져 있었다면 아무것도 하지 않는다(깨어날 때 멋대로 켜지 않기 위해).
    */
-  function powerOffForSleep(): void {
+  function powerOffForSleep(verdict: UnattendedVerdict): void {
+    // 판정이 먼저다 — 책상(AC·외부 모니터) 상태에서는 장치 찾기 명령도 돌릴 필요가 없다
+    if (!verdict.unattended) {
+      console.log(`[power] ${d.label} 유지 — ${verdict.reason}`);
+      return;
+    }
     const cmd = d.locate();
     if (!cmd) {
       console.warn(`[power] ${d.missingLog}`);
-      return;
-    }
-    const verdict = judgeUnattended();
-    if (!verdict.unattended) {
-      console.log(`[power] ${d.label} 유지 — ${verdict.reason}`);
       return;
     }
     if (readPower(cmd) !== true) return; // 이미 꺼져 있거나 못 읽음 → 건드리지 않는다
@@ -162,26 +178,48 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
       return;
     }
     restoring = true;
-    void attemptRestore(cmd, why, 0);
+    void attemptRestore(cmd, why, 0, restoreGen);
+  }
+
+  function cancelRestore(): void {
+    restoreGen++;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    inflight?.kill();
+    inflight = null;
+    restoring = false; // 기록은 그대로 — 다음 복귀가 처음부터 다시 시도한다
   }
 
   /** 한 번 시도하고, 실패하면 간격을 늘려 다시 — 전부 실패해야 사용자에게 알린다 */
-  async function attemptRestore(cmd: RadioCommand, why: string, attempt: number): Promise<void> {
-    // 그 사이 다른 경로가 되돌렸으면(플래그 삭제) 더 볼 것 없다
-    if (!didWeTurnRadioOff(d.kind)) {
+  async function attemptRestore(cmd: RadioCommand, why: string, attempt: number, gen: number): Promise<void> {
+    retryTimer = null;
+    if (gen !== restoreGen) return; // 그 사이 잠들기 시작했다 — cancelRestore 가 정리했다
+    try {
+      // 그 사이 다른 경로가 되돌렸으면(플래그 삭제) 더 볼 것 없다
+      if (!didWeTurnRadioOff(d.kind)) {
+        restoring = false;
+        return;
+      }
+      const ok = await writePowerAsync(cmd, true);
+      // ⚠️ 켜는 사이 잠들기가 시작됐으면 결과로 기록을 건드리지 않는다 — 잠들기(powerOffForSleep)가 방금 남긴
+      // "껐다" 기록을 여기서 지우면 장치는 꺼졌는데 복구 근거가 없어진다
+      if (gen !== restoreGen) return;
+      if (ok) {
+        clearRadioOff(d.kind);
+        restoring = false;
+        const tried = attempt > 0 ? ` · ${attempt + 1}번째 시도` : '';
+        console.log(`[power] ${d.label}를 다시 켰습니다 (${why}${tried})`);
+        return;
+      }
+    } catch (err) {
+      // 기록 파일 쓰기 실패 등 — restoring 이 묶이면 이 프로세스의 복구가 전부 막힌다
+      console.warn(`[power] ${d.label} 복구 중 오류:`, err);
       restoring = false;
-      return;
-    }
-    if (await writePowerAsync(cmd, true)) {
-      clearRadioOff(d.kind);
-      restoring = false;
-      const tried = attempt > 0 ? ` · ${attempt + 1}번째 시도` : '';
-      console.log(`[power] ${d.label}를 다시 켰습니다 (${why}${tried})`);
       return;
     }
     const next = attempt + 1;
     if (next < RESTORE_RETRY_MS.length) {
-      setTimeout(() => void attemptRestore(cmd, why, next), RESTORE_RETRY_MS[next]);
+      retryTimer = setTimeout(() => void attemptRestore(cmd, why, next, gen), RESTORE_RETRY_MS[next]);
       return;
     }
     // 플래그는 남긴다 — 다음 복귀·다음 실행이 한 번 더 시도한다
@@ -207,5 +245,5 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
     restoreAfterWake('덮개 열림');
   }
 
-  return { powerOffForSleep, restoreAfterWake, restoreIfLidOpened };
+  return { powerOffForSleep, cancelRestore, restoreAfterWake, restoreIfLidOpened };
 }

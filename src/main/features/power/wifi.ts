@@ -34,11 +34,19 @@ function findWifiDevice(): string | null {
   }
 }
 
+/**
+ * 목록에서 찾은 장치 이름 — 프로세스 동안 기억한다.
+ * ⚠️ 깨어나는 순간에는 configd 가 장치를 열거하느라 `networksetup` 이 몇 초 붙잡힐 수 있다(규칙 문서 실측).
+ * 복구 때 목록 조회가 한 번 타임아웃 나면 "장치 없음"으로 끝나 끈 기록까지 지워지므로, 끌 때 찾은 이름을
+ * 그대로 쓴다. 짐작한 이름이 아니라 목록에서 찾은 값이라 위 ⚠️ 와 어긋나지 않는다.
+ */
+let wifiDevice: string | null = null;
+
 export const wifiSwitch = createRadioSwitch({
   kind: 'wifi',
   label: 'Wi-Fi',
   locate: () => {
-    const dev = findWifiDevice();
+    const dev = (wifiDevice ??= findWifiDevice());
     if (!dev) return null;
     return {
       bin: NETWORKSETUP,
