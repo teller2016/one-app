@@ -154,6 +154,93 @@
         max-width: 100%;
         overflow-x: auto;
       }
+
+      // ── 답변 본문 스타일 (2026-10-02 사용자가 시안에서 고른 조합 — 채팅 보기에만, Nightwatch 리포트는 그대로) ──
+      // 표 = 둥근 틀 · 제목 = 배경 띠 · 인라인 코드 = 장미색 글자 · 인용 = 경고 상자 · 구분선 = 넓은 여백 ·
+      // 🎯 결론 줄 = 강조 상자 · 체크리스트 = 동그라미. 결론 줄·체크는 Markdown `answer` 가 붙이는 클래스다.
+
+      // 표 — 내용 폭만큼 둥근 틀로 감싸고 칸은 가로줄만. 틀이 가로 스크롤 상자라 머리 면이 모서리에서 잘린다
+      .md table {
+        width: fit-content;
+        border: 1px solid var(--border);
+        border-radius: var(--r-tab);
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+
+      .md th,
+      .md td {
+        padding: 8px 12px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .md tbody tr:last-child td {
+        border-bottom: 0; // 틀 테두리와 겹쳐 2px 로 보이지 않게
+      }
+
+      // 섹션 제목(## 🔍 진단) — 밑줄 대신 옅은 띠
+      .md h2 {
+        padding: 6px 10px;
+        border-bottom: 0;
+        border-radius: var(--r-md);
+        background: var(--surface-2);
+        font-size: var(--fs-emph);
+      }
+
+      .md :not(pre) > code {
+        color: var(--code-ink);
+      }
+
+      // 인용 — 답변 형식에선 `> ⚠️` 주의 문구로만 쓴다 → Banner 와 같은 테두리 없는 경고 soft 면
+      .md blockquote {
+        padding: 10px 12px;
+        border-left: 0;
+        border-radius: var(--r-tab);
+        background: var(--warning-soft);
+        color: var(--text);
+      }
+
+      .md hr {
+        margin: 24px 0;
+      }
+
+      .md__lead {
+        margin-bottom: 14px;
+        padding: 10px 14px;
+        border-radius: var(--r-tab);
+        background: var(--accent-soft);
+        font-weight: 600;
+      }
+
+      // 체크리스트 — 글머리 자리를 비우고 첫 줄 높이 가운데에 동그라미(완료 = 초록 채움 + 체크)
+      .md .contains-task-list {
+        padding-left: 24px;
+        list-style: none;
+      }
+
+      .md .task-list-item {
+        position: relative;
+      }
+
+      .md__check {
+        position: absolute;
+        left: -24px;
+        top: calc((1lh - 16px) / 2);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--r-full);
+
+        &--on {
+          border-color: var(--ok);
+          background: var(--ok);
+          color: var(--surface-1);
+        }
+      }
     }
   }
 

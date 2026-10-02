@@ -26,6 +26,7 @@ colors:            # 라이트 / 다크
   danger:          ["#c4323a", "#f2676d"]
   ot:              ["#b45309", "#ff8f4d"]
   idle:            ["#69717c", "#858c96"]
+  code-ink:        ["#a33053", "#f39ab8"]   # 채팅 답변 인라인 코드 글자
 
 typography:
   font-body: "'IBM Plex Sans KR' (@fontsource 번들 — lib/fonts.ts)"
@@ -95,6 +96,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 1.7 }
 | 위험 | `--danger` | `#c4323a` | `#f2676d` | 실패·종료·삭제 |
 | 초과근무 | `--ot` | `#b45309` | `#ff8f4d` | OT 전용 |
 | 유휴 | `--idle` | `#69717c` | `#858c96` | 빌드 이력 없음 등 |
+| 인라인 코드 | `--code-ink` | `#a33053` | `#f39ab8` | 채팅 답변의 `code` 글자만 (칩·인용 상자·제목 띠 위 전부 4.8:1+) |
 
 - 각 시맨틱에는 `-soft`(배지·배너 배경) 짝이 있다. soft@surface-1 위 글자 대비는 전부 4.5:1 이상.
 - **차트 팔레트** `--chart-1t`~`--chart-10o`: 1~5 는 인디고·스카이·앰버·핑크·민트(목업 주간보고와 같은 순서), 6~10 은 보조. O쌍은 ptag 글자색 겸용 — 다크에선 밝게, 라이트에선 어둡게 보정.

@@ -715,7 +715,7 @@ function AssistantBubble({ text }: { text: string }) {
   return (
     <div className="term-chat__row">
       <div className="term-chat__bubble term-chat__bubble--ai">
-        <Markdown copyCode>{text}</Markdown>
+        <Markdown copyCode answer>{text}</Markdown>
         <button
           type="button"
           className="term-chat__copy"
