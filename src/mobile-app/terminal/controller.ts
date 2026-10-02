@@ -28,9 +28,11 @@ import {
   KEY_SEQ,
   StableWaiting,
   applyModifiers,
+  base64UrlToBytes,
   defaultView,
   mergeChat,
   pickAutoAttach,
+  sameKey,
   stripDaReplies,
   visibleSessions,
   type KeyName,
@@ -251,6 +253,7 @@ class MoTerminalController {
     });
     // 탭 슬립(잠금·앱 전환) 복귀 시 즉시 재연결
     document.addEventListener('visibilitychange', () => {
+      this.sendVisibility();
       if (document.visibilityState === 'visible') {
         if (!this.ws) {
           this.reconnectDelay = 1000;
@@ -426,6 +429,8 @@ class MoTerminalController {
       // 작업 영역 트리를 한 번 받아 둔다 — 상단 타일 색과 변경 탭 대상(세션 위치 → 워크트리)이 쓴다.
       // 경량 조회(listWorktreesBrief)라 접속마다 한 번은 부담이 없다. 시트를 열 때 다시 갱신한다.
       this.send({ type: 'workspaces' });
+      this.sendVisibility(); // 보는 폰이 있으면 서버가 푸시를 생략한다
+      this.requestPushKey(); // 알림을 허용한 폰이면 푸시 구독을 (다시) 등록한다
       // 서버가 접속 직후 sessions 를 보내주고, 그때 마지막 세션으로 재attach 된다
     };
     sock.onmessage = (e) => {
@@ -593,6 +598,9 @@ class MoTerminalController {
       case 'chat-prompt':
         if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
         this.set({ chat: { ...this.state.chat, prompt: msg.prompt } });
+        break;
+      case 'push-key':
+        void this.subscribePush(msg.key);
         break;
       case 'error':
         // ⚠️ 연결 끊김으로 표시하지 말 것 — attach 실패 한 번에 UI 가 통째로 잠겨 "아무것도 안 된다"가
@@ -1107,9 +1115,12 @@ class MoTerminalController {
   }
 
   // ── 폰 알림 — 자리를 비운 동안 입력 대기가 생기면 알린다 ──
+  // 두 갈래다. ① 페이지 알림(notifyWaiting) — 페이지가 백그라운드에서 **살아 있는 동안**(WS 유지)만 온다.
+  // ② 웹 푸시(subscribePush → main push.ts → sw.js push) — 페이지가 얼거나 닫혀 있어도 온다. 안드로이드는
+  // 앱 전환·화면 잠금 뒤 곧 페이지를 얼려 ①만으로는 답이 끝날 때쯤 알릴 주체가 없었다(2026-10-02).
+  // ①을 남긴 것은 PC 가 푸시 서비스에 못 닿을 때의 대비다 — 둘 다 와도 tag 가 같아 한 장이다.
   // ⚠️ 안드로이드 Chrome 은 페이지의 `new Notification()` 을 거부한다 — SW 의 showNotification 만 된다.
-  //    SW(`/sw.js`)는 fetch 를 가로채지 않는다 — 알림 클릭 처리만.
-  // ⚠️ 진짜 푸시가 아니다 — 페이지가 백그라운드에서 **살아 있는 동안**(WS 유지)만 온다.
+  //    SW(`/sw.js`)는 fetch 를 가로채지 않는다 — 푸시 표시·알림 클릭 처리만.
   // ⚠️ secure context 전용 — http 로 뜬 경우엔 통째로 비활성.
 
   private swReg: ServiceWorkerRegistration | null = null;
@@ -1179,10 +1190,44 @@ class MoTerminalController {
       return;
     }
     void Notification.requestPermission().then((perm) => {
-      if (perm === 'granted') void this.ensureSw();
-      else if (perm === 'denied') this.notice('브라우저 설정에서 알림이 차단돼 있습니다');
+      if (perm === 'granted') {
+        void this.ensureSw();
+        this.requestPushKey();
+      } else if (perm === 'denied') this.notice('브라우저 설정에서 알림이 차단돼 있습니다');
       this.syncNotifyBar();
     });
+  }
+
+  /** 화면이 보이는지 서버에 알린다 — MO 를 보고 있는 폰이 있으면 서버가 푸시를 생략한다(탭바 배지가 대신) */
+  private sendVisibility() {
+    this.send({ type: 'visibility', visible: document.visibilityState === 'visible' });
+  }
+
+  /** 알림을 허용했으면 공개키를 요청한다 — 응답('push-key')으로 구독한다(subscribePush) */
+  private requestPushKey() {
+    if (notifySupported() && 'PushManager' in window && Notification.permission === 'granted')
+      this.send({ type: 'push-key' });
+  }
+
+  /** 웹 푸시 구독을 만들어(이미 있으면 그대로) PC 에 등록한다 — 접속할 때마다(브라우저가 구독을 바꿨을 수 있다) */
+  private async subscribePush(key: string) {
+    const reg = await this.ensureSw();
+    if (!reg) return;
+    try {
+      const appKey = base64UrlToBytes(key);
+      let sub = await reg.pushManager.getSubscription();
+      // PC 가 키를 새로 만들었으면 옛 구독은 새 키로 서명한 푸시를 받지 못한다 — 다시 만든다
+      if (sub && !sameKey(sub.options.applicationServerKey, appKey)) {
+        await sub.unsubscribe();
+        sub = null;
+      }
+      sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
+      const { endpoint, keys } = sub.toJSON();
+      if (endpoint && keys?.p256dh && keys.auth)
+        this.send({ type: 'push-subscribe', sub: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } } });
+    } catch {
+      // 푸시 미지원·푸시 서비스 접속 실패 — 페이지 알림(notifyWaiting)만 남는다
+    }
   }
 
   dismissNotifyBar() {

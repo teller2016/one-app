@@ -206,6 +206,9 @@ paths:
 - 출력 복사: 세션 메뉴 → 선택 모드(드래그 = **줄 단위** `selectLines`, 스크롤 대신) → [복사](`useCopy` — http 폴백 포함). 검색: `SearchAddon`(데스크톱과 같은 하이라이트 합성).
 - 핀치 글자 크기 6~22(**기본 11** — 옛 기본 6 은 읽기엔 작았다) + 메뉴 [A− A+]. ⚠️ 핀치 touchend 를 탭 처리 금지. 붙여넣기는 secure context 만(메뉴에서 비활성 + 이유).
 - 대기 알림·탭 배지·홈 아이콘 배지·wakeLock 은 `StableWaiting`(3초 유예) 하나를 본다. ⚠️ 안드로이드는 셸 `public/sw.js`(루트 스코프, fetch 미개입) `showNotification`. 알림 클릭 → 열린 창 `postMessage` → 셸이 터미널 탭으로(`onFocusRequest`). secure context 전용.
+- **폰 알림은 두 갈래**(2026-10-02): ① 페이지 알림(`notifyWaiting`) — 페이지가 살아 있을 때만. ② **웹 푸시** — main `push.ts`(web-push · VAPID) → 푸시 서비스(FCM) → `sw.js` `push`. ⚠️ 안드로이드는 앱 전환·잠금 뒤 곧 페이지를 얼리고 소켓을 끊어 ①만으로는 알림이 안 왔다(신고 당시 PC 서버 연결 0). 흐름: 접속·권한 허용 시 `push-key` → `subscribe` → `push-subscribe`(접속마다 재등록, 서버가 같은 것 거름) / 전송은 `ipc.ts` `onAgentWaiting`(턴당 1회 판정 공유)에서 `canPushToPhone()`(서버 켜짐 + **`visibility` 를 보고한 보이는 폰 없음**)일 때. tag `wait:<id>` 를 ①과 공유해 한 장으로 합쳐진다.
+  - ⚠️ 키·구독은 `runtimeFile('terminal-push.json')` — dev(포트+1)와 설치본은 origin 이 달라 구독이 따로다. VAPID 비밀키는 safeStorage. 토큰 재발급("모든 기기 무효화")이 구독도 비운다. 구독 주소는 푸시 서비스 호스트만(`PUSH_HOSTS` — 임의 https 로 요청을 쏘는 통로 방지).
+  - ⚠️ 받은 푸시는 SW 가 **반드시** 알림으로 보인다(안 보이면 Chrome 이 '백그라운드에서 업데이트됨'을 띄운다) → "답했으니 알림 걷기"는 폰이 MO 를 열 때(`closeNotificationsFor`)만. `web-push` 는 main 번들 external.
 - 세션 종료 확인은 공용 `useConfirm`, 안내는 공용 토스트(옛 페이지는 네이티브 confirm·상태 칸 2.2초).
 - ⚠️ **`DA_REPLY_RE` 는 MO·데스크톱 둘 다 필수**, ESC 는 `String.fromCharCode(27)`.
 - ⚠️ 예측 입력 억제 `autocomplete=off`+`autocapitalize=none`+`inputmode="url"`. `.composition-view` 는 **MO 에만**(`--fs-title` 고정, `!important`).

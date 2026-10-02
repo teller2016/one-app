@@ -39,8 +39,10 @@ import {
   scrollSessionToBottom,
   writeSession,
 } from './pty';
+import { clearPushSubscriptions, sendWaitingPush } from './push';
 import { initTmux } from './tmux';
 import {
+  canPushToPhone,
   dropAllClients,
   getServerStatus,
   onServerChanged,
@@ -206,6 +208,7 @@ export function registerTerminalIpc() {
   ipcMain.handle('terminal:server:regen-token', () => {
     regenerateToken();
     dropAllClients(); // 이미 붙은 기기까지 무효화 — 확인창의 "모든 기기 무효화" 약속
+    clearPushSubscriptions(); // 무효화한 폰에 세션 이름이 담긴 알림이 계속 가지 않게
     return getServerStatus(); // 새 토큰이 반영된 URL 목록
   });
 
@@ -255,6 +258,16 @@ export function registerTerminalIpc() {
     // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.
     void (async () => {
       const location = await sessionLocationLabel(info.cwd);
+      // 폰 푸시(push.ts) — 데스크톱 알림 강도와 무관하다(폰에서 알림을 허용한 것 자체가 선택이다).
+      // 페이지가 살아 있으면 페이지 알림(MO controller.ts notifyWaiting)도 뜨지만 tag 가 같아 한 장으로 합쳐진다
+      if (canPushToPhone()) {
+        const where = location ?? info.cwd.split('/').filter(Boolean).pop() ?? '';
+        sendWaitingPush({
+          id: info.id,
+          title: info.title,
+          body: `${TERMINAL_AGENT_NAMES[info.agentId]} 입력 대기${where ? ` · ${where}` : ''}`,
+        }).catch((err) => console.error('[push] 입력 대기 푸시 실패', err));
+      }
       const payload = {
         // 어느 작업 영역의 어느 워크트리인지를 제목에 싣는다 (2026-08-14 사용자 요청)
         title: location ? `입력 대기 — ${location}` : '입력 대기',

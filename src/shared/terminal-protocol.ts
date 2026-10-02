@@ -64,7 +64,15 @@ export type TermClientMsg =
   // 입력창 전송 — 서버가 붙여넣기 감싸기·Enter 지연까지 처리한다(여러 줄이 줄마다 제출되지 않게)
   | { type: 'chat-send'; id: string; text: string }
   | { type: 'chat-commands'; id: string } // `/` 자동완성 목록 요청 — 입력창에서 / 를 칠 때
-  | { type: 'chat-files'; id: string }; // `@` 파일 자동완성 목록 요청 — 입력창에서 @ 를 칠 때
+  | { type: 'chat-files'; id: string } // `@` 파일 자동완성 목록 요청 — 입력창에서 @ 를 칠 때
+  // ── 폰 알림(웹 푸시 — main `push.ts`) ──
+  // 폰 화면이 보이는가(visibilitychange) — MO 를 보고 있는 폰이 있으면 서버가 푸시를 생략한다(탭바 배지가 대신한다)
+  | { type: 'visibility'; visible: boolean }
+  | { type: 'push-key' } // 알림을 허용한 폰이 구독에 쓸 공개키를 요청한다 — 응답 'push-key'
+  | { type: 'push-subscribe'; sub: TermPushSubscription }; // 구독 등록 — 접속할 때마다 보낸다(서버가 같은 것은 거른다)
+
+/** 폰의 웹 푸시 구독 — `PushSubscription.toJSON()` 에서 필요한 것만 */
+export type TermPushSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 /** 서버 → 클라이언트 */
 export type TermServerMsg =
@@ -111,6 +119,7 @@ export type TermServerMsg =
   | { type: 'chat-status'; id: string; text: string | null }
   | { type: 'chat-commands'; id: string; items: ChatCommand[] }
   | { type: 'chat-files'; id: string; items: string[] }
+  | { type: 'push-key'; key: string } // VAPID 공개키(URL-safe base64) — 폰이 pushManager.subscribe 에 쓴다
   | { type: 'error'; message: string };
 
 /** 채팅 보기로 오는 메시지 — 폰(WS)·데스크톱(IPC `terminal:chat`) 공용 */

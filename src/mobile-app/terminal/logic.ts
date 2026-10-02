@@ -156,6 +156,22 @@ export class StableWaiting {
 /** 키보드가 열렸다고 볼 높이 감소 — 주소창 표시/숨김(≈50px)과 구분되는 문턱 */
 export const KEYBOARD_MIN_DELTA = 120;
 
+/** URL-safe base64(VAPID 공개키) → 바이트 — `pushManager.subscribe` 의 applicationServerKey 형식 */
+export function base64UrlToBytes(s: string): Uint8Array<ArrayBuffer> {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** 기존 구독의 키(ArrayBuffer)가 지금 서버 키와 같은가 — 다르면 구독을 다시 만들어야 한다 */
+export function sameKey(a: ArrayBuffer | null, b: Uint8Array): boolean {
+  if (!a || a.byteLength !== b.length) return false;
+  const av = new Uint8Array(a);
+  return av.every((v, i) => v === b[i]);
+}
+
 // ── 채팅 보기 ──
 
 /** 세션 보기 방식 — 'chat' 은 claude 대화 기록(jsonl)을 말풍선으로, 'term' 은 xterm */

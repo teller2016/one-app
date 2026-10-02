@@ -7,9 +7,11 @@ import {
   KEY_SEQ,
   StableWaiting,
   applyModifiers,
+  base64UrlToBytes,
   defaultView,
   mergeChat,
   pickAutoAttach,
+  sameKey,
   stripDaReplies,
   visibleSessions,
 } from './logic';
@@ -178,5 +180,27 @@ describe('채팅 보기', () => {
     const capped = mergeChat([], many, []);
     expect(capped).toHaveLength(CHAT_MAX_ITEMS);
     expect(capped[0].key).toBe('k5');
+  });
+});
+
+describe('웹 푸시 공개키', () => {
+  it('URL-safe base64(패딩 없음)를 바이트로 — +/ 자리의 -_ 와 길이 맞춤', () => {
+    const bytes = Uint8Array.from([251, 255, 191, 0, 1]); // 표준 base64 로는 '+/+/AAE=' 류가 나오는 값
+    const url = Buffer.from(bytes).toString('base64url');
+    expect(url).not.toMatch(/[+/=]/);
+    expect([...base64UrlToBytes(url)]).toEqual([...bytes]);
+  });
+
+  it('65바이트 P-256 공개키 길이 그대로', () => {
+    const key = Buffer.alloc(65, 7).toString('base64url');
+    expect(base64UrlToBytes(key).length).toBe(65);
+  });
+
+  it('기존 구독 키 비교 — 같으면 재구독 안 함, 다르거나 없으면 재구독', () => {
+    const k = Uint8Array.from([1, 2, 3]);
+    expect(sameKey(Uint8Array.from([1, 2, 3]).buffer, k)).toBe(true);
+    expect(sameKey(Uint8Array.from([1, 2, 4]).buffer, k)).toBe(false);
+    expect(sameKey(Uint8Array.from([1, 2]).buffer, k)).toBe(false);
+    expect(sameKey(null, k)).toBe(false);
   });
 });

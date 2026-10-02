@@ -34,6 +34,7 @@ import {
   writeSession,
 } from './pty';
 import { chatCommandsFor, chatFilesFor, sendChatText, subscribeChat } from './chat';
+import { addPushSubscription, getPushPublicKey } from './push';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
@@ -83,6 +84,8 @@ type SocketState = {
   attachGen: number;
   /** 채팅 보기 구독 해제 (chat.ts) — 폰이 채팅을 보는 동안만 대화 기록을 읽는다 */
   chatOff: (() => void) | null;
+  /** 폰 화면이 보이는가('visibility') — 보이는 폰이 있으면 푸시를 생략한다(canPushToPhone) */
+  visible: boolean;
 };
 const socketState = new Map<WebSocket, SocketState>();
 
@@ -104,6 +107,8 @@ const newSocketState = (kind: SocketState['kind']): SocketState => ({
   resyncing: false,
   attachGen: 0,
   chatOff: null,
+  // 모르면 안 보는 것으로 — 틀려도 알림이 한 번 더 올 뿐이다(반대로 틀리면 알림을 잃는다)
+  visible: false,
 });
 
 /**
@@ -523,7 +528,28 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       void chatFilesFor(id).then((items) => send(ws, { type: 'chat-files', id, items }));
       break;
     }
+    case 'visibility':
+      state.visible = msg.visible === true;
+      break;
+    case 'push-key': {
+      const key = getPushPublicKey();
+      if (key) send(ws, { type: 'push-key', key });
+      break;
+    }
+    case 'push-subscribe':
+      addPushSubscription(msg.sub); // 형식·주소는 push.ts 가 검증한다
+      break;
   }
+}
+
+/**
+ * 폰 푸시를 보낼 때인가 — 서버가 떠 있고(꺼져 있으면 알림을 눌러도 열 곳이 없다), MO 를 **보고 있는** 폰이
+ * 없을 때. 보고 있으면 탭바 배지·홈 아이콘 배지가 이미 알린다.
+ */
+export function canPushToPhone(): boolean {
+  if (!server?.listening) return false;
+  for (const st of socketState.values()) if (st.kind === 'term' && st.visible) return false;
+  return true;
 }
 
 // ── 바인딩 주소 ──
