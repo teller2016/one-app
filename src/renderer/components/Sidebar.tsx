@@ -50,8 +50,10 @@ export function Sidebar({
   onOpenPalette: () => void;
 }) {
   const [width, setWidth] = useState(savedWidth);
+  // 기본은 접힘 — 저장값이 '0'(직접 펼침)일 때만 펼친다(2026-10-02 사용자 결정). 개발 인스턴스는 Vite 포트가
+  // 바뀌면 origin 이 달라 localStorage 가 비어 늘 기본값으로 뜬다
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('sidebar:collapsed') === '1',
+    () => localStorage.getItem('sidebar:collapsed') !== '0',
   );
   // 폭 전환 애니메이션은 접기/펴기에만 준다 — 드래그 중에는 폭이 손끝을 그대로
   // 따라와야 하므로 CSS 에서 transition 을 끈다(끌림이 생기면 조작감이 무너진다)

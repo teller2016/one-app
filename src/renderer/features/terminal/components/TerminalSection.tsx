@@ -1006,8 +1006,9 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const [changesWidth, setChangesWidth] = useState(savedChangesWidth);
   const changesWidthRef = useRef(changesWidth);
   const [sideWidth, setSideWidth] = useState(savedSideWidth);
+  // 기본은 접힘(타일) — 저장값이 '0'(직접 펼침)일 때만 펼친다(앱 사이드바와 같은 기본값, 2026-10-02 사용자 결정)
   const [sideCollapsed, setSideCollapsed] = useState(
-    () => localStorage.getItem('terminal:sideCollapsed') === '1'
+    () => localStorage.getItem('terminal:sideCollapsed') !== '0'
   );
   const sideWidthRef = useRef(sideWidth);
   const sideCollapsedRef = useRef(sideCollapsed);
