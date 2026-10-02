@@ -8,13 +8,24 @@
 import { app, powerMonitor } from 'electron';
 import type { PowerState } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
-import { isSleepBluetoothOffEnabled } from '../settings/store';
-import {
-  powerOffForSleep,
-  restoreAfterWake,
-  restoreIfLidOpened,
-} from './bluetooth';
+import { isSleepBluetoothOffEnabled, isSleepWifiOffEnabled } from '../settings/store';
+import { bluetoothSwitch } from './bluetooth';
+import type { RadioSwitch } from './radioSwitch';
 import { reportSleepCycle } from './wakeReport';
+import { wifiSwitch } from './wifi';
+
+/**
+ * 잠잘 때 끄는 무선 — 끄기는 각자의 토글이 켜져 있을 때만, 되돌리기는 토글과 무관하게
+ * "우리가 껐다" 기록이 있으면 한다(끈 뒤에 토글을 꺼도 장치는 돌아와야 한다).
+ */
+const RADIOS: { enabled: () => boolean; sw: RadioSwitch }[] = [
+  { enabled: isSleepBluetoothOffEnabled, sw: bluetoothSwitch },
+  { enabled: isSleepWifiOffEnabled, sw: wifiSwitch },
+];
+
+function restoreRadios(why: string): void {
+  for (const r of RADIOS) r.sw.restoreAfterWake(why);
+}
 
 /** 복귀 뒤 입력 감지 주기 — 다크웨이크는 몇 초 만에 다시 잠들어 `suspend` 가 이 타이머를 걷어낸다 */
 const ACTIVITY_PROBE_MS = 5_000;
@@ -63,7 +74,7 @@ function onSuspend(): void {
   if (!asleep) sleptAt = Date.now();
   setAsleep(true);
   // 다크웨이크에서 다시 잠들 때도 온다 — 그때 이미 껐다면 powerOffForSleep 이 스스로 걸러낸다
-  if (isSleepBluetoothOffEnabled()) powerOffForSleep();
+  for (const r of RADIOS) if (r.enabled()) r.sw.powerOffForSleep();
 }
 
 /**
@@ -75,7 +86,7 @@ function onResume(): void {
   resumedAt = Date.now();
   // 입력을 기다리기 전에 덮개부터 본다 — 블루투스를 꺼둔 상태면 입력장치 자체가 없어
   // `getSystemIdleTime` 만으로는 영영 복귀 판정이 안 될 수 있다
-  restoreIfLidOpened();
+  for (const r of RADIOS) r.sw.restoreIfLidOpened();
   cancelProbe();
   const check = () => {
     const inputAt = Date.now() - powerMonitor.getSystemIdleTime() * 1000;
@@ -91,7 +102,7 @@ function fullWake(): void {
   const since = sleptAt;
   sleptAt = null;
   setAsleep(false);
-  restoreAfterWake('완전 복귀');
+  restoreRadios('완전 복귀');
   if (since !== null) void reportSleepCycle(since, Date.now());
 }
 
@@ -101,9 +112,9 @@ function fullWake(): void {
  */
 export function startPowerWatch(): void {
   void app.whenReady().then(() => {
-    // 비정상 종료(발열 강제 종료 등)로 블루투스가 꺼진 채 남았으면 여기서 되돌린다.
+    // 비정상 종료(발열 강제 종료 등)로 무선이 꺼진 채 남았으면 여기서 되돌린다.
     // 앱이 뜬다는 건 사람이 맥을 쓰고 있다는 뜻이라 켜는 것이 맞다
-    restoreAfterWake('앱 시작');
+    restoreRadios('앱 시작');
     powerMonitor.on('suspend', onSuspend);
     powerMonitor.on('resume', onResume);
     powerMonitor.on('unlock-screen', () => {

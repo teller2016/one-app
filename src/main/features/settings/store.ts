@@ -25,6 +25,7 @@ interface StoredSettings {
   notifyDeploy?: boolean; // 배포 완료/실패 알림 (기본 on)
   notifyMail?: boolean; // 새 메일 도착 알림음 (기본 on)
   sleepBluetoothOff?: boolean; // 잠잘 때 블루투스 끄기 (기본 off — 입력장치를 끄는 동작이라 옵트인)
+  sleepWifiOff?: boolean; // 잠잘 때 Wi-Fi 끄기 (기본 off — 네트워크를 끊는 동작이라 옵트인)
   sounds?: Partial<Record<NotifySoundKind, string>>; // 알림음 이름 (미설정이면 기본값)
   jiraUrl?: string; // Jira 베이스 URL (커밋 이슈 키 링크화)
   jiraEmail?: string; // Jira 계정 이메일 (내 이슈 API 인증)
@@ -73,6 +74,7 @@ export function getSettingsForRenderer(): AppSettingsView {
     notifyDeploy: s.notifyDeploy !== false, // 기본값 on
     notifyMail: s.notifyMail !== false, // 기본값 on
     sleepBluetoothOff: s.sleepBluetoothOff === true, // 기본값 off
+    sleepWifiOff: s.sleepWifiOff === true, // 기본값 off
     sounds: resolveSounds(s.sounds),
     // 저장된 값에 티켓·보드 경로가 붙어 있으면 여기서 정리해 보여준다 — 화면·API 호출·
     // 커밋 이슈 링크가 같은 베이스를 쓰게 한다(다음 저장 때 파일에도 정리된 값이 남는다)
@@ -122,6 +124,9 @@ export function saveSettings(input: SaveSettingsInput): AppSettingsView {
   }
   if (typeof input.sleepBluetoothOff === 'boolean') {
     next.sleepBluetoothOff = input.sleepBluetoothOff;
+  }
+  if (typeof input.sleepWifiOff === 'boolean') {
+    next.sleepWifiOff = input.sleepWifiOff;
   }
   // 연동 주소는 명시적으로 넘어온 경우만 갱신 (끝 슬래시 제거)
   if (typeof input.jiraUrl === 'string') {
@@ -190,6 +195,14 @@ export function isMailNotifyEnabled(): boolean {
  */
 export function isSleepBluetoothOffEnabled(): boolean {
   return readStored().sleepBluetoothOff === true;
+}
+
+/**
+ * 잠잘 때 Wi-Fi 를 끌지 — 기본 off(옵트인).
+ * 네트워크를 끊는 동작이라 사용자가 켠 적 없으면 아무것도 하지 않는다.
+ */
+export function isSleepWifiOffEnabled(): boolean {
+  return readStored().sleepWifiOff === true;
 }
 
 /**

@@ -43,6 +43,8 @@ export type SleepCycleSummary = {
  * 집에서 아는 Wi-Fi 에 다크웨이크 중 자동 접속한 뒤, 깰 때마다 로컬 Java 서버들이 DB(1521·3306·6379)
  * 연결을 시도하고 그 응답이 다시 깨우는 루프가 1시간 이어졌다. 사유를 안 보던 힌트는 이걸 블루투스
  * 조건 탓으로 안내했다.
+ * ⚠️ 2026-10-02 재발: 9시간 4176회(깨어 있던 비율 71%) — 이번엔 femc Claude 세션의 `mcp-oracle-database` 가
+ * 사내 DB 재접속을 15초마다 시도했다. 범인이 매번 달라 Wi-Fi 끄기 토글(`wifi.ts`)로 막는다.
  */
 export type WakeCause = 'bluetooth' | 'wifi' | 'maintenance' | 'other';
 
@@ -152,11 +154,12 @@ export function dominantWakeCause(s: SleepCycleSummary): WakeCause {
  * 재연결 루프**로 확정됐고 그 설정은 이미 적용돼 있다. 자동 끄기를 켠 뒤 다크웨이크가 시간당
  * 20.7회 → 1.2회로 떨어진 것이 확인됐다(09-23). 그래서 힌트는 **그 토글을 켰는지**로 갈린다 —
  * 껐으면 켜라고 하고, 켰는데도 폭주했다면 조건(외부 모니터·전원)에 걸려 안 꺼진 것이다.
- * 단, **Wi-Fi 가 주로 깨웠다면 블루투스 얘기를 하지 않는다**(2026-10-01, `WakeCause` 주석 참고).
+ * 단, **Wi-Fi 가 주로 깨웠다면 블루투스 얘기를 하지 않는다**(2026-10-01, `WakeCause` 주석 참고) —
+ * 그때는 같은 갈래를 Wi-Fi 끄기 토글로 안내한다(2026-10-02 추가).
  */
 export function formatWakeStormToast(
   s: SleepCycleSummary,
-  bluetoothOffEnabled = false,
+  enabled: { bluetoothOff?: boolean; wifiOff?: boolean } = {},
 ): { title: string; message: string } {
   const title = s.lidClosed
     ? '덮개를 닫은 동안 맥이 계속 깨어났습니다'
@@ -168,8 +171,10 @@ export function formatWakeStormToast(
   if (s.thermal) parts.push('발열 비상 잠자기 발생');
   const hint =
     dominantWakeCause(s) === 'wifi'
-      ? 'Wi-Fi 수신 패킷이 주로 깨웠습니다 — 덮개를 닫기 전에 로컬 서버(DB 연결 등)를 꺼 두세요.'
-      : bluetoothOffEnabled
+      ? enabled.wifiOff
+        ? 'Wi-Fi 수신 패킷이 주로 깨웠습니다 — 외부 모니터나 전원이 연결돼 있으면 Wi-Fi를 끄지 않습니다. 연결을 확인하세요.'
+        : "Wi-Fi 수신 패킷이 주로 깨웠습니다(DB 연결·로컬 서버의 재접속 등) — 환경설정 → 전원에서 '잠잘 때 Wi-Fi 끄기'를 켜 보세요."
+      : enabled.bluetoothOff
         ? '외부 모니터나 전원이 연결돼 있으면 블루투스를 끄지 않습니다 — 연결을 확인하세요.'
         : "환경설정 → 전원에서 '잠잘 때 블루투스 끄기'를 켜 보세요.";
   return { title, message: `${parts.join(' · ')}. ${hint}` };

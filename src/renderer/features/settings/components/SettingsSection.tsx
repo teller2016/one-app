@@ -104,6 +104,7 @@ export function SettingsSection() {
   // 잠잘 때 블루투스 끄기 — blueutil 이 있어야 동작하므로 설치 여부를 함께 들고 있는다
   const [sleepBluetoothOff, setSleepBluetoothOff] = useState(false);
   const [hasBlueutil, setHasBlueutil] = useState(true);
+  const [sleepWifiOff, setSleepWifiOff] = useState(false);
   // 알림음 — 선택값(자리별)과 고를 수 있는 음원 목록
   const [sounds, setSounds] = useState<Record<NotifySoundKind, string>>(
     NOTIFY_SOUND_DEFAULTS,
@@ -159,6 +160,7 @@ export function SettingsSection() {
         setNotifyDeploy(s.notifyDeploy);
         setNotifyMail(s.notifyMail);
         setSleepBluetoothOff(s.sleepBluetoothOff);
+        setSleepWifiOff(s.sleepWifiOff);
         setSounds(s.sounds);
         setJiraUrl(s.jiraUrl);
         setJiraEmail(s.jiraEmail);
@@ -343,6 +345,7 @@ export function SettingsSection() {
           notifyDeploy,
           notifyMail,
           sleepBluetoothOff,
+          sleepWifiOff,
           jiraUrl,
           jiraEmail,
           jiraToken,
@@ -355,6 +358,7 @@ export function SettingsSection() {
         setNotifyDeploy(res.notifyDeploy);
         setNotifyMail(res.notifyMail);
         setSleepBluetoothOff(res.sleepBluetoothOff);
+        setSleepWifiOff(res.sleepWifiOff);
         setJiraUrl(res.jiraUrl);
         setJiraEmail(res.jiraEmail);
         setHasJiraToken(res.hasJiraToken);
@@ -601,6 +605,12 @@ export function SettingsSection() {
               disabled={loading || !hasBlueutil}
               label="잠잘 때 블루투스 끄기"
             />
+            <Checkbox
+              checked={sleepWifiOff}
+              onChange={(e) => setSleepWifiOff(e.target.checked)}
+              disabled={loading}
+              label="잠잘 때 Wi-Fi 끄기"
+            />
             {!hasBlueutil && (
               <Banner variant="warning">
                 blueutil 이 필요합니다 — 터미널에서{' '}
@@ -614,6 +624,12 @@ export function SettingsSection() {
               건드리지 않습니다. 책상에서 외부 모니터를 연결한 채 덮개를 닫고
               쓰는 중에는 동작하지 않습니다 — 블루투스 키보드·마우스로 맥을 깨울
               수 없게 되기 때문입니다.
+            </p>
+            <p className="hint">
+              Wi-Fi 끄기는 잠든 맥 안의 프로그램(DB 연결·로컬 서버 등)이 계속
+              재접속을 시도해, 그 응답이 맥을 밤새 깨우는 것을 막습니다. 꺼 둔
+              동안에는 &apos;나의 Mac 찾기&apos;와 폰 MO 접속이 되지 않고,
+              덮개를 열면 몇 초 안에 다시 연결됩니다.
             </p>
           </SettingsPanel>
 

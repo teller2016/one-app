@@ -96,6 +96,11 @@ export type AppSettingsView = {
    * 덮개 닫힘 · 외부 모니터 없음 · 배터리 전원이 모두 참일 때만 실제로 끈다.
    */
   sleepBluetoothOff: boolean;
+  /**
+   * 잠잘 때 Wi-Fi 끄기 on/off (기본 off — 옵트인). 조건은 블루투스와 같다.
+   * 잠든 맥 안의 프로세스가 재접속을 시도하며 Wi-Fi 응답으로 맥을 계속 깨우는 연쇄를 끊는다.
+   */
+  sleepWifiOff: boolean;
   sounds: Record<NotifySoundKind, string>; // 알림음 이름 (미설정이면 기본값으로 해석된 값)
   jiraUrl: string; // Jira 베이스 URL (커밋 메시지의 이슈 키 링크화용, 빈 값이면 비활성)
   jiraEmail: string; // Jira 계정 이메일 (내 이슈 API 인증용, 빈 값이면 비활성)
@@ -124,6 +129,7 @@ export type SaveSettingsInput = {
   notifyDeploy?: boolean; // 미지정이면 기존 유지
   notifyMail?: boolean; // 미지정이면 기존 유지
   sleepBluetoothOff?: boolean; // 미지정이면 기존 유지
+  sleepWifiOff?: boolean; // 미지정이면 기존 유지
   jiraUrl?: string; // 미지정이면 기존 유지
   jiraEmail?: string; // 미지정이면 기존 유지
   jiraToken?: string; // 빈 값이면 기존 유지

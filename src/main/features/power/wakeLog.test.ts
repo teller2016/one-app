@@ -181,14 +181,14 @@ describe('formatWakeStormToast', () => {
   // 힌트가 엉뚱한 곳(pmset tcpkeepalive)을 가리키던 것을 고친 뒤로, 두 갈래를 고정해 둔다
   it('블루투스 끄기가 꺼져 있으면 그걸 켜라고 안내한다', () => {
     const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
-    const t = formatWakeStormToast(s, false);
+    const t = formatWakeStormToast(s, { bluetoothOff: false });
     expect(t.message).toContain('블루투스 끄기');
     expect(t.message).not.toContain('tcpkeepalive');
   });
 
   it('이미 켜져 있으면 조건(외부 모니터·전원)을 확인하라고 안내한다', () => {
     const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
-    const t = formatWakeStormToast(s, true);
+    const t = formatWakeStormToast(s, { bluetoothOff: true });
     expect(t.message).toContain('외부 모니터');
     expect(t.message).not.toContain('tcpkeepalive');
   });
@@ -198,8 +198,24 @@ describe('formatWakeStormToast', () => {
     const wifi = storm(30).replace(/centauri-beta\//g, 'centauri-alpha E_RX_IP_PACKET ARPT/');
     const s = summarizeSleepCycle(wifi, T('18:34:30'), T('19:31:40'));
     expect(s.causes.wifi).toBe(30);
-    const t = formatWakeStormToast(s, true);
+    const t = formatWakeStormToast(s, { bluetoothOff: true });
     expect(t.message).toContain('Wi-Fi');
+    expect(t.message).not.toContain('블루투스');
+  });
+
+  // 2026-10-02: Wi-Fi 쪽도 블루투스와 같은 두 갈래 — 토글이 꺼져 있으면 켜라고, 켜져 있으면 조건을 보라고
+  it('Wi-Fi 끄기가 꺼져 있으면 그걸 켜라고 안내한다', () => {
+    const wifi = storm(30).replace(/centauri-beta\//g, 'centauri-alpha E_RX_IP_PACKET ARPT/');
+    const s = summarizeSleepCycle(wifi, T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(s, { bluetoothOff: true, wifiOff: false });
+    expect(t.message).toContain('Wi-Fi 끄기');
+  });
+
+  it('Wi-Fi 끄기가 켜져 있는데도 폭주했으면 조건(외부 모니터·전원)을 확인하라고 안내한다', () => {
+    const wifi = storm(30).replace(/centauri-beta\//g, 'centauri-alpha E_RX_IP_PACKET ARPT/');
+    const s = summarizeSleepCycle(wifi, T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(s, { wifiOff: true });
+    expect(t.message).toContain('외부 모니터');
     expect(t.message).not.toContain('블루투스');
   });
 });

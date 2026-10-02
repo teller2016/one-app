@@ -40,15 +40,16 @@ paths:
 - 알림은 `sendToast`(sticky, `dedupeKey: 'power-wake-storm'`) — 복귀한 사용자가 One App 을 볼 때 그대로
   있으면 된다. 알럿(`notify`)으로 바꾸지 말 것(포커스를 뺏을 이유가 없다).
 - ⚠️ **토스트 힌트로 `pmset tcpkeepalive` 를 가리키지 말 것**(2026-09-23 수정) — 그 설정은 이미 적용돼
-  있고 진짜 원인은 블루투스다. 힌트는 `formatWakeStormToast(summary, bluetoothOffEnabled)` 의 두 번째
-  인자로 갈린다: 토글이 꺼져 있으면 켜라고, 켜져 있는데도 폭주했으면 조건(외부 모니터·전원)을 보라고
-  안내한다. 순수 함수를 유지하려고 설정 값은 `wakeReport` 가 읽어 넘긴다. 두 갈래는 `wakeLog.test.ts` 가 고정한다.
+  있고 진짜 원인은 블루투스다. 힌트는 `formatWakeStormToast(summary, { bluetoothOff, wifiOff })` 의 두 번째
+  인자로 갈린다: 깨운 사유 쪽(블루투스/Wi-Fi) 토글이 꺼져 있으면 켜라고, 켜져 있는데도 폭주했으면 조건(외부 모니터·전원)을
+  보라고 안내한다. 순수 함수를 유지하려고 설정 값은 `wakeReport` 가 읽어 넘긴다. 네 갈래는 `wakeLog.test.ts` 가 고정한다.
 - ⚠️ **힌트는 깨운 사유부터 본다**(2026-10-01) — `classifyWakeCause` 가 다크웨이크를 `centauri-beta`=블루투스 ·
   `centauri-alpha`/`E_RX_IP_PACKET`/`E_PFN_NET_FOUND`=Wi-Fi · `rtc/Maintenance`=유지관리로 나누고, **Wi-Fi 가 최다면
   블루투스 얘기를 하지 않는다**. 실측: 블루투스 자동 끄기는 정상(bluetoothd `peripheral manager isn't powered on`)이었는데
   14시간 55분 동안 550회 — 535회가 Wi-Fi. 00:21 다크웨이크 중 아는 Wi-Fi 에 자동 접속(`E_PFN_NET_FOUND`)한 뒤 1시간 동안
   6초 간격으로 깼다. 깨운 패킷은 대부분 **ARP 응답**(airportd `_decodeWoWWakeUpDataPacket` 의 ethertype `0806`)이고,
   깰 때마다 로컬 Java 서버가 DB(1521·3306·6379) 연결을 시도했다. 배터리 영향은 80→78% 로 작았다. `womp`(배터리)는 이미 0 이다.
+  → 2026-10-02 재발(9시간 4176회)로 **잠잘 때 Wi-Fi 끄기**를 만들었다(아래 절). Wi-Fi 가 최다면 힌트가 그 토글을 가리킨다.
 - `Sleep/Wakes since boot … Dark Wake Count in this sleep cycle:N` 요약 줄은 쓰지 않는다 — 잠든 시각 기준으로
   자를 수 없다. 표본 줄과 규칙은 `wakeLog.test.ts`.
 
@@ -84,7 +85,11 @@ zsh 에는 내장 `log` 명령이 있어 `log show …` 가 **조용히 빈 결�
   (`pmset -g` 에 `sleep prevented by caffeinate`). Claude Code 의 의도된 동작이고 덮개 닫힘 잠자기는 못 막으니
   이 기능이 다룰 일이 아니다.
 
-## 잠잘 때 블루투스 끄기 (`bluetooth.ts` + `store.ts`, 2026-09-22)
+## 잠잘 때 블루투스 끄기 (`bluetooth.ts` + 공통 `radioSwitch.ts`·`unattended.ts`·`store.ts`, 2026-09-22)
+> 2026-10-02 Wi-Fi 끄기를 더하면서 **끄고 되돌리는 순서를 `radioSwitch.ts`(`createRadioSwitch(driver)`)로,
+> 세 조건 판정을 `unattended.ts` 로** 옮겼다. `bluetooth.ts`·`wifi.ts` 는 "무슨 명령으로 읽고 쓰는지" 만 담은
+> 드라이버다. 아래 블루투스 절의 함정(기록 먼저·덮개 열림에서만 복구·재시도)은 이제 공통 흐름의 규칙이고 Wi-Fi 도 똑같이 따른다.
+
 위 재연결 루프를 잠들기 전에 끊는다. 환경설정 → **전원** 의 토글(`settings.json` 의
 `sleepBluetoothOff`, **기본 off — 입력장치를 끄는 동작이라 옵트인**)이 켜져 있을 때만 동작한다.
 `blueutil`(Homebrew, IOBluetooth 사설 API 래핑)이 필요하고, 없으면 환경설정이 설치 안내를 띄운다.
@@ -107,8 +112,9 @@ zsh 에는 내장 `log` 명령이 있어 `log show …` 가 **조용히 빈 결�
   따옴표까지 붙여 정확히 맞출 것.
 
 ### 되돌리는 경로는 3개다 (우리가 끈 경우에만)
-`power.json` 의 `btOffAt` 플래그가 근거다 — 사용자가 직접 꺼둔 블루투스를 켜지 않기 위함이고,
+`power.json` 의 `btOffAt`(Wi-Fi 는 `wifiOffAt`) 플래그가 근거다 — 사용자가 직접 꺼둔 장치를 켜지 않기 위함이고,
 ⚠️ **메모리가 아니라 파일에 둔다**(발열 강제 종료로 앱이 죽어도 다음 실행이 되돌려야 한다).
+⚠️ 키 이름 `btOffAt` 은 바꾸지 말 것 — 이미 저장된 파일의 복구 근거다.
 
 1. `resume` 에 **덮개가 열렸으면** 즉시 (`restoreIfLidOpened`)
 2. 완전 복귀(`fullWake`)
@@ -157,3 +163,40 @@ zsh 에는 내장 `log` 명령이 있어 `log show …` 가 **조용히 빈 결�
 `blueutil` 조회는 `features/power/ipc.ts`(`power:blueutil:check`)에 두고 `registerPowerIpc()` 로 등록한다.
 ⚠️ **`registerSettingsIpc()` 쪽에 두면 안 된다** — 단독 배포판(lite)도 그 함수를 부르므로 전원 기능
 코드가 lite 번들에 딸려간다. 렌더러는 `window.oneApp.power?.checkBlueutil?.()`(옵셔널 — 구 preload·폰 셸에 없다).
+
+## 잠잘 때 Wi-Fi 끄기 (`wifi.ts`, 2026-10-02)
+블루투스를 끈 뒤에도 덮개 닫힘(배터리) 9시간 동안 **4176번** 깼다 — 사유 전부 `centauri-alpha E_RX_IP_PACKET`,
+배터리 54→39%. 한 번 깨면 powerd 가 `"PM configd - Wait for Device enumeration"` 으로 **5초 붙잡고** 2초 자다 다음
+패킷에 또 깨서, 9시간 중 **71%를 깨어 있었다**(깨어 있던 합계 377분 / 잠든 합계 155분).
+
+### 범인 찾는 법 — airportd 가 깨운 패킷을 남긴다
+`pmset -g log` 의 `WakeDetails` 와 powerd 통합 로그는 `<private>` 로 가려지지만, **airportd 가 원본 프레임을 hex 로 남긴다**:
+```
+/usr/bin/log show --start "<시각>" --info --predicate 'process == "airportd" AND eventMessage CONTAINS "WoWWakeUpData:"'
+```
+`'<fcb214b8beaf 00300dbf8e10 0806 0001 0800 0604 0002 …>'` = 목적지 MAC · 출발 MAC · ethertype(`0806` ARP / `0800` IPv4)
+· ARP opcode(`0002` 응답). 보존은 몇 시간~하루라 그날 아침에 볼 것. 10-02 집계(1300여 건): **공유기 → 맥 ARP 응답 1001건(77%)** ·
+IPv6 122 · IoT 기기·맥 자신의 gratuitous ARP 수십 건. → 맥 안의 무언가가 **깰 때마다 바깥으로 접속을 시도**해 공유기 주소를 묻고,
+그 응답이 잠든 맥을 다시 깨우는 연쇄다. 그때 떠 있던 소켓을 `lsof -i -nP | grep SYN_SENT` 로 찾으면 된다.
+- 10-02 범인: femc Claude 세션(`claude --agent metacommerce-orchestrator`) 2개가 띄운 **`mcp-oracle-database`** 가 사내 DB
+  `192.168.176.129:1521`(사무실·VPN 밖에선 안 닿음)에 **15초마다 재접속**. 10-01 의 범인은 로컬 Java 서버(DB 1521·3306·6379)였다.
+  범인이 매번 바뀌므로 프로세스가 아니라 Wi-Fi 를 끊는다.
+- ⚠️ **같은 망 IoT 기기의 브로드캐스트는 범인이 아니었다** — 집 망에 Tuya 플러그(`.50`, UDP 6667 5초)·로보락(`.45`, 58866 5초)·
+  삼성 폰(`.16`, 15600 6초)이 상시 뿌리지만 깨운 패킷 집계에는 거의 없다. 간격이 비슷해 보인다고 단정하지 말 것.
+- ⚠️ **adb(5353 mDNS 7초 질의)도 아니었다** — 질의 주기가 깨어남 주기(7초)와 같아 의심했지만, 깨어남 주기는
+  "5초 붙잡힘 + 2초 잠" 으로 **어떤 패킷이 오든 7초 언저리**가 된다. 주기 일치는 증거가 아니다.
+- 폭주는 **아는 Wi-Fi 에 붙어 있는 동안만** 난다(퇴근 덮개 닫기 직후 사무실 2분 · 집 도착 `E_PFN_NET_FOUND` 뒤 밤새, 이동 중엔 0).
+
+### 구현
+- 조건·순서는 블루투스와 같다(`radioSwitch.ts` · `unattended.ts`). 토글은 환경설정 → 전원 `잠잘 때 Wi-Fi 끄기`
+  (`settings.json` 의 `sleepWifiOff`, **기본 off — 네트워크를 끊는 동작이라 옵트인**). 관리자 권한·설치 도구가 필요 없다.
+- 명령: `/usr/sbin/networksetup -setairportpower <장치> off|on`, 읽기 `-getairportpower <장치>`(`Wi-Fi Power (en0): On`).
+  장치는 `-listallhardwareports` 의 `Hardware Port: Wi-Fi` 다음 줄 `Device:` 로 **정확히** 찾는다.
+- ⚠️ **장치 이름을 짐작해 넘기지 말 것** — `networksetup -setairportpower <Wi-Fi 가 아닌 이름> off` 는 실패하지 않고
+  `Turning off the only airport interface found: en0` 를 찍으며 **진짜 Wi-Fi 를 끈다(exit 0)**. 2026-10-02 오류 동작을 보려고
+  `en9` 를 넣었다가 사용자 Wi-Fi 를 1~2분 꺼 버렸다(유선 en7 덕에 세션은 살았다). **개발 중에 `-setairportpower` 를 돌리지 말 것.**
+- ⚠️ 같은 이유로 **종료 코드를 믿지 않는다** — 드라이버가 `verifyWrite: true` 로 쓰고 나서 다시 읽어 확인한다
+  (블루투스는 기존 동작 그대로 종료 코드만 본다).
+- 대가: 꺼 둔 동안(가방 안) '나의 Mac 찾기'·폰 MO 접속이 안 된다. 덮개를 열면 `restoreIfLidOpened` 로 즉시 켜고 몇 초 안에 재연결된다.
+- 검증 상태(2026-10-02): `tsc`·`lint`·`test`·lite `typecheck`·`reach` 통과, 장치·전원 정규식은 실제 출력으로 확인.
+  **실제 잠자기 끄기/켜기는 아직 미검증** — 다음 덮개 닫힘의 `pmset -g log`(E_RX_IP_PACKET 수)와 `[power] Wi-Fi를 껐습니다` 로그로 확인할 것.
