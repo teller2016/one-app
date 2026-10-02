@@ -186,7 +186,7 @@ paths:
 
 ## MO 접속·서버
 - **Tailscale** 도달, 앱은 토큰만: `?token=` → `timingSafeEqual` → **HttpOnly 쿠키**(1년·Lax), WS upgrade 재검증, 30초 ping. 토큰·포트(18317)는 `safeStorage`/`terminal.json`.
-- ⚠️ **회사 VPN(full-tunnel) 켜면 MO 끊김 — 미해결**(원본 .ovpn 유지, 시도 2건 롤백).
+- ⚠️ **회사 VPN(full-tunnel)을 켜면 MO 가 끊기던 문제** — 2026-10-02 VPN 연결 시 Tailscale 서버만 `net_gateway` 로 빼는 경로를 얹어 해결(DERP 경유). 원인·함정은 `features/system.md` VPN 절.
 - HTTPS `tls.ts`(`tailscale cert`, 실패 시 http) — PWA·clipboard 전제. ⚠️ URL 은 인증서 도메인만, wss 는 `location.protocol` 따라. `ensureTls()` → `setSecureContext()`. ⚠️ `--cert-file/--key-file` 명시. manifest·아이콘만 `PUBLIC_PATHS`.
 - ⚠️ **`startServer` 는 진행 중 promise 로 직렬화**(`stopServer` 는 완료 대기, listen 후 `getServerEnabled()` 재확인).
 - ⚠️ **WS 백프레셔**(> 2MB): `/term` 은 data 만 버리고 `needsResync`, `/rpc` 는 소켓을 끊는다.

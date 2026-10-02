@@ -21,6 +21,7 @@ import {
   sessionPath,
 } from './config';
 import { getVpnCredentials } from './store';
+import { tailscaleBypassArgs } from './tailscaleBypass';
 import { generateTotp, totpRemainingSeconds } from './totp';
 
 type StatusListener = (status: VpnStatus) => void;
@@ -295,8 +296,12 @@ function findFreePort(): Promise<number> {
   });
 }
 
-/** osascript 관리자 인증으로 openvpn 을 root 데몬으로 실행 */
-function launchAsRoot(bin: string, ovpnPath: string, port: number): Promise<void> {
+/**
+ * osascript 관리자 인증으로 openvpn 을 root 데몬으로 실행.
+ * `extraArgs` 는 Tailscale 우회 경로(`tailscaleBypass.ts`) — `.ovpn` 을 고치지 않고 명령줄로 얹는다.
+ * SIGHUP 재연결은 같은 명령줄을 다시 읽으므로 우회 경로도 함께 다시 세워진다.
+ */
+function launchAsRoot(bin: string, ovpnPath: string, port: number, extraArgs: string[]): Promise<void> {
   const cmd = [
     shQuote(bin),
     '--config', shQuote(ovpnPath),
@@ -316,6 +321,7 @@ function launchAsRoot(bin: string, ovpnPath: string, port: number): Promise<void
     '--connect-retry-max', '2',
     '--log', shQuote(logPath()),
     '--writepid', shQuote(pidPath()),
+    ...extraArgs.map(shQuote),
   ].join(' ');
   // AppleScript 문자열 이스케이프 (\ 와 ")
   const escaped = cmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -402,7 +408,8 @@ export async function connectVpn(ovpnPath: string, manualOtp?: string): Promise<
 
   setStatus({ state: 'connecting', detail: '관리자 인증 대기 중' });
   try {
-    await launchAsRoot(bin, ovpnPath, port);
+    // ⚠️ connecting 으로 바꾼 뒤에 기다린다 — 앞에서 기다리면 그 사이 [연결]을 또 눌러 데몬이 둘 뜬다
+    await launchAsRoot(bin, ovpnPath, port, await tailscaleBypassArgs());
     setStatus({ state: 'connecting', detail: 'OpenVPN 시작 중' });
     await attachManagement(port, mgmtPw, 12_000);
     await waitForConnected(60_000);

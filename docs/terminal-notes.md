@@ -290,45 +290,30 @@ TUI 구간은 attach 가 어차피 replay 를 버리니 링버퍼에 안 쌓으�
 ## MO 접속
 툴바 폰 아이콘 → 서버 on/off + 접속 URL·QR + 토큰 재발급. 도달·암호화는 **Tailscale**(맥·폰에 설치 전제, URL 은 100.64.0.0/10 주소 우선 정렬)이 담당하고 앱은 **토큰 인증**만 한다 — `?token=` 1회 → `timingSafeEqual` 검증 → **HttpOnly 쿠키 승격**, WS(`/term`) upgrade 에서 재검증, 30초 ping 으로 죽은 소켓 회수. 토큰은 `safeStorage` 로 `userData/terminal.json`(포트 기본 18317·자동 시작 여부)에 저장하고, 켜둔 상태면 앱 재시작 시 자동으로 다시 켜진다.
 
-### ⚠️ 회사 VPN(full-tunnel)을 켜면 MO 접속이 통째로 끊긴다 (2026-08-09 실측)
-증상: VPN 연결 중에는 **폰에서 맥북이 Tailscale 목록에 offline 으로만 보이고** MO 에 접속할 수 없다. Tailscale 앱에는 `Logged Out`(fetch control key … failed to resolve) → `Out Of Sync`(not-in-map-poll) → `Relay Server Unavailable`(no-derp-connection) 이 차례로 뜬다.
+### ⚠️ 회사 VPN(full-tunnel)을 켜면 MO 접속이 통째로 끊긴다 → 2026-10-02 해결
+증상: VPN 연결 중에는 **폰에서 맥북이 Tailscale 목록에 offline 으로만 보이고** MO 에 접속할 수 없다. 맥 `tailscale status` 의 Health 에 "Unable to connect to the Tailscale coordination server", `tailscale netcheck` 은 `UDP: false`·`Nearest DERP: unknown`.
 
-원인은 OpenVPN 서버가 push 하는 **`redirect-gateway`(full-tunnel)** 다. 기본 경로가 `0/1`·`128/1` 로 터널에 잡히면서 Tailscale 이 쓰는 **세 갈래가 전부 회사망을 거쳐 막힌다**:
-
-| 삼켜지는 것 | 대역(실측) | 막혔을 때 증상 |
-|---|---|---|
-| 컨트롤 플레인 | `192.200.0.0/24` | `Online: False` → tailnet 에 offline 으로 광고 |
-| DERP 릴레이 | `172.237.0.0/16`·`172.238.0.0/16`(Tokyo) | `no-derp-connection` → 데이터 경로 소멸 |
-
-**⚠️ 현재 상태 = 미해결(원본 `.ovpn` 유지).** 아래는 2026-08-09 에 시도한 것과 그 결과 기록이다. 사용자 판단으로 **VPN 을 켤 땐 MO 를 포기**하고 원본 설정으로 두었다.
-
-**시도 ①  `pull-filter ignore "redirect-gateway"`(split tunnel) → 🚫 쓰면 안 된다**
-한 줄로 Tailscale 이 전부 살아나 정답처럼 보이지만, **사내 서비스는 '회사 IP 에서 나온 요청'만 허용**해서 full-tunnel 을 없애는 순간 회사 경로 접속이 통째로 끊긴다(실측 후 되돌림). 사용자가 VPN 을 켜는 목적 자체가 **출발지 IP 를 회사 것으로 만드는 것**이다.
-- 판정 기준: `curl -s https://ifconfig.me` 가 **회사 IP(221.151.188.x)** 면 정상, 집 IP(222.236.x)면 full-tunnel 이 깨진 것.
-
-**시도 ②  `net_gateway` 예외 4줄 → Tailscale·사내망은 됐지만 Claude 가 끊겼다**
+**진짜 원인(2026-10-02 실측) — 방화벽이 아니라 macOS 의 인터페이스 묶기.** Tailscale 앱(네트워크 확장)은 다른 VPN 에 휘말리지 않으려고 자기 소켓을 **물리 기본 인터페이스(유선 en7 등)에 묶는다**. 서버가 push 한 `redirect-gateway` 로 `0/1`·`128.0/1 → utun` 이 생기면 목적지 경로가 utun 소속이 되고, en7 에 묶인 소켓은 en7 소속 경로를 못 찾아 **즉시 ENETUNREACH** 를 받는다(기본 인터페이스에는 스코프된 default 경로가 없다).
 ```
-route 168.126.63.0 255.255.255.0 net_gateway   # ❌ DNS — 이 줄이 문제였다
-route 192.200.0.0 255.255.255.0 net_gateway    # 컨트롤 플레인
-route 172.237.0.0 255.255.0.0 net_gateway      # DERP (Tokyo)
-route 172.238.0.0 255.255.0.0 net_gateway      # DERP (Tokyo)
+Tailscale 소켓 (en7 에 묶임)
+ └─ 목적지 172.237.28.183 (DERP 도쿄) / 192.200.0.116 (컨트롤)
+     └─ 경로표: 0/1 → utun6 (VPN)     ← en7 소속이 아니라 탈락
+         └─ en7 소속 경로 없음 → connect: network is unreachable
 ```
-`net_gateway` 매크로 자체는 옳다(VPN 연결/해제에 맞춰 자동으로 붙었다 떨어져, 수동 `route add` 처럼 재부팅에 사라지지 않는다). 문제는 **DNS 줄**이다 — 이름 해석만 집 회선으로 빠져 경로가 어긋나면서 **Claude(`api.anthropic.com`) 연결이 끊겼다**.
+- 증거: Tailscale 로그(`/usr/bin/log show --predicate 'process == "io.tailscale.ipn.macsys.network-extension"'`)에 `dial tcp4 172.237.28.183:443: connect: network is unreachable`. `route -n get -ifscope en7 172.237.28.183` = `not in table`(en0 처럼 스코프된 default 가 있는 비기본 인터페이스는 찾는다).
+- **같은 IP 를 묶지 않은 curl 로 부르면 VPN 을 타고 200/302 가 온다** — 회사 방화벽은 Tailscale 을 막지 않는다. 2026-08-09 기록의 "회사망을 거쳐 막힌다"는 오진이었다.
 
-**⚠️ "DNS 가 첫 관문"은 오진이었다** — 원본 설정 + VPN 켬 상태에서 `controlplane.tailscale.com` 해석은 **정상**(`192.200.0.112`)이다. 회사 DNS 는 Tailscale 을 막지 않는다. 당시 해석이 실패한 진짜 이유는 **진단 중 `tailscale down` 을 해서** 시스템 DNS 1순위(`100.100.100.100` = Tailscale)가 죽고 **자기가 죽어 자기를 못 푸는 순환**에 빠졌기 때문이다.
+**해결 — VPN 연결 때 Tailscale 서버에만 물리 게이트웨이 경로를 얹는다** (`main/features/vpn/tailscaleBypass.ts`). openvpn 명령줄에 `--route 192.200.0.0 255.255.255.0 net_gateway`(컨트롤 플레인, Tailscale Inc. 소유 /24) + `tailscale debug derp-map` 의 DERP IPv4 전부를 `/32 net_gateway` 로 준다. en7 소속의 더 구체적인 경로가 생겨 묶인 소켓도 길을 찾고, 나머지 트래픽은 그대로 VPN 을 타 출발지가 회사 IP 로 남는다. `.ovpn` 은 원본 그대로다.
+- 실측(2026-10-02): 설치본에서 VPN 을 새로 연결하자 openvpn 이 `--route` 89개를 깔았다(`ps -o args= -p $(pgrep -x openvpn)`). 임시 `route add` 로 먼저 같은 경로를 넣었을 때와 결과가 같다 — 즉시 `Online`, netcheck `UDP: true`·Nearest DERP Tokyo, 출발지 `221.151.188.10` 유지, `api.anthropic.com` 404 · Jira 302 · gw 200, `tailscale ping s26-ultra` via DERP(tok) 72~118ms, 폰 MO 접속·입력 정상.
+- ⚠️ **폰 직결(P2P)은 안 된다** — 폰 주소(LTE 등)는 매번 달라 경로로 뺄 수 없어 DERP 경유로만 붙는다.
+- ⚠️ 폰은 맥이 offline 이던 상태를 잠시 들고 있다 — 첫 시도가 안 되면 MO 를 완전히 닫았다 다시 연다(실측).
 
-**다음에 시도한다면 — DNS 줄을 뺀 3줄**(미검증):
-```
-route 192.200.0.0 255.255.255.0 net_gateway
-route 172.237.0.0 255.255.0.0 net_gateway
-route 172.238.0.0 255.255.0.0 net_gateway
-```
-적용 후 **Claude 도달을 먼저 확인**(`curl -s -o /dev/null -w '%{http_code}' https://api.anthropic.com/` → 404 면 정상)하고, 그 다음 MO 를 본다. 또한 이 방식은 Tailscale 이 DERP IP 대역을 바꾸면 재발하므로(`no-derp-connection`), 그때는 `dig +short derp7{a..h}.tailscale.com` 으로 새 대역을 확인해 갱신해야 한다.
-
-**회사 방화벽은 Anthropic 을 막지 않는다** — 원본 설정 + VPN 켬에서 `api.anthropic.com` 404 · `claude.ai` 403 · TCP 443 도달 확인(출발지 `221.151.188.10`).
-- ⚠️ 이 방식의 약점은 **Tailscale 이 DERP 서버 IP 대역을 바꾸면 다시 끊긴다**는 것(증상: `no-derp-connection`). 그때는 `dig derp7{a..h}.tailscale.com` 으로 새 대역을 확인해 `route … net_gateway` 줄을 갱신한다.
+**지난 시도 기록(2026-08-09)**
+- ① `pull-filter ignore "redirect-gateway"`(split tunnel) → 🚫 **쓰면 안 된다.** Tailscale 은 살지만 **사내 서비스가 '회사 IP 에서 나온 요청'만 허용**해 Jira·메일 등 회사 경로가 통째로 끊긴다. 판정: `curl -s https://ifconfig.me` 가 회사 IP(221.151.188.x)면 정상, 집 IP 면 full-tunnel 이 깨진 것.
+- ② `.ovpn` 에 `net_gateway` 예외 4줄(DNS `168.126.63.0/24` + 컨트롤 `/24` + DERP 도쿄 `/16` 둘) → Tailscale·사내망은 됐지만 **Claude 가 끊겨** 되돌렸다. 원인으로 지목된 **DNS 줄은 지금 방식에 넣지 않는다**(Tailscale 은 컨트롤이 준 DialPlan IP 와 DERP 의 bootstrap DNS 로 붙어 DNS 우회가 필요 없다). `/16` 대신 지도에서 읽은 `/32` 를 쓰는 것도 차이다 — DERP 대역이 바뀌어도 다음 연결 때 따라간다.
 - ⚠️ **진단 중 `tailscale down` 을 하지 말 것** — `up` 은 non-default 플래그(이 환경은 `--accept-routes`)를 전부 다시 명시해야 하고, 그 사이 DNS 가 죽어 있으면 재로그인이 **불가능해져 로그아웃 상태로 고착**된다(실측). 빠져나오려면 `tailscale up --accept-routes --accept-dns=false` 로 Tailscale 의 DNS 관리를 잠시 끄고 로그인한 뒤 되돌린다.
 - ⚠️ **측정할 때마다 VPN 이 실제로 켜져 있는지 함께 확인할 것** — 중간에 VPN 이 꺼진 줄 모르고 "고쳐졌다"고 오판하기 쉽다(실측으로 한 번 겪음). 판정 기준은 `pgrep -x openvpn` + `netstat -rn | grep -E "^(0/1|128\.0/1)"`.
+- 회사 방화벽은 Anthropic 도 막지 않는다 — 원본 설정 + VPN 켬에서 `api.anthropic.com` 404 · TCP 443 도달(출발지 `221.151.188.10`).
 
 ### ⚠️ `startServer` 는 진행 중 promise 하나로 직렬화한다 (2026-09-29)
 `ensureTls()`(`tailscale cert`)로 시작이 수 초 걸리는 사이 **자동 시작 재시도와 사용자의 [켜기]가 겹치면 둘 다 통과**해 서버가 두 번 떴다 — pty 구독·ping 타이머가 새고 RPC 브리지가 죽었다. 지금은 진행 중인 시작 promise 를 공유한다. `stopServer` 는 시작 완료를 기다린 뒤 닫고, 시작은 listen 직후 `getServerEnabled()` 를 다시 봐 그 사이 꺼졌으면 스스로 닫는다.

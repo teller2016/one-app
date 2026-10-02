@@ -73,6 +73,14 @@ paths:
 - ⚠️ 서버 설정(`ping-restart`·`proto tcp`)은 우리가 못 바꾼다. `--ping`/`--ping-restart` CLI 인자로 OpenVPN 자체 keepalive 를 짧게 두는 방법은 위 SIGUSR1 경로 보존 문제 때문에 보류.
 - ⚠️ **개발 인스턴스와 설치본은 `userData/vpn/session.json` 을 공유**해 같은 management 소켓에 붙으려 한다. OpenVPN 은 **클라이언트를 하나만 받고 나머지 접속은 TCP 백로그에 조용히 세워 둔다**(2026-09-07 실측: 두 번째 앱은 비밀번호·`state` 를 보내고도 읽히지 않아 `disconnected` 로 보이다가, 첫 클라이언트가 끊기는 순간 이어받아 갑자기 `connected` 가 된다). 그래서 **설치본이 떠 있으면 dev 로 VPN 검증이 불가**하다. 설치본을 끄고 검증하되 — ⚠️ **Claude 세션이 설치본의 터미널 안에서 돌고 있으면 설치본을 끄지 말 것**(사용자 화면이 사라진다. tmux 세션은 남아 사용자가 앱을 다시 열게 되고, 그 사이 상태를 오판한다). 그땐 `/build` 로 설치본에 실어 라우팅 테이블(`route -n get <서버IP>`)로 검증한다.
 
+**Tailscale(MO) 우회 경로(`tailscaleBypass.ts`, 2026-10-02)** — VPN 을 켜도 폰에서 MO 가 붙도록 연결할 때마다 openvpn 명령줄에 `--route <IP> <mask> net_gateway` 를 얹는다(`.ovpn` 은 원본 그대로). 대상은 컨트롤 플레인 `192.200.0.0/24`(Tailscale Inc. 소유) + `tailscale debug derp-map` 의 DERP IPv4 전부(약 90개 /32 — 지도는 Tailscale 이 디스크에 들고 있어 오프라인이어도 나온다). Tailscale 이 없거나 지도를 못 읽으면 아무것도 얹지 않는다.
+- **원인**: Tailscale 앱은 소켓을 **물리 기본 인터페이스에 묶는다**. `0/1`·`128.0/1 → utun` 이 더 구체적이라 묶인 소켓은 그 인터페이스 소속 경로를 못 찾아 즉시 ENETUNREACH(위 '경로 추종'의 EHOSTUNREACH 와 같은 커널 동작 — 기본 인터페이스엔 스코프된 default 가 없다). 판정: `route -n get -ifscope <기본 인터페이스> <DERP IP>` 가 `not in table`. ⚠️ 회사 방화벽이 막는 게 아니다 — 묶지 않은 curl 은 같은 IP 에 VPN 경유로 200 이 온다.
+- ⚠️ **DNS 대역은 넣지 말 것**(2026-08-09 `168.126.63.0/24` 를 빼자 Claude 가 끊겼다). Tailscale 은 DialPlan IP·DERP bootstrap DNS 로 붙어 DNS 우회가 필요 없다.
+- ⚠️ **폰 직결(P2P)은 여전히 안 된다** — 폰 주소는 매번 달라 경로로 못 뺀다. DERP(도쿄) 경유로만 붙는다(실측 72~164ms).
+- ⚠️ CLI 대기는 `connecting` 으로 바꾼 **뒤에** 한다 — 앞에서 기다리면 그 사이 [연결]을 또 눌러 root 데몬이 둘 뜬다.
+- SIGHUP 재연결은 같은 명령줄을 다시 읽으므로 우회 경로도 새 게이트웨이로 다시 선다(전환 뒤 재설정은 미실측). DERP 목록은 **새로 연결할 때만** 갱신된다 — 이 코드 이전에 띄운 데몬은 [재연결]로는 우회 경로가 생기지 않아 [연결 해제]→[연결]이 필요하다.
+- 검증 순서: `pgrep -x openvpn` + `ifconfig.me` = 회사 IP → `tailscale status` 에 맥이 offline 이 아님 → `tailscale ping s26-ultra`(via DERP) → 폰 접속. ⚠️ 폰은 맥이 offline 이던 기억을 잠시 들고 있다 — 첫 시도가 안 되면 MO 를 완전히 닫았다 연다.
+
 ## 폰 미러링
 `renderer/features/mirror` + `main/features/mirror`
 

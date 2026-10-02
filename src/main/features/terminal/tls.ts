@@ -11,20 +11,14 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
+import { findTailscale } from '../../lib/tailscale';
 
 /** 인증서 만료가 이 기간 안으로 들어오면 갱신 (Tailscale 인증서는 90일) */
 const RENEW_BEFORE_MS = 20 * 24 * 60 * 60 * 1000;
-const TAILSCALE_BINS = [
-  '/usr/local/bin/tailscale',
-  '/opt/homebrew/bin/tailscale',
-  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
-];
 
 export type TlsFiles = { cert: string; key: string; domain: string };
 
 const certDir = () => path.join(app.getPath('userData'), 'mo-cert');
-const findTailscale = (): string | null =>
-  TAILSCALE_BINS.find((p) => fs.existsSync(p)) ?? null;
 
 const run = (bin: string, args: string[]): Promise<string> =>
   new Promise((resolve, reject) => {
