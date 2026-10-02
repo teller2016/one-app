@@ -21,7 +21,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ChatCommand, ChatPrompt, ChatServerMsg } from '../../../shared/terminal-protocol';
+import type { ChatCommand, ChatPrompt, ChatQueued, ChatServerMsg } from '../../../shared/terminal-protocol';
 import { listChatCommands, listChatFiles } from './chatCommands';
 import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
 import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
@@ -218,15 +218,38 @@ type QueueEntry = { key: string; text: string; ts?: string; hidden: boolean };
  */
 const QUEUE_STALE_MS = 6000;
 
+/**
+ * 사람 메시지가 아닌 대기열 항목 — claude 가 사람 입력 자리에 넣는 시스템 태그들.
+ * ⚠️ `<` 로 시작하는 것 전부로 거르지 말 것 — 사람이 `<div> 고쳐줘` 처럼 보낸 글이 '대기 중'에서 사라진다
+ * (2026-10-02 실측: 대기열의 태그는 `<task-notification>` 뿐이었다 — 나머지는 사람 입력 쪽 표식이라 함께 둔다)
+ */
+const SYSTEM_QUEUED_RE = /^<(task-notification|local-command-|bash-|command-|system-reminder)/;
+
 const makeQueued = (text: string, ts: string | undefined, n: number): QueueEntry => ({
   key: `queued:${ts ?? Date.now()}:${n}`,
-  text,
+  text, // ⚠️ 원문 그대로 둔다 — remove 연산이 글자로 맞춰 찾는다(applyQueueOps). 다듬기는 visibleQueue 에서
   ...(ts ? { ts } : {}),
-  hidden: text.trimStart().startsWith('<'),
+  hidden: SYSTEM_QUEUED_RE.test(text.trimStart()),
 });
 
-/** 보여 줄 대기열(사람 메시지만) */
-const visibleQueue = (q: QueueEntry[]) => q.filter((x) => !x.hidden).map(({ key, text, ts }) => ({ key, text, ...(ts ? { ts } : {}) }));
+const IMAGE_MARK_RE = /\[Image #\d+\]\s*/g;
+
+/**
+ * 보여 줄 대기열(사람 메시지만) — 이미지 자리 표시(`[Image #4]`)는 걷고 장수로 단다. 읽힌 뒤의 말풍선
+ * (transcript.ts userTextItem)과 같은 모양이어야 '대기 중' → 보통 말풍선으로 바뀔 때 글이 달라지지 않는다
+ */
+const visibleQueue = (q: QueueEntry[]): ChatQueued[] =>
+  q
+    .filter((x) => !x.hidden)
+    .map(({ key, text, ts }) => {
+      const images = text.match(IMAGE_MARK_RE)?.length ?? 0;
+      return {
+        key,
+        text: images ? text.replace(IMAGE_MARK_RE, '').trim() : text,
+        ...(images ? { images } : {}),
+        ...(ts ? { ts } : {}),
+      };
+    });
 
 /** 대기열을 갱신하고 보이는 것이 바뀌었는지 */
 function updateQueue(w: Watch, ops: QueueOp[]): boolean {
@@ -265,7 +288,9 @@ function sendSnapshot(w: Watch, found: Found, only?: Listener) {
       items: parsed.items.slice(-INITIAL_ITEMS),
       results: parsed.results,
       ...(size === 0 ? { fresh: true } : {}),
-      queued: visibleQueue(queue),
+      // 이미 도는 구독에 합류한 쪽(only)에는 지금 들고 있는 대기열을 준다 — 꼬리를 다시 읽어 만든 것은
+      // 비운 기록(sweepQueue·놓친 꺼냄)을 모르고 '대기 중' 유령을 되살린다
+      queued: visibleQueue(only ? w.queue : queue),
     },
     only,
   );

@@ -543,7 +543,10 @@ export function ChatView({
           {queued.map((q) => (
             <div key={q.key} className="term-chat__row term-chat__row--me term-chat__row--queued">
               <span className="term-chat__time">대기 중</span>
-              <div className="term-chat__bubble term-chat__bubble--me term-chat__bubble--queued">{q.text}</div>
+              <div className="term-chat__bubble term-chat__bubble--me term-chat__bubble--queued">
+                {q.images ? <span className="term-chat__img-tag">이미지 {q.images}장</span> : null}
+                {q.text}
+              </div>
             </div>
           ))}
           {composer &&

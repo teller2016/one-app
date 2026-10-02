@@ -342,9 +342,10 @@ class MoTerminalController {
       if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         resizeTimer = null;
-        // 채팅 보기에선 xterm 이 데스크톱 크기를 **따라가기만** 한다 — 따라간 크기를 되돌려 보내면, 데스크톱 창을
-        // 끄는 중에 늦게 도착한 옛 크기가 최신 크기를 덮을 수 있다. 터미널로 돌아올 때 setView 가 주장한다
-        if (this.state.view !== 'term') return;
+        // 보고 있지 않으면(채팅 보기·다른 탭·화면 꺼짐) xterm 은 데스크톱 크기를 **따라가기만** 한다 — 따라간 크기를
+        // 되돌려 보내면 서버가 그것을 '폰이 쥔 크기'로 기록하고, 데스크톱 창을 끄는 중엔 늦게 도착한 옛 크기가 최신
+        // 크기를 덮을 수 있다. 다시 보게 될 때 claimSize 가 주장한다
+        if (!this.viewingTerm()) return;
         this.send({ type: 'resize', cols, rows });
       }, 120);
     });
@@ -379,8 +380,13 @@ class MoTerminalController {
    */
   private claimSize() {
     this.refit();
-    if (!this.term || !this.active || this.state.view !== 'term' || !this.state.attachedId) return;
+    if (!this.term || !this.viewingTerm() || !this.state.attachedId) return;
     this.send({ type: 'resize', cols: this.term.cols, rows: this.term.rows });
+  }
+
+  /** 터미널 보기로 **보고 있는가** — 크기를 쥐는 유일한 조건(위 크기 규칙). 셸 탭·화면·보기 셋 다 맞아야 한다 */
+  private viewingTerm(view: MoView = this.state.view) {
+    return this.active && document.visibilityState === 'visible' && view === 'term';
   }
 
   private releaseSize() {
@@ -536,9 +542,7 @@ class MoTerminalController {
         // **보고 있는 쪽이 다시 주장**한다. 백그라운드·숨은 탭일 때는 따라가 다툼을 피한다.
         const mine = this.fit?.proposeDimensions();
         if (
-          document.visibilityState === 'visible' &&
-          this.active &&
-          this.state.view === 'term' && // 채팅 보기는 크기를 주장하지 않는다 — 데스크톱 크기를 따른다
+          this.viewingTerm() && // 채팅 보기·숨은 탭은 크기를 주장하지 않는다 — 데스크톱 크기를 따른다
           mine &&
           mine.cols > 0 &&
           mine.rows > 0 &&
@@ -632,9 +636,10 @@ class MoTerminalController {
     // 소켓이 안 열렸으면 보내지도 대기 표시도 하지 않는다 — 표시만 남으면 이후 자동 attach 가 막힌다
     if (this.pendingAttachId === id || !this.term || this.ws?.readyState !== WebSocket.OPEN) return;
     this.pendingAttachId = id;
-    // 채팅 보기로 열 세션은 크기를 주장하지 않는다(0×0 = 주장 없음) — 숨은 xterm 의 크기(처음엔 80×24)로
-    // 데스크톱 claude 화면을 줄여 버리면 안 된다. 터미널로 바꾸는 순간 그때 크기를 주장한다(setView)
-    if (this.viewFor(id) === 'chat') {
+    // 보지 않을 세션은 크기를 주장하지 않는다(0×0 = 주장 없음) — 채팅 보기로 열 세션이면 숨은 xterm 의 크기(처음엔
+    // 80×24)로 데스크톱 claude 화면을 줄여 버리면 안 되고, 다른 탭·화면 꺼짐 중의 재접속 자동 attach 도 PC 를 폰
+    // 크기로 묶으면 안 된다. 터미널로 바꾸거나(setView) 다시 보게 되는 순간(setActive·visibilitychange) 주장한다
+    if (!this.viewingTerm(this.viewFor(id))) {
       this.send({ type: 'attach', id, cols: 0, rows: 0 });
       return;
     }

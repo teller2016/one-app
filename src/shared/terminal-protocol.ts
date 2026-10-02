@@ -137,7 +137,8 @@ export type ChatCommand = { name: string; description?: string; source: 'project
  * claude 가 일하는 중에 보내 **대기열에 들어간** 내 메시지 — 아직 읽히지 않았다(회색 말풍선 '대기 중').
  * 대화 기록의 `queue-operation`(enqueue·dequeue·remove)으로 안다. 읽히면 대기열에서 빠지고 보통 말풍선이 된다
  */
-export type ChatQueued = { key: string; text: string; ts?: string };
+/** 대기 중 메시지 — images = 붙인 이미지 수(글의 `[Image #N]` 자리 표시는 서버가 걷는다) */
+export type ChatQueued = { key: string; text: string; images?: number; ts?: string };
 
 export type ChatQuestion = {
   question: string;

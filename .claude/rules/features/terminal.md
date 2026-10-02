@@ -181,6 +181,9 @@ paths:
 - ⚠️ **보는 쪽 우선 + 놓으면 데스크톱으로**(2026-10-01 사용자 결정) — 폰은 터미널 보기로 **보는 동안만** 크기를 쥔다. 화면 꺼짐·앱 전환(`visibilitychange`)·다른 탭(`setActive(false)`)·채팅 보기·다른 세션 attach·WS 끊김이면 `release` → 서버가 **그 폰이 쥔 크기일 때만** 데스크톱이 마지막으로 주장한 크기(`deskSize`, ipc attach·resize 가 기억)로 되돌린다(`pty.releaseRemoteSize`). 돌아오면 `claimSize`.
   ⚠️ 놓지 않던 때는 폰을 한 번 터미널 보기로 열었다 내려놓으면 PTY 가 폰 크기로 남아 PC 가 좁아지고 **행이 넘쳐 입력 상자가 pane 아래로 잘렸다**(채팅 보기는 아래 칸이 0). 창 focus 재주장은 창이 이미 포커스면 안 뜬다.
   ⚠️ 데스크톱은 **따라간 크기를 PTY 로 되돌려 보내지 않는다**(`followed`) — 보내면 main 이 폰 크기를 `deskSize` 로 기억해 놓을 때 폰 크기로 돌아간다.
+  ⚠️ 서버는 놓을 세션을 **`heldId`(attach 요청 시점에 정함)** 로 고른다 — `attachedId` 는 응답 뒤에야 정해져 빠른 칩 전환(A→B)·응답 전 끊김·attach 직후 release 에서 줄여 놓은 PTY 를 아무도 놓지 않았다(2026-10-02 리뷰). 늦게 끝난 attach 는 `attached` 를 보내지 않고, 그 세션을 이제 아무도 쥐지 않으면 크기를 돌려준다.
+  ⚠️ 폰의 크기 주장(attach 크기·onResize·`resized` 재주장)은 전부 **`viewingTerm()`**(셸 탭 활성 + 화면 보임 + 터미널 보기) 하나로 판정한다 — 다른 탭·화면 꺼짐 중의 재접속 자동 attach 는 `0×0`.
+  🔲 미결(사용자 결정 필요): 화면이 켜진 폰(claude 작업 중 wakeLock)은 PC 의 pane 클릭 재주장에 곧바로 다시 주장한다 — '마지막에 손댄 쪽 우선'으로 바꿀지.
 - claude 는 대체 화면 + 마우스 트래킹 유지 — 스크롤을 흉내내지 말고 휠을 넘긴다.
 - 상세: 노트 'attach 프로토콜'.
 
@@ -239,7 +242,7 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
   `pty.ts` `inheritableEnv()` 가 걸러낸다(`CLAUDE_CONFIG_DIR` 은 남김). 그 전에 뜬 tmux 서버는 옛 env 를 들고 있다.
 - jsonl 은 Claude Code 내부 형식 — 파서(`transcript.ts`)는 모르는 줄·블록을 **조용히 건너뛴다**. `isSidechain`(서브에이전트)·`isMeta` 숨김,
   `[Request interrupted by user…]` 는 사람 입력 자리에 오지만 `notice`(가운데 회색 줄). 규칙은 `transcript.test.ts` 가 고정.
-- **일하는 중에 보낸 메시지(대기열)** — 2026-10-02 실측: `queue-operation` enqueue(보낸 순간) → 턴이 끝나 꺼내면 dequeue + 보통 user 줄, **진행 중인 턴에 끼워 읽히면** remove(`absorbed_mid_turn`) + `attachment` 'queued_command'(prompt) **만** 남고 user 줄이 없다(예전엔 그 메시지가 채팅에 안 보였다). 대기열 상태는 파일 조각에 걸쳐 `chat.ts` Watch 가 들고(`applyQueueOps`), 바뀔 때만 'chat' 메시지의 `queued`(전체 목록)로 보낸다 → `ChatView` 맨 아래 **회색 점선 말풍선 '대기 중'**. 사람 아닌 것(`<task-notification>` 등)은 순서 맞춤용으로만 두고 숨긴다. 모르는 연산 = 비움, 한가한데 6초 넘게 남으면 비움(`QUEUE_STALE_MS` — 꺼낸 기록을 놓친 경우).
+- **일하는 중에 보낸 메시지(대기열)** — 2026-10-02 실측: `queue-operation` enqueue(보낸 순간) → 턴이 끝나 꺼내면 dequeue + 보통 user 줄, **진행 중인 턴에 끼워 읽히면** remove(`absorbed_mid_turn`) + `attachment` 'queued_command'(prompt) **만** 남고 user 줄이 없다(예전엔 그 메시지가 채팅에 안 보였다). 대기열 상태는 파일 조각에 걸쳐 `chat.ts` Watch 가 들고(`applyQueueOps`), 바뀔 때만 'chat' 메시지의 `queued`(전체 목록)로 보낸다 → `ChatView` 맨 아래 **회색 점선 말풍선 '대기 중'**. 사람 아닌 것(`<task-notification>` 등 — `SYSTEM_QUEUED_RE`, ⚠️ `<` 로 시작하는 것 전부로 거르면 `<div> 고쳐줘` 가 사라진다)은 순서 맞춤용으로만 두고 숨긴다. ⚠️ **이미지를 붙인 끼워 읽힘은 `queued_command.prompt` 가 블록 배열**이다(문자열만 받으면 메시지가 채팅에서 통째로 사라졌다 — `userContent`). 대기열 글은 원문으로 두고(remove 가 글자로 맞춘다) 보일 때만 `[Image #N]` 을 걷어 장수로 단다. 이미 도는 구독에 합류한 쪽엔 Watch 가 들고 있는 대기열을 준다(꼬리 재파싱은 비운 기록을 몰라 유령을 되살린다). 모르는 연산 = 비움, 한가한데 6초 넘게 남으면 비움(`QUEUE_STALE_MS` — 꺼낸 기록을 놓친 경우).
 - `<task-notification>`(백그라운드 작업 완료)는 사람 입력 자리에 오지만 내 말풍선이 아니라 `notice`('백그라운드 작업 — 요약').
 
 ### 데스크톱 채팅 보기 (2026-10-01)

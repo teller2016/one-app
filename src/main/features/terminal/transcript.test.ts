@@ -207,6 +207,26 @@ describe('대기열(일하는 중에 보낸 메시지)', () => {
     expect(later.items).toEqual([{ kind: 'user', key: 'att1', text: '둘째 메시지', ts: '2026-10-02T00:41:20.942Z' }]);
   });
 
+  it('이미지를 붙여 끼워 읽힌 메시지(prompt 가 블록 배열)도 말풍선이 된다 — 자리 표시는 걷고 이미지 수를 단다', () => {
+    const { items } = parseTranscript(
+      [
+        line({
+          type: 'attachment',
+          uuid: 'att2',
+          attachment: {
+            type: 'queued_command',
+            prompt: [{ type: 'text', text: '[Image #4] [Image #5] 봐봐' }, { type: 'image' }, { type: 'image' }],
+            commandMode: 'prompt',
+            origin: { kind: 'human' },
+            timestamp: 't9',
+          },
+        }),
+      ],
+      CWD,
+    );
+    expect(items).toEqual([{ kind: 'user', key: 'att2', text: '봐봐', images: 2, ts: 't9' }]);
+  });
+
   it('턴이 끝나고 꺼내 가면(dequeue) 앞에서부터 빠진다', () => {
     const { queueOps } = parseTranscript(
       [enqueue('하나', 't1'), enqueue('둘', 't2'), line({ type: 'queue-operation', operation: 'dequeue' })],

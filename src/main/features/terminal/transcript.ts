@@ -208,6 +208,22 @@ function userTextItem(text: string, key: string, images: number, ts?: string): C
 }
 
 /**
+ * 사람 입력 내용 — 문자열이거나 블록 배열(`[{type:'text'}, {type:'image'}]` — 이미지를 붙이면 배열이다).
+ * user 줄과 끼워 읽힌 메시지(attachment `queued_command` 의 prompt)가 같은 모양이라 함께 쓴다
+ */
+function userContent(c: unknown): { text: string; images: number } | null {
+  if (typeof c === 'string') return { text: c, images: 0 };
+  if (!Array.isArray(c)) return null;
+  const texts: string[] = [];
+  let images = 0;
+  for (const b of c as Block[]) {
+    if (b?.type === 'text') texts.push(str(b.text));
+    else if (b?.type === 'image') images += 1;
+  }
+  return { text: texts.join('\n'), images };
+}
+
+/**
  * jsonl 줄들 → 채팅 항목 + 도구 결과. 깨진 줄(쓰는 중인 마지막 줄 등)은 건너뛴다.
  * @param cwd 세션 위치 — 도구 요약의 경로를 상대 경로로 줄인다
  */
@@ -235,9 +251,17 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
     // 진행 중인 턴에 끼워 넣어 읽힌 내 메시지 — user 줄이 따로 없다
     if (o.type === 'attachment') {
       const a = o.attachment;
-      const prompt = str(a?.prompt);
-      if (a?.type === 'queued_command' && prompt && (a.commandMode ?? 'prompt') === 'prompt' && (a.origin?.kind ?? 'human') === 'human') {
-        const it = userTextItem(prompt, o.uuid ?? `${items.length}`, 0, a.timestamp ?? o.timestamp);
+      // ⚠️ 이미지를 붙인 메시지는 prompt 가 문자열이 아니라 블록 배열이다 — 문자열만 받으면 그 메시지가 채팅에서
+      // 통째로 사라졌다(대기 중 → 대기열에서 빠짐 → 여기서 건너뜀, 2026-10-02 리뷰 · 로컬 기록 388건 중 7건)
+      const prompt = userContent(a?.prompt);
+      if (
+        a?.type === 'queued_command' &&
+        prompt &&
+        (prompt.text.trim() || prompt.images) &&
+        (a.commandMode ?? 'prompt') === 'prompt' &&
+        (a.origin?.kind ?? 'human') === 'human'
+      ) {
+        const it = userTextItem(prompt.text, o.uuid ?? `${items.length}`, prompt.images, a.timestamp ?? o.timestamp);
         if (it) items.push(it);
       }
       continue;
@@ -252,8 +276,6 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
         continue;
       }
       if (!Array.isArray(content)) continue;
-      const texts: string[] = [];
-      let images = 0;
       for (const b of content as Block[]) {
         if (b?.type === 'tool_result' && b.tool_use_id) {
           results.push({
@@ -261,11 +283,12 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
             text: clip(resultText(b.content), RESULT_MAX),
             ...(b.is_error ? { isError: true } : {}),
           });
-        } else if (b?.type === 'text') texts.push(str(b.text));
-        else if (b?.type === 'image') images += 1;
+        }
       }
-      if (texts.length || images) {
-        const it = userTextItem(texts.join('\n'), uuid, images, o.timestamp);
+      // 도구 결과만 있는 줄은 사람 입력이 아니다 — 글·이미지 블록이 있을 때만 말풍선(userContent 는 둘만 본다)
+      const typed = userContent(content);
+      if (typed && (typed.text || typed.images)) {
+        const it = userTextItem(typed.text, uuid, typed.images, o.timestamp);
         if (it) items.push(it);
       }
       continue;

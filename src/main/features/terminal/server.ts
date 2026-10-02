@@ -76,6 +76,12 @@ type SocketState = {
    */
   cols: number;
   rows: number;
+  /**
+   * 그 크기를 쥔 세션 — **attach 요청 시점에** 정한다. `attachedId` 는 attach 응답 뒤에야 정해지고 재동기화 중엔
+   * null 이라, 그것으로 놓을 세션을 고르면 빠른 세션 전환·응답 전 끊김에서 줄여 놓은 PTY 를 아무도 놓지 않았다
+   * (PC 가 폰 크기에 갇힘 — 2026-10-02 리뷰)
+   */
+  heldId: string | null;
   /** 출력 프레임을 버린 적이 있다 — 버퍼가 빠지면 attach 를 다시 돌려 화면을 맞춘다 */
   needsResync: boolean;
   /** 재동기화 attach 진행 중 (중복 실행 방지) */
@@ -91,14 +97,15 @@ const socketState = new Map<WebSocket, SocketState>();
 
 /** 폰이 쥔 크기를 놓는다 — 그 세션 PTY 를 데스크톱 크기로 되돌린다(pty.releaseRemoteSize) */
 function releaseHeldSize(state: SocketState) {
-  if (state.attachedId && state.cols > 0 && state.rows > 0)
-    releaseRemoteSize(state.attachedId, state.cols, state.rows);
+  if (state.heldId && state.cols > 0 && state.rows > 0) releaseRemoteSize(state.heldId, state.cols, state.rows);
+  state.heldId = null;
   state.cols = 0;
   state.rows = 0;
 }
 
 const newSocketState = (kind: SocketState['kind']): SocketState => ({
   attachedId: null,
+  heldId: null,
   alive: true,
   kind,
   cols: 0,
@@ -343,6 +350,7 @@ function resyncSocket(ws: WebSocket, state: SocketState) {
   const gen = state.attachGen;
   // attach 스냅샷 전후 라이브 data 가 이중 전달되지 않게 잠시 떼어 둔다(일반 attach 와 같은 규칙)
   state.attachedId = null;
+  if (state.cols > 0 && state.rows > 0) state.heldId = id; // 재동기화도 쥔 크기로 붙는다
   void attachSession(id, state.cols, state.rows)
     .then((res) => {
       if (gen !== state.attachGen || !socketState.has(ws)) return; // 그새 다른 세션을 골랐다
@@ -426,32 +434,41 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'attach': {
       const attachId = msg.id;
       const { cols, rows } = msg;
-      // 다른 세션으로 옮긴다 — 보던 세션의 크기는 데스크톱에 돌려준다
-      if (state.attachedId && state.attachedId !== attachId) releaseHeldSize(state);
+      // 다른 세션으로 옮긴다 — 쥐고 있던 세션의 크기는 데스크톱에 돌려준다
+      if (state.heldId && state.heldId !== attachId) releaseHeldSize(state);
       state.cols = cols;
       state.rows = rows;
-      state.attachGen += 1; // 진행 중인 재동기화는 이 attach 에 밀려 버려진다
+      state.heldId = cols > 0 && rows > 0 ? attachId : null; // 0×0 = 주장 없음(채팅 보기)
+      state.attachGen += 1; // 진행 중인 재동기화·앞선 attach 는 이 attach 에 밀려 버려진다
+      const gen = state.attachGen;
       state.needsResync = false;
       void attachSession(attachId, cols, rows).then((res) => {
-        if (!res.ok) {
-          send(ws, { type: 'error', message: res.error ?? 'attach 실패' });
-          return;
+        // 그새 다른 세션을 골랐거나 끊겼다 — 'attached' 를 보내면 늦게 온 응답이 최신 세션 선택을 덮는다
+        if (gen === state.attachGen && socketState.has(ws)) {
+          if (!res.ok) {
+            send(ws, { type: 'error', message: res.error ?? 'attach 실패' });
+          } else {
+            // attachedId 는 attach 스냅샷 이후에 설정 — 스냅샷에 포함된 flush 가
+            // 이 소켓으로 이중 전달(라이브 data + replay)되는 것을 막는다.
+            // (attachSession 내부 await 중의 flush 는 스냅샷 seq 에 포함되므로,
+            // 스냅샷→여기(마이크로태스크) 사이에 끼어들 flush 는 없다 — 유실 없음)
+            state.attachedId = attachId;
+            send(ws, {
+              type: 'attached',
+              id: attachId,
+              replay: res.replay ?? '',
+              alt: res.alt ?? false,
+              tmux: res.tmux ?? false,
+              seq: res.seq ?? 0,
+              cols: res.cols ?? 0,
+              rows: res.rows ?? 0,
+            });
+          }
         }
-        // attachedId 는 attach 스냅샷 이후에 설정 — 스냅샷에 포함된 flush 가
-        // 이 소켓으로 이중 전달(라이브 data + replay)되는 것을 막는다.
-        // (attachSession 내부 await 중의 flush 는 스냅샷 seq 에 포함되므로,
-        // 스냅샷→여기(마이크로태스크) 사이에 끼어들 flush 는 없다 — 유실 없음)
-        state.attachedId = attachId;
-        send(ws, {
-          type: 'attached',
-          id: attachId,
-          replay: res.replay ?? '',
-          alt: res.alt ?? false,
-          tmux: res.tmux ?? false,
-          seq: res.seq ?? 0,
-          cols: res.cols ?? 0,
-          rows: res.rows ?? 0,
-        });
+        // 이 attach 가 PTY 를 폰 크기로 줄였는데 그새 아무도 그 세션을 쥐지 않게 됐으면(놓음·다른 세션·끊김) 돌려준다 —
+        // 그 처리들은 줄이기 **전에** 돌아 되돌릴 것이 없었다(releaseRemoteSize 는 그 크기일 때만 되돌린다).
+        // 'attached' 뒤에 해야 되돌린 크기('resized')가 이 소켓에도 간다
+        if (state.heldId !== attachId) releaseRemoteSize(attachId, cols, rows);
       });
       break;
     }
@@ -461,8 +478,10 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     case 'resize':
       state.cols = msg.cols;
       state.rows = msg.rows;
-      if (state.attachedId)
+      if (state.attachedId) {
         resizeSession(state.attachedId, msg.cols, msg.rows);
+        state.heldId = state.attachedId; // 놓은 뒤 다시 쥔 경우(claimSize) — 놓을 대상도 다시 정한다
+      }
       break;
     // 폰이 이 세션을 더는 보지 않는다(화면 꺼짐·앱 전환·채팅 보기·다른 탭) — 크기를 데스크톱에 돌려준다
     case 'release':
@@ -758,6 +777,7 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
       sendToAttached(id, { type: 'exit', id, exitCode });
       for (const state of socketState.values()) {
         if (state.attachedId === id) state.attachedId = null;
+        if (state.heldId === id) state.heldId = null;
       }
     }),
     onPtyResized((id, cols, rows) => sendToAttached(id, { type: 'resized', id, cols, rows })),
