@@ -281,6 +281,23 @@ export function ChatView({
     lastCount.current = items.length;
   }, [items, busy, prompt, status]);
 
+  // 목록 높이가 줄어도 바닥에 붙어 있었으면 마지막 내용을 계속 보인다 — 폰 키보드가 올라오면(셸이 `--mo-vh` 로
+  // 줄어든다) 스크롤 위치는 그대로라 마지막 말풍선이 키보드 뒤로 밀려 내려갔다(2026-10-02 사용자 요청).
+  // 데스크톱도 아래 칸(터미널)이 커질 때 같다. 높이가 줄어도 scroll 이벤트는 안 뜨므로 크기로 본다
+  const unavailableNow = !!unavailable;
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let h = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      if (el.clientHeight === h) return;
+      h = el.clientHeight;
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [unavailableNow]);
+
   const onScroll = () => {
     const el = listRef.current;
     if (!el) return;

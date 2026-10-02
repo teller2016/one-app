@@ -66,6 +66,23 @@ describe('liveRegionTop', () => {
     expect(liveRegionTop(done, COLS)).toBe(34);
   });
 
+  it('위 경계에 이름표가 박혀 있어도(--agent 세션) 위 경계 — 입력 줄이 가려지면 안 된다', () => {
+    // 2026-10-02 사용자 화면 — 위 경계 오른쪽에 에이전트 이름, 상태줄 5줄
+    const label = ' everything-metacommerce-fe:metacommerce-orchestrator ─';
+    const s = screen({
+      28: '✻ Baked for 40s · done 오후 10:58',
+      30: '─'.repeat(COLS - label.length) + label,
+      31: '❯\u00a0커밋',
+      32: R,
+      33: '  ✦ ⋆ * ⋆ ✦  Claude Code v2.1.286 (sbjung)',
+      34: '   ▐▛███▜▌   Opus 5.5 · xhigh · ⏺ Thinking on       ├ Context',
+      35: '  ▝▜█████▛▘  2 CLAUDE.md · 8 MCP · 46 Hooks         ├ 5-hours',
+      36: '    ▘▘ ▝▝    Everything Metacommerce (Vue) v4.58.2  └ Weekly',
+      37: '  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents',
+    });
+    expect(liveRegionTop(s, COLS)).toBe(30);
+  });
+
   it('여러 줄 입력 — 들여쓴 이어지는 줄이 있어도 위 경계', () => {
     const s = screen({ 31: R, 32: '❯ 첫 줄', 33: '  둘째 줄', 34: '  셋째 줄', 35: R, 36: FOOTER[0] });
     expect(liveRegionTop(s, COLS)).toBe(31);

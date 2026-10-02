@@ -18,8 +18,15 @@
 //   ⚠️ 작업 중인 도구 줄(`⎿ $ sleep 6 (4s)`)은 스피너 위라 넣지 않는다 — 채팅에 '진행 중' 도구로 이미 보인다.
 // 못 찾으면 null — 호출부가 직전 값을 유지한다(빗나가도 모양만 어긋나고 입력은 터미널 그대로다).
 
-/** claude 가 그리는 경계 — 0열부터 전체 폭(들여쓴 마크다운 구분선과 갈린다) */
-const RULE_RE = /^─+$/;
+/**
+ * claude 가 그리는 경계 — 0열부터 전체 폭(들여쓴 마크다운 구분선과 갈린다).
+ * ⚠️ 입력 상자 **위 경계엔 이름표가 박힐 수 있다** — `--agent` 세션은 `──── 플러그인:에이전트 ─` 처럼 오른쪽에
+ *    이름이 들어간다(2026-10-02 사용자 화면 실측). `─` 만으로 된 줄만 경계로 보면 위 경계를 놓치고 아래 경계부터
+ *    드러나 **입력 줄이 채팅에 가려졌다**. 그래서 '0열부터 ─ 3개 이상으로 시작해 ─ 로 끝나는 전체 폭 줄' 이면 경계로 본다.
+ *    (─ 비율로 거르지 말 것 — 폰 크기(70열)에선 이름표가 줄의 절반을 넘는다)
+ */
+const RULE_RE = /^─{3,}.*─$/;
+const isRuleLine = (line: string, cols: number) => line.length >= cols * 0.8 && RULE_RE.test(line);
 /** 입력 상자 첫 줄 — 선택지 커서('❯ 1.')는 아니다 */
 const INPUT_RE = /^[❯!>](?!\s*\d+\.)/;
 /** 스피너 줄 — '…' 로 알아본다(완료 줄 '✻ Cogitated for 7s · done' 에는 없다) */
@@ -37,7 +44,7 @@ const SPINNER_SCAN = 24;
 
 export function liveRegionTop(screen: string[], cols: number): number | null {
   const lines = screen.map((l) => l.replace(/\s+$/, ''));
-  const isRule = (i: number) => lines[i].length >= cols * 0.8 && RULE_RE.test(lines[i]);
+  const isRule = (i: number) => isRuleLine(lines[i], cols);
   const rules: number[] = [];
   lines.forEach((_, i) => isRule(i) && rules.push(i));
 
