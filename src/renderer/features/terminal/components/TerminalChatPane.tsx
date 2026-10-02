@@ -49,6 +49,7 @@ export const TerminalChatPane = memo(function TerminalChatPane({
         unavailable={chat.unavailable}
         fresh={chat.fresh}
         prompt={chat.prompt}
+        queued={chat.queued}
         busy={busy}
         findSignal={findSignal}
         composer={false}

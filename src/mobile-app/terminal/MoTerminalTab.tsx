@@ -385,6 +385,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           fresh={chatItems?.fresh ?? false}
           prompt={chatItems?.prompt ?? null}
           status={chatItems?.status ?? null}
+          queued={chatItems?.queued}
           commands={st.chatCommands?.id === attached?.id ? st.chatCommands.items : null}
           onRequestCommands={requestCommands}
           files={st.chatFiles?.id === attached?.id ? st.chatFiles.items : null}

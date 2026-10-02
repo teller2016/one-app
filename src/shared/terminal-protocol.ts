@@ -92,7 +92,16 @@ export type TermServerMsg =
   // 채팅 — reset 이면 통째 교체(구독 시작·대화가 바뀜), 아니면 뒤에 덧붙인다.
   // results 는 앞서 보낸 도구 호출의 결과 — 클라이언트가 toolId 로 맞춰 붙인다
   // fresh = claude 는 떠 있지만 대화 파일이 아직 없다(첫 메시지 전) — 빈 대화 + 입력창
-  | { type: 'chat'; id: string; reset: boolean; items: ChatItem[]; results: ChatToolResult[]; fresh?: boolean }
+  // queued = claude 가 아직 읽지 않은(대기열의) 내 메시지 **전체 목록** — 있을 때만 바꾸고 없으면 그대로 둔다
+  | {
+      type: 'chat';
+      id: string;
+      reset: boolean;
+      items: ChatItem[];
+      results: ChatToolResult[];
+      fresh?: boolean;
+      queued?: ChatQueued[];
+    }
   // 대화 기록을 못 찾았다(claude 가 아닌 세션·아직 시작 전) — 클라이언트는 안내 + 터미널 보기
   | { type: 'chat-unavailable'; id: string; reason: string }
   // claude 가 터미널에서 답을 기다린다(sessions/<pid>.json status 'waiting') — 화면에서 읽은 선택 화면.
@@ -114,6 +123,12 @@ export type ChatServerMsg = Extract<
 export type ChatCommand = { name: string; description?: string; source: 'project' | 'user' | 'builtin' };
 
 // ── 채팅 항목 ──
+
+/**
+ * claude 가 일하는 중에 보내 **대기열에 들어간** 내 메시지 — 아직 읽히지 않았다(회색 말풍선 '대기 중').
+ * 대화 기록의 `queue-operation`(enqueue·dequeue·remove)으로 안다. 읽히면 대기열에서 빠지고 보통 말풍선이 된다
+ */
+export type ChatQueued = { key: string; text: string; ts?: string };
 
 export type ChatQuestion = {
   question: string;

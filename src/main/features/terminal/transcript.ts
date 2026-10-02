@@ -5,7 +5,13 @@
 //    조용히 건너뛴다**(throw 금지 — 한 줄이 깨졌다고 대화 전체가 안 보이면 안 된다).
 //
 // 실측(Claude Code 2.1.x):
-// - 줄 type: user · assistant · attachment · system · permission-mode · file-history-snapshot … — user·assistant 만 쓴다
+// - 줄 type: user · assistant · attachment · system · permission-mode · file-history-snapshot … — user·assistant 를 쓰고,
+//   claude 가 일하는 중에 보낸 메시지는 따로 본다(2026-10-02 실측):
+//   · `queue-operation` enqueue(content) — 보낸 순간 대기열에 들어간다(아직 안 읽힘) · dequeue — 턴이 끝나고 꺼내 감
+//     (곧이어 보통 user 줄) · remove(content, reason 'absorbed_mid_turn') — 진행 중인 턴에 끼워 넣어 읽힘
+//   · 끼워 넣어 읽힌 메시지는 **user 줄로 남지 않고** `attachment` type 'queued_command'(prompt) 로만 남는다 —
+//     이걸 안 읽으면 그 메시지가 채팅에 영영 안 보였다
+//   · 백그라운드 작업 완료는 사람 입력 자리(user 줄)에 `<task-notification>` 으로 온다 — 내 말풍선이 아니라 알림 줄로
 // - assistant 는 **블록 하나당 한 줄**로 스트리밍된다(같은 message.id 에 text·tool_use·thinking 이 줄을 나눠 온다)
 // - user 의 content 가 문자열이면 사람이 친 입력, 배열이면 tool_result(도구 결과)·이미지가 섞인다
 // - isSidechain = 서브에이전트 내부 대화 · isMeta = 명령 안내문 같은 주입물 — 둘 다 숨긴다
@@ -35,9 +41,28 @@ type Line = {
   isCompactSummary?: boolean;
   timestamp?: string;
   message?: { content?: unknown };
+  // queue-operation
+  operation?: string;
+  content?: unknown;
+  // attachment
+  attachment?: {
+    type?: string;
+    prompt?: unknown;
+    timestamp?: string;
+    commandMode?: string;
+    origin?: { kind?: string };
+  };
 };
 
-export type ParsedChat = { items: ChatItem[]; results: ChatToolResult[] };
+/** 대기열 변화 — 기록 순서대로. 파일 여러 조각에 걸치므로 상태는 chat.ts 가 들고 있는다(applyQueueOps) */
+export type QueueOp =
+  | { op: 'enqueue'; text: string; ts?: string }
+  | { op: 'dequeue' }
+  | { op: 'remove'; text: string }
+  /** 모르는 연산 — 대기열을 비운다(남은 회색 말풍선이 영영 남는 것보다 낫다) */
+  | { op: 'clear' };
+
+export type ParsedChat = { items: ChatItem[]; results: ChatToolResult[]; queueOps: QueueOp[] };
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}\n… (${s.length - max}자 생략)` : s);
 
@@ -51,6 +76,29 @@ const rel = (p: string, cwd: string) => {
 };
 
 const firstLine = (s: string) => s.split('\n').find((l) => l.trim())?.trim() ?? '';
+
+/** 한 줄 요약용 자르기 — 말줄임 */
+const clip1 = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}…` : s);
+
+/** 대기열 변화 적용 — 남은 대기열을 돌려준다(입력 배열은 건드리지 않는다). 키는 enqueue 시각 + 순번 */
+export function applyQueueOps<T extends { key: string; text: string; ts?: string }>(
+  queue: T[],
+  ops: QueueOp[],
+  make: (text: string, ts: string | undefined, n: number) => T,
+): T[] {
+  let q = queue;
+  let n = 0;
+  for (const o of ops) {
+    if (o.op === 'enqueue') q = [...q, make(o.text, o.ts, n++)];
+    else if (o.op === 'dequeue') q = q.slice(1);
+    else if (o.op === 'clear') q = [];
+    else {
+      const i = q.findIndex((x) => x.text.trim() === o.text.trim());
+      q = i >= 0 ? [...q.slice(0, i), ...q.slice(i + 1)] : q.slice(1);
+    }
+  }
+  return q;
+}
 
 /** 도구 결과 content — 문자열이거나 `[{type:'text', text}]` 배열 */
 function resultText(content: unknown): string {
@@ -139,6 +187,11 @@ function userTextItem(text: string, key: string, images: number, ts?: string): C
   const t = (images ? text.replace(/\[Image #\d+\]\s*/g, '') : text).trim();
   if (!t && !images) return null;
   if (t.startsWith('<local-command-') || t.startsWith('<bash-stdout') || t.startsWith('<bash-stderr')) return null;
+  // 백그라운드 작업 완료 알림 — claude 가 사람 입력 자리에 넣는다. 내 말풍선이 아니라 알림 줄로(요약 한 줄)
+  if (t.startsWith('<task-notification>')) {
+    const summary = t.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim();
+    return { kind: 'notice', key, text: summary ? `백그라운드 작업 — ${clip1(summary, 120)}` : '백그라운드 작업 알림' };
+  }
   const cmd = t.match(/<command-name>([^<]*)<\/command-name>/);
   if (cmd) {
     const args = t.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim();
@@ -161,6 +214,7 @@ function userTextItem(text: string, key: string, images: number, ts?: string): C
 export function parseTranscript(lines: string[], cwd: string): ParsedChat {
   const items: ChatItem[] = [];
   const results: ChatToolResult[] = [];
+  const queueOps: QueueOp[] = [];
   for (const raw of lines) {
     if (!raw.trim()) continue;
     let o: Line;
@@ -169,7 +223,26 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
     } catch {
       continue;
     }
-    if ((o.type !== 'user' && o.type !== 'assistant') || o.isSidechain || o.isMeta || o.isCompactSummary) continue;
+    if (o.isSidechain) continue;
+    // 대기열 — 일하는 중에 보낸 메시지(위 머리말)
+    if (o.type === 'queue-operation') {
+      if (o.operation === 'enqueue') queueOps.push({ op: 'enqueue', text: str(o.content), ts: o.timestamp });
+      else if (o.operation === 'dequeue') queueOps.push({ op: 'dequeue' });
+      else if (o.operation === 'remove') queueOps.push({ op: 'remove', text: str(o.content) });
+      else queueOps.push({ op: 'clear' });
+      continue;
+    }
+    // 진행 중인 턴에 끼워 넣어 읽힌 내 메시지 — user 줄이 따로 없다
+    if (o.type === 'attachment') {
+      const a = o.attachment;
+      const prompt = str(a?.prompt);
+      if (a?.type === 'queued_command' && prompt && (a.commandMode ?? 'prompt') === 'prompt' && (a.origin?.kind ?? 'human') === 'human') {
+        const it = userTextItem(prompt, o.uuid ?? `${items.length}`, 0, a.timestamp ?? o.timestamp);
+        if (it) items.push(it);
+      }
+      continue;
+    }
+    if ((o.type !== 'user' && o.type !== 'assistant') || o.isMeta || o.isCompactSummary) continue;
     const uuid = o.uuid ?? `${items.length}`;
     const content = o.message?.content;
     if (o.type === 'user') {
@@ -224,5 +297,5 @@ export function parseTranscript(lines: string[], cwd: string): ParsedChat {
       // thinking·redacted_thinking 등은 숨긴다
     });
   }
-  return { items, results };
+  return { items, results, queueOps };
 }

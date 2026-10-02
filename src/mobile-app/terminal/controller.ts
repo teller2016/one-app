@@ -15,6 +15,7 @@ import type {
   ChatCommand,
   ChatItem,
   ChatPrompt,
+  ChatQueued,
   TermClientMsg,
   TermCwdOption,
   TermServerMsg,
@@ -109,6 +110,8 @@ export type MoTermState = {
     prompt: ChatPrompt | null;
     /** 작업 중 상태 줄 (chat-status) */
     status: string | null;
+    /** 아직 안 읽힌(대기열의) 내 메시지 — 회색 말풍선 */
+    queued: ChatQueued[];
   };
   /** `/` 자동완성 목록 — 보고 있는 세션 것(요청할 때만 받는다) */
   chatCommands: { id: string; items: ChatCommand[] } | null;
@@ -184,7 +187,7 @@ class MoTerminalController {
       view: 'term',
       chatCommands: null,
       chatFiles: null,
-      chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null },
+      chat: { id: null, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null, queued: [] },
     };
   }
 
@@ -567,13 +570,15 @@ class MoTerminalController {
             fresh: msg.reset ? !!msg.fresh : this.state.chat.fresh,
             prompt: this.state.chat.id === msg.id ? this.state.chat.prompt : null,
             status: this.state.chat.id === msg.id ? this.state.chat.status : null,
+            // 대기열은 '있을 때만 통째로' 온다 — 없으면 그대로(다른 세션·스냅샷이면 비운다)
+            queued: msg.queued ?? (same ? this.state.chat.queued : []),
           },
         });
         break;
       }
       case 'chat-unavailable':
         if (msg.id !== this.chatSubId) break;
-        this.set({ chat: { id: msg.id, items: [], loaded: true, unavailable: msg.reason, fresh: false, prompt: null, status: null } });
+        this.set({ chat: { id: msg.id, items: [], loaded: true, unavailable: msg.reason, fresh: false, prompt: null, status: null, queued: [] } });
         break;
       case 'chat-status':
         if (msg.id !== this.chatSubId || this.state.chat.id !== msg.id) break;
@@ -651,7 +656,7 @@ class MoTerminalController {
       this.send({ type: 'chat-open', id: want });
       // 다른 세션의 말풍선이 잠깐이라도 남지 않게 비우고 시작한다(같은 세션 재구독이면 유지)
       if (this.state.chat.id !== want)
-        this.set({ chat: { id: want, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null } });
+        this.set({ chat: { id: want, items: [], loaded: false, unavailable: null, fresh: false, prompt: null, status: null, queued: [] } });
       // 같은 세션 재구독(터미널에 갔다 옴) — 말풍선은 두되 선택 화면은 버린다. 그새 터미널에서 답했을 수 있다
       // (서버가 곧 지금 상태를 다시 보낸다)
       else if (this.state.chat.prompt) this.set({ chat: { ...this.state.chat, prompt: null } });

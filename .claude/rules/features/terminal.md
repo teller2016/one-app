@@ -236,6 +236,8 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
   `pty.ts` `inheritableEnv()` 가 걸러낸다(`CLAUDE_CONFIG_DIR` 은 남김). 그 전에 뜬 tmux 서버는 옛 env 를 들고 있다.
 - jsonl 은 Claude Code 내부 형식 — 파서(`transcript.ts`)는 모르는 줄·블록을 **조용히 건너뛴다**. `isSidechain`(서브에이전트)·`isMeta` 숨김,
   `[Request interrupted by user…]` 는 사람 입력 자리에 오지만 `notice`(가운데 회색 줄). 규칙은 `transcript.test.ts` 가 고정.
+- **일하는 중에 보낸 메시지(대기열)** — 2026-10-02 실측: `queue-operation` enqueue(보낸 순간) → 턴이 끝나 꺼내면 dequeue + 보통 user 줄, **진행 중인 턴에 끼워 읽히면** remove(`absorbed_mid_turn`) + `attachment` 'queued_command'(prompt) **만** 남고 user 줄이 없다(예전엔 그 메시지가 채팅에 안 보였다). 대기열 상태는 파일 조각에 걸쳐 `chat.ts` Watch 가 들고(`applyQueueOps`), 바뀔 때만 'chat' 메시지의 `queued`(전체 목록)로 보낸다 → `ChatView` 맨 아래 **회색 점선 말풍선 '대기 중'**. 사람 아닌 것(`<task-notification>` 등)은 순서 맞춤용으로만 두고 숨긴다. 모르는 연산 = 비움, 한가한데 6초 넘게 남으면 비움(`QUEUE_STALE_MS` — 꺼낸 기록을 놓친 경우).
+- `<task-notification>`(백그라운드 작업 완료)는 사람 입력 자리에 오지만 내 말풍선이 아니라 `notice`('백그라운드 작업 — 요약').
 
 ### 데스크톱 채팅 보기 (2026-10-01)
 - **탭 안의 작은 토글**(`TabViewToggle` — 에이전트 세션만, hover·활성·채팅 중일 때만 보임 · ⚠️ 숨었을 땐 **폭 0**(opacity 만 0 이면 자리를 차지해 에이전트 탭 제목이 일찍 잘렸다))로 세션별 전환, 단축키 **⌘E**(포커스 세션 — `useTerminalShortcuts`, `e.code === 'KeyE'` · 셸 세션은 무시), 기본은 터미널(`lib/chatViews` — localStorage, 종료 세션은 `pruneChatViews`).

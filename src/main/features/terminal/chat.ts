@@ -25,7 +25,7 @@ import type { ChatCommand, ChatPrompt, ChatServerMsg } from '../../../shared/ter
 import { listChatCommands, listChatFiles } from './chatCommands';
 import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
 import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
-import { parseTranscript } from './transcript';
+import { applyQueueOps, parseTranscript, type QueueOp } from './transcript';
 
 const TICK_MS = 1000;
 /** 처음 열 때 읽는 꼬리 — 오래 쓴 대화는 수십 MB 라 끝부분만 */
@@ -201,7 +201,40 @@ type Watch = {
   promptKey: string;
   /** 마지막으로 보낸 작업 중 상태 줄 — 바뀔 때만. null = 일하지 않거나 못 읽음 */
   statusText: string | null;
+  /**
+   * 대기열 — 일하는 중에 보내 아직 안 읽힌 메시지(`queue-operation`). 파일 조각에 걸치므로 여기서 들고 있는다.
+   * hidden = 사람 메시지가 아닌 것(`<task-notification>` 등 — 순서 맞춤용으로만 둔다)
+   */
+  queue: QueueEntry[];
+  /** 한가한데 대기열이 남아 있기 시작한 시각(0 = 아님) — 비운 기록을 놓친 경우의 안전장치(QUEUE_STALE_MS) */
+  queueIdleSince: number;
 };
+
+type QueueEntry = { key: string; text: string; ts?: string; hidden: boolean };
+
+/**
+ * claude 는 한가해지면 대기열을 곧바로 꺼내 간다 — 한가한데 이만큼 남아 있으면 꺼낸 기록을 놓친 것(꼬리만 읽은 스냅샷·
+ * 모르는 연산·Esc 로 입력란에 되돌린 경우)이라 비운다. 회색 말풍선이 영영 남는 것보다 낫다
+ */
+const QUEUE_STALE_MS = 6000;
+
+const makeQueued = (text: string, ts: string | undefined, n: number): QueueEntry => ({
+  key: `queued:${ts ?? Date.now()}:${n}`,
+  text,
+  ...(ts ? { ts } : {}),
+  hidden: text.trimStart().startsWith('<'),
+});
+
+/** 보여 줄 대기열(사람 메시지만) */
+const visibleQueue = (q: QueueEntry[]) => q.filter((x) => !x.hidden).map(({ key, text, ts }) => ({ key, text, ...(ts ? { ts } : {}) }));
+
+/** 대기열을 갱신하고 보이는 것이 바뀌었는지 */
+function updateQueue(w: Watch, ops: QueueOp[]): boolean {
+  if (!ops.length) return false;
+  const before = JSON.stringify(visibleQueue(w.queue));
+  w.queue = applyQueueOps(w.queue, ops, makeQueued);
+  return JSON.stringify(visibleQueue(w.queue)) !== before;
+}
 
 const watches = new Map<string, Watch>();
 
@@ -218,7 +251,11 @@ function sendSnapshot(w: Watch, found: Found, only?: Listener) {
   if (start > 0) text = text.slice(text.indexOf('\n') + 1); // 잘린 첫 줄은 버린다
   const { lines, used } = completeLines(text);
   const parsed = parseTranscript(lines, found.cwd);
-  if (!only) w.offset = size - (Buffer.byteLength(text, 'utf8') - used);
+  const queue = applyQueueOps<QueueEntry>([], parsed.queueOps, makeQueued);
+  if (!only) {
+    w.offset = size - (Buffer.byteLength(text, 'utf8') - used);
+    w.queue = queue;
+  }
   emit(
     w,
     {
@@ -228,6 +265,7 @@ function sendSnapshot(w: Watch, found: Found, only?: Listener) {
       items: parsed.items.slice(-INITIAL_ITEMS),
       results: parsed.results,
       ...(size === 0 ? { fresh: true } : {}),
+      queued: visibleQueue(queue),
     },
     only,
   );
@@ -251,8 +289,30 @@ function syncTranscript(w: Watch, found: Found) {
   if (!used) return;
   w.offset += used;
   const parsed = parseTranscript(lines, found.cwd);
-  if (!parsed.items.length && !parsed.results.length) return;
-  emit(w, { type: 'chat', id: w.termId, reset: false, items: parsed.items, results: parsed.results });
+  const queueChanged = updateQueue(w, parsed.queueOps);
+  if (!parsed.items.length && !parsed.results.length && !queueChanged) return;
+  emit(w, {
+    type: 'chat',
+    id: w.termId,
+    reset: false,
+    items: parsed.items,
+    results: parsed.results,
+    ...(queueChanged ? { queued: visibleQueue(w.queue) } : {}),
+  });
+}
+
+/** 한가한데 대기열이 남아 있으면 잠시 뒤 비운다(QUEUE_STALE_MS) */
+function sweepQueue(w: Watch, found: Found | null) {
+  if (found?.status !== 'idle' || !w.queue.length) {
+    w.queueIdleSince = 0;
+    return;
+  }
+  if (!w.queueIdleSince) w.queueIdleSince = Date.now();
+  if (Date.now() - w.queueIdleSince < QUEUE_STALE_MS) return;
+  const hadVisible = visibleQueue(w.queue).length > 0;
+  w.queue = [];
+  w.queueIdleSince = 0;
+  if (hadVisible) emit(w, { type: 'chat', id: w.termId, reset: false, items: [], results: [], queued: [] });
 }
 
 /** 대기 중이면 화면에서 선택 화면을 읽는다 — 읽지 못하면 선택지 없는 prompt(= 터미널에서 답 필요) */
@@ -302,6 +362,7 @@ async function tick(w: Watch) {
     } else {
       w.reportedMissing = false;
       syncTranscript(w, found);
+      sweepQueue(w, found);
     }
     await syncPrompt(w, found);
   } catch (err) {
@@ -342,6 +403,8 @@ export function subscribeChat(termId: string, listener: Listener): () => void {
       lastSearchAt: 0,
       promptKey: '',
       statusText: null,
+      queue: [],
+      queueIdleSince: 0,
     };
     w.timer = setInterval(() => void tick(w), TICK_MS);
     watches.set(termId, w);

@@ -452,6 +452,17 @@
     margin-top: 10px;
   }
 
+  // 대기열 — 일하는 중에 보내 아직 안 읽힌 내 메시지. 면 없이 점선 테두리 + 흐린 글자, 시각 자리엔 '대기 중'
+  &__bubble--queued {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-3);
+  }
+
+  &__row--queued &__time {
+    font-family: inherit;
+  }
+
   &__time {
     flex-shrink: 0;
     padding-bottom: 2px;

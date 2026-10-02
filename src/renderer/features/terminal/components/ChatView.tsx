@@ -26,7 +26,7 @@ import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
 import { Markdown } from '../../../components/Markdown';
 import { useCopy } from '../../../lib/useCopy';
-import type { ChatCommand, ChatItem, ChatPrompt } from '../../../../shared/terminal-protocol';
+import type { ChatCommand, ChatItem, ChatPrompt, ChatQueued } from '../../../../shared/terminal-protocol';
 import { getChatDraft, setChatDraft } from '../lib/chatDrafts';
 
 type AskItem = Extract<ChatItem, { kind: 'ask' }>;
@@ -54,6 +54,9 @@ const STOP_HOLD_MS = 6000;
 const COMMAND_LIMIT = 8;
 
 const isAgentTool = (t: ToolItem) => t.name === 'Agent' || t.name === 'Task';
+
+/** 대기열 기본값 — 렌더마다 새 배열이면 따라 내리기 effect 가 매번 돈다 */
+const NO_QUEUED: ChatQueued[] = [];
 
 /** 최신 TodoWrite 의 할 일 — 상세가 '[x] …' · '[~] …' · '[ ] …' 줄이다(main transcript.ts describeTool) */
 type Todo = { text: string; state: 'done' | 'doing' | 'todo' };
@@ -169,6 +172,7 @@ export function ChatView({
   prompt,
   busy,
   status = null,
+  queued = NO_QUEUED,
   commands = null,
   onRequestCommands,
   files = null,
@@ -192,6 +196,11 @@ export function ChatView({
   busy: boolean;
   /** 작업 중 상태 줄(화면에서 읽음) — 없으면 '작업 중…' */
   status?: string | null;
+  /**
+   * claude 가 일하는 중에 보내 **아직 안 읽힌** 내 메시지(대기열) — 맨 아래 회색 말풍선 '대기 중'.
+   * 읽히면 대기열에서 빠지고 보통 말풍선으로 온다(2026-10-02 사용자 요청 — 둘째 메시지가 늦게 떴다)
+   */
+  queued?: ChatQueued[];
   /** `/` 자동완성 목록 — null 이면 아직 안 받았다(입력창에서 / 를 치면 onRequestCommands) */
   commands?: ChatCommand[] | null;
   onRequestCommands?: () => void;
@@ -279,7 +288,7 @@ export function ChatView({
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
     else if (items.length > lastCount.current) setHasNew(true);
     lastCount.current = items.length;
-  }, [items, busy, prompt, status]);
+  }, [items, busy, prompt, status, queued]);
 
   // 목록 높이가 줄어도 바닥에 붙어 있었으면 마지막 내용을 계속 보인다 — 폰 키보드가 올라오면(셸이 `--mo-vh` 로
   // 줄어든다) 스크롤 위치는 그대로라 마지막 말풍선이 키보드 뒤로 밀려 내려갔다(2026-10-02 사용자 요청).
@@ -531,6 +540,12 @@ export function ChatView({
           {blocks.map((b) =>
             b.kind === 'tools' ? <ToolGroup key={b.key} tools={b.tools} /> : <ChatRow key={b.item.key} item={b.item} />,
           )}
+          {queued.map((q) => (
+            <div key={q.key} className="term-chat__row term-chat__row--me term-chat__row--queued">
+              <span className="term-chat__time">대기 중</span>
+              <div className="term-chat__bubble term-chat__bubble--me term-chat__bubble--queued">{q.text}</div>
+            </div>
+          ))}
           {composer &&
             (prompt ? (
               <PromptCard prompt={prompt} onKey={sendKey} onShowTerminal={onShowTerminal} />

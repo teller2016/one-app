@@ -1,6 +1,6 @@
 // claude 대화 기록 파서 테스트 — 줄 모양은 Claude Code 2.1.x jsonl 실측을 줄인 것이다.
 import { describe, expect, it } from 'vitest';
-import { RESULT_MAX, describeTool, parseTranscript } from './transcript';
+import { RESULT_MAX, applyQueueOps, describeTool, parseTranscript } from './transcript';
 
 const CWD = '/Users/me/proj';
 const line = (o: unknown) => JSON.stringify(o);
@@ -171,6 +171,78 @@ describe('parseTranscript', () => {
     expect(items).toEqual([{ kind: 'user', key: 'i', text: '이거 봐', images: 1 }]);
     expect(results[0].isError).toBe(true);
     expect(results[0].text.length).toBeLessThan(RESULT_MAX + 30);
+  });
+});
+
+// 일하는 중에 보낸 메시지 — 2026-10-02 실측 줄(Claude Code 2.1.286)을 줄인 것
+describe('대기열(일하는 중에 보낸 메시지)', () => {
+  const enqueue = (text: string, ts: string) => line({ type: 'queue-operation', operation: 'enqueue', timestamp: ts, content: text });
+  const make = (text: string, ts: string | undefined, n: number) => ({ key: `q:${ts}:${n}`, text, ts });
+
+  it('enqueue 는 대기열에 넣고, 진행 중인 턴에 끼워 읽히면(remove + queued_command) 보통 말풍선이 된다', () => {
+    const first = parseTranscript([enqueue('둘째 메시지', '2026-10-02T00:41:20.942Z')], CWD);
+    expect(first.items).toEqual([]);
+    const q = applyQueueOps([], first.queueOps, make);
+    expect(q.map((x) => x.text)).toEqual(['둘째 메시지']);
+
+    const later = parseTranscript(
+      [
+        line({ type: 'queue-operation', operation: 'remove', content: '둘째 메시지', reason: 'absorbed_mid_turn' }),
+        line({
+          type: 'attachment',
+          uuid: 'att1',
+          timestamp: '2026-10-02T00:41:20.942Z',
+          attachment: {
+            type: 'queued_command',
+            prompt: '둘째 메시지',
+            commandMode: 'prompt',
+            origin: { kind: 'human' },
+            timestamp: '2026-10-02T00:41:20.942Z',
+          },
+        }),
+      ],
+      CWD,
+    );
+    expect(applyQueueOps(q, later.queueOps, make)).toEqual([]);
+    expect(later.items).toEqual([{ kind: 'user', key: 'att1', text: '둘째 메시지', ts: '2026-10-02T00:41:20.942Z' }]);
+  });
+
+  it('턴이 끝나고 꺼내 가면(dequeue) 앞에서부터 빠진다', () => {
+    const { queueOps } = parseTranscript(
+      [enqueue('하나', 't1'), enqueue('둘', 't2'), line({ type: 'queue-operation', operation: 'dequeue' })],
+      CWD,
+    );
+    expect(applyQueueOps([], queueOps, make).map((x) => x.text)).toEqual(['둘']);
+  });
+
+  it('모르는 연산은 대기열을 비운다', () => {
+    const { queueOps } = parseTranscript([enqueue('하나', 't1'), line({ type: 'queue-operation', operation: 'popAll' })], CWD);
+    expect(applyQueueOps([], queueOps, make)).toEqual([]);
+  });
+
+  it('사람이 아닌 끼워 넣기(queued_command — 작업 알림 등)는 말풍선으로 만들지 않는다', () => {
+    const { items } = parseTranscript(
+      [line({ type: 'attachment', uuid: 'x', attachment: { type: 'queued_command', prompt: '<task-notification>…', origin: { kind: 'task' } } })],
+      CWD,
+    );
+    expect(items).toEqual([]);
+  });
+
+  it('백그라운드 작업 완료(<task-notification>)는 내 말풍선이 아니라 알림 줄', () => {
+    const { items } = parseTranscript(
+      [
+        line({
+          type: 'user',
+          uuid: 'n1',
+          message: {
+            content:
+              '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command "sleep 10" completed (exit code 0)</summary>\n</task-notification>',
+          },
+        }),
+      ],
+      CWD,
+    );
+    expect(items).toEqual([{ kind: 'notice', key: 'n1', text: '백그라운드 작업 — Background command "sleep 10" completed (exit code 0)' }]);
   });
 });
 
