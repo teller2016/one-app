@@ -733,6 +733,17 @@ export const SessionTabs = memo(function SessionTabs({
           rightActions
         ) : (
           <>
+            <Tooltip label="변경사항 (⌘B) — 선택한 워크트리의 git 상태·커밋·푸시">
+              <button
+                type="button"
+                className={`icon-btn${changesOpen ? ' terminal__changes-btn--on' : ''}`}
+                aria-label="변경사항"
+                aria-pressed={changesOpen}
+                onClick={onToggleChanges}
+              >
+                <Icon name="git-branch" size={16} />
+              </button>
+            </Tooltip>
             {editorName && (
               <Tooltip
                 label={
@@ -752,17 +763,6 @@ export const SessionTabs = memo(function SessionTabs({
                 </button>
               </Tooltip>
             )}
-            <Tooltip label="변경사항 (⌘B) — 선택한 워크트리의 git 상태·커밋·푸시">
-              <button
-                type="button"
-                className={`icon-btn${changesOpen ? ' terminal__changes-btn--on' : ''}`}
-                aria-label="변경사항"
-                aria-pressed={changesOpen}
-                onClick={onToggleChanges}
-              >
-                <Icon name="git-branch" size={16} />
-              </button>
-            </Tooltip>
           </>
         )}
       </div>
