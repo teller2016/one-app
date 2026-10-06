@@ -2,6 +2,7 @@
 // tmux 세션 이름(oneapp-<id>)만으론 에이전트·프로젝트·제목을 알 수 없어서,
 // 생성 시 여기 기록해 두고 앱 재시작 복원 때 tmux list-sessions 결과와 대조한다.
 // 항목 제거는 tmux 세션이 실제로 죽었을 때만 — 앱 종료(detach)는 유지한다.
+// 재부팅으로 tmux 서버째 사라진 세션은 `resume` 이 있으면 대화를 이어 다시 띄운다(resume.ts).
 import type { TerminalAgentId } from '../../../shared/types';
 import { runtimeFile } from '../../lib/devInstance';
 import { readUserJson, writeUserJson } from '../../lib/store';
@@ -20,6 +21,25 @@ export type PersistedSession = {
   createdAt: number;
   cols?: number; // 마지막 PTY 크기 — 복원 attach 를 이 크기로 해 TUI 리플로우를 없앤다
   rows?: number;
+  /** 그 안에서 돌던 claude — 있으면 재부팅 뒤 `--resume` 으로 다시 띄운다. 없으면(순수 셸) 정리한다 */
+  resume?: PersistedResume;
+};
+
+/** 재부팅 복원용 claude 재개 정보 — 턴이 끝날 때마다(대기 전이) resume.ts 가 갱신한다 */
+export type PersistedResume = {
+  /** 무엇으로 띄웠나 — femc 는 FEMC 에이전트·플러그인이 붙도록 femc 를 거쳐 재개해야 한다 */
+  launcher: 'claude' | 'femc';
+  sessionId: string;
+  /** 계정 폴더(CLAUDE_CONFIG_DIR) — `~/.claude` · `~/.claude-team` */
+  configDir: string;
+  /** claude 를 띄운 위치 — 재개는 이 폴더에서 해야 대화를 찾는다 (세션 cwd 와 다를 수 있다) */
+  cwd: string;
+  /** 대화 파일 — 복원 시 없으면(메시지를 보낸 적 없음) 재개 없이 새로 띄운다 */
+  file: string;
+  /** femc 스택(vue 등) — 고정해 두지 않으면 femc 가 위치로 판정하다 되물을 수 있다 */
+  stack?: string;
+  /** claude 를 권한 확인 없이 띄웠는지 — 사용자 셸 함수가 붙이는 옵션을 그대로 잇는다 */
+  skipPermissions?: boolean;
 };
 
 type SessionsFile = Record<string, PersistedSession>; // key = 세션 id
@@ -49,6 +69,17 @@ export function updatePersistedTitle(id: string, title: string): void {
   const meta = all[id];
   if (!meta || meta.title === title) return;
   writeUserJson(FILE, { ...all, [id]: { ...meta, title } });
+}
+
+/** 재개 정보 갱신 — undefined 면 지운다(claude 가 끝나 셸만 남음). 같으면 쓰지 않는다 */
+export function updatePersistedResume(id: string, resume: PersistedResume | undefined): void {
+  const all = read();
+  const meta = all[id];
+  if (!meta || JSON.stringify(meta.resume) === JSON.stringify(resume)) return;
+  const next = { ...meta };
+  if (resume) next.resume = resume;
+  else delete next.resume;
+  writeUserJson(FILE, { ...all, [id]: next });
 }
 
 // ── 크기 저장은 트레일링 디바운스 ──

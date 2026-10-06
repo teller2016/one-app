@@ -43,6 +43,7 @@ import {
   writeSession,
 } from './pty';
 import { clearPushSubscriptions, sendWaitingPush } from './push';
+import { trackResume } from './resume';
 import { initTmux } from './tmux';
 import {
   canPushToPhone,
@@ -257,6 +258,8 @@ export function registerTerminalIpc() {
   onPtyResized((id, cols, rows) =>
     broadcast('terminal:resized', { id, cols, rows })
   );
+  // 재부팅 복원용 — 턴이 끝날 때마다 그 안의 claude 재개 정보를 sidecar 에 적는다(복원은 restoreSessions)
+  trackResume();
   onServerChanged(() => broadcast('terminal:server:changed'));
 
   // 입력대기 알림 — 뱃지(사이드바·독)는 sessions 브로드캐스트가 담당하고, 여기선 강도별 추가 신호만

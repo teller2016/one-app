@@ -5,6 +5,7 @@
 // tmux 백엔드(설치 시): node-pty 가 셸 대신 tmux 클라이언트를 spawn 한다.
 // 실제 셸은 tmux 서버(-L oneapp) 소유라 앱을 재시작해도 세션·에이전트가 살아있고,
 // 시작 시 restoreSessions() 가 sidecar(terminal-sessions.json)와 대조해 재접속한다.
+// 재부팅으로 tmux 서버째 사라진 세션은 그 안의 claude·femc 대화를 이어 다시 띄운다(resume.ts).
 // tmux 미설치면 기존 직접 spawn — 이 경우 세션은 앱 수명과 같다(영속 없음).
 import * as pty from 'node-pty';
 import crypto from 'node:crypto';
@@ -21,6 +22,7 @@ import { shQuote } from '../../lib/util';
 import { describeInput, termDebugOn, termLog } from './debug';
 import { getProject } from '../projects/store';
 import { agentCommand } from './agents';
+import { resumeCommand } from './resumeCommand';
 import {
   listPersisted,
   flushPersistedSizes,
@@ -28,6 +30,8 @@ import {
   savePersisted,
   updatePersistedSize,
   updatePersistedTitle,
+  type PersistedResume,
+  type PersistedSession,
 } from './sessions-store';
 import {
   getTmuxBin,
@@ -703,8 +707,9 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
 
 /**
  * 앱 시작 시 영속 세션 복원 — tmux 생존 세션(oneapp-*)과 sidecar 를 대조한다.
- * sidecar 만 남은 항목은 정리(크래시로 tmux 서버까지 죽은 경우)하고,
- * sidecar 없는 고아 tmux 세션도 셸로 복원한다(사용자가 잃는 것보단 낫다).
+ * sidecar 만 남은 항목 = 앱이 꺼져 있는 동안 tmux 서버째 사라진 세션(재부팅·크래시)이다 — 그 안에서
+ * claude·femc 가 돌았으면(`resume` 기록, resume.ts) 대화를 이어 같은 id 로 다시 띄우고(reviveSession),
+ * 순수 셸이면 정리한다. sidecar 없는 고아 tmux 세션도 셸로 복원한다(사용자가 잃는 것보단 낫다).
  */
 export async function restoreSessions(): Promise<void> {
   const bin = await initTmux();
@@ -714,20 +719,36 @@ export async function restoreSessions(): Promise<void> {
     live.map(sessionIdFromTmuxName).filter((v): v is string => !!v)
   );
   const persisted = new Map(listPersisted().map((p) => [p.id, p]));
-  for (const id of persisted.keys()) {
-    if (!liveIds.has(id)) removePersisted(id);
+  const revivable: { meta: PersistedSession; resume: PersistedResume }[] = [];
+  for (const meta of persisted.values()) {
+    if (liveIds.has(meta.id)) continue;
+    // 위치가 사라졌으면(워크트리 삭제) 이어 띄울 곳이 없다
+    if (meta.resume && fs.existsSync(meta.cwd) && fs.existsSync(meta.resume.cwd)) {
+      revivable.push({ meta, resume: meta.resume });
+    } else {
+      removePersisted(meta.id);
+    }
   }
   const now = Date.now();
   let restored = false;
   // ⚠️ list-sessions 는 세션 이름(oneapp-<랜덤 id>)순으로 나열해 생성 순서와 무관하다 —
   // 그대로 Map 에 담으면 삽입 순서(= 탭 기본 순서)가 재시작마다 뒤섞인다(2026-09-15 신고).
   // sidecar 의 createdAt 순으로 복원해 생성 순서를 지킨다. 메타 없는 고아 세션은 뒤로.
+  // 되살릴 세션도 같은 줄에 세운다 — 살아남은 세션과 섞여 있던 자리 그대로.
   const createdAtOf = (name: string): number => {
     const id = sessionIdFromTmuxName(name);
     return (id ? persisted.get(id)?.createdAt : undefined) ?? Number.MAX_SAFE_INTEGER;
   };
-  const ordered = [...live].sort((a, b) => createdAtOf(a) - createdAtOf(b));
-  for (const name of ordered) {
+  const ordered = [
+    ...live.map((name) => ({ at: createdAtOf(name), name })),
+    ...revivable.map((r) => ({ at: r.meta.createdAt, revive: r })),
+  ].sort((a, b) => a.at - b.at);
+  for (const entry of ordered) {
+    if ('revive' in entry) {
+      if (reviveSession(bin, entry.revive.meta, entry.revive.resume, now)) restored = true;
+      continue;
+    }
+    const name = entry.name;
     const id = sessionIdFromTmuxName(name);
     if (!id || sessions.has(id)) continue;
     const meta = persisted.get(id);
@@ -767,6 +788,57 @@ export async function restoreSessions(): Promise<void> {
     ensureStatusTimer();
     emitChanged();
   }
+}
+
+/**
+ * 재부팅 등으로 tmux 서버째 사라진 claude·femc 세션을 **같은 id** 로 다시 띄운다 — 렌더러의 탭 순서·분할
+ * 레이아웃·팝아웃 배정이 세션 id 로 저장돼 있어 그대로 이어진다. 명령은 `resumeCommand`(resumeCommand.ts)가
+ * 조립한다 — `--resume <sessionId>` 로 그 대화를 선택기 없이 연다. 띄우지 못하면 sidecar 를 정리한다.
+ */
+function reviveSession(
+  bin: string,
+  meta: PersistedSession,
+  resume: PersistedResume,
+  now: number
+): boolean {
+  const hasTranscript = fs.existsSync(resume.file);
+  const command = resumeCommand(resume, { sessionCwd: meta.cwd, hasTranscript });
+  const shell = process.env.SHELL ?? '/bin/zsh';
+  const tmuxName = tmuxSessionName(meta.id);
+  const cols = meta.cols ?? 80;
+  const rows = meta.rows ?? 24;
+  let proc: pty.IPty;
+  try {
+    proc = pty.spawn(
+      bin,
+      tmuxNewSessionArgs(tmuxName, meta.cwd, launchShellCommand(shell, command)),
+      ptyOptions(meta.cwd, cols, rows)
+    );
+  } catch (e) {
+    console.error(`[terminal] 세션 되살리기 실패 (${meta.id}):`, e);
+    removePersisted(meta.id);
+    return false;
+  }
+  const session = makeSession({
+    id: meta.id,
+    proc,
+    tmuxName,
+    title: meta.title,
+    cwd: meta.cwd,
+    cols,
+    rows,
+    agentId: meta.agentId,
+    projectId: meta.projectId,
+    projectName: meta.projectName,
+    createdAt: meta.createdAt,
+    // 막 띄운 claude 가 대화를 다시 그리며 만드는 대기 — 생성과 같은 유예로 알림 없이 상태만
+    suppressNotifyUntil: now + CREATE_NOTIFY_GRACE_MS,
+  });
+  session.notifiedSinceInput = true;
+  sessions.set(meta.id, session);
+  wireSession(session);
+  life('revive', { id: meta.id, launcher: resume.launcher, resumed: hasTranscript, command });
+  return true;
 }
 
 /**

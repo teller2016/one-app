@@ -23,6 +23,19 @@ tmux 설치 시 node-pty 가 `$SHELL -il` 대신 **tmux 클라이언트**(`tmux 
 - ⚠️ tmux 타깃은 `=이름` 정확 매칭을 쓸 것 — 단 target-session 계열(has/kill/attach)에서만 검증됨, 3.7b 에서 `send-keys` 등 pane 타깃엔 `=` 가 안 먹는 것 실측.
 - ⚠️ **`list-sessions` 는 세션 이름순**으로 돌려준다 — 이름이 `oneapp-<랜덤 id>` 라 사실상 무작위 순서다. `restoreSessions()` 가 그 순서대로 Map 에 담으면(Map 삽입 순서 = 탭 기본 순서) **앱을 재시작할 때마다 탭 순서가 뒤섞였다**(2026-09-15). 지금은 sidecar 의 `createdAt` 순으로 정렬해 담는다.
 
+### 재부팅 복원 — claude·femc 대화를 이어 다시 띄운다 (2026-10-06)
+사용자 요청("컴퓨터가 껐다 켜져도 세션을 유지할 방법")으로 넣었다. 프로세스는 전원과 함께 죽으므로 **다시 띄워 잇는** 방식이다(tmux-resurrect 와 같은 발상). 예전엔 sidecar 만 남은 항목(= 앱이 꺼진 동안 tmux 서버째 사라진 세션)을 그냥 지웠다.
+- **기록**(`resume.ts`): 세션이 busy 를 벗어날 때마다(2초 정착) `claudeFiles.findClaude` 로 그 안의 claude 를 찾아 sidecar `resume` 에 sessionId·계정 폴더·claude 의 cwd·대화 파일·실행기를 적는다. 매 턴 적으므로 강제 종료·방전에도 남고 `/clear` 를 따라간다. claude 가 없으면 지운다 — **순수 셸 탭은 복원하지 않는다**(사용자 결정). ⚠️ 'waiting' 전이만 보던 첫 구현은 셸 탭에서 손으로 띄운 claude 를 놓친다(셸은 waiting 이 없다).
+- **실행기 판별**(`resumeCommand.ts detectLauncher`): `ps -o args=` 의 `--plugin-dir`/`--settings` 값에 `/.femc/` 가 있으면 femc, 스택은 `…/stacks/<id>/` 에서. 실측(설치본에서 돌던 femc 세션 5개 모두 `femc`/`vue`): `claude --agent metacommerce-orchestrator --plugin-dir ~/.femc/generations/g-…/stacks/vue/plugin --settings … <프롬프트> --add-dir … --tools … --dangerously-skip-permissions`.
+- **다시 띄우기**(`pty.ts reviveSession`): **같은 id** 의 tmux 세션을 새로 만든다 — 탭 순서·분할·팝아웃 배정이 id 로 저장돼 있어 그대로 이어진다. 명령:
+  - claude = `CLAUDE_CONFIG_DIR=<계정> command claude [--dangerously-skip-permissions] --resume <id>` — `command` 로 계정 선택 셸 함수를 건너뛴다(jira/work.ts 와 같은 우회). id 를 붙인 `--resume` 은 선택기 없이 그 대화를 연다.
+  - femc = `… FEMC_SKIP_UPDATE_CHECK=1 command femc run --stack <s> --resume <id>`. ⚠️ `femc --resume` 은 첫 인자가 플래그라 **메뉴로 빠진다** — `run` 서브커맨드는 나머지 인자를 메뉴 없이 claude 로 넘기고 **지금 설치된 세대**로 플러그인을 다시 조립한다(옛 세대 경로를 재생하면 업데이트 뒤 사라진 경로를 가리킨다). `--stack` 은 런처가 먼저 떼어 낸다. react·jsp(`scopes-in-repo`) 스택이면 femc 가 scope 를 한 번 물을 수 있다(vue 는 `repo-per-scope` 라 안 묻는다 — `selectActiveScope`).
+  - 대화 파일이 없으면(메시지를 보낸 적 없음) resume 없이 새로 띄운다. claude 의 cwd 가 세션 cwd 와 다르면 `cd` 후 실행. 위치가 사라졌으면(워크트리 삭제) 되살리지 않고 정리한다.
+  - Jira [작업] 세션의 `--add-dir`(티켓 폴더)은 다시 붙이지 않는다 — `ps` 가 argv 를 공백으로 이어 붙여 공백 든 경로를 복원할 수 없고, 티켓은 이미 대화에 들어가 있다.
+- `claude --resume <id>` 는 **같은 sessionId 를 이어 쓴다**(실측) — 되살린 뒤의 기록도 같은 id 라 몇 번 재부팅해도 같은 대화로 이어진다.
+- dev 검증(2026-10-06): claude 세션 + 셸 세션 생성 → 메시지 1개 → sidecar `resume` 기록 확인 → dev 정상 종료 → `tmux -L oneapp-dev kill-server` → 재시작 → `[life] event=revive … resumed=true`, 같은 id·제목으로 계정 질문 없이 이전 대화가 보이고 셸 세션은 정리됨. 상태는 waiting·seen(연두 아님), 렌더러·main 오류 0.
+- 🔲 종료 순서 가정: 정상 종료·재시작에선 앱 `before-quit`(detach)이 tmux 서버보다 먼저라 sidecar 가 남는다. 앱이 살아 있는 채 tmux 서버만 죽으면 지금처럼 `finalizeExit` 가 sidecar 를 지운다(복원 대상 아님).
+
 ## 세션 오케스트레이터 (2026-08 개편)
 상단 탭바 → **좌측 세션 패널**(행 = 상태점 + 제목 + `에이전트 · 상태` 서브라벨) + 우측 xterm. 새 세션은 [+] 모달에서 **위치(프로젝트 레지스트리) + 에이전트**(`agents.ts` — 셸·claude·femc·codex·gemini, `zsh -lc "whence -p"` 1회 캐시로 설치 감지 → **미설치는 선택지에서 조용히 제외**, 안내 문구 없음) 선택 → 셸 spawn 후 명령을 자동 입력(에이전트가 죽어도 셸 세션은 유지).
 

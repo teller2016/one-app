@@ -25,6 +25,7 @@ paths:
 - ⚠️ `=이름` 정확 매칭은 **target-session 계열(has/kill/attach)만** — pane 타깃(`send-keys`)엔 안 먹어 pane id 를 캐시한다.
 - [x] = `kill-session`(sidecar 제거), `before-quit` 은 **detach 만**. 외부 detach 면 `has-session` 후 재attach. 미설치면 직접 spawn 폴백(`terminal:backend`).
 - ⚠️ `restoreSessions()` 는 sidecar `createdAt` 순 정렬 — `list-sessions` 는 이름순(=무작위)이라 탭 순서가 뒤섞인다.
+- **재부팅 복원**(2026-10-06): sidecar 만 남은 세션(앱이 꺼진 동안 tmux 서버째 사라짐)은 `resume` 기록이 있으면 **같은 id** 로 되살리고(`reviveSession` — 탭 순서·분할·팝아웃이 id 로 이어진다), 없으면(순수 셸) 정리. 기록은 `resume.ts` 가 **busy 를 벗어날 때마다** — ⚠️ waiting 만 보면 셸 탭의 claude 를 놓친다. 명령은 `resumeCommand.ts`(+테스트) — ⚠️ `command claude`·`command femc` + `CLAUDE_CONFIG_DIR`(계정 선택 함수 우회), ⚠️ femc 는 `femc run --stack <s> --resume <id>`(`femc --resume` 은 메뉴로 빠진다). 상세: 노트 '재부팅 복원'.
 - 상세: 노트 '세션 영속화 — tmux 백엔드'.
 
 ## 자동 실행 명령 (에이전트 시작)
