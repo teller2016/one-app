@@ -104,6 +104,7 @@ type Session = {
   outputRunSince: number; // 지금 이어지는 출력 구간의 시작 시각 — '실작업' 판정 기준
   lastMouseAt: number; // 마지막 마우스 리포트(휠·클릭) 시각 — "보고 있음" 신호
   working: boolean; // 출력이 이어지는 것이 확인된 busy — LNB 로딩 표시용
+  seen: boolean; // waiting 을 사용자가 봤는지 — false = '확인 전'(연두). 대기로 들어올 때 정한다(setStatus)
   notifiedSinceInput: boolean; // 이번 입력(턴)에 대한 waiting 알림 기회를 이미 소진했는지
   lastInputSubmit: boolean; // 마지막 입력에 제출(\r)이 있었는지 — 게이트 유예 재판정 대상 여부
   lastInputKind: string; // 진단용 — 마지막 입력의 '종류' 요약 (debug.ts, 로그 꺼져 있으면 빈 값)
@@ -158,6 +159,7 @@ const toInfo = (s: Session): TerminalSessionInfo => ({
   projectName: s.projectName,
   status: s.status,
   working: s.working,
+  seen: s.seen,
   createdAt: s.createdAt,
 });
 
@@ -176,6 +178,11 @@ function setStatus(s: Session, status: TerminalSessionStatus, why: string) {
       notified: s.notifiedSinceInput,
     });
   }
+  // 대기로 들어오면 '확인 전'(seen=false) — 새로 끝난 일이다. 예외는 생성·복원 grace 안의 대기:
+  // 기동 화면·복원 redraw 가 만든 대기는 새 소식이 아니라 처음부터 확인함으로 둔다(재시작마다 전 세션이 연두가 된다).
+  // 단 grace 안이라도 **실작업(working) 끝의 대기**는 진짜 완료라 확인 전으로 둔다.
+  // 보고 있는 세션이면 렌더러·폰이 곧바로 markSessionSeen 으로 올린다.
+  if (status === 'waiting') s.seen = !s.working && Date.now() < s.suppressNotifyUntil;
   s.status = status;
   if (status !== 'busy') s.working = false; // busy 를 벗어나면 작업중 표시를 내린다
   emitChanged();
@@ -481,6 +488,7 @@ function makeSession(init: {
     outputRunSince: 0,
     lastMouseAt: 0,
     working: false,
+    seen: true,
     notifiedSinceInput: false,
     lastInputKind: '',
     lastInputSubmit: false,
@@ -886,6 +894,19 @@ export function markAnswerSubmitted(id: string): void {
   s.lastInputSubmit = true;
   s.suppressNotifyUntil = 0;
   if (s.status === 'waiting') setStatus(s, 'idle', 'answer');
+}
+
+/**
+ * 사용자가 대기 중인 세션을 봤다 — '확인 전'(연두)을 '입력 대기'(주황)로 내린다.
+ * 부르는 쪽: 데스크톱·팝아웃(포커스된 창에 잠깐 이상 보였을 때 — 렌더러 `useMarkSeen`) · 폰(`server.ts` 'seen').
+ * 대기가 아니거나 이미 봤으면 아무것도 하지 않는다(같은 세션을 여러 창이 보고해도 방송은 한 번).
+ */
+export function markSessionSeen(id: string): void {
+  const s = sessions.get(id);
+  if (!s || s.status !== 'waiting' || s.seen) return;
+  s.seen = true;
+  termLog('status', { id: s.id, from: 'waiting', to: 'waiting+seen', why: 'seen' });
+  emitChanged();
 }
 
 export function writeSession(id: string, data: string): void {

@@ -25,6 +25,7 @@ const sess = (id: string, cwd = '/a', status: TerminalSessionInfo['status'] = 'i
   agentId: 'claude',
   status,
   working: false,
+  seen: true,
   createdAt: 0,
 });
 

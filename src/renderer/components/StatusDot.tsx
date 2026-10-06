@@ -1,12 +1,13 @@
 /**
- * 상태 점 — busy(경고색+펄스) · ok · fail · idle · run(초록+펄스, 에이전트 작업 중) · wait(주황, 펄스 없음 — 사람을 부르는 입력 대기).
+ * 상태 점 — busy(경고색+펄스) · ok · fail · idle · run(초록+펄스, 에이전트 작업 중) · wait(주황, 펄스 없음 — 사람을 부르는 입력 대기)
+ * · fresh(연두 — 끝났는데 아직 안 본 세션).
  * sm 6px(뱃지 내 기본) / md 8px(VPN 위젯 등 단독 사용).
  */
 export function StatusDot({
   status,
   md = false,
 }: {
-  status: 'busy' | 'ok' | 'fail' | 'idle' | 'run' | 'wait';
+  status: 'busy' | 'ok' | 'fail' | 'idle' | 'run' | 'wait' | 'fresh';
   md?: boolean;
 }) {
   return (

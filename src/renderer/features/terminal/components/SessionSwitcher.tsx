@@ -30,8 +30,9 @@ import { initials, tileColor } from '../lib/workspace';
 
 const REFRESH_MS = 3000;
 
-/** 상태 → 공용 뱃지 색 (busy = 주황 · ok = 초록 · idle = 회색 — 탭 점과 같은 색) */
-const PHASE_BADGE: Record<Phase, 'busy' | 'ok' | 'idle'> = {
+/** 상태 → 공용 뱃지 색 (fresh = 연두 · busy = 주황 · ok = 초록 · idle = 회색 — 탭 점과 같은 색) */
+const PHASE_BADGE: Record<Phase, 'fresh' | 'busy' | 'ok' | 'idle'> = {
+  fresh: 'fresh',
   wait: 'busy',
   run: 'ok',
   idle: 'idle',

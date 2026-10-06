@@ -33,6 +33,7 @@ import {
   worktreeRef,
 } from '../lib/workspace';
 import type { WorkspaceSelection } from '../lib/workspace';
+import { SESSION_DOT_LABEL, sessionDot } from '../lib/sessionState';
 
 /**
  * 행에 '작업중' 을 켤 세션인가 — **에이전트 세션(claude 등)의 실작업만** 센다.
@@ -43,6 +44,21 @@ import type { WorkspaceSelection } from '../lib/workspace';
  */
 const isAgentBusy = (s: TerminalSessionInfo) =>
   s.working && !!s.agentId && s.agentId !== 'shell';
+
+/** 위치(워크트리·워크스페이스)별 집계 — fresh = 확인 전 대기가 있다 · waiting = 확인한 대기가 있다 */
+type NavAgg = { count: number; fresh: boolean; waiting: boolean; busy: boolean };
+const NO_AGG: NavAgg = { count: 0, fresh: false, waiting: false, busy: false };
+
+/**
+ * 세션 수 뱃지 색 — 숫자는 늘 전체 세션 수, 색만 대기 상태를 따른다.
+ * ⚠️ **확인 전(연두)이 하나라도 있으면 그 색이 이긴다**(2026-10-06 사용자 지시) — 확인한 대기(주황)는 그다음.
+ */
+const waitTone = (a: NavAgg, base: string) =>
+  a.fresh ? ` ${base}--fresh` : a.waiting ? ` ${base}--waiting` : '';
+
+/** 툴팁·접근성 꼬리 — ' · 확인 전 · 입력 대기' */
+const waitLabel = (a: NavAgg) =>
+  `${a.fresh ? ` · ${SESSION_DOT_LABEL.fresh}` : ''}${a.waiting ? ` · ${SESSION_DOT_LABEL.wait}` : ''}`;
 
 /** 아크의 라운드 사각 반지름 — 26px 이니셜 타일(`--r-tile` 7) 을 1px 바깥에서 감싸 7 + 1 = 8.
  *  SVG 기하는 CSS 변수로 못 쓰므로 여기서만 숫자로 둔다(토큰이 바뀌면 같이 고칠 것). */
@@ -208,38 +224,36 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   const dropClass = (ws: TerminalWorkspace, base: string) =>
     drop?.id === ws.id ? ` ${base}--drop-${drop.after ? 'after' : 'before'}` : '';
 
-  // 위치(cwd)별 세션 수·입력대기 여부를 한 번에 집계한다 — 예전엔 워크스페이스 행과
+  // 위치(cwd)별 세션 수·대기 여부를 한 번에 집계한다 — 예전엔 워크스페이스 행과
   // 워크트리 행마다 sessions 를 통째로 훑어 (워크트리 수 × 세션 수) 만큼 돌았다.
   // 세션 상태 브로드캐스트마다 트리가 다시 그려지는 자리라 훑는 횟수가 그대로 비용이다.
+  // fresh = 확인 전(끝났는데 안 본) 대기 · waiting = 확인한 대기 — 둘 다 있으면 색은 fresh 가 이긴다(waitTone)
   const byCwd = useMemo(() => {
-    const map = new Map<string, { count: number; waiting: boolean; busy: boolean }>();
+    const map = new Map<string, NavAgg>();
     for (const s of sessions) {
-      const busy = isAgentBusy(s);
-      const cur = map.get(s.cwd);
-      if (cur) {
-        cur.count += 1;
-        cur.waiting ||= s.status === 'waiting';
-        cur.busy ||= busy;
-      } else {
-        map.set(s.cwd, { count: 1, waiting: s.status === 'waiting', busy });
-      }
+      const dot = sessionDot(s);
+      const cur = map.get(s.cwd) ?? { count: 0, fresh: false, waiting: false, busy: false };
+      cur.count += 1;
+      cur.fresh ||= dot === 'fresh';
+      cur.waiting ||= dot === 'wait';
+      cur.busy ||= isAgentBusy(s);
+      map.set(s.cwd, cur);
     }
     return map;
   }, [sessions]);
 
   /** 워크스페이스 아래 전 워크트리의 세션 합계 (부모 행의 개수 뱃지·대기 색·작업중) */
-  const wsAgg = (ws: TerminalWorkspace) => {
-    let count = 0;
-    let waiting = false;
-    let busy = false;
+  const wsAgg = (ws: TerminalWorkspace): NavAgg => {
+    const out: NavAgg = { count: 0, fresh: false, waiting: false, busy: false };
     for (const wt of worktrees[ws.id] ?? []) {
       const a = byCwd.get(wt.path);
       if (!a) continue;
-      count += a.count;
-      waiting ||= a.waiting;
-      busy ||= a.busy;
+      out.count += a.count;
+      out.fresh ||= a.fresh;
+      out.waiting ||= a.waiting;
+      out.busy ||= a.busy;
     }
-    return { count, waiting, busy };
+    return out;
   };
 
   /**
@@ -321,7 +335,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     return (
       <div className="terminal__list" role="list">
         {tiles.map((ws) => {
-          const { count: wsCount, waiting, busy } = wsAgg(ws);
+          const wsA = wsAgg(ws);
+          const { count: wsCount, busy } = wsA;
           const isOpen = expanded.includes(ws.id);
           const wsActive =
             selection?.kind === 'worktree' && selection.wsId === ws.id;
@@ -335,7 +350,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
             >
               <Tooltip
                 side="right"
-                label={`${ws.name} — 세션 ${wsCount}개${busy ? ' · 작업 중' : ''}${waiting ? ' · 입력 대기' : ''} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
+                label={`${ws.name} — 세션 ${wsCount}개${busy ? ' · 작업 중' : ''}${waitLabel(wsA)} · 클릭: 워크트리 ${isOpen ? '접기' : '펼치기'}`}
               >
                 {/* 펼침 모드의 행 클릭과 같은 동작 — 워크트리 타일 목록을 접고 편다
                     (예전엔 첫 워크트리를 선택했는데 두 모드의 클릭 의미가 달라 혼란 — 2026-08-06) */}
@@ -366,10 +381,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                   {/* 자식 워크트리에 켜진 세션 합계 — 부모만 보여도 사용 중임을 알 수 있게 */}
                   {wsCount > 0 && (
                     <span
-                      className={
-                        'terminal__wt-sq-count' +
-                        (waiting ? ' terminal__wt-sq-count--waiting' : '')
-                      }
+                      className={'terminal__wt-sq-count' + waitTone(wsA, 'terminal__wt-sq-count')}
                       aria-hidden="true"
                     >
                       {wsCount}
@@ -392,17 +404,15 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                       wsId: ws.id,
                       path: wt.path,
                     });
-                    const agg = byCwd.get(wt.path);
-                    const count = agg?.count ?? 0;
-                    const wtWaiting = agg?.waiting ?? false;
-                    const wtBusy = agg?.busy ?? false;
+                    const agg = byCwd.get(wt.path) ?? NO_AGG;
+                    const { count, busy: wtBusy } = agg;
                     return (
                       <Tooltip
                         key={wt.path}
                         side="right"
                         label={`${worktreeLabel(wt)}${
                           count > 0 ? ` · 세션 ${count}개` : ''
-                        }${wtBusy ? ' · 작업 중' : ''}${wtWaiting ? ' · 입력 대기' : ''}`}
+                        }${wtBusy ? ' · 작업 중' : ''}${waitLabel(agg)}`}
                       >
                         <button
                           type="button"
@@ -425,10 +435,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                           {wtBusy && <BusyArc size={24} />}
                           {count > 0 && (
                             <span
-                              className={
-                                'terminal__wt-sq-count' +
-                                (wtWaiting ? ' terminal__wt-sq-count--waiting' : '')
-                              }
+                              className={'terminal__wt-sq-count' + waitTone(agg, 'terminal__wt-sq-count')}
                               aria-hidden="true"
                             >
                               {count}
@@ -474,7 +481,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     <div className="terminal__list">
       {workspaces.map((ws) => {
         const isOpen = expanded.includes(ws.id);
-        const { count: wsCount, waiting: wsWaiting, busy: wsBusy } = wsAgg(ws);
+        const wsA = wsAgg(ws);
+        const { count: wsCount, busy: wsBusy } = wsA;
         const list = worktrees[ws.id];
         // 일반 폴더 워크스페이스(git 저장소 아님) — main 이 합성한 단일 항목이라 브랜치·워크트리가 없다
         const plain = list?.[0]?.plain === true;
@@ -541,13 +549,10 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                         aria-label="작업 중"
                       />
                     )}
-                    {/* 자식 워크트리에 켜진 세션 합계 — 입력 대기가 있으면 주황 */}
+                    {/* 자식 워크트리에 켜진 세션 합계 — 확인 전이 하나라도 있으면 연두, 아니면 입력 대기 주황 */}
                     {wsCount > 0 && (
                       <span
-                        className={
-                          'terminal__ws-count' +
-                          (wsWaiting ? ' terminal__ws-count--waiting' : '')
-                        }
+                        className={'terminal__ws-count' + waitTone(wsA, 'terminal__ws-count')}
                       >
                         ({wsCount})
                       </span>
@@ -626,10 +631,9 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                     wsId: ws.id,
                     path: wt.path,
                   });
-                  const agg = byCwd.get(wt.path);
-                  const count = agg?.count ?? 0;
-                  const waiting = agg?.waiting ?? false;
-                  const busy = agg?.busy ?? false;
+                  const agg = byCwd.get(wt.path) ?? NO_AGG;
+                  const { count, busy } = agg;
+                  const waitDot = agg.fresh ? 'fresh' : agg.waiting ? 'wait' : null;
                   return (
                     <div
                       key={wt.path}
@@ -637,7 +641,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                         'terminal__wt-row',
                         active ? 'terminal__wt-row--active' : '',
                         wt.missing ? 'terminal__wt-row--missing' : '',
-                        waiting ? 'terminal__wt-row--waiting' : '',
+                        waitDot ? 'terminal__wt-row--waiting' : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -669,10 +673,15 @@ export const WorkspaceNav = memo(function WorkspaceNav({
                             aria-label="작업 중"
                           />
                         )}
-                        {/* 입력 대기 — 주황 점 (목업). 세션 수 옆 숫자만으론 눈에 안 띈다 */}
-                        {waiting && (
-                          <span className="terminal__wt-wait" role="img" aria-label="입력 대기">
-                            <StatusDot status="wait" />
+                        {/* 대기 점 (목업) — 확인 전이 하나라도 있으면 연두, 아니면 입력 대기 주황.
+                            세션 수 옆 숫자만으론 눈에 안 띈다 */}
+                        {waitDot && (
+                          <span
+                            className="terminal__wt-wait"
+                            role="img"
+                            aria-label={SESSION_DOT_LABEL[waitDot]}
+                          >
+                            <StatusDot status={waitDot} />
                           </span>
                         )}
                       </button>

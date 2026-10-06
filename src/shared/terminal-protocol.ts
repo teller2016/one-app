@@ -58,6 +58,8 @@ export type TermClientMsg =
       rows?: number;
     }
   | { type: 'kill'; id: string }
+  // 폰이 대기 세션을 보고 있다(화면 켜짐·터미널 탭·그 세션) — '확인 전' → '입력 대기' (main `pty.markSessionSeen`)
+  | { type: 'seen'; id: string }
   // ── 채팅 보기 — claude 대화 기록(jsonl)을 말풍선으로 (main `chat.ts`) ──
   | { type: 'chat-open'; id: string } // 이 세션의 대화를 구독 — 응답은 'chat'(reset) 후 증분
   | { type: 'chat-close' }

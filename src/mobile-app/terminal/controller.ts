@@ -22,7 +22,7 @@ import type {
   TermWorkspaceNode,
 } from '../../shared/terminal-protocol';
 import type { TerminalPreset, TerminalSessionInfo } from '../../shared/types';
-import { TERMINAL_AGENT_NAMES, agentIdFromCommand } from '../../shared/types';
+import { SEEN_DWELL_MS, TERMINAL_AGENT_NAMES, agentIdFromCommand, isUnseenWait } from '../../shared/types';
 import {
   KEYBOARD_MIN_DELTA,
   KEY_SEQ,
@@ -160,6 +160,9 @@ class MoTerminalController {
   private listeners = new Set<Listener>();
   private noticeListeners = new Set<(text: string) => void>();
   private stable = new StableWaiting(3000, () => this.onWaitingChanged([]));
+  /** '확인 전' 세션을 보고 있다 — SEEN_DWELL_MS 뒤 서버에 알린다(syncSeen) */
+  private seenTimer: ReturnType<typeof setTimeout> | null = null;
+  private seenFor: string | null = null;
   private state: MoTermState;
 
   constructor() {
@@ -266,6 +269,7 @@ class MoTerminalController {
         this.releaseSize(); // 화면 꺼짐·앱 전환 — PC 가 제 크기로 돌아가게
       }
       this.syncWakeLock();
+      this.syncSeen();
     });
     this.baseViewportH = this.viewportH();
     this.syncNotifyBar();
@@ -371,6 +375,7 @@ class MoTerminalController {
       this.releaseSize(); // 다른 탭으로 갔다 — 안 보는 동안 PC 화면을 폰 크기로 묶어 두지 않는다
     }
     this.syncWakeLock();
+    this.syncSeen();
   }
 
   /**
@@ -432,6 +437,7 @@ class MoTerminalController {
       this.reconnectDelay = 1000;
       this.set({ connected: true, statusText: '연결됨' });
       this.syncWakeLock();
+      this.syncSeen();
       // 작업 영역 트리를 한 번 받아 둔다 — 상단 타일 색과 변경 탭 대상(세션 위치 → 워크트리)이 쓴다.
       // 경량 조회(listWorktreesBrief)라 접속마다 한 번은 부담이 없다. 시트를 열 때 다시 갱신한다.
       this.send({ type: 'workspaces' });
@@ -474,6 +480,7 @@ class MoTerminalController {
         this.syncView();
         this.onWaitingChanged(this.stable.update(sessions));
         this.syncWakeLock();
+        this.syncSeen();
         this.autoAttach();
         break;
       }
@@ -522,6 +529,7 @@ class MoTerminalController {
         this.syncView();
         this.syncBottom();
         this.syncWakeLock();
+        this.syncSeen();
         void this.closeNotificationsFor((id) => id === msg.id); // 열어 봤으면 그 알림은 용건이 끝났다
         break;
       }
@@ -1279,6 +1287,32 @@ class MoTerminalController {
     const s = this.wakeSentinel;
     this.wakeSentinel = null;
     void s?.release().catch(() => undefined);
+  }
+
+  /**
+   * 보고 있는 세션의 '확인 전'(연두)을 '입력 대기'(주황)로 — 셸이 터미널 탭 + 화면 켜짐 + 그 세션(터미널·채팅 보기
+   * 모두)이 SEEN_DWELL_MS 넘게 이어지면 서버에 알린다(main `pty.markSessionSeen` → 데스크톱·폰 전부에 방송).
+   * 데스크톱의 `useMarkSeen` 과 같은 규칙이다. 호출 지점은 syncWakeLock 과 같다(세션·attach·탭·화면이 바뀔 때).
+   */
+  private syncSeen() {
+    const id = this.state.attachedId;
+    const want =
+      id &&
+      this.active &&
+      document.visibilityState === 'visible' &&
+      this.state.sessions.some((s) => s.id === id && isUnseenWait(s))
+        ? id
+        : null;
+    if (want === this.seenFor) return;
+    if (this.seenTimer !== null) clearTimeout(this.seenTimer);
+    this.seenTimer = null;
+    this.seenFor = want;
+    if (!want) return;
+    this.seenTimer = setTimeout(() => {
+      this.seenTimer = null;
+      this.seenFor = null; // 못 보냈으면(끊김) 다음 sessions 방송이 다시 건다 — 서버는 중복을 거른다
+      this.send({ type: 'seen', id: want });
+    }, SEEN_DWELL_MS);
   }
 
   private syncWakeLock() {

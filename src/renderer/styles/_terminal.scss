@@ -423,6 +423,12 @@
       color: var(--warning);
       font-weight: 600;
     }
+
+    // 확인 전(끝났는데 아직 안 본) 세션이 하나라도 있으면 연두 — 주황보다 우선(WorkspaceNav waitTone)
+    &--fresh {
+      color: var(--fresh);
+      font-weight: 600;
+    }
   }
 
   &__ws-actions {
@@ -688,6 +694,15 @@
       box-shadow:
         0 0 0 2px var(--surface-1),
         inset 0 0 0 1px color-mix(in srgb, var(--warning) 35%, transparent);
+    }
+
+    // 확인 전 = 같은 소프트 틴트의 연두 — 하나라도 있으면 주황보다 우선(WorkspaceNav waitTone)
+    &--fresh {
+      background: var(--fresh-soft);
+      color: var(--fresh);
+      box-shadow:
+        0 0 0 2px var(--surface-1),
+        inset 0 0 0 1px color-mix(in srgb, var(--fresh) 35%, transparent);
     }
   }
 

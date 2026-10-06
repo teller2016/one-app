@@ -155,6 +155,7 @@ export async function terminalOverview(): Promise<TerminalOverviewItem[]> {
       id: s.id,
       cwd: s.cwd,
       tabTitle: s.title,
+      seen: s.seen, // 셸 탭은 휴리스틱상 대기가 없어 늘 true — claude 상태 파일로 읽은 대기는 '입력 대기'로 보인다
       ...stateOf(s, c.status),
       ...(await placeOf(s.cwd, trees)),
       title: d?.aiTitle ?? null,

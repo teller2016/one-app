@@ -12,7 +12,7 @@ import { useBackClose } from '../../renderer/lib/useBackClose';
 // TerminalSection(→ 데스크톱 xterm 5종)을 끌고 와 폰 번들이 커진다(그 배럴 주석 참고)
 import { initials, tileColor } from '../../renderer/features/terminal/lib/workspace';
 import type { TerminalPreset, TerminalSessionInfo } from '../../shared/types';
-import { presetsForWorkspace } from '../../shared/types';
+import { isUnseenWait, presetsForWorkspace } from '../../shared/types';
 import type { TermWorkspaceNode } from '../../shared/terminal-protocol';
 import { controller, FONT_MAX, FONT_MIN, type MoScope } from './controller';
 import type { KeyName } from './logic';
@@ -71,13 +71,14 @@ function Sheet({
   );
 }
 
-function statusOf(s: TerminalSessionInfo): 'wait' | 'busy' | null {
-  if (s.status === 'waiting') return 'wait';
+/** 데스크톱 탭 점과 같은 기준 — 확인 전(끝났는데 아직 안 봄) = 연두 · 입력 대기(본 뒤) = 주황 · 작업 중 = 초록 */
+function statusOf(s: TerminalSessionInfo): 'fresh' | 'wait' | 'busy' | null {
+  if (s.status === 'waiting') return isUnseenWait(s) ? 'fresh' : 'wait';
   if (s.working || s.status === 'busy') return 'busy';
   return null;
 }
 
-const STATUS_LABEL = { wait: '입력 대기', busy: '작업 중' } as const;
+const STATUS_LABEL = { fresh: '확인 전', wait: '입력 대기', busy: '작업 중' } as const;
 
 /**
  * 키 바·키보드 버튼 — **누르는 순간(pointerdown)** 보낸다. pointerdown 을 막아야 xterm 포커스(=소프트 키보드)가
@@ -292,7 +293,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
         </div>
       )}
 
-      {/* 세션 칩 — 드롭다운 대신 한 줄 가로 스크롤. 대기 = 주황 점 · 작업 중 = 초록 링 */}
+      {/* 세션 칩 — 드롭다운 대신 한 줄 가로 스크롤. 확인 전 = 연두 점 · 입력 대기 = 주황 점 · 작업 중 = 초록 링 */}
       <div className={`moterm__chips${st.connected ? '' : ' moterm__chips--off'}`} role="tablist" aria-label="세션">
         {chips.map((s) => {
           const status = statusOf(s);
@@ -689,6 +690,17 @@ function WorkspaceSheet({ onClose }: { onClose: () => void }) {
   const countAt = (paths: Set<string>) => st.sessions.filter((s) => paths.has(s.cwd)).length;
   const waitAt = (paths: Set<string>) =>
     st.sessions.some((s) => paths.has(s.cwd) && st.waiting.includes(s.id));
+  /** 대기 점 색 — 확인 전이 하나라도 있으면 연두가 이긴다(데스크톱 LNB 와 같은 규칙) */
+  const waitToneAt = (paths: Set<string>): 'fresh' | 'wait' | null =>
+    !waitAt(paths)
+      ? null
+      : st.sessions.some((s) => paths.has(s.cwd) && isUnseenWait(s))
+        ? 'fresh'
+        : 'wait';
+  const waitDot = (paths: Set<string>) => {
+    const tone = waitToneAt(paths);
+    return tone && <span className={`moterm__dot moterm__dot--${tone}`} aria-label={STATUS_LABEL[tone]} />;
+  };
 
   const pick = (ws: TermWorkspaceNode, wt: TermWorkspaceNode['worktrees'][number]) => {
     const scope: MoScope = {
@@ -745,7 +757,7 @@ function WorkspaceSheet({ onClose }: { onClose: () => void }) {
                 </span>
                 <Tile name={ws.name} color={ws.color} />
                 <span className="moterm__ws-name">{ws.name}</span>
-                {waitAt(paths) && <span className="moterm__dot moterm__dot--wait" aria-label="입력 대기" />}
+                {waitDot(paths)}
                 <span className="moterm__count-text">
                   세션 <span className="moterm__num">{countAt(paths)}</span>
                 </span>
@@ -769,7 +781,7 @@ function WorkspaceSheet({ onClose }: { onClose: () => void }) {
                           <span className="moterm__wt-name">{wt.name}</span>
                           {wt.branch && <span className="moterm__wt-branch">{wt.branch}</span>}
                         </span>
-                        {waitAt(one) && <span className="moterm__dot moterm__dot--wait" aria-label="입력 대기" />}
+                        {waitDot(one)}
                         <span className="moterm__count-text">
                           세션 <span className="moterm__num">{countAt(one)}</span>
                         </span>

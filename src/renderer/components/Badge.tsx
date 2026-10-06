@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StatusDot } from './StatusDot';
 
-type BadgeVariant = 'busy' | 'ok' | 'fail' | 'idle' | 'pill' | 'accent';
+type BadgeVariant = 'busy' | 'ok' | 'fail' | 'idle' | 'fresh' | 'pill' | 'accent';
 
 /**
  * 상태 뱃지 — soft 배경 + 시맨틱 글자 + 상태 점.

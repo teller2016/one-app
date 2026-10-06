@@ -27,6 +27,7 @@ import { beginPointerDrag } from '../../../lib/pointerDrag';
 import { useSessionHistory } from '../lib/useSessionHistory';
 import { useSplitGroups } from '../lib/useSplitGroups';
 import { useWorkspaceActions } from '../lib/useWorkspaceActions';
+import { useMarkSeen } from '../lib/sessionState';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
 import type { DropSide } from '../lib/layout';
@@ -845,6 +846,10 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     const shown = activeGroupIds ?? (activeId ? [activeId] : []);
     for (const id of shown) dismissToast(termWaitToastKey(id));
   }, [active, activeId, activeGroupIds, dismissToast]);
+
+  // 보고 있는 세션의 '확인 전'(연두)을 '입력 대기'(주황)로 — 창 포커스 + 잠깐 이상 보였을 때(lib/sessionState).
+  // 토스트 회수(위)는 섹션에 올라오기만 하면 하지만, 확인은 창이 앞에 있어야 한다(뒤에 깔린 창은 본 게 아니다)
+  useMarkSeen(mainSessions, activeGroupIds ?? (activeId ? [activeId] : []), active);
 
   /** ⌘T — 모달 없이 현재 워크트리에서 바로 셸 세션을 연다 (2026-08-06 사용자 요청) */
   const createShell = useCallback(async () => {

@@ -23,6 +23,7 @@ import {
   createSession,
   killSession,
   listSessions,
+  markSessionSeen,
   onPtyResized,
   onSessionsChanged,
   onTerminalData,
@@ -549,6 +550,9 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
     }
     case 'visibility':
       state.visible = msg.visible === true;
+      break;
+    case 'seen':
+      markSessionSeen(String(msg.id));
       break;
     case 'push-key': {
       const key = getPushPublicKey();

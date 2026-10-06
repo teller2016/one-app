@@ -1,16 +1,17 @@
 // ⌘⇧P Claude 세션 전환 — 저장소별 묶음·정렬·검색 (순수 함수 — switcher.test.ts)
-import type { TerminalOverviewItem } from '../../../../shared/types';
+import { isUnseenWait, type TerminalOverviewItem } from '../../../../shared/types';
 
-/** 탭 점과 같은 기준 — 입력 대기 = 주황 · 작업 중 = 초록(`working` — busy 는 한 프레임에도 켜진다) · 쉬는 중 */
-export type Phase = 'wait' | 'run' | 'idle';
-export const PHASES: Phase[] = ['wait', 'run', 'idle'];
+/** 탭 점과 같은 기준 — 확인 전 = 연두 · 입력 대기 = 주황 · 작업 중 = 초록(`working` — busy 는 한 프레임에도 켜진다) · 쉬는 중 */
+export type Phase = 'fresh' | 'wait' | 'run' | 'idle';
+export const PHASES: Phase[] = ['fresh', 'wait', 'run', 'idle'];
 export const PHASE_LABEL: Record<Phase, string> = {
+  fresh: '확인 전',
   wait: '입력 대기',
   run: '작업 중',
   idle: '쉬는 중',
 };
 export const phaseOf = (s: TerminalOverviewItem): Phase =>
-  s.status === 'waiting' ? 'wait' : s.working ? 'run' : 'idle';
+  s.status === 'waiting' ? (isUnseenWait(s) ? 'fresh' : 'wait') : s.working ? 'run' : 'idle';
 
 /** 큰 글씨 한 줄 — 작업 제목, 없으면 첫 요청, 그것도 없으면(첫 메시지 전) 탭 이름 */
 export const headline = (s: TerminalOverviewItem) => s.title ?? s.firstPrompt ?? s.tabTitle;
@@ -33,7 +34,7 @@ export function matches(s: TerminalOverviewItem, q: string): boolean {
     .every((t) => hay.includes(t));
 }
 
-/** 급한 순 — 상태(입력 대기 → 작업 중 → 쉬는 중), 같으면 최근 활동 */
+/** 급한 순 — 상태(확인 전 → 입력 대기 → 작업 중 → 쉬는 중), 같으면 최근 활동 */
 const urgency = (a: TerminalOverviewItem, b: TerminalOverviewItem) =>
   PHASES.indexOf(phaseOf(a)) - PHASES.indexOf(phaseOf(b)) || b.activityAt - a.activityAt;
 
@@ -68,7 +69,7 @@ export function groupSessions(items: TerminalOverviewItem[]): SessionGroup[] {
 
 /** 상태별 세션 수 — 검색줄 오른쪽 요약 */
 export function phaseCounts(items: TerminalOverviewItem[]): Record<Phase, number> {
-  const out: Record<Phase, number> = { wait: 0, run: 0, idle: 0 };
+  const out: Record<Phase, number> = { fresh: 0, wait: 0, run: 0, idle: 0 };
   for (const s of items) out[phaseOf(s)] += 1;
   return out;
 }

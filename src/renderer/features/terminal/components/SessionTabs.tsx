@@ -15,10 +15,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from 'react';
-import type {
-  TerminalSessionInfo,
-  TerminalSessionStatus,
-} from '../../../../shared/types';
+import type { TerminalSessionInfo } from '../../../../shared/types';
 import { TERMINAL_AGENT_NAMES } from '../../../../shared/types';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
@@ -27,19 +24,8 @@ import { useToast } from '../../../components/Toast';
 import { Tooltip } from '../../../components/Tooltip';
 import { errMsg } from '../../../lib/errMsg';
 import { TabViewToggle } from './TabViewToggle';
+import { SESSION_DOT_LABEL, sessionDot } from '../lib/sessionState';
 
-// 작업 중 = 초록 펄스, 입력 대기 = 주황(펄스 없음) — 입력 대기는 "나를 부른다"는 주의 신호라
-// 사이드바 뱃지·토스트와 같은 주의색으로 맞춘다 (2026-09-30 Signal 리디자인 — 예전엔 대기=초록)
-const STATUS_DOT: Record<TerminalSessionStatus, 'run' | 'wait' | 'idle'> = {
-  busy: 'run',
-  waiting: 'wait',
-  idle: 'idle',
-};
-const STATUS_LABELS: Record<TerminalSessionStatus, string> = {
-  busy: '작업 중',
-  waiting: '입력 대기',
-  idle: '유휴',
-};
 
 // 스프링 로딩 대기 — 드래그 중 다른 탭 위에 이만큼 머물면 그 화면이 열린다.
 // 0 이면 탭바를 가로지르기만 해도 화면이 연쇄 전환되고, 길면 굼떠 보인다.
@@ -407,14 +393,14 @@ export const SessionTabs = memo(function SessionTabs({
           className="terminal__tab-hit"
           aria-selected={s.id === activeId}
           title={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
-            STATUS_LABELS[s.status]
+            SESSION_DOT_LABEL[sessionDot(s)]
           }${i < 9 ? ` (⌘${i + 1})` : ''}\n우클릭: 메뉴(별도 창 분리·이름 변경·종료) · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
           onClick={() => onSelect(s.id)}
         >
-          {/* 상태점은 제목 앞 — 작업 중(초록 펄스)·입력 대기(주황)만 (목업 2026-09-30) */}
+          {/* 상태점은 제목 앞 — 작업 중(초록 펄스)·확인 전(연두)·입력 대기(주황)만 (lib/sessionState) */}
           {s.status !== 'idle' && (
             <span className="terminal__tab-dot" aria-hidden="true">
-              <StatusDot status={STATUS_DOT[s.status]} />
+              <StatusDot status={sessionDot(s)} />
             </span>
           )}
           <span className="terminal__tab-title">{s.title}</span>
@@ -593,7 +579,7 @@ export const SessionTabs = memo(function SessionTabs({
         >
           {s.status !== 'idle' && (
             <span className="terminal__tab-dot" aria-hidden="true">
-              <StatusDot status={STATUS_DOT[s.status]} />
+              <StatusDot status={sessionDot(s)} />
             </span>
           )}
           <span className="terminal__tab-title">{s.title}</span>

@@ -30,6 +30,7 @@ import {
 import { usePaneOrchestration } from '../lib/usePaneOrchestration';
 import { useSplitGroups } from '../lib/useSplitGroups';
 import { useTerminalShortcuts } from '../lib/useTerminalShortcuts';
+import { useMarkSeen } from '../lib/sessionState';
 import { SessionTabs } from './SessionTabs';
 import { TerminalPanes } from './TerminalPanes';
 
@@ -405,6 +406,9 @@ function PopoutBody({
     window.addEventListener('focus', report);
     return () => window.removeEventListener('focus', report);
   }, [windowId, activeId, activeGroupIds]);
+
+  // 이 창이 앞에서 보여 주는 세션의 '확인 전'을 확인함으로 (메인 창 TerminalSection 과 같은 훅)
+  useMarkSeen(sessions, activeGroupIds ?? (activeId ? [activeId] : []), true);
 
   // ── 레포 라벨 — "워크스페이스 · 워크트리" (main 의 sessionLocationLabel, cwd 캐시) ──
   const [locLabel, setLocLabel] = useState<string | null>(null);

@@ -798,6 +798,10 @@
   }
 
   &__count {
+    &--fresh {
+      color: var(--fresh);
+    }
+
     &--wait {
       color: var(--warning);
     }

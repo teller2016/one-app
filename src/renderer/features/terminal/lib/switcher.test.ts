@@ -11,6 +11,7 @@ const item = (o: Partial<TerminalOverviewItem>): TerminalOverviewItem => ({
   tabTitle: 'tab',
   status: 'idle',
   working: false,
+  seen: true,
   workspace: null,
   branch: null,
   title: null,
@@ -42,10 +43,21 @@ describe('groupSessions', () => {
 
   it('busy 여도 working 이 아니면 쉬는 중으로 센다', () => {
     expect(phaseCounts([item({ status: 'busy', working: false }), item({ status: 'waiting' })])).toEqual({
+      fresh: 0,
       wait: 1,
       run: 0,
       idle: 1,
     });
+  });
+
+  it('대기 중 아직 안 본 세션(확인 전)이 확인한 대기보다 먼저다 — 묶음 순서도 그걸로 정한다', () => {
+    const seenWait = item({ workspace: ws('a'), status: 'waiting', seen: true, activityAt: 9 });
+    const fresh = item({ workspace: ws('b'), status: 'waiting', seen: false, activityAt: 1 });
+    const run = item({ workspace: ws('a'), status: 'busy', working: true, activityAt: 5 });
+    const groups = groupSessions([seenWait, run, fresh]);
+    expect(groups.map((g) => g.key)).toEqual(['b', 'a']);
+    expect(groups[1].sessions.map((s) => s.id)).toEqual([seenWait.id, run.id]);
+    expect(phaseCounts([seenWait, fresh, run])).toEqual({ fresh: 1, wait: 1, run: 1, idle: 0 });
   });
 });
 

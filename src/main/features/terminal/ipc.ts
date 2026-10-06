@@ -28,6 +28,7 @@ import {
   createSession,
   killSession,
   listSessions,
+  markSessionSeen,
   onAgentWaiting,
   onPtyResized,
   onSessionsChanged,
@@ -190,6 +191,8 @@ export function registerTerminalIpc() {
   ipcMain.on('terminal:write', (_e, id: string, data: string) =>
     writeSession(id, data)
   );
+  // 대기 세션을 봤다 — '확인 전'(연두) → '입력 대기'(주황). 판정(포커스된 창에 잠깐 이상 보임)은 렌더러 useMarkSeen
+  ipcMain.on('terminal:seen', (_e, id: string) => markSessionSeen(String(id)));
   // 데스크톱의 주장은 기억해 둔다 — 폰이 크기를 놓으면 여기로 되돌린다(pty.releaseRemoteSize)
   ipcMain.on('terminal:resize', (_e, id: string, cols: number, rows: number) => {
     rememberDesktopSize(id, cols, rows);

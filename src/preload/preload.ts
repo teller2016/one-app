@@ -495,6 +495,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 키 입력·리사이즈 — fire-and-forget (invoke 왕복 비용 제거)
     write: (id: string, data: string) =>
       ipcRenderer.send("terminal:write", id, data),
+    // 대기 세션을 봤다 — '확인 전' → '입력 대기' (main pty.markSessionSeen)
+    markSeen: (id: string) => ipcRenderer.send("terminal:seen", id),
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.send("terminal:resize", id, cols, rows),
     // 휠 스크롤 위임 (tmux 백엔드 전용) — 양수 = 위로. 반환값으로 [맨 아래로] 를 켠다

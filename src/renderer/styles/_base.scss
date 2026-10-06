@@ -96,6 +96,9 @@
   --ok-soft-strong: rgba(23, 128, 79, 0.24); // diff 워드 하이라이트 — 행 틴트 위에 겹침
   --warning: #a55f00;
   --warning-soft: rgba(213, 128, 0, 0.12);
+  // 확인 전(연두) — 터미널 세션이 끝났는데 아직 안 봤다. 작업 중(--ok 청록빛 초록)과 색상으로 갈리게 노랑 쪽 초록
+  --fresh: #4a7a0b; // soft@s1 위 4.57:1
+  --fresh-soft: rgba(101, 163, 13, 0.12);
   --danger: #c4323a;
   --danger-soft: rgba(196, 50, 58, 0.1);
   --danger-soft-strong: rgba(196, 50, 58, 0.24);
@@ -296,6 +299,8 @@
   --ok-soft-strong: rgba(76, 203, 141, 0.3);
   --warning: #f2a53a;
   --warning-soft: rgba(242, 165, 58, 0.14);
+  --fresh: #a3e635; // soft@s1 위 9:1
+  --fresh-soft: rgba(163, 230, 53, 0.14);
   --danger: #f2676d;
   --danger-soft: rgba(242, 103, 109, 0.14);
   --danger-soft-strong: rgba(242, 103, 109, 0.3);
@@ -1171,6 +1176,12 @@ input.input--bare {
     color: var(--idle);
   }
 
+  // 터미널 세션 확인 전 (⌘⇧P 상태 칸)
+  &--fresh {
+    background: var(--fresh-soft);
+    color: var(--fresh);
+  }
+
   // 점 없는 정보형 필 (기간·인원수 등)
   &--pill {
     background: var(--surface-2);
@@ -1260,6 +1271,11 @@ input.input--bare {
 
   &--wait {
     background: var(--warning);
+  }
+
+  // 터미널 세션 — 확인 전(끝났는데 아직 안 봄)은 연두. 본 뒤엔 위 wait(주황)
+  &--fresh {
+    background: var(--fresh);
   }
 }
 

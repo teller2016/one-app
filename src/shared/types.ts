@@ -1404,6 +1404,7 @@ export const TERMINAL_AGENT_NAMES: Record<TerminalAgentId, string> = {
 /**
  * 세션 상태 — main 의 출력/침묵 휴리스틱이 판정한다.
  * busy: 작업 중(스피너 포함) · waiting: 턴 종료 후 입력 대기(알림 대상) · idle: 그 외
+ * waiting 은 다시 `seen` 으로 '확인 전'(안 봄)과 '입력 대기'(봄)로 나뉜다.
  */
 export type TerminalSessionStatus = 'busy' | 'waiting' | 'idle';
 
@@ -1432,8 +1433,19 @@ export type TerminalSessionInfo = {
    *  busy 는 리렌더 한 프레임에도 켜지므로(스크롤·타이핑) 그대로 쓰면 오탐이 된다.
    *  판정 규칙은 main 의 `pty.ts` 의 `WORKING_MIN_MS` 주석 참고. */
   working: boolean;
+  /** waiting 을 사용자가 **봤는가** — false 면 '확인 전'(끝났는데 아직 안 본 세션, 연두),
+   *  true 면 '입력 대기'(보고 내 차례인 세션, 주황). waiting 일 때만 의미가 있다 — `isUnseenWait` 로 읽을 것.
+   *  대기로 들어올 때 내리고, 창·폰에서 그 세션이 보이면 올린다(main `pty.ts` `markSessionSeen`) */
+  seen: boolean;
   createdAt: number;
 };
+
+/** '확인 전' — 작업이 끝나 대기 중인데 사용자가 아직 그 세션을 보지 않았다 */
+export const isUnseenWait = (s: Pick<TerminalSessionInfo, 'status' | 'seen'>): boolean =>
+  s.status === 'waiting' && !s.seen;
+
+/** 이만큼 보여야 '봤다' — 탭·칩을 훑고 지나가기만 한 세션까지 확인함이 되지 않게(데스크톱·폰 공용) */
+export const SEEN_DWELL_MS = 800;
 
 /** Claude 세션 현황 한 줄 — ⌘⇧P 빠른 전환 팝업. main `overview.ts` 가 claude 가 떠 있는 세션만 골라 대화 기록에서 꺼낸다 */
 export type TerminalOverviewItem = {
@@ -1443,6 +1455,8 @@ export type TerminalOverviewItem = {
   tabTitle: string;
   status: TerminalSessionStatus;
   working: boolean;
+  /** 대기를 사용자가 봤는가 — 세션 목록과 같은 값(`TerminalSessionInfo.seen`) */
+  seen: boolean;
   /** 소속 워크스페이스 — 팝업이 저장소별로 묶고 LNB 와 같은 색 타일을 그린다. 등록된 워크스페이스 밖이면 null('기타') */
   workspace: Pick<TerminalWorkspace, 'id' | 'name' | 'color'> | null;
   /** 세션이 도는 워크트리의 브랜치 — 일반 폴더·detached HEAD 면 null */

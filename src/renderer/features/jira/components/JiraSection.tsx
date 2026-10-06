@@ -4,6 +4,7 @@ import type {
   JiraTransition,
   TerminalSessionInfo,
 } from '../../../../shared/types';
+import { isUnseenWait } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
@@ -74,8 +75,10 @@ const prioInfo = (name: string): { level: string; icon: IconName } | null => {
  * ⚠️ `busy` 가 아니라 `working` 을 본다 — busy 는 스크롤·타이핑 리렌더 한 프레임에도 켜진다.
  *    예전엔 busy 가 아니면 전부 '입력 대기'라 쉬는 세션(idle)까지 주황으로 보였다.
  */
-function workChipState(s: TerminalSessionInfo): { dot: 'wait' | 'run' | 'idle'; label: string } {
-  if (s.status === 'waiting') return { dot: 'wait', label: '입력 대기' };
+function workChipState(s: TerminalSessionInfo): { dot: 'fresh' | 'wait' | 'run' | 'idle'; label: string } {
+  // 대기는 둘 — 끝났는데 아직 안 본 '확인 전'(연두) · 본 뒤의 '입력 대기'(주황)
+  if (s.status === 'waiting')
+    return isUnseenWait(s) ? { dot: 'fresh', label: '확인 전' } : { dot: 'wait', label: '입력 대기' };
   if (s.working) return { dot: 'run', label: '작업 중' };
   return { dot: 'idle', label: '쉬는 중' };
 }

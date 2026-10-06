@@ -322,7 +322,7 @@
     @include focus-ring(0px);
   }
 
-  // 상태 점 7 — 입력 대기 주황 · 작업 중 초록 + 링 (데스크톱 탭과 같은 색)
+  // 상태 점 7 — 확인 전 연두 · 입력 대기 주황 · 작업 중 초록 + 링 (데스크톱 탭과 같은 색)
   &__dot {
     width: 7px;
     height: 7px;
@@ -331,6 +331,11 @@
 
     &--wait {
       background: var(--warning);
+    }
+
+    // 확인 전(끝났는데 아직 안 봄) — 보고 나면 위 주황으로
+    &--fresh {
+      background: var(--fresh);
     }
 
     &--busy {

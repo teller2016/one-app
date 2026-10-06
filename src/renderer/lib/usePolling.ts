@@ -103,3 +103,23 @@ export function useTick(intervalMs: number, enabled = true): number {
   }, [intervalMs, enabled]);
   return tick;
 }
+
+/**
+ * 창이 활성(보임+포커스)인가 — 바뀔 때 리렌더한다. 위 폴링의 활성 판정과 같은 기준.
+ * '사용자가 이 창을 지금 보고 있다'가 필요한 곳(터미널 대기 세션 확인 처리 등)에 쓴다.
+ */
+export function useWindowActive(): boolean {
+  const [active, setActive] = useState(isWindowActive);
+  useEffect(() => {
+    const sync = () => setActive(isWindowActive());
+    window.addEventListener('focus', sync);
+    window.addEventListener('blur', sync);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('blur', sync);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, []);
+  return active;
+}

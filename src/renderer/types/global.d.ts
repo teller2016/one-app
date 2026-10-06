@@ -397,6 +397,8 @@ declare global {
           set: (level: TerminalNotifyLevel) => Promise<TerminalNotifyLevel>;
         };
         write: (id: string, data: string) => void;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        markSeen?: (id: string) => void;
         resize: (id: string, cols: number, rows: number) => void;
         // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비 (detach 와 같은 이유)
         scroll?: (
