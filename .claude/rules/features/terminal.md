@@ -276,7 +276,9 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
   - ⚠️ `ai-title` 이 없는 세션이 많다 — **슬래시 명령으로 시작한 세션**(`/플러그인:dev SSB-9 — …`)이 그렇다 → 첫 요청은 '글로 된 인자가 있는 명령'의 인자도 받는다(`/model opus` 같은 한 낱말 인자는 건너뜀).
   - ⚠️ `last-prompt` 에 **다른 claude 세션이 보낸 메시지**(`Another Claude session sent a message: <teammate-message …>`)가 남아 사람 요청을 덮는다 → `isPeerMessage` 로 거른다.
   - ⚠️ 붙여넣기는 `<pasted_content id=…>…</pasted_content id=…>` — **닫는 태그에도 id** 가 붙는다. 걷어내고 직접 친 글을 쓴다.
-- 순서 = 입력 대기 → 작업 중(`working`) → 쉬는 중, 같은 상태끼리 jsonl 수정 시각순. ↵ = `openTerminalSession`(토스트 [이동]과 같은 길 — 팝아웃 세션이면 그 창이 앞으로).
+- 화면 = **저장소별 묶음**(2026-10-06 사용자가 시안 C 선택 — 캔버스 'Claude 세션 전환 시안'): 머리 = LNB 와 같은 색 타일(`terminal__ws-tile--cN`) + 이름 + 세션 수, 줄 = 상태 뱃지(공용 `Badge` busy/ok/idle, 칸 폭 고정) · 제목 · 브랜치 칩(main/master 생략) · 시각 / 마지막 요청. 검색줄 오른쪽 = 상태별 수.
+- 순서(`lib/switcher.ts` + 테스트): 묶음 안 = 입력 대기 → 작업 중(`working`) → 쉬는 중, 같으면 jsonl 수정 시각순 · 묶음끼리 = **가장 급한 세션** 기준 같은 규칙 · 워크스페이스 밖은 맨 아래 '기타'. ↑↓ 는 묶음을 넘어 줄 단위. ↵ = `openTerminalSession`(토스트 [이동]과 같은 길 — 팝아웃 세션이면 그 창이 앞으로).
+- 워크스페이스·브랜치는 main 이 `sessionLocation` + `listWorktreesBrief(…, {cached: true})`(LNB 폴링과 같은 지문 캐시)로 채운다 — 한 번의 조회 안에서 저장소별 목록을 나눠 쓴다.
 - dev 검증: dev 는 tmux 소켓이 따로라 세션 0개로 뜬다 → `terminal.create({agentId:'claude'})` 로 만들면 계정 선택 셸 함수(`1) Personal`)가 먼저 뜬다(`write('1\r')`). 짧은 메시지 하나면 1~2초 안에 ai-title 이 생긴다.
 
 ## 에이전트 추가

@@ -1415,8 +1415,10 @@ export type TerminalOverviewItem = {
   tabTitle: string;
   status: TerminalSessionStatus;
   working: boolean;
-  /** "워크스페이스 · 워크트리" — 등록된 워크스페이스 밖이면 null */
-  location: string | null;
+  /** 소속 워크스페이스 — 팝업이 저장소별로 묶고 LNB 와 같은 색 타일을 그린다. 등록된 워크스페이스 밖이면 null('기타') */
+  workspace: Pick<TerminalWorkspace, 'id' | 'name' | 'color'> | null;
+  /** 세션이 도는 워크트리의 브랜치 — 일반 폴더·detached HEAD 면 null */
+  branch: string | null;
   /** claude 가 붙인 작업 제목(대화 기록의 ai-title) — 없는 세션도 많다 */
   title: string | null;
   /** 첫 요청 한 줄 — 제목이 없을 때 '무슨 작업인가'를 대신한다 */

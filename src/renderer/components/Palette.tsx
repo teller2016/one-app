@@ -18,8 +18,11 @@ export function Palette<T>({
   items,
   itemKey,
   itemGroup,
+  renderGroup,
   renderItem,
   itemClassName,
+  className,
+  searchAside,
   onRun,
   onClose,
   empty,
@@ -35,10 +38,16 @@ export function Palette<T>({
   itemKey: (item: T) => string;
   /** 값이 바뀌는 줄 위에 그룹 제목을 단다 */
   itemGroup?: (item: T) => string;
+  /** 그룹 제목을 직접 그린다(그 그룹 첫 줄의 항목을 받는다) — 없으면 itemGroup 값을 글자로 */
+  renderGroup?: (item: T) => ReactNode;
   /** 줄 안쪽 내용 — 줄 버튼(선택 표시·클릭·hover)은 셸이 그린다 */
   renderItem: (item: T) => ReactNode;
   /** 줄 모양 변형 (예: 두 줄 행) */
   itemClassName?: string;
+  /** 팝업 모양 변형 (예: `palette--wide`) */
+  className?: string;
+  /** 검색창 오른쪽 내용 (요약 숫자 등) */
+  searchAside?: ReactNode;
   onRun: (item: T) => void;
   onClose: () => void;
   /** 보일 줄이 없을 때 문구 */
@@ -126,7 +135,7 @@ export function Palette<T>({
           눌러도 포커스가 입력창을 떠나지 않게 막는다. 안 그러면 푸터·그룹 제목 클릭 한 번에
           포커스가 body 로 빠져 ↑↓·↵·Esc 가 전부 먹통이 된다(2026-09-30 /test) */}
       <div
-        className="palette"
+        className={'palette' + (className ? ` ${className}` : '')}
         role="dialog"
         aria-label={label}
         onKeyDown={onKeyDown}
@@ -150,6 +159,7 @@ export function Palette<T>({
               items[active] !== undefined ? optionId(items[active]) : undefined
             }
           />
+          {searchAside}
         </div>
         <div className="palette__list" ref={listRef} role="listbox">
           {items.length === 0 && <p className="palette__empty">{empty}</p>}
@@ -159,7 +169,12 @@ export function Palette<T>({
             lastGroup = group;
             return (
               <div key={itemKey(it)}>
-                {head && <div className="palette__group">{group}</div>}
+                {head &&
+                  (renderGroup ? (
+                    <div className="palette__group palette__group--rich">{renderGroup(it)}</div>
+                  ) : (
+                    <div className="palette__group">{group}</div>
+                  ))}
                 <button
                   type="button"
                   id={optionId(it)}

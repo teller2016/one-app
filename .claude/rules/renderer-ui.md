@@ -55,7 +55,7 @@ paths:
 섹션 세그먼트·액션은 `<TopbarSlot left right>` 로 앱 탑바에 그린다(탑바 없는 셸 — Lite·폰 — 에선 제자리 `.topbar-inline`). 섹션 안 하위 화면(폼 등)은 **`crumb`** 로 경로 셋째 칸(`그룹 / 섹션 / 하위`)을 채운다 — 탑바 없는 셸에선 그리지 않으므로 그쪽은 페이지 제목을 직접 그린다(`useHasTopbar`).
 
 ## ⌘P 명령 팔레트 (`app/CommandPalette.tsx` + `lib/commands.ts`)
-- **오버레이·검색창·↑↓↵Esc·포커스는 공용 `components/Palette.tsx` 셸**(2026-10-06) — ⌘⇧P Claude 세션 전환(`features/terminal` `SessionSwitcher`)도 같은 셸이다. 아래 포커스 ⚠️ 들이 셸에 들어 있으니 검색 팝업을 새로 만들 땐 복사하지 말고 셸을 쓴다. 선택은 **항목 key** 로 기억한다(열린 동안 목록이 갱신돼 순서가 바뀌어도 고른 줄이 따라간다). 두 줄 행은 `itemClassName="palette__item--session"`.
+- **오버레이·검색창·↑↓↵Esc·포커스는 공용 `components/Palette.tsx` 셸**(2026-10-06) — ⌘⇧P Claude 세션 전환(`features/terminal` `SessionSwitcher`)도 같은 셸이다. 아래 포커스 ⚠️ 들이 셸에 들어 있으니 검색 팝업을 새로 만들 땐 복사하지 말고 셸을 쓴다. 선택은 **항목 key** 로 기억한다(열린 동안 목록이 갱신돼 순서가 바뀌어도 고른 줄이 따라간다). 선택 기능: `className`(`palette--wide` 760) · `searchAside`(검색줄 오른쪽) · `renderGroup`(그룹 머리를 직접 그림 — `palette__group--rich`) · `itemClassName`(두 줄 행 `palette__item--session`).
 - ⌘P·⌘⇧P 는 `App` 의 **같은 capture 리스너** — 하나를 열면 다른 쪽은 닫힌다. 팔레트에도 'Claude 세션 전환' 명령이 있다.
 - 동작의 정본은 각 기능이다 — 팔레트가 동작을 다시 구현하지 않는다. 위젯은 떠 있는 동안 **`useRegisterCommands(id, () => Command[])`** 로 자기 명령을 등록하고(버튼과 **같은 핸들러**를 넘긴다 — 확인창·오류 표시가 그대로 따라온다), 팔레트는 열릴 때·입력할 때마다 `collectCommands()` 로 모은다.
   - ⚠️ 등록하는 건 **배열이 아니라 만드는 함수**다(ref 로 최신만 쓴다) — 핸들러가 렌더마다 새로 만들어지므로 배열 등록은 매 렌더 재등록이 된다.

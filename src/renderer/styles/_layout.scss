@@ -783,10 +783,87 @@
     }
   }
 
-  // ⌘⇧P Claude 세션 전환 (features/terminal SessionSwitcher) — 두 줄 행: 작업 제목·위치 / 마지막 요청·시각
+  // ===== ⌘⇧P Claude 세션 전환 (features/terminal SessionSwitcher — 2026-10-06 시안 C '저장소별 묶음') =====
+  // 저장소 머리(색 타일 + 이름 + 세션 수) 아래로 줄이 들여 쓰이고, 줄 = 상태 뱃지 · 제목 · 브랜치 칩 · 시각 / 마지막 요청
+  &--wide {
+    width: min(760px, calc(100vw - 48px));
+  }
+
+  &__counts {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__count {
+    &--wait {
+      color: var(--warning);
+    }
+
+    &--run {
+      color: var(--ok);
+    }
+
+    &--idle {
+      color: var(--text-3);
+    }
+  }
+
+  &__group--rich {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 12px 6px;
+    text-transform: none;
+    letter-spacing: normal;
+
+    // LNB 펼친 트리와 같은 20px 타일 (색·이니셜 규칙은 terminal__ws-tile 그대로)
+    .terminal__ws-tile {
+      width: 20px;
+      height: 20px;
+      font-size: var(--fs-nano);
+    }
+  }
+
+  // 묶음 사이 구분선 — 첫 묶음 위엔 없다
+  &__list > div:not(:first-child) > .palette__group--rich {
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  &__ws-name {
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  &__ws-count {
+    font-size: var(--fs-ui-sm);
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
   &__item--session {
     height: auto;
-    padding: 8px 10px;
+    align-items: flex-start;
+    gap: 12px;
+    // 왼쪽은 머리 타일 아래로 들여 쓴다 — 12(머리 여백) + 20(타일) + 8(간격)
+    padding: 8px 12px 8px 40px;
+
+    .palette__label {
+      flex: 0 1 auto;
+      color: var(--text);
+      font-weight: 500;
+    }
+  }
+
+  // 상태 뱃지 칸 — 폭을 고정해 '입력 대기'·'작업 중' 길이가 달라도 제목이 세로로 맞는다
+  &__status {
+    flex-shrink: 0;
+    width: 64px;
+    display: flex;
   }
 
   &__body {
@@ -799,26 +876,40 @@
 
   &__line {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
     min-width: 0;
   }
 
+  &__branch {
+    min-width: 0;
+    max-width: 40%;
+    padding: 1px 6px;
+    border-radius: var(--r-sm);
+    background: var(--surface-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono); // 브랜치 = 식별자
+    font-size: var(--fs-caption);
+    color: var(--text-2);
+  }
+
+  &__time {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--text-3);
+    font-size: var(--fs-ui-sm);
+    font-variant-numeric: tabular-nums; // 한글이 섞여 모노 대신
+  }
+
   &__sub {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-3);
-    font-size: var(--fs-small);
-  }
-
-  &__time {
-    flex-shrink: 0;
-    color: var(--text-3);
-    font-size: var(--fs-ui-sm);
-    font-variant-numeric: tabular-nums; // 한글이 섞여 모노 대신
+    font-size: var(--fs-ui);
   }
 
   &__empty {

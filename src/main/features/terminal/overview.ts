@@ -8,9 +8,11 @@
 // - claude 찾기는 `ps` 한 번으로 전 세션(findClaudeMany).
 // - 대화 기록은 파일별로 **읽은 데까지 기억**해 늘어난 바이트만 읽는다. 처음엔 끝 TAIL_BYTES 만.
 import fs from 'node:fs';
-import type { TerminalOverviewItem } from '../../../shared/types';
+import type { TerminalOverviewItem, WorktreeInfo } from '../../../shared/types';
+import { listWorktreesBrief } from '../workspaces/git';
+import { listWorkspaces } from '../workspaces/store';
 import { alive, completeLines, findClaudeMany, readRange } from './claudeFiles';
-import { sessionLocationLabel } from './location';
+import { sessionLocation } from './location';
 import { listSessions, sessionRootPid } from './pty';
 import { digestLines, firstPromptOf, type TranscriptDigest } from './sessionDigest';
 
@@ -99,11 +101,33 @@ function digestFile(file: string): { digest: FileDigest; mtime: number } | null 
   return { digest: d, mtime: st.mtimeMs };
 }
 
+/**
+ * 세션 위치 → 소속 워크스페이스(이름·지정 색)와 브랜치 — 팝업이 저장소별로 묶는다.
+ * 브랜치는 LNB 10초 폴링과 같은 **지문 캐시 경량 조회**(`listWorktreesBrief` cached)라 git 을 거의 다시 돌리지 않는다.
+ * @param trees 한 번의 현황 조회 안에서 저장소별 목록을 나눠 쓴다(같은 저장소 세션이 여럿)
+ */
+async function placeOf(
+  cwd: string,
+  trees: Map<string, Promise<WorktreeInfo[]>>,
+): Promise<Pick<TerminalOverviewItem, 'workspace' | 'branch'>> {
+  const loc = await sessionLocation(cwd);
+  const ws = loc && listWorkspaces().find((w) => w.id === loc.wsId);
+  if (!loc || !ws) return { workspace: null, branch: null };
+  let list = trees.get(ws.repoPath);
+  if (!list) {
+    list = listWorktreesBrief(ws.repoPath, { cached: true }).catch(() => []);
+    trees.set(ws.repoPath, list);
+  }
+  const branch = (await list).find((w) => w.path === loc.wtPath)?.branch ?? null;
+  return { workspace: { id: ws.id, name: ws.name, color: ws.color }, branch };
+}
+
 export async function terminalOverview(): Promise<TerminalOverviewItem[]> {
   const sessions = listSessions();
   const claudes = await findClaudeMany(await rootsFor(sessions.map((s) => s.id)));
   const items: TerminalOverviewItem[] = [];
   const liveFiles = new Set<string>();
+  const trees = new Map<string, Promise<WorktreeInfo[]>>();
   for (const s of sessions) {
     const c = claudes.get(s.id);
     if (!c) continue;
@@ -116,7 +140,7 @@ export async function terminalOverview(): Promise<TerminalOverviewItem[]> {
       tabTitle: s.title,
       status: s.status,
       working: s.working,
-      location: await sessionLocationLabel(s.cwd),
+      ...(await placeOf(s.cwd, trees)),
       title: d?.aiTitle ?? null,
       firstPrompt: d?.firstPrompt ?? null,
       lastPrompt: d?.lastPrompt ?? null,
