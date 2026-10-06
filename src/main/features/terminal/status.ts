@@ -23,6 +23,12 @@ export const MIN_TURN_BYTES = 50;
 export const NOTIFY_INPUT_GAP_MS = 5000;
 // 재판정 타이머에 얹는 여유 — 게이트가 풀리는 순간 정확히 깨우면 경계에서 다시 걸린다
 export const NOTIFY_RECHECK_PAD_MS = 100;
+// 1초 틱이 이보다 늦게 오면 시스템이 잠들었다 깼다(또는 main 이 멈췄다)고 본다
+export const TICK_STALL_MS = 5000;
+// 깨어난 뒤 침묵 판정을 쉬는 시간 — 멈춰 있던 claude 가 다시 그리기 시작할 여유.
+// ⚠️ 이게 없으면 잠든 시간이 통째로 '침묵'으로 읽혀 작업 중이던 세션이 깨자마자 waiting 이 되고
+//    알림까지 나갔다(2026-08-19 로그: silence=69s 로 claude 2개 알림 → 2초 뒤 입력 없이 작업 재개).
+export const RESUME_GRACE_MS = 5000;
 
 // ── 1) 침묵 판정 — busy 세션이 조용해졌을 때 waiting 인가 idle 인가 ──────────────
 
@@ -55,8 +61,13 @@ export type SilenceDecision = {
 export function decideSilence(
   s: SilenceInput,
   now: number,
+  /** 마지막으로 잠들었다 깬 시각(0 = 없음) — 그 뒤 RESUME_GRACE_MS 동안은 판정하지 않는다 */
+  resumedAt = 0,
 ): SilenceDecision | null {
   if (s.status !== 'busy') return null;
+  // 깬 직후 — 출력이 끊겼던 건 claude 가 조용해서가 아니라 멈춰 있어서다. 유예가 끝나도 출력이
+  // 돌아오지 않았으면(잠들기 전에 이미 끝난 턴) 그때 평소대로 판정한다.
+  if (resumedAt && now - resumedAt < RESUME_GRACE_MS) return null;
   // bare BEL 은 에이전트의 명시적 주의 요청 — 짧은 침묵으로 조기 판정 + 바이트 임계 면제
   const bell = s.bellAt > s.lastInputAt;
   const silence = bell ? BEL_SILENCE_MS : WAIT_SILENCE_MS;
@@ -125,4 +136,24 @@ export function decideWaitingNotify(
     action: 'recheck',
     delayMs: NOTIFY_INPUT_GAP_MS - gap + NOTIFY_RECHECK_PAD_MS,
   };
+}
+
+// ── 3) 제출 판정 — 이 입력이 Enter(턴 시작)인가 ─────────────────────────────
+
+// eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
+const BRACKETED_PASTE_RE = /\x1b\[200~[\s\S]*?(?:\x1b\[201~|$)/g;
+// eslint-disable-next-line no-control-regex -- 터미널 제어 문자 매칭이 목적
+const SUBMIT_RE = /(?<!\x1b)[\r\n]/;
+
+/**
+ * 입력에 제출(Enter)이 있는가 — waiting 해제·생성 grace 해제·알림 재판정 대상을 가른다.
+ *
+ * - Shift+Enter(`ESC \r` = TUI 줄바꿈)는 제출이 아니다(멀티라인 작성 중 멈춤에 알림이 울리면 안 된다).
+ * - ⚠️ **붙여넣기 안의 줄바꿈도 제출이 아니다** — xterm 은 붙여넣은 글의 줄바꿈을 `\r` 로 바꿔
+ *   bracketed paste(`ESC[200~ … ESC[201~`)로 감싸 보낸다(`@xterm/xterm` Clipboard.ts). 그 `\r` 을 Enter 로
+ *   세면 여러 줄을 붙여넣기만 해도 대기 뱃지가 꺼지고, 5초 뒤 재판정에서 알림음·폰 푸시가 나갔다.
+ *   claude 는 붙여넣은 글을 제출하지 않는다 — 제출은 뒤따르는 Enter 다(폰 채팅 전송도 Enter 를 따로 보낸다).
+ */
+export function isSubmitInput(data: string): boolean {
+  return SUBMIT_RE.test(data.replace(BRACKETED_PASTE_RE, ''));
 }

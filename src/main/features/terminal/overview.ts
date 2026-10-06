@@ -8,7 +8,7 @@
 // - claude 찾기는 `ps` 한 번으로 전 세션(findClaudeMany).
 // - 대화 기록은 파일별로 **읽은 데까지 기억**해 늘어난 바이트만 읽는다. 처음엔 끝 TAIL_BYTES 만.
 import fs from 'node:fs';
-import type { TerminalOverviewItem, WorktreeInfo } from '../../../shared/types';
+import type { TerminalOverviewItem, TerminalSessionInfo, WorktreeInfo } from '../../../shared/types';
 import { listWorktreesBrief } from '../workspaces/git';
 import { listWorkspaces } from '../workspaces/store';
 import { alive, completeLines, findClaudeMany, readRange } from './claudeFiles';
@@ -122,6 +122,23 @@ export async function placeOf(
   return { workspace: { id: ws.id, name: ws.name, color: ws.color }, branch };
 }
 
+/**
+ * 줄의 상태 — 에이전트 탭은 LNB·탭 점과 **같은 판정**(pty.ts 휴리스틱)을 그대로 쓴다.
+ * 셸 탭에서 손으로 친 claude 는 휴리스틱이 waiting 자격을 주지 않아(셸은 `ls` 한 번에 뱃지가 뜨면 안 된다)
+ * 끝나도 '쉬는 중'으로 아래에 깔렸다 → claude 가 직접 쓰는 상태(`sessions/<pid>.json` status)로 읽는다.
+ * claude 의 idle(입력란 앞)은 에이전트 탭이 '입력 대기'로 보이는 자리와 같아 waiting 으로 맞춘다.
+ */
+function stateOf(
+  s: TerminalSessionInfo,
+  claudeStatus: string | undefined,
+): Pick<TerminalOverviewItem, 'status' | 'working'> {
+  if (s.agentId === 'shell') {
+    if (claudeStatus === 'busy') return { status: 'busy', working: true };
+    if (claudeStatus === 'idle' || claudeStatus === 'waiting') return { status: 'waiting', working: false };
+  }
+  return { status: s.status, working: s.working };
+}
+
 export async function terminalOverview(): Promise<TerminalOverviewItem[]> {
   const sessions = listSessions();
   const claudes = await findClaudeMany(await rootsFor(sessions.map((s) => s.id)));
@@ -138,8 +155,7 @@ export async function terminalOverview(): Promise<TerminalOverviewItem[]> {
       id: s.id,
       cwd: s.cwd,
       tabTitle: s.title,
-      status: s.status,
-      working: s.working,
+      ...stateOf(s, c.status),
       ...(await placeOf(s.cwd, trees)),
       title: d?.aiTitle ?? null,
       firstPrompt: d?.firstPrompt ?? null,

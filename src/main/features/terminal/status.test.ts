@@ -8,9 +8,11 @@ import {
   MIN_TURN_BYTES,
   NOTIFY_INPUT_GAP_MS,
   NOTIFY_RECHECK_PAD_MS,
+  RESUME_GRACE_MS,
   WAIT_SILENCE_MS,
   decideSilence,
   decideWaitingNotify,
+  isSubmitInput,
   type NotifyGateInput,
   type SilenceInput,
 } from './status';
@@ -88,6 +90,25 @@ describe('decideSilence — 침묵 판정', () => {
         bytesSinceInput: 0,
       });
       expect(decideSilence(s, NOW)).toBeNull(); // 2.5초 기준이므로 아직 이르다
+    });
+  });
+
+  describe('잠들었다 깬 직후', () => {
+    it('깬 뒤 유예 안에서는 아무리 오래 조용했어도 판정하지 않는다', () => {
+      // 증상(2026-08-19 로그): 잠든 시간이 침묵으로 읽혀 작업 중이던 claude 가 깨자마자 waiting + 알림,
+      // 2초 뒤 입력 없이 작업 재개
+      const s = busy({ lastOutputAt: NOW - 69_000 });
+      expect(decideSilence(s, NOW, NOW - (RESUME_GRACE_MS - 1))).toBeNull();
+    });
+
+    it('유예가 끝나도 출력이 돌아오지 않았으면 평소대로 판정한다 — 잠들기 전에 끝난 턴', () => {
+      const s = busy({ lastOutputAt: NOW - 69_000 });
+      expect(decideSilence(s, NOW, NOW - RESUME_GRACE_MS)).toEqual({ next: 'waiting', why: 'silence' });
+    });
+
+    it('유예 뒤 출력이 돌아왔으면 그 출력 기준으로 잰다', () => {
+      const s = busy({ lastOutputAt: NOW - 1_000 });
+      expect(decideSilence(s, NOW, NOW - RESUME_GRACE_MS - 1_000)).toBeNull();
     });
   });
 
@@ -178,5 +199,35 @@ describe('decideWaitingNotify — 알림 게이트', () => {
     // suppressNotifyUntil 을 0 으로 푸는 것이 수정이고, 그때 이 판정이 나와야 한다.
     const d = decideWaitingNotify(gate({ suppressNotifyUntil: 0 }), NOW);
     expect(d).toEqual({ action: 'fire' });
+  });
+});
+
+describe('isSubmitInput — 제출 판정', () => {
+  it('Enter(\\r)는 제출', () => {
+    expect(isSubmitInput('\r')).toBe(true);
+    expect(isSubmitInput('hello\r')).toBe(true);
+  });
+
+  it('타이핑·숫자 키는 제출이 아니다', () => {
+    expect(isSubmitInput('abc')).toBe(false);
+    expect(isSubmitInput('1')).toBe(false);
+  });
+
+  it('Shift+Enter(ESC \\r = TUI 줄바꿈)는 제출이 아니다', () => {
+    expect(isSubmitInput('\x1b\r')).toBe(false);
+  });
+
+  it('붙여넣기 안의 줄바꿈은 제출이 아니다', () => {
+    // 증상: 여러 줄을 붙여넣기만 해도 대기 뱃지가 꺼지고 5초 뒤 알림음·폰 푸시
+    // (xterm 은 붙여넣은 줄바꿈을 \r 로 바꿔 bracketed paste 로 감싼다)
+    expect(isSubmitInput('\x1b[200~첫 줄\r둘째 줄\r\x1b[201~')).toBe(false);
+  });
+
+  it('붙여넣기 뒤에 따로 친 Enter 는 제출', () => {
+    expect(isSubmitInput('\x1b[200~a\rb\x1b[201~\r')).toBe(true);
+  });
+
+  it('끝 표시가 아직 안 온 붙여넣기도 줄바꿈을 세지 않는다', () => {
+    expect(isSubmitInput('\x1b[200~a\rb')).toBe(false);
   });
 });

@@ -47,7 +47,7 @@ import {
   tmuxScrollPane,
   tmuxSessionName,
 } from './tmux';
-import { decideSilence, decideWaitingNotify } from './status';
+import { TICK_STALL_MS, decideSilence, decideWaitingNotify, isSubmitInput } from './status';
 
 const RING_MAX_BYTES = 512 * 1024; // attach replay 용 출력 보관 상한 (chunk 단위 링버퍼)
 const BATCH_MS = 16; // 출력 배칭 — 대량 출력 시 IPC/WS 이벤트 폭주 방지
@@ -285,7 +285,15 @@ function noteOutput(s: Session, chunk: string, bytes: number) {
   // ⚠️ 한 번 켜지면 busy 인 동안 유지한다 — 작업 중에 스크롤한다고 표시가 꺼지면 안 된다.
   if (!s.working && sustained) {
     s.working = true;
-    termLog('status', { id: s.id, from: 'busy', to: 'busy+working', why: 'sustained-output' });
+    // 실작업이 확인됐다 = 이 작업이 끝나면 알릴 가치가 있다 — 알림 기회를 다시 채운다.
+    // 기회는 사람 입력 때만 채워져서, **입력 없이 시작된 작업**의 완료가 무음이었다: 앱 재시작(복원이
+    // 기회를 미리 소진) 때 돌던 턴 · claude 가 스스로 시작한 턴(백그라운드 작업 완료·다른 세션 메시지·/loop)
+    // · 작업 도중 긴 침묵으로 waiting 을 한 번 찍은 뒤의 진짜 완료. attach/resize redraw·분 단위 갱신은
+    // 한 프레임이라 sustained 가 아니므로 여기서 다시 채워지지 않는다(턴당 1회 원칙 유지).
+    // 생성·복원 grace(suppressNotifyUntil)는 건드리지 않는다 — claude 기동 화면도 길게 그릴 수 있다.
+    const rearm = s.notifiedSinceInput;
+    s.notifiedSinceInput = false;
+    termLog('status', { id: s.id, from: 'busy', to: 'busy+working', why: 'sustained-output', rearm });
     emitChanged();
   }
 }
@@ -300,10 +308,8 @@ function noteInput(s: Session, data: string) {
   s.bytesSinceInput = 0;
   s.bellAt = 0;
   s.notifiedSinceInput = false; // 새 턴 — 알림 기회 리셋
-  // 제출(Enter) 여부 — 게이트 유예 재판정 대상 판정. Shift+Enter(ESC \r = TUI 줄바꿈)는
-  // 제출이 아니므로 제외한다(멀티라인 작성 중 멈춤에 알림이 울리면 안 된다).
-  // eslint-disable-next-line no-control-regex -- 터미널 제어 문자 매칭이 목적
-  s.lastInputSubmit = /(?<!\x1b)[\r\n]/.test(data);
+  // 제출(Enter) 여부 — 게이트 유예 재판정 대상 판정. Shift+Enter·붙여넣기 안의 줄바꿈은 제외(status.ts)
+  s.lastInputSubmit = isSubmitInput(data);
   // ⚠️ 제출이 오면 **생성 grace 를 즉시 푼다** — 사용자가 뭔가 시킨 세션은 더 이상 '방금
   // 만든/복원한' 세션이 아니다. grace 는 초기 프롬프트·복원 redraw 의 소음을 막자는 것이지
   // 사용자가 시킨 작업의 완료를 삼키라는 뜻이 아닌데, `create-grace` 분기가 알림 기회까지
@@ -345,11 +351,19 @@ const AUTO_REPLY_RE =
   // eslint-disable-next-line no-control-regex -- 터미널 이스케이프 시퀀스 매칭이 목적
   /^(?:\x1b\[(?:[IO]|\d+;\d+R|\d*n|[?>][0-9;]*c|\?[0-9;]+\$y|<\d+;\d+;\d+[Mm]|\d+;\d+;\d+M|M[\s\S]{3})|\x1b\][0-9]+;[^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[^\x1b]*\x1b\\)+$/;
 
+let lastTickAt = 0; // 직전 틱 시각 — 틱이 크게 늦으면 잠들었다 깬 것이다
+let resumedAt = 0; // 마지막으로 깬 시각 — 그 직후엔 침묵 판정을 쉰다(status.ts RESUME_GRACE_MS)
+
 /** 전역 침묵 판정 틱 — busy 세션이 조용해지면 waiting(에이전트) 또는 idle 로 내린다 */
 function statusTick() {
   const now = Date.now();
+  if (lastTickAt && now - lastTickAt > TICK_STALL_MS) {
+    resumedAt = now;
+    termLog('status', { event: 'resume', gap: `${((now - lastTickAt) / 1000).toFixed(1)}s` });
+  }
+  lastTickAt = now;
   for (const s of sessions.values()) {
-    const d = decideSilence(s, now);
+    const d = decideSilence(s, now, resumedAt);
     if (!d) continue;
     setStatus(s, d.next, d.why);
     // ⚠️ BEL 은 판정에 **한 번 쓰면 소비**한다. 예전엔 다음 입력까지 남아 있어서, 완료 때
@@ -361,7 +375,9 @@ function statusTick() {
 
 let statusTimer: NodeJS.Timeout | null = null;
 const ensureStatusTimer = () => {
-  if (!statusTimer) statusTimer = setInterval(statusTick, STATUS_TICK_MS);
+  if (statusTimer) return;
+  lastTickAt = 0; // 쉬던 타이머를 다시 켠 것은 잠에서 깬 것이 아니다
+  statusTimer = setInterval(statusTick, STATUS_TICK_MS);
 };
 const stopStatusTimerIfEmpty = () => {
   if (sessions.size === 0 && statusTimer) {

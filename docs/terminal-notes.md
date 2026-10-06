@@ -596,6 +596,15 @@ xterm 은 커스텀 핸들러에서 false 를 받으면 `cancel()` 없이 빠져
 - ⚠️ 판정을 `statusTick` 으로 옮기지 말 것 — 출력이 끊긴 뒤에도 시간만으로 문턱을 넘어 리렌더가 통과한다.
 - **`waiting`(초록)은 제출(Enter)로만 내린다** — 타이핑 도중에 내리면 답을 쓰다 다른 세션을 보러 간 사용자가 '아직 답 안 보낸 세션'을 목록에서 잃는다(2026-08-19 신고). `noteInput` 은 `lastInputSubmit` 일 때만 `waiting → idle`. 알림 기회 리셋(`notifiedSinceInput`)은 종전대로 모든 입력에서 한다.
 
+### 상태 판정 검토 — 깬 직후·붙여넣기·입력 없는 턴 (2026-10-06)
+판정 기준 검토 중 8월 `term-debug.log` 에서 가짜 알림 실례 두 가지를 찾아 하나를 고쳤다.
+
+- **잠들었다 깨면 침묵 판정을 쉰다** — 09:36:11 실측: `silence=69s` 로 작업 중이던 claude 2개가 waiting + **알림**, 2초 뒤 입력 없이 작업 재개. 1초 틱이 잠든 시간을 통째로 '침묵'으로 읽고, 깬 뒤 claude 출력보다 틱이 먼저 돈다. `statusTick` 이 틱 간격 > `TICK_STALL_MS`(5초)를 깬 것으로 보고 `resumedAt` 을 남기면 `decideSilence` 가 `RESUME_GRACE_MS`(5초) 동안 판정을 쉰다. 유예 뒤에도 출력이 없으면(잠들기 전에 끝난 턴) 평소대로 waiting. 로그 `[status] event=resume gap=…`.
+- **붙여넣기 안의 줄바꿈은 제출이 아니다**(`isSubmitInput`) — xterm 은 붙여넣은 글의 줄바꿈을 `\r` 로 바꿔 bracketed paste 로 감싼다(`@xterm/xterm` Clipboard.ts `prepareTextForTerminal`). 예전 정규식 `(?<!\x1b)[\r\n]` 이 그걸 Enter 로 세어, 여러 줄을 붙여넣기만 해도 대기 뱃지가 꺼지고 5초 뒤 재판정(`notifyRecheck`)에서 알림음·폰 푸시가 나갔다(토스트는 보는 세션이라 생략되지만 소리·푸시는 가시성 게이트가 없다).
+- **`working` 이 켜지면 알림 기회를 다시 채운다** — 기회는 사람 입력 때만 채워져서, 입력 없이 시작된 턴의 완료가 무음이었다: 앱 재시작 때 돌던 턴(`restoreSessions` 가 기회를 미리 소진) · claude 가 스스로 시작한 턴(백그라운드 작업 완료·다른 세션 메시지·`/loop`) · 작업 도중 긴 침묵 뒤의 진짜 완료. attach/resize redraw·분 단위 갱신은 sustained 가 아니라 재장전되지 않는다. ⚠️ 생성·복원 grace 는 그대로 둔다(claude 기동 화면이 1.2초 넘게 이어질 수 있다) — 복원 후 20초 안에 끝난 턴은 여전히 조용하다.
+- **미해결 — 작업 도중 긴 침묵**: 08:17:33 실측 femc 세션이 waiting + 알림 → **22초 뒤 입력 없이 재개**. "작업 중이면 스피너가 1Hz 로 그린다"는 전제가 늘 맞지는 않는다. 대안은 claude 가 직접 쓰는 `sessions/<pid>.json` 의 `status`(busy/idle/waiting)로 waiting 확정 직전 교차 확인하는 것 — 판정 경로에 파일 조회가 끼는 구조 변경이라 보류(현재 claude 버전 재현 미확인).
+- ⌘⇧P 팝업의 **셸 탭 claude**(손으로 친 것)는 휴리스틱이 waiting 자격을 안 줘 끝나도 '쉬는 중'으로 깔렸다 → `overview.ts stateOf` 가 claude 상태 파일로 읽는다(claude idle = 입력란 앞 = 에이전트 탭의 '입력 대기'와 같은 자리라 waiting). 알림은 여전히 없다(휴리스틱 그대로).
+
 ### 진단 로그 (`terminal/debug.ts`)
 알림 오탐은 재현 시점을 잡기 어려워 콘솔이 아니라 파일에 쌓는다.
 

@@ -164,6 +164,10 @@ paths:
 - ⚠️ **자동 응답은 입력이 아니다**(`AUTO_REPLY_RE` — 포커스·CPR·DSR·DA·DECRPM·**마우스 리포트**·OSC·DCS) — 새 유형은 main 목록에. ⚠️ BEL 은 한 번 쓰면 소비(`bellAt = 0`).
 - **sustained**(`noteOutput`): `OUTPUT_RUN_GAP_MS`(1.5초) 이내로 `WORKING_MIN_MS`(1.2초) 이상 + 키·마우스 조용. `working` 과 `waiting`→busy 가 이걸 요구. ⚠️ `idle`→busy 는 즉시. ⚠️ `statusTick` 으로 옮기지 말 것.
 - **`waiting` 은 제출로만 내린다**(`lastInputSubmit`).
+- 제출 판정은 `isSubmitInput`(status.ts) — ⚠️ **붙여넣기(`ESC[200~…201~`) 안의 줄바꿈은 제출이 아니다**(xterm 이 `\r` 로 바꿔 보낸다 — 여러 줄 붙여넣기에 뱃지 꺼짐 + 5초 뒤 알림).
+- ⚠️ **잠들었다 깨면 침묵 판정을 5초 쉰다**(`TICK_STALL_MS`·`RESUME_GRACE_MS` · `decideSilence` 의 `resumedAt`) — 잠든 시간이 침묵으로 읽혀 작업 중 세션에 가짜 알림이 나갔다(2026-10-06).
+- 알림 기회는 입력 + **`working` 켜짐**(실작업)에도 다시 채운다 — 입력 없이 시작된 턴(복원·백그라운드 완료·`/loop`)의 완료 알림. 생성·복원 grace 는 건드리지 않는다.
+- ⌘⇧P 의 **셸 탭 claude**(휴리스틱상 waiting 자격 없음) 상태는 claude 상태 파일로 읽는다(`overview.ts stateOf`).
 - 진단: `touch ~/Library/Application\ Support/One\ App/term-debug.on`(재시작 불필요) → `term-debug.log`(dev `-dev`). 태그 `[input]`·`[auto]`·`[status]`·`[notify]`·`[skip]`·`[life]`.
 
 ## 리사이즈

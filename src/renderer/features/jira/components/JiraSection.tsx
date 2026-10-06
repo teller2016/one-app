@@ -69,6 +69,17 @@ const prioInfo = (name: string): { level: string; icon: IconName } | null => {
   return null;
 };
 
+/**
+ * femc 작업 칩의 상태 — 터미널 탭 점과 같은 의미.
+ * ⚠️ `busy` 가 아니라 `working` 을 본다 — busy 는 스크롤·타이핑 리렌더 한 프레임에도 켜진다.
+ *    예전엔 busy 가 아니면 전부 '입력 대기'라 쉬는 세션(idle)까지 주황으로 보였다.
+ */
+function workChipState(s: TerminalSessionInfo): { dot: 'wait' | 'run' | 'idle'; label: string } {
+  if (s.status === 'waiting') return { dot: 'wait', label: '입력 대기' };
+  if (s.working) return { dot: 'run', label: '작업 중' };
+  return { dot: 'idle', label: '쉬는 중' };
+}
+
 /** 이슈별 전환 메뉴 데이터 — 열 때마다 Jira 에서 조회 (프로젝트·워크플로우별로 다름) */
 type MenuState = 'loading' | JiraTransition[] | { error: string };
 
@@ -196,12 +207,10 @@ const IssueRow = memo(function IssueRow({
           type="button"
           className="jira__work-chip"
           onClick={() => onOpenSession(workSession)}
-          title={`${workSession.title} — ${
-            workSession.status === 'busy' ? '작업 중' : '입력 대기'
-          } · 터미널로 이동`}
+          title={`${workSession.title} — ${workChipState(workSession).label} · 터미널로 이동`}
         >
           {/* 작업 중 = 초록 펄스 · 입력 대기 = 주황 (터미널 탭 점과 같은 의미) */}
-          <StatusDot status={workSession.status === 'busy' ? 'run' : 'wait'} />
+          <StatusDot status={workChipState(workSession).dot} />
           <span className="jira__work-chip-name">femc</span>
         </button>
       )}
