@@ -62,6 +62,8 @@ export function StartWorkModal({
   const confirmDialog = useConfirm();
   const [workspaces, setWorkspaces] = useState<TerminalWorkspace[]>([]);
   const [worktrees, setWorktrees] = useState<Record<string, WorktreeInfo[]>>({});
+  // 목록 조회가 실패한 워크스페이스 → 실패 사유 (폴더가 사라졌거나 git 이 실패한 저장소)
+  const [broken, setBroken] = useState<Record<string, string>>({});
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [femcReady, setFemcReady] = useState(true); // 확인 전엔 경고를 띄우지 않는다
@@ -100,12 +102,23 @@ export function StartWorkModal({
         // `git status --untracked-files=all` + `git diff` 를 돌려 전부 모으면 600ms 가까이
         // 걸린다(워크스페이스 14개 596ms, 2026-08-20 실측). 그동안 모달이 안 뜨면 티켓 하나
         // 시작하는 데 체감된다. 미커밋 표시(dirty·±N)에 필요한 상세는 아래에서 덧입힌다.
+        // ⚠️ 실패는 **워크스페이스마다** 잡는다 — 폴더가 사라진 저장소 하나가 거부되면
+        // Promise.all 전체가 거부돼 나머지 위치까지 못 고르고 시작이 막혔다(2026-10-06 신고)
+        const failed: Record<string, string> = {};
         const trees = await Promise.all(
-          ws.map(async (w) => [w.id, await api.workspaces.worktrees(w.id, false)] as const)
+          ws.map(async (w) => {
+            try {
+              return [w.id, await api.workspaces.worktrees(w.id, false)] as const;
+            } catch (err) {
+              failed[w.id] = errMsg(err);
+              return [w.id, [] as WorktreeInfo[]] as const;
+            }
+          })
         );
         if (!alive) return;
         setWorkspaces(ws);
         setWorktrees(Object.fromEntries(trees));
+        setBroken(failed);
         setSessions(ss);
         setProjects(ps);
         setFemcReady(agents.some((a) => a.id === 'femc' && a.installed));
@@ -116,6 +129,7 @@ export function StartWorkModal({
         // 미커밋 표시는 뒤따라 채운다 — 도착하는 워크스페이스부터 그 항목만 갈아끼우므로
         // 목록은 이미 떠 있고 '미커밋'·±N 만 곧 나타난다
         for (const w of ws) {
+          if (w.id in failed) continue; // 경량 조회도 실패한 곳은 상세도 실패한다
           void api.workspaces
             .worktrees(w.id, true)
             .then((list) => {
@@ -305,6 +319,15 @@ export function StartWorkModal({
                     <span className="jira-work__ws-name">{ws.name}</span>
                     {matchedWsIds.has(ws.id) && (
                       <span className="jira-work__match">{projectKey} 매칭</span>
+                    )}
+                    {/* 고를 행이 없다 — 이유를 남겨 둔다(정리는 터미널 섹션에서 워크스페이스 삭제) */}
+                    {broken[ws.id] !== undefined && (
+                      <span
+                        className="jira-work__ws-missing"
+                        title={`${ws.repoPath}\n${broken[ws.id]}`}
+                      >
+                        {/no such file/i.test(broken[ws.id]) ? '폴더 없음' : '불러오지 못함'}
+                      </span>
                     )}
                   </div>
                   {(worktrees[ws.id] ?? []).map((wt) => {
