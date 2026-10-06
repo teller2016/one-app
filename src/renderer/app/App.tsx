@@ -21,6 +21,7 @@ import {
   MoStatusItem,
   SessionSwitcher,
   TerminalSection,
+  WaitingToast,
 } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
@@ -184,11 +185,41 @@ function AppToastBridge(): null {
   }, []);
   useEffect(() => {
     if (!window.oneApp?.onToast) return;
+    // 세션이 팝아웃 창에 있으면 그 창 포커스가 곧 '이동'이다 — 아니면 터미널 섹션의 그 세션으로 간다
+    const goSession = (term: { sessionId: string; cwd: string }) => {
+      void (async () => {
+        const res = await window.oneApp?.terminal?.windows?.focusSession(
+          term.sessionId
+        );
+        if (!res?.handled)
+          openTerminalSession({ sessionId: term.sessionId, cwd: term.cwd });
+      })();
+    };
     return window.oneApp.onToast((p) => {
       // 터미널 세션 대상(입력대기)인데 이미 그 세션을 보고 있으면 생략 — 같은 화면에
       // "이동" 토스트는 소음이다 (판정은 TerminalSection 이 sectionNav 에 등록)
       const term = p.terminalSession;
       if (term && isSessionOnScreen(term.sessionId)) return;
+      // 입력 대기 카드(저장소·작업 제목·선택지 버튼/마지막 답변) — features/terminal 이 그린다
+      const card = p.terminalCard;
+      if (term && card) {
+        toast(p.message, {
+          sticky: p.sticky,
+          dedupeKey: p.dedupeKey,
+          render: (close) => (
+            <WaitingToast
+              card={card}
+              sessionId={term.sessionId}
+              onOpen={() => {
+                close();
+                goSession(term);
+              }}
+              onClose={close}
+            />
+          ),
+        });
+        return;
+      }
       toast(p.message, {
         variant: p.variant ?? "info",
         title: p.title,
@@ -198,23 +229,7 @@ function AppToastBridge(): null {
         // 세션 대상이면 그 세션까지 포커스, 아니면 섹션 전환만 — 둘 다 sectionNav
         // 경유라 App 이 등록한 navigator 가 SECTIONS 검증을 한다
         action: term
-          ? {
-              label: p.actionLabel ?? "이동",
-              onClick: () => {
-                // 세션이 팝아웃 창에 있으면 그 창 포커스가 곧 '이동'이다 —
-                // 아니면 종전대로 터미널 섹션의 그 세션으로 간다
-                void (async () => {
-                  const res = await window.oneApp?.terminal?.windows?.focusSession(
-                    term.sessionId
-                  );
-                  if (!res?.handled)
-                    openTerminalSession({
-                      sessionId: term.sessionId,
-                      cwd: term.cwd,
-                    });
-                })();
-              },
-            }
+          ? { label: p.actionLabel ?? "이동", onClick: () => goSession(term) }
           : p.section
             ? { label: p.actionLabel ?? "이동", section: p.section }
             : undefined,

@@ -17,6 +17,7 @@ import { listAgents } from './agents';
 import { subscribeChat } from './chat';
 import { sessionLocation, sessionLocationLabel } from './location';
 import { terminalOverview } from './overview';
+import { answerPrompt, waitCard } from './waitCard';
 import {
   initTerminalWindows,
   isVisibleInPopout,
@@ -173,6 +174,10 @@ export function registerTerminalIpc() {
   ipcMain.handle('terminal:agents', () => listAgents());
   // Claude 세션 현황 — ⌘⇧P 빠른 전환 팝업이 열린 동안만 몇 초마다 부른다(overview.ts)
   ipcMain.handle('terminal:overview', () => terminalOverview());
+  // 입력 대기 알림에서 바로 답하기 — 화면이 알림의 질문과 같을 때만 번호 키를 보낸다(waitCard.ts)
+  ipcMain.handle('terminal:prompt:answer', (_e, id: string, key: string, n: number) =>
+    answerPrompt(String(id), String(key), Number(n))
+  );
   // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다
   ipcMain.handle('terminal:backend', async () => ({ tmux: !!(await initTmux()) }));
   ipcMain.handle('terminal:notify-level:get', () => getNotifyLevel());
@@ -260,7 +265,11 @@ export function registerTerminalIpc() {
     // sticky 지만 dedupeKey 로 세션당 1장만 유지되고, 이미 보고 있는 세션이면
     // 렌더러(AppToastBridge)가 생략한다. 백그라운드 알럿 폴백은 alert 단계에서만.
     void (async () => {
-      const location = await sessionLocationLabel(info.cwd);
+      const [location, card] = await Promise.all([
+        sessionLocationLabel(info.cwd),
+        // 알림 카드(저장소·작업 제목·선택지/마지막 답변) — 못 모아도 알림은 예전 문구로 나간다
+        waitCard(info.id).catch(() => null),
+      ]);
       // 폰 푸시(push.ts) — 데스크톱 알림 강도와 무관하다(폰에서 알림을 허용한 것 자체가 선택이다).
       // 페이지가 살아 있으면 페이지 알림(MO controller.ts notifyWaiting)도 뜨지만 tag 가 같아 한 장으로 합쳐진다
       if (canPushToPhone()) {
@@ -280,6 +289,7 @@ export function registerTerminalIpc() {
         section: 'terminal',
         terminalSession: { sessionId: info.id, cwd: info.cwd },
         dedupeKey: termWaitToastKey(info.id),
+        ...(card ? { terminalCard: card } : {}),
       };
       // 팝아웃 창이 그 세션을 **포커스 상태로** 보고 있으면 토스트를 생략한다 —
       // 메인 창의 렌더러 판정(AppToastBridge 의 isSessionOnScreen)과 짝을 이루는

@@ -49,8 +49,8 @@ async function rootsFor(ids: string[]): Promise<Map<string, number>> {
   return out;
 }
 
-/** 대화 기록 요약 갱신 — 파일이 아직 없으면(첫 메시지 전) null */
-function digestFile(file: string): { digest: FileDigest; mtime: number } | null {
+/** 대화 기록 요약 갱신 — 파일이 아직 없으면(첫 메시지 전) null. 입력 대기 카드(waitCard.ts)도 쓴다 */
+export function digestFile(file: string): { digest: FileDigest; mtime: number } | null {
   let st: fs.Stats;
   try {
     st = fs.statSync(file);
@@ -106,7 +106,7 @@ function digestFile(file: string): { digest: FileDigest; mtime: number } | null 
  * 브랜치는 LNB 10초 폴링과 같은 **지문 캐시 경량 조회**(`listWorktreesBrief` cached)라 git 을 거의 다시 돌리지 않는다.
  * @param trees 한 번의 현황 조회 안에서 저장소별 목록을 나눠 쓴다(같은 저장소 세션이 여럿)
  */
-async function placeOf(
+export async function placeOf(
   cwd: string,
   trees: Map<string, Promise<WorktreeInfo[]>>,
 ): Promise<Pick<TerminalOverviewItem, 'workspace' | 'branch'>> {

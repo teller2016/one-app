@@ -100,6 +100,7 @@ import type {
   TerminalCreateInput,
   TerminalSessionInfo,
   TerminalOverviewItem,
+  TerminalPromptAnswerResult,
   TerminalAttachResult,
   TerminalServerStatus,
   TerminalAgentInfo,
@@ -388,6 +389,8 @@ declare global {
         agents: () => Promise<TerminalAgentInfo[]>;
         // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
         overview?: () => Promise<TerminalOverviewItem[]>;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        answerPrompt?: (id: string, key: string, n: number) => Promise<TerminalPromptAnswerResult>;
         backend: () => Promise<{ tmux: boolean }>;
         notifyLevel: {
           get: () => Promise<TerminalNotifyLevel>;

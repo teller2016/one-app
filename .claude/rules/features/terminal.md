@@ -281,6 +281,16 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
 - 워크스페이스·브랜치는 main 이 `sessionLocation` + `listWorktreesBrief(…, {cached: true})`(LNB 폴링과 같은 지문 캐시)로 채운다 — 한 번의 조회 안에서 저장소별 목록을 나눠 쓴다.
 - dev 검증: dev 는 tmux 소켓이 따로라 세션 0개로 뜬다 → `terminal.create({agentId:'claude'})` 로 만들면 계정 선택 셸 함수(`1) Personal`)가 먼저 뜬다(`write('1\r')`). 짧은 메시지 하나면 1~2초 안에 ai-title 이 생긴다.
 
+## 입력 대기 알림 카드 — 알림에서 바로 답하기 (2026-10-06)
+사용자가 시안 C(캔버스 '입력 대기 알림 시안')를 골랐다. main `waitCard.ts` 가 카드를 모아 `AppToastPayload.terminalCard` 로 싣고, 앱 셸 `AppToastBridge` 가 `toast(…, { render })`(공용 Toast 의 직접 그리기 옵션)로 `WaitingToast` 를 그린다. OS 알림(alert)·폰 푸시는 예전 title/message 그대로.
+- 카드 = 저장소 타일·`저장소 · 작업 제목`(overview 의 `placeOf`·`digestFile` 재사용) + ① 번호 선택 화면이면 질문·선택지(권한 확인이면 `preview`) ② 아니면 claude 마지막 답변(`lastReplyOf` — 꼬리 512KB). 선택 화면은 **claude 가 `status: 'waiting'` 일 때만** 읽는다(채팅 보기와 같은 게이트 — 답변 속 '1. …' 오인 방지).
+- 답하기 = IPC `terminal:prompt:answer(id, key, n)` → **그 번호 키를 PTY 에 쓴다**(폰 채팅 보기와 같은 방식). ⚠️ 알림은 묵는다 — 보내기 직전 화면을 다시 읽어 `promptKey`(질문·선택지 글자, 커서 제외)가 같을 때만 보낸다(다르면 stale → '이미 답했거나 질문이 사라졌습니다', 실측). 보낸 뒤 화면이 바뀔 때까지 최대 1.8초 기다려 다음 선택 화면을 카드에 싣는다 — 끝까지 같으면 버튼을 잠근다(두 번 답하지 않게).
+- ⚠️ **번호 키는 제출로 치지 않는다**(`noteInput` 은 Enter 만) — 그래서 알림에서 답한 뒤 이어진 작업이 끝나도 알림이 안 나갔다(실측) → 알림 답하기만 `markAnswerSubmitted`(Enter 제출과 같은 처리)를 덧댄다. 터미널·폰에서 번호로 답한 경우는 예전 그대로다.
+- 직접 답 자리(`freeText`)는 버튼이 아니다(점선·'직접 답하기 — 터미널에서').
+- 선택 화면 읽기 보강(`screenPrompt.ts` + 테스트): `kind`(권한 확인 = `Tab to amend` · 플랜 승인 = `ctrl+g`) · 권한 `preview` = 상자 제목 + 점선 위 **마지막 줄**(설명·파일 이름 — `Tip: auto mode …` 안내는 그 위에 접혀 온다) + 점선 안 내용(`│ ` 걷기). ⚠️ 긴 명령·경로는 claude 가 **폭 끝에서 글자 단위로 접는다**(`-J` 로도 안 이어진다) — 폭(가장 긴 줄) − 2 이상인 줄은 다음 줄과 잇는다(선택지 라벨도 — '항상 허용' 경로가 설명으로 새던 것).
+- 🔲 **권한 확인 창에선 입력 대기 알림 자체가 안 나간다**(이번 변경 전부터) — 창이 떠 있는 동안 claude 가 도구 줄 `⏺` 를 **깜빡이며 계속 다시 그려**(초당 ~100B, 2026-10-06 `pipe-pane` 실측) '2.5초 완전 침묵' 판정이 오지 않아 busy·working 으로 남는다. bypass 모드(사용자 기본)에선 권한 창이 드물다. 고친다면 claude 의 `sessions/<pid>.json` `status: 'waiting'`(waitingFor 'permission prompt')을 대기 신호로 함께 보는 쪽 — `status.ts` 규칙 변경이라 사용자 확인 후.
+- dev 검증: 질문 = claude 에게 'AskUserQuestion 하나로 물어보라' · 권한/플랜 창 = `command: 'CLAUDE_CONFIG_DIR="$HOME/.claude" command claude --permission-mode default|plan'`(사용자 claude 함수는 bypass 를 붙인다). 알림은 생성 20초 유예 뒤 + 그 세션을 보고 있지 않을 때만 뜬다(다른 섹션으로 옮겨 둘 것).
+
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만**. 감지는 `zsh -lc "whence -p"` 1회 캐시, 미설치는 조용히 제외.
 - `presetsForWorkspace`·`agentIdFromCommand` 는 **`shared/types.ts`** — 데스크톱·MO 판정이 갈라지면 안 된다.

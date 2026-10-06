@@ -481,6 +481,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     agents: () => ipcRenderer.invoke("terminal:agents"),
     // Claude 세션 현황 — claude 가 떠 있는 세션의 작업 제목·요청 (⌘⇧P 빠른 전환)
     overview: () => ipcRenderer.invoke("terminal:overview"),
+    // 입력 대기 알림에서 바로 답하기 — key = 알림이 보여 준 질문(promptKey), n = 고른 번호
+    answerPrompt: (id: string, key: string, n: number) =>
+      ipcRenderer.invoke("terminal:prompt:answer", id, key, n),
     // 백엔드 정보 — tmux(영속) 가용 여부 (미설치 힌트 표시용)
     backend: () => ipcRenderer.invoke("terminal:backend"),
     // 입력대기 알림 강도 (badge/sound/alert — 뱃지는 항상)

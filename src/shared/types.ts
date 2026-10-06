@@ -1,4 +1,6 @@
 // 프로세스(main / preload / renderer) 간 공용 타입
+// terminal-protocol 도 이 파일을 type-only 로 가져온다 — 순환은 타입뿐이라 런타임에 영향이 없다
+import type { ChatPrompt } from './terminal-protocol';
 
 export type ScheduleDateOption = {
   type: "today" | "yesterday" | "date";
@@ -445,7 +447,33 @@ export type AppToastPayload = {
   terminalSession?: { sessionId: string; cwd: string };
   /** 같은 키의 기존 토스트를 교체한다 — 세션당 입력대기 토스트 1장 유지용 */
   dedupeKey?: string;
+  /** 입력 대기 카드 — 있으면 렌더러가 title/message 대신 카드(저장소·작업 제목·선택지 버튼)로 그린다.
+   *  title/message 는 OS 알림(alert 단계) 폴백으로 그대로 싣는다 */
+  terminalCard?: TerminalWaitCard;
 };
+
+/** 입력 대기 알림 카드 — main `ipc.ts` 가 화면·대화 기록에서 모아 싣는다 (2026-10-06 시안 C '알림에서 바로 답하기') */
+export type TerminalWaitCard = {
+  workspace: Pick<TerminalWorkspace, 'id' | 'name' | 'color'> | null;
+  branch: string | null;
+  /** 작업 제목 — ai-title → 첫 요청 → 탭 이름 */
+  title: string;
+  /** 번호 선택 화면(질문·권한 확인·플랜 승인) — 있으면 버튼으로 바로 답한다 */
+  prompt: ChatPrompt | null;
+  /** 선택 화면이 없을 때(일반 완료) claude 의 마지막 답변 한 줄 */
+  reply: string | null;
+};
+
+/** 알림에서 답하기 결과 — 보내기 직전 화면을 다시 읽어 **같은 질문일 때만** 번호 키를 보낸다 */
+export type TerminalPromptAnswerResult =
+  /** 보냈다 — next = 이어지는 선택 화면(여러 질문·검토 화면), 없으면 null */
+  | { ok: true; next: ChatPrompt | null }
+  /** 안 보냈다 — 이미 답했거나 화면이 바뀌었다(stale) · 세션이 없다(gone) · 직접 답 자리라 버튼으로 못 답한다(invalid) */
+  | { ok: false; reason: 'stale' | 'gone' | 'invalid'; prompt: ChatPrompt | null };
+
+/** 선택 화면이 같은 질문인가 — 커서 위치(current)는 빼고 질문·선택지 글자로 비교한다(화살표로 커서만 옮겨도 같은 질문) */
+export const promptKey = (p: ChatPrompt | null): string =>
+  p ? JSON.stringify([p.header ?? '', p.question, p.options.map((o) => o.label)]) : '';
 
 /**
  * 터미널 입력대기 토스트의 dedupeKey.

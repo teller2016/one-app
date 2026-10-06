@@ -14,6 +14,8 @@ import { parseTranscript } from './transcript';
 
 /** 표시 상한 — 한 줄 요약이라 길게 보낼 이유가 없다 */
 const TEXT_MAX = 200;
+/** 마지막 답변 상한 — 알림 카드에서 두 줄까지 보인다 */
+const REPLY_MAX = 300;
 
 export type TranscriptDigest = {
   aiTitle?: string;
@@ -33,13 +35,13 @@ export function promptLine(text: string): string | undefined {
 }
 
 /** 여러 줄 글 → 한 줄(공백 접기·이미지 자리 표시 제거·길이 상한) — 빈 글이면 undefined */
-export function oneLine(text: string): string | undefined {
+export function oneLine(text: string, max = TEXT_MAX): string | undefined {
   const t = text
     .replace(/\[Image #\d+\]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!t) return undefined;
-  return t.length > TEXT_MAX ? `${t.slice(0, TEXT_MAX)}…` : t;
+  return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
 /**
@@ -81,6 +83,25 @@ export function firstPromptOf(lines: string[]): string | undefined {
       const args = it.text.match(/^\/\S+\s+([\s\S]+)$/)?.[1]?.trim();
       if (args && /\s/.test(args)) return promptLine(args);
     }
+  }
+  return undefined;
+}
+
+/**
+ * 대화 끝머리 줄들 → claude 의 마지막 답변 한 줄 — 입력 대기 알림 카드의 '무엇이 끝났나'.
+ * 마크다운 표식(굵게·코드·제목 #·목록 기호)은 걷어 평문으로 접는다(알림에서 두 줄까지 보인다).
+ */
+export function lastReplyOf(lines: string[]): string | undefined {
+  const items = parseTranscript(lines, '').items;
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const it = items[i];
+    if (it.kind !== 'assistant') continue;
+    const plain = it.text
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/^\s{0,3}(#{1,6}|[-*+]|\d+\.|>)\s+/gm, '')
+      .replace(/\*\*|__|`/g, '');
+    const t = oneLine(plain, REPLY_MAX);
+    if (t) return t;
   }
   return undefined;
 }

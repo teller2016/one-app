@@ -31,6 +31,11 @@ export type ToastOptions = {
   action?: ToastAction;
   /** 같은 키의 기존 토스트를 교체한다 — sticky 여도 쌓이지 않는다 (예: 세션당 입력대기 1장) */
   dedupeKey?: string;
+  /**
+   * 카드 안을 직접 그린다 — 아이콘·제목·액션·닫기 대신 이 내용만(닫기 버튼도 내용이 그린다, `close` 로 닫는다).
+   * 토스트 틀(위치·쌓임·진입/퇴장·dedupeKey·hover 시 타이머 정지)은 그대로다. 예: 입력 대기 알림 카드(features/terminal)
+   */
+  render?: (close: () => void) => ReactNode;
 };
 
 type ToastItem = ToastOptions & {
@@ -107,6 +112,19 @@ function ToastCard({
     if (item.action?.section) navigateSection(item.action.section);
     onDismiss(id);
   };
+
+  if (item.render) {
+    return (
+      <div
+        className={`toast toast--custom${item.leaving ? ' toast--leaving' : ''}`}
+        role="status"
+        onMouseEnter={stop}
+        onMouseLeave={start}
+      >
+        {item.render(() => onDismiss(id))}
+      </div>
+    );
+  }
 
   return (
     <div

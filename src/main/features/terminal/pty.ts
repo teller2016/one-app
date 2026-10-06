@@ -858,6 +858,20 @@ export function renameSession(id: string, title: string): void {
   emitChanged();
 }
 
+/**
+ * 입력 대기 알림 카드에서 선택지를 골랐다 — 번호 키 하나지만 **제출**과 같다(그 답으로 claude 가 일을 이어 간다).
+ * `noteInput` 은 Enter 만 제출로 본다(타이핑 중 멈춤에 알림이 울리면 안 된다) — 그래서 번호 키만으로는 waiting 이
+ * 내려가지 않아, 알림에서 답한 뒤 이어진 작업이 끝나도 알림이 다시 나가지 않았다(2026-10-06 /test 실측).
+ * 알림에서 답한 경우에만 Enter 제출과 같은 처리를 덧댄다. 호출 순서: `writeSession`(번호) → 이것.
+ */
+export function markAnswerSubmitted(id: string): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.lastInputSubmit = true;
+  s.suppressNotifyUntil = 0;
+  if (s.status === 'waiting') setStatus(s, 'idle', 'answer');
+}
+
 export function writeSession(id: string, data: string): void {
   const s = sessions.get(id);
   if (!s) return;

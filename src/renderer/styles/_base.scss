@@ -1725,6 +1725,15 @@ input.input--bare {
       background: var(--accent-soft);
     }
   }
+
+  // 내용을 직접 그리는 카드(`toast(…, { render })` — 예: 입력 대기 알림 카드) — 틀(면·테두리·그림자·진입)만 주고
+  // 안쪽 배치는 내용이 정한다. 아이콘·제목 줄이 없으니 세로로 쌓는다
+  &--custom {
+    flex-direction: column;
+    align-items: stretch;
+    width: 380px;
+    padding: 12px 14px;
+  }
 }
 
 // ===== 중첩 패널 (로그·커밋 내역 — 다크 코드 패널, 크림↔다크 리듬) =====

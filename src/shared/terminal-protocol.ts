@@ -156,6 +156,10 @@ export type ChatPrompt = {
   options: { n: number; label: string; description?: string; current?: boolean }[];
   /** 'Type something.' 번호 — 입력창 글은 이 번호로 옮긴 뒤 넣는다 */
   freeText?: number;
+  /** 질문이 아닌 선택 화면 — 권한 확인(`Tab to amend`) · 플랜 승인(`ctrl+g`). 질문·검토 화면은 없음 */
+  kind?: 'permission' | 'plan';
+  /** 권한 확인이 무엇을 허용하는지 — 질문 위 미리보기(도구·명령·파일 이름·내용 앞부분) 몇 줄 */
+  preview?: string;
 };
 
 export type ChatItem =

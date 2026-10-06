@@ -1,6 +1,6 @@
 // 세션 현황 요약 테스트 — 줄 모양은 Claude Code 2.1.290~291 jsonl 실측을 줄인 것이다.
 import { describe, expect, it } from 'vitest';
-import { digestLines, firstPromptOf, oneLine, promptLine } from './sessionDigest';
+import { digestLines, firstPromptOf, lastReplyOf, oneLine, promptLine } from './sessionDigest';
 
 const line = (o: unknown) => JSON.stringify(o);
 
@@ -125,5 +125,26 @@ describe('firstPromptOf', () => {
 
   it('사람 입력이 없으면 undefined', () => {
     expect(firstPromptOf([line({ type: 'file-history-snapshot' })])).toBeUndefined();
+  });
+});
+
+describe('lastReplyOf', () => {
+  it('마지막 assistant 글을 평문 한 줄로 — 마크다운 표식·코드 블록은 걷는다', () => {
+    expect(
+      lastReplyOf([
+        line({ type: 'assistant', uuid: 'a1', message: { content: [{ type: 'text', text: '옛 답' }] } }),
+        line({ type: 'user', uuid: 'u1', message: { content: '다음' } }),
+        line({
+          type: 'assistant',
+          uuid: 'a2',
+          message: { content: [{ type: 'text', text: '## 결과\n- **커밋**했습니다 (`bff1bdc`)\n```sh\nnpm test\n```\n끝.' }] },
+        }),
+        line({ type: 'assistant', uuid: 'a3', message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }] } }),
+      ]),
+    ).toBe('결과 커밋했습니다 (bff1bdc) 끝.');
+  });
+
+  it('답변이 없으면 undefined', () => {
+    expect(lastReplyOf([line({ type: 'user', message: { content: '안녕' } })])).toBeUndefined();
   });
 });

@@ -124,6 +124,42 @@ describe('parseScreenPrompt', () => {
         },
         { n: 3, label: 'No' },
       ],
+      kind: 'permission',
+      preview: 'Create file\nhello.txt\n1 hi',
+    });
+  });
+
+  it('권한 확인(Bash) — 실측 화면: 안내(Tip)는 버리고, │ 를 걷고, 폭 끝에서 접힌 명령·선택지는 잇는다', () => {
+    const W = 80;
+    const cmd1 = ' │ touch /private/tmp/claude-501/-Users-me-proj/90546d2d-a14b-4abb-88c4-b192c0016e3';
+    const opt2 = '   2. Yes, and always allow access to /private/tmp/claude-501/-Users-me-proj/scrat';
+    const screen = [
+      '⏺ 빈 파일 생성',
+      '─'.repeat(W),
+      ' Bash command',
+      ' Tip: auto mode handles these prompts for you — choose "switch to auto mode"',
+      ' below',
+      ' 빈 파일 생성',
+      '╌'.repeat(W),
+      cmd1.slice(0, W - 1),
+      ' │ ' + cmd1.slice(W - 1) + '/perm.txt',
+      '╌'.repeat(W),
+      ' Do you want to proceed?',
+      ' ❯ 1. Yes',
+      opt2.slice(0, W),
+      '      ' + opt2.slice(W) + 'chpad from this project',
+      '   3. No',
+      ' Esc to cancel · Tab to amend',
+    ].join('\n');
+    const p = parseScreenPrompt(screen);
+    expect(p?.question).toBe('Do you want to proceed?');
+    expect(p?.kind).toBe('permission');
+    expect(p?.preview).toBe(
+      'Bash command\n빈 파일 생성\ntouch /private/tmp/claude-501/-Users-me-proj/90546d2d-a14b-4abb-88c4-b192c0016e3/perm.txt',
+    );
+    expect(p?.options[1]).toEqual({
+      n: 2,
+      label: 'Yes, and always allow access to /private/tmp/claude-501/-Users-me-proj/scratchpad from this project',
     });
   });
 
@@ -151,6 +187,7 @@ describe('parseScreenPrompt', () => {
         { n: 3, label: 'Tell Claude what to change', description: 'shift+tab to approve with this feedback' },
       ],
       freeText: 3,
+      kind: 'plan',
     });
   });
 

@@ -26,6 +26,8 @@
 //   플랜 승인  `   Claude has written up a plan … Would you like to proceed?` / `   ❯ 1. Yes, …` … /
 //              `     3. Tell Claude what to change`(커서를 두고 글을 치는 자리 = 직접 답) / `   ctrl+g to edit in Vim · <계획 파일>`
 // ⚠️ 읽지 못하면 null — 호출부는 '터미널에서 답 필요' 카드로 물러난다(틀린 버튼보다 버튼 없음이 낫다).
+// 데스크톱 입력 대기 알림(2026-10-06 — 알림에서 바로 답하기)도 같은 결과를 쓴다: 권한 확인이면 **무엇을 허용하는지**
+// (질문 위 미리보기 — 위 경계 `─` 줄 아래부터)를 `preview` 로 함께 준다 — 그게 없으면 뭘 허용하는지 모르고 누르게 된다.
 import type { ChatPrompt } from '../../../shared/terminal-protocol';
 
 const HINT_RE = /Enter to (select|confirm)|Esc to cancel|ctrl\+g to edit/;
@@ -37,6 +39,11 @@ const BORDER_RE = /^\s*─{3,}.*─$/;
 const TAB_RE = /[☐☒✔]/;
 /** 직접 답하는 자리 — 질문의 'Type something.' · 플랜 승인의 'Tell Claude what to change' */
 const FREE_TEXT_RE = /^(Type something|Tell Claude what to change)/i;
+/** 권한 확인 미리보기의 위 경계(상자 맨 위 `─` 줄)와 그 안의 구분 점선(`╌`) */
+const BOX_TOP_RE = /^\s*─{3,}/;
+const DASHED_RE = /^\s*╌{3,}\s*$/;
+/** 미리보기 상한 — 파일 내용이 길게 따라올 수 있다(앞부분이 도구·대상이다) */
+const PREVIEW_LINES = 6;
 
 export function parseScreenPrompt(screen: string): ChatPrompt | null {
   const lines = screen.split('\n').map((l) => l.replace(/\s+$/, ''));
@@ -47,6 +54,8 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
       break;
     }
   }
+  const hint = end >= 0 ? lines[end] : '';
+  const kind = /Tab to amend/.test(hint) ? 'permission' : /ctrl\+g to edit/.test(hint) ? 'plan' : undefined;
   if (end < 0) {
     // 안내 줄 없는 선택 화면(검토) — 마지막 글자 줄이 선택지여야 한다(아래에 붙은 경계 줄은 건너뛴다)
     let last = lines.length - 1;
@@ -66,18 +75,29 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
   }
   if (start < 0) return null;
 
+  // 화면 폭 — 경계 줄이 끝까지 그려진다. 폭 끝까지 찬 줄은 claude 가 **글자 단위로 접은** 줄이다(경로·명령이 둘로 갈린다)
+  const width = Math.max(...lines.map((l) => l.length));
+  const wrapped = (line: string) => line.length >= width - 2;
   const options: ChatPrompt['options'] = [];
+  let prevWrapped = false;
   for (let i = start; i < end; i += 1) {
     const line = lines[i];
-    if (!line.trim() || SEPARATOR_RE.test(line)) continue;
+    if (!line.trim() || SEPARATOR_RE.test(line)) {
+      prevWrapped = false;
+      continue;
+    }
     const m = line.match(OPTION_RE);
     if (m && Number(m[1]) === options.length + 1) {
       options.push({ n: Number(m[1]), label: m[2], ...(/^\s*❯/.test(line) ? { current: true } : {}) });
+    } else if (options.length && prevWrapped && !options[options.length - 1].description) {
+      // 앞 선택지 줄이 폭 끝에서 잘렸다 — 이 줄은 설명이 아니라 라벨의 나머지(2026-10-06 실측: 권한 '항상 허용' 경로)
+      options[options.length - 1].label += line.trim();
     } else if (options.length) {
       // 선택지 아래 들여쓴 줄 = 설명(폭이 좁으면 여러 줄로 감긴다)
       const last = options[options.length - 1];
       last.description = last.description ? `${last.description} ${line.trim()}` : line.trim();
     }
+    prevWrapped = wrapped(line);
   }
   if (!options.length) return null;
 
@@ -95,6 +115,7 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
     if (!line.trim() || SEPARATOR_RE.test(line) || TAB_RE.test(line)) break;
     q.unshift(line.trim());
   }
+  const preview = kind === 'permission' ? permissionPreview(lines, i, wrapped) : undefined;
   skipBlank();
   if (i >= 0 && TAB_RE.test(lines[i])) {
     header = lines[i].replace(/[☐☒✔←→]/g, ' ').replace(/\s+/g, ' ').trim() || undefined;
@@ -105,7 +126,61 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
     ...(header ? { header } : {}),
     options,
     ...(freeText ? { freeText } : {}),
+    ...(kind ? { kind } : {}),
+    ...(preview ? { preview } : {}),
   };
+}
+
+/**
+ * 권한 확인 질문 위 미리보기 — 무엇을 허용하는지. 실측 모양(2.1.291, 2026-10-06):
+ *   ────────────── (상자 위 경계)
+ *    Bash command                         ← 제목(도구)
+ *    Tip: auto mode handles these …       ← 안내(접혀 두 줄) — 버린다
+ *    below
+ *    권한 알림 테스트용 빈 파일 생성        ← 설명 · 파일 권한이면 파일 이름
+ *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ *    │ touch /private/tmp/…-a14b-4ab       ← 내용(명령·파일 앞부분) — `│` 를 걷고, 폭 끝에서 접힌 줄은 잇는다
+ *    │ b-88c4-…/perm-test.txt
+ *   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ *    Do you want to proceed?
+ * → 제목 · 점선 위 **마지막 줄**(설명·파일 이름 — 안내 문구는 그 위에 온다) · 점선 안 내용. 점선이 없으면 안내만 걸러 그대로.
+ */
+function permissionPreview(
+  lines: string[],
+  from: number,
+  wrapped: (line: string) => boolean,
+): string | undefined {
+  let top = -1;
+  for (let k = from; k >= 0 && from - k <= 30; k -= 1) {
+    if (BOX_TOP_RE.test(lines[k])) {
+      top = k;
+      break;
+    }
+  }
+  const block = lines.slice(top + 1, from + 1);
+  const firstDash = block.findIndex((l) => DASHED_RE.test(l));
+  const text = (l: string) => l.trim().replace(/^│\s?/, '');
+  const filled = (ls: string[]) => ls.filter((l) => l.trim() && !DASHED_RE.test(l));
+  const out: string[] = [];
+  if (firstDash < 0) {
+    out.push(...filled(block).map(text).filter((t) => !/^Tip:/.test(t)));
+  } else {
+    const head = filled(block.slice(0, firstDash));
+    if (head.length) out.push(text(head[0]));
+    if (head.length > 1) out.push(text(head[head.length - 1]));
+    let join = false;
+    for (const l of block.slice(firstDash + 1)) {
+      if (DASHED_RE.test(l)) break;
+      if (!l.trim()) {
+        join = false;
+        continue;
+      }
+      if (join) out[out.length - 1] += text(l);
+      else out.push(text(l));
+      join = wrapped(l);
+    }
+  }
+  return out.length ? out.slice(0, PREVIEW_LINES).join('\n') : undefined;
 }
 
 // ── 작업 중 상태 줄 ──
