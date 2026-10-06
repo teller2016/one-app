@@ -1,11 +1,6 @@
 // MO 채팅 보기 — 터미널 세션 안에서 도는 claude 의 **대화 기록(jsonl)** 을 찾아 구독한다.
 //
-// 화면을 긁어 해석하지 않는다 — claude 는 대화를 `$CLAUDE_CONFIG_DIR/projects/<cwd>/<sessionId>.jsonl`
-// 에 줄 단위로 남기고, 실행 중인 프로세스마다 `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`
-// (`{pid, sessionId, cwd, …}`)을 둔다(2026-10-01 실측, Claude Code 2.1.x). 그래서
-//   세션 pane 셸 pid → 자손 프로세스 중 sessions/<pid>.json 이 있는 것 → sessionId → jsonl
-// 순으로 **추측 없이** 이어진다. 계정이 여럿(`~/.claude`·`~/.claude-team` — CLAUDE_CONFIG_DIR 셸 함수)이라
-// 홈의 `.claude*` 폴더를 전부 후보로 본다.
+// 화면을 긁어 해석하지 않는다 — pane 셸 pid → claude 프로세스 → 대화 기록 순으로 **추측 없이** 찾는다(claudeFiles.ts).
 //
 // ⚠️ jsonl 은 **첫 메시지 때** 생긴다 — sessions/<pid>.json 은 claude 가 뜨자마자 있지만 대화 파일은 아직 없다
 //    (2026-10-01 /test 실측). 그 상태를 '못 찾음'으로 보내면 새 세션은 첫 메시지를 터미널로 쳐야 했다 →
@@ -17,13 +12,20 @@
 //
 // 구독은 폰이 채팅 보기를 연 동안만 — 1초 주기로 크기만 보고, 늘어난 바이트만 읽어 파싱한다.
 // `/clear`·`/resume` 으로 sessionId 가 바뀌면 sessions/<pid>.json 이 따라 바뀌므로 주기마다 다시 읽는다.
-import { execFile } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ChatCommand, ChatPrompt, ChatQueued, ChatServerMsg } from '../../../shared/terminal-protocol';
 import { listChatCommands, listChatFiles } from './chatCommands';
-import { listSessions, sessionRootPid, sessionScreen, writeSession } from './pty';
+import {
+  alive,
+  completeLines,
+  fileSize,
+  findClaude,
+  readRange,
+  resolveFromPid,
+  type ClaudeProcess,
+} from './claudeFiles';
+import { listSessions, sessionScreen, writeSession } from './pty';
 import { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
 import { applyQueueOps, parseTranscript, type QueueOp } from './transcript';
 
@@ -39,151 +41,7 @@ const MISSING_REASON = 'claude 대화 기록을 찾지 못했습니다 — claud
 type ChatMsg = ChatServerMsg;
 type Listener = (msg: ChatMsg) => void;
 
-type Found = {
-  pid: number;
-  configDir: string;
-  sessionId: string;
-  cwd: string;
-  file: string;
-  /** claude 가 남긴 상태 — 'busy' · 'idle' · 'waiting'(터미널에서 답 대기) */
-  status?: string;
-};
-
-// ── 탐색 ──
-
-let configDirsCache: { at: number; dirs: string[] } | null = null;
-
-/** claude 설정 폴더 후보 — 홈의 `.claude`·`.claude-*` 중 sessions/ 가 있는 것 (1분 캐시) */
-function configDirs(): string[] {
-  if (configDirsCache && Date.now() - configDirsCache.at < 60_000) return configDirsCache.dirs;
-  const home = os.homedir();
-  const dirs = new Set<string>();
-  if (process.env.CLAUDE_CONFIG_DIR) dirs.add(process.env.CLAUDE_CONFIG_DIR);
-  try {
-    for (const name of fs.readdirSync(home)) {
-      if (name === '.claude' || name.startsWith('.claude-')) dirs.add(path.join(home, name));
-    }
-  } catch {
-    // 홈을 못 읽으면 후보 없음
-  }
-  const list = [...dirs].filter((d) => fs.existsSync(path.join(d, 'sessions')));
-  configDirsCache = { at: Date.now(), dirs: list };
-  return list;
-}
-
-/** 뿌리 pid 의 자손(자신 포함, 가까운 순) — `ps` 한 번 */
-function descendants(root: number): Promise<number[]> {
-  return new Promise((resolve) => {
-    execFile('/bin/ps', ['-A', '-o', 'pid=,ppid='], { timeout: 3000 }, (err, stdout) => {
-      if (err) return resolve([root]);
-      const children = new Map<number, number[]>();
-      for (const line of String(stdout).split('\n')) {
-        const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-        if (!pid || Number.isNaN(ppid)) continue;
-        const arr = children.get(ppid) ?? [];
-        arr.push(pid);
-        children.set(ppid, arr);
-      }
-      const out: number[] = [];
-      const queue = [root];
-      while (queue.length && out.length < 200) {
-        const p = queue.shift() as number;
-        out.push(p);
-        queue.push(...(children.get(p) ?? []));
-      }
-      resolve(out);
-    });
-  });
-}
-
-type SessionMeta = { sessionId?: string; cwd?: string; status?: string };
-
-function readMeta(configDir: string, pid: number): SessionMeta | null {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(configDir, 'sessions', `${pid}.json`), 'utf8')) as SessionMeta;
-  } catch {
-    return null;
-  }
-}
-
-/** `/Users/me/a.b` → `-Users-me-a-b` — claude 의 projects 폴더 이름 규칙(영숫자 외 전부 '-') */
-const projectSlug = (cwd: string) => cwd.replace(/[^a-zA-Z0-9]/g, '-');
-
-/** 대화 파일 경로 — 아직 없으면(첫 메시지 전) 생길 자리를 돌려준다. 생기면 증분 읽기가 0 바이트부터 따라간다 */
-function transcriptFile(configDir: string, sessionId: string, cwd: string): string {
-  const direct = path.join(configDir, 'projects', projectSlug(cwd), `${sessionId}.jsonl`);
-  if (fs.existsSync(direct)) return direct;
-  // 이름 규칙이 바뀌었을 때의 안전망 — projects 아래를 한 단계만 훑는다
-  try {
-    for (const dir of fs.readdirSync(path.join(configDir, 'projects'))) {
-      const f = path.join(configDir, 'projects', dir, `${sessionId}.jsonl`);
-      if (fs.existsSync(f)) return f;
-    }
-  } catch {
-    // projects 가 없다
-  }
-  return direct;
-}
-
-/** 파일 크기 — 아직 없으면 0 (첫 메시지 전) */
-function fileSize(file: string): number {
-  try {
-    return fs.statSync(file).size;
-  } catch {
-    return 0;
-  }
-}
-
-function resolveFromPid(pid: number, configDir: string): Found | null {
-  const meta = readMeta(configDir, pid);
-  if (!meta?.sessionId || !meta.cwd) return null;
-  const file = transcriptFile(configDir, meta.sessionId, meta.cwd);
-  return { pid, configDir, sessionId: meta.sessionId, cwd: meta.cwd, file, status: meta.status };
-}
-
-async function findClaude(termId: string): Promise<Found | null> {
-  const root = await sessionRootPid(termId);
-  if (!root) return null;
-  const dirs = configDirs();
-  for (const pid of await descendants(root)) {
-    for (const dir of dirs) {
-      const found = resolveFromPid(pid, dir);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-// ── 읽기 ──
-
-function readRange(file: string, start: number, end: number): string {
-  if (end <= start) return '';
-  const fd = fs.openSync(file, 'r');
-  try {
-    const buf = Buffer.alloc(end - start);
-    fs.readSync(fd, buf, 0, buf.length, start);
-    return buf.toString('utf8');
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/** 마지막 줄바꿈까지만 완성된 줄 — 나머지(쓰는 중인 줄)는 다음 주기로 */
-function completeLines(text: string): { lines: string[]; used: number } {
-  const lastNl = text.lastIndexOf('\n');
-  if (lastNl < 0) return { lines: [], used: 0 };
-  const done = text.slice(0, lastNl + 1);
-  return { lines: done.split('\n'), used: Buffer.byteLength(done, 'utf8') };
-}
+type Found = ClaudeProcess;
 
 // ── 구독 ──
 

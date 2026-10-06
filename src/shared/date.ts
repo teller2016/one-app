@@ -58,5 +58,17 @@ export const fromMinutes = (min: number) => {
   return `${pad2(Math.floor(wrapped / 60))}:${pad2(wrapped % 60)}`;
 };
 
+/** "5분 전" 형태 상대 시간 (일주일 넘으면 날짜로) — 배포·PR·Claude 세션 전환 공용 */
+export const relativeTime = (ts: number) => {
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return new Date(ts).toLocaleDateString("ko-KR");
+};
+
 /** getDay() 색인용 한글 요일 — 일요일이 0 */
 export const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];

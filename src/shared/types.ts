@@ -1407,6 +1407,26 @@ export type TerminalSessionInfo = {
   createdAt: number;
 };
 
+/** Claude 세션 현황 한 줄 — ⌘⇧P 빠른 전환 팝업. main `overview.ts` 가 claude 가 떠 있는 세션만 골라 대화 기록에서 꺼낸다 */
+export type TerminalOverviewItem = {
+  id: string;
+  cwd: string;
+  /** 탭 이름 — 제목·요청이 하나도 없을 때(첫 메시지 전) 대신 보인다 */
+  tabTitle: string;
+  status: TerminalSessionStatus;
+  working: boolean;
+  /** "워크스페이스 · 워크트리" — 등록된 워크스페이스 밖이면 null */
+  location: string | null;
+  /** claude 가 붙인 작업 제목(대화 기록의 ai-title) — 없는 세션도 많다 */
+  title: string | null;
+  /** 첫 요청 한 줄 — 제목이 없을 때 '무슨 작업인가'를 대신한다 */
+  firstPrompt: string | null;
+  /** 마지막 요청 한 줄 */
+  lastPrompt: string | null;
+  /** 마지막 활동(대화 기록 수정 시각) — 같은 상태끼리 최근순 정렬 */
+  activityAt: number;
+};
+
 // ── 터미널 팝아웃 창 — 세션↔창 배정의 정본은 main(windows.ts), 렌더러는 미러 ──
 
 /** 팝아웃 창 요약 — `terminal:windows` 브로드캐스트 payload (전체 목록 탑재) */

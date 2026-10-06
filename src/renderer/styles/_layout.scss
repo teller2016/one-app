@@ -783,6 +783,44 @@
     }
   }
 
+  // ⌘⇧P Claude 세션 전환 (features/terminal SessionSwitcher) — 두 줄 행: 작업 제목·위치 / 마지막 요청·시각
+  &__item--session {
+    height: auto;
+    padding: 8px 10px;
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__line {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__sub {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-3);
+    font-size: var(--fs-small);
+  }
+
+  &__time {
+    flex-shrink: 0;
+    color: var(--text-3);
+    font-size: var(--fs-ui-sm);
+    font-variant-numeric: tabular-nums; // 한글이 섞여 모노 대신
+  }
+
   &__empty {
     margin: 0;
     padding: 24px 10px;

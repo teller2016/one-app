@@ -17,7 +17,11 @@ import { PortsSection } from "../features/ports";
 import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
-import { MoStatusItem, TerminalSection } from "../features/terminal";
+import {
+  MoStatusItem,
+  SessionSwitcher,
+  TerminalSection,
+} from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -31,6 +35,7 @@ import {
   useHasSectionBack,
   useHasSectionForward,
 } from "../lib/sectionBack";
+import { useRegisterCommands } from "../lib/commands";
 import { usePolling } from "../lib/usePolling";
 import { termWaitToastKey } from "../../shared/types";
 import type { ReactNode } from "react";
@@ -325,22 +330,42 @@ export function App() {
     };
   }, [goBack, goForward]);
 
-  // ⌘P 명령 팔레트 — 어느 화면에서든(터미널 포함) 연다. capture 로 받아 xterm 보다 먼저 잡는다.
-  // ⌘K 는 다른 앱의 전역 단축키와 겹쳐 2026-10-01 ⌘P 로 바꿨다
+  // ⌘P 명령 팔레트 · ⌘⇧P Claude 세션 전환 — 어느 화면에서든(터미널 포함) 연다. capture 로 받아 xterm 보다 먼저 잡는다.
+  // ⌘K 는 다른 앱의 전역 단축키와 겹쳐 2026-10-01 ⌘P 로 바꿨다. 둘은 겹쳐 뜨지 않는다 — 하나를 열면 다른 쪽은 닫힌다
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return;
+      if (!e.metaKey || e.altKey || e.ctrlKey) return;
       // e.code 로 판정 — 한글 입력 상태에서는 e.key 가 'ㅔ' 라 놓친다
       if (e.code !== "KeyP" || e.isComposing) return;
       e.preventDefault();
       e.stopPropagation();
-      setPaletteOpen((v) => !v);
+      if (e.shiftKey) {
+        setSwitcherOpen((v) => !v);
+        setPaletteOpen(false);
+      } else {
+        setPaletteOpen((v) => !v);
+        setSwitcherOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closeSwitcher = useCallback(() => setSwitcherOpen(false), []);
+  // 단축키를 몰라도 ⌘P 에서 찾을 수 있게
+  useRegisterCommands("claude-sessions", () => [
+    {
+      id: "claude-sessions",
+      group: "이동",
+      label: "Claude 세션 전환",
+      hint: "⌘⇧P",
+      keywords: "claude session 세션 현황 터미널",
+      icon: "terminal",
+      run: () => setSwitcherOpen(true),
+    },
+  ]);
 
   const [jiraCount, setJiraCount] = useState(0);
   const [jiraUnread, setJiraUnread] = useState(0);
@@ -525,6 +550,7 @@ export function App() {
               onClose={closePalette}
             />
           )}
+          {switcherOpen && <SessionSwitcher onClose={closeSwitcher} />}
 
           {/* 하단 상태바 — 상주 위젯. 위젯은 각자 격리한다(하나가 죽어도 나머지·셸은 산다) */}
           <StatusBar

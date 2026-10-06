@@ -99,6 +99,7 @@ import type {
   WorktreeInfo,
   TerminalCreateInput,
   TerminalSessionInfo,
+  TerminalOverviewItem,
   TerminalAttachResult,
   TerminalServerStatus,
   TerminalAgentInfo,
@@ -385,6 +386,8 @@ declare global {
         openEditor?: (id: string) => Promise<{ ok: boolean; error?: string }>;
         kill: (id: string) => Promise<{ ok: boolean }>;
         agents: () => Promise<TerminalAgentInfo[]>;
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        overview?: () => Promise<TerminalOverviewItem[]>;
         backend: () => Promise<{ tmux: boolean }>;
         notifyLevel: {
           get: () => Promise<TerminalNotifyLevel>;

@@ -2,7 +2,7 @@
 import type { DeployStatus } from '../../../../shared/types';
 import { ownerRepoPartsFromUrl } from '../../../../shared/types';
 import { JIRA_KEY_RE } from '../../../../shared/jira-url';
-import { pad2 } from '../../../../shared/date';
+import { pad2, relativeTime } from '../../../../shared/date';
 
 /** 상태/패널 맵의 키 (projectId:targetId) */
 export const statusKey = (projectId: string, targetId: string) =>
@@ -40,17 +40,8 @@ export const formatDuration = (ms: number) => {
   return `${s}초`;
 };
 
-/** "5분 전" 형태의 상대 시간 (일주일 넘으면 날짜로) */
-export const formatRelative = (ts: number) => {
-  const min = Math.floor((Date.now() - ts) / 60000);
-  if (min < 1) return '방금 전';
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}일 전`;
-  return new Date(ts).toLocaleDateString('ko-KR');
-};
+/** "5분 전" 형태의 상대 시간 (일주일 넘으면 날짜로) — 정본은 shared/date */
+export const formatRelative = relativeTime;
 
 /** Gitea 커밋 페이지 URL 베이스 — giteaUrl 미설정이거나 저장소 해석 실패면 null */
 export const giteaCommitBase = (

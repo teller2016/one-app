@@ -16,6 +16,7 @@ import { EDITOR_NAME, findEditorApp, openWithApp } from '../workspaces/editor';
 import { listAgents } from './agents';
 import { subscribeChat } from './chat';
 import { sessionLocation, sessionLocationLabel } from './location';
+import { terminalOverview } from './overview';
 import {
   initTerminalWindows,
   isVisibleInPopout,
@@ -170,6 +171,8 @@ export function registerTerminalIpc() {
     return openWithApp(editor, loc.wtPath);
   });
   ipcMain.handle('terminal:agents', () => listAgents());
+  // Claude 세션 현황 — ⌘⇧P 빠른 전환 팝업이 열린 동안만 몇 초마다 부른다(overview.ts)
+  ipcMain.handle('terminal:overview', () => terminalOverview());
   // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다
   ipcMain.handle('terminal:backend', async () => ({ tmux: !!(await initTmux()) }));
   ipcMain.handle('terminal:notify-level:get', () => getNotifyLevel());

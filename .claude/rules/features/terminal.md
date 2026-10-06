@@ -221,7 +221,7 @@ paths:
 
 ## MO 채팅 보기 (2026-10-01 — `main/.../chat.ts`·`transcript.ts` + `mobile-app/terminal/MoChatView.tsx`)
 claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미널] 토글, claude·femc 는 채팅이 기본 — `logic.ts` `defaultView`).
-- **화면을 긁지 않는다 — 대화 기록(jsonl)을 읽는다**: pane 셸 pid(`tmuxPanePid`) → 자손 중 `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`
+- **화면을 긁지 않는다 — 대화 기록(jsonl)을 읽는다**(찾기·파일 읽기는 `claudeFiles.ts` — 세션 전환 팝업과 공유): pane 셸 pid(`tmuxPanePid`) → 자손 중 `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`
   이 있는 프로세스 → `sessionId`·`cwd` → `projects/<cwd 영숫자 외 '-'>/<sessionId>.jsonl`. 설정 폴더는 홈의 `.claude`·`.claude-*` 전부(계정 셸 함수).
   구독(1초 주기, 늘어난 바이트만)은 **폰이 채팅을 보는 동안만**(`chat-open`/`chat-close`, 소켓 close 에서 해제). `/clear` 로 sessionId 가 바뀌면 메타를 다시 읽어 reset.
 - ⚠️ **jsonl 은 첫 메시지 때 생긴다**(sessions/<pid>.json 은 기동 즉시) — 파일이 없으면 '못 찾음'이 아니라 **빈 대화(`fresh`)** 로 보내 입력창을 연다.
@@ -267,6 +267,17 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
 - 답변·코드 블록 [복사] — `Markdown copyCode`.
 - 이미지 첨부 흉내(임시 폴더 저장 → 칩 → 경로 붙여넣기, `chatImages.ts`)는 2026-10-01 데스크톱을 진짜 터미널 입력으로 바꾸며 걷어냈다 — 되살리지 말 것. 파서는 이미지가 있는 입력의 `[Image #N]` 자리 표시를 걷고 '이미지 N장' 꼬리표로 보인다.
 - 서브에이전트(Agent/Task) 호출은 도구 묶음에서 빼 한 줄로(진행 중 스피너). 할 일 패널은 최신 TodoWrite 상세(`[x]/[~]/[ ]` 줄)를 읽는다 — ⚠️ 2026-10-01 기준 이 환경의 claude(2.1.286)엔 TodoWrite 가 없어(최근 기록 200개에 0회) 실제로는 뜨지 않는다.
+
+## Claude 세션 전환 팝업 (⌘⇧P — 2026-10-06)
+모든 워크스페이스에서 claude 가 떠 있는 세션을 한 목록으로 — 렌더러 `SessionSwitcher`(공용 `Palette` 셸, App.tsx 가 어느 섹션에서든 연다) ← IPC `terminal:overview` ← main `overview.ts`.
+- 대상 = **claude 프로세스가 실제로 있는 세션**(셸 탭에서 손으로 친 claude 포함, claude 가 끝나 셸만 남은 탭 제외). 찾기는 채팅 보기와 같은 `claudeFiles.ts`(pane pid → `sessions/<pid>.json` → jsonl) — 전 세션을 `ps` **한 번**(`findClaudeMany`), pane pid 는 기억.
+- 열린 동안만 3초 폴링. 대화 기록은 파일별로 읽은 데까지 기억해 증분만(처음엔 끝 1MB), 첫 요청은 머리 256KB 한 번.
+- 줄 내용(순수 함수 `sessionDigest.ts` + 테스트): 제목 = jsonl `ai-title`(마지막 것) → 없으면 첫 요청 → 탭 이름 / 둘째 줄 = `last-prompt`. 실측 함정:
+  - ⚠️ `ai-title` 이 없는 세션이 많다 — **슬래시 명령으로 시작한 세션**(`/플러그인:dev SSB-9 — …`)이 그렇다 → 첫 요청은 '글로 된 인자가 있는 명령'의 인자도 받는다(`/model opus` 같은 한 낱말 인자는 건너뜀).
+  - ⚠️ `last-prompt` 에 **다른 claude 세션이 보낸 메시지**(`Another Claude session sent a message: <teammate-message …>`)가 남아 사람 요청을 덮는다 → `isPeerMessage` 로 거른다.
+  - ⚠️ 붙여넣기는 `<pasted_content id=…>…</pasted_content id=…>` — **닫는 태그에도 id** 가 붙는다. 걷어내고 직접 친 글을 쓴다.
+- 순서 = 입력 대기 → 작업 중(`working`) → 쉬는 중, 같은 상태끼리 jsonl 수정 시각순. ↵ = `openTerminalSession`(토스트 [이동]과 같은 길 — 팝아웃 세션이면 그 창이 앞으로).
+- dev 검증: dev 는 tmux 소켓이 따로라 세션 0개로 뜬다 → `terminal.create({agentId:'claude'})` 로 만들면 계정 선택 셸 함수(`1) Personal`)가 먼저 뜬다(`write('1\r')`). 짧은 메시지 하나면 1~2초 안에 ai-title 이 생긴다.
 
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만**. 감지는 `zsh -lc "whence -p"` 1회 캐시, 미설치는 조용히 제외.
