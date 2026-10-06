@@ -158,8 +158,53 @@ describe('liveRegionTop', () => {
     expect(liveRegionTop(s, COLS)).toBe(1);
   });
 
-  it('들여쓴 구분선·짧은 구분선은 경계가 아니다 — 못 찾으면 null', () => {
-    expect(liveRegionTop(screen({ 10: '⏺ 답변', 11: '  ' + '─'.repeat(COLS - 2), 12: '──────────' }), COLS)).toBeNull();
+  it('플랜 승인 — 경계를 2칸 들여 그려도 맨 위 경계(2.1.290 실측, 140열)', () => {
+    // 2026-10-06 시험 세션 capture-pane 그대로 — 0열 경계만 보던 때는 null 이라 선택지가 채팅 밑에 가려졌다
+    const C = 140;
+    const r = '  ' + '─'.repeat(C - 4);
+    const s = screen(
+      {
+        1: '  ⎿  /plan to preview',
+        2: '▔'.repeat(C),
+        4: r,
+        5: '   Ready to code?',
+        7: "   Here is Claude's plan:",
+        8: '  ' + '╌'.repeat(C - 4),
+        9: '   hello.txt 에 "hi" 쓰기',
+        13: '   작업 디렉터리에 hello.txt 파일을 만들고 내용으로 hi 를 기록한다.',
+        22: '  ' + '╌'.repeat(C - 4),
+        33: r,
+        34: '   Claude has written up a plan and is ready to execute. Would you like to proceed?',
+        36: '   ❯ 1. Yes, and switch to BYPASS PERMISSIONS (no further prompts) for this session',
+        37: '     2. Yes, manually approve edits',
+        38: '     3. Tell Claude what to change',
+        39: '        shift+tab to approve with this feedback',
+        41: '   ctrl+g to edit in Vim · ~/.claude/plans/hello-txt-hi-wondrous-badger.md',
+      },
+      42,
+    );
+    expect(liveRegionTop(s, C)).toBe(4);
+  });
+
+  it('플랜 승인 — 계획이 길어 위 경계가 화면 밖이면 질문 위 경계부터(선택지는 보인다)', () => {
+    const r = '  ' + '─'.repeat(COLS - 4);
+    const s = screen({
+      0: '   7. 단계 일곱',
+      30: '   - 확인한다.',
+      31: '  ' + '╌'.repeat(COLS - 4),
+      33: r,
+      34: '   Claude has written up a plan and is ready to execute. Would you like to proceed?',
+      36: '   ❯ 1. Yes, auto-accept edits',
+      37: '     2. Yes, manually approve edits',
+      38: '     3. Tell Claude what to change',
+    });
+    expect(liveRegionTop(s, COLS)).toBe(33);
+  });
+
+  it('짧은 구분선·깊이 들여쓴 구분선은 경계가 아니다 — 못 찾으면 null', () => {
+    // 답변의 마크다운 구분선은 2.1.290 에서 `  ---` 글자 그대로 그려진다(2026-10-06 실측) — 전체 폭 ─ 가 아니다
+    expect(liveRegionTop(screen({ 10: '⏺ 답변', 11: '  ---', 12: '──────────' }), COLS)).toBeNull();
+    expect(liveRegionTop(screen({ 10: '⏺ 표', 11: '      ' + '─'.repeat(COLS - 6) }), COLS)).toBeNull();
   });
 
   it('claude 가 아닌 화면(셸) — null', () => {

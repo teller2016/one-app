@@ -19,15 +19,24 @@
 //   Enter to select · ↑/↓ to navigate · Esc to cancel   ← 안내 줄
 // ⚠️ 여러 질문의 **검토 화면('Ready to submit your answers?')에는 안내 줄이 없다** — 화면이 `2. Cancel` 로 끝난다(실측).
 //    그래서 안내 줄이 없으면 **화면 마지막 글자 줄이 선택지일 때만** 선택 화면으로 본다(호출 자체가 status 'waiting' 일 때뿐이다).
+//    ⚠️ 2.1.290 부터는 그 아래에 입력 상자 위 경계(이름표가 박힌 `──── 세션이름 ─`)가 한 줄 더 그려진다 — 경계 줄은 건너뛴다.
+// 2.1.290 의 다른 선택 화면(2026-10-06 실측) — 안내 줄이 `Enter to …` 가 아니다:
+//   권한 확인  ` Do you want to create hello.txt?` / ` ❯ 1. Yes` … / ` Esc to cancel · Tab to amend`
+//              (위에 명령·파일 내용 미리보기가 `╌` 점선 사이에 있다 — 점선에서 질문 모으기를 멈춘다)
+//   플랜 승인  `   Claude has written up a plan … Would you like to proceed?` / `   ❯ 1. Yes, …` … /
+//              `     3. Tell Claude what to change`(커서를 두고 글을 치는 자리 = 직접 답) / `   ctrl+g to edit in Vim · <계획 파일>`
 // ⚠️ 읽지 못하면 null — 호출부는 '터미널에서 답 필요' 카드로 물러난다(틀린 버튼보다 버튼 없음이 낫다).
 import type { ChatPrompt } from '../../../shared/terminal-protocol';
 
-const HINT_RE = /Enter to (select|confirm)/;
+const HINT_RE = /Enter to (select|confirm)|Esc to cancel|ctrl\+g to edit/;
 const OPTION_RE = /^\s*(?:❯\s*)?(\d{1,2})\.\s+(.+?)\s*$/;
-const SEPARATOR_RE = /^\s*[─━-]{3,}\s*$/;
+const SEPARATOR_RE = /^\s*[─━╌-]{3,}\s*$/;
+/** claude 가 그리는 경계 — 입력 상자 위 경계엔 이름표가 박힐 수 있다(`──── 세션이름 ─`) */
+const BORDER_RE = /^\s*─{3,}.*─$/;
 /** 여러 질문의 탭 줄(☐ 미답 · ☒ 답함 · ✔ Submit) — 질문 위의 머리 */
 const TAB_RE = /[☐☒✔]/;
-const FREE_TEXT_RE = /^Type something/i;
+/** 직접 답하는 자리 — 질문의 'Type something.' · 플랜 승인의 'Tell Claude what to change' */
+const FREE_TEXT_RE = /^(Type something|Tell Claude what to change)/i;
 
 export function parseScreenPrompt(screen: string): ChatPrompt | null {
   const lines = screen.split('\n').map((l) => l.replace(/\s+$/, ''));
@@ -39,9 +48,9 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
     }
   }
   if (end < 0) {
-    // 안내 줄 없는 선택 화면(검토) — 마지막 글자 줄이 선택지여야 한다
+    // 안내 줄 없는 선택 화면(검토) — 마지막 글자 줄이 선택지여야 한다(아래에 붙은 경계 줄은 건너뛴다)
     let last = lines.length - 1;
-    while (last >= 0 && !lines[last].trim()) last -= 1;
+    while (last >= 0 && (!lines[last].trim() || BORDER_RE.test(lines[last]))) last -= 1;
     if (last < 0 || !OPTION_RE.test(lines[last])) return null;
     end = last + 1;
   }

@@ -69,6 +69,91 @@ describe('parseScreenPrompt', () => {
     });
   });
 
+  // ── 2.1.290 실측(2026-10-06, 140열) — 안내 줄이 `Enter to …` 가 아니거나 끝에 경계가 붙는 화면들 ──
+
+  it('검토 화면 아래에 입력 상자 위 경계(이름표)가 붙어도 읽는다', () => {
+    const screen = [
+      '─'.repeat(140),
+      '←  ☒ 시간대  ☒ 문화생활  ✔ Submit  →',
+      '',
+      'Review your answers',
+      '',
+      ' ● 아침형 인간인가요 밤형 인간인가요?',
+      '   → 아침형',
+      '',
+      'Ready to submit your answers?',
+      '',
+      '❯ 1. Submit answers',
+      '  2. Cancel',
+      '',
+      '─'.repeat(116) + ' create-hello-txt-file ─',
+    ].join('\n');
+    expect(parseScreenPrompt(screen)).toEqual({
+      question: 'Ready to submit your answers?',
+      options: [
+        { n: 1, label: 'Submit answers', current: true },
+        { n: 2, label: 'Cancel' },
+      ],
+    });
+  });
+
+  it('권한 확인 — 안내 줄이 Esc to cancel, 점선 사이 미리보기는 질문에 넣지 않는다', () => {
+    const screen = [
+      '⏺ Write(hello.txt)',
+      '',
+      '─'.repeat(140),
+      ' Create file',
+      ' hello.txt',
+      '╌'.repeat(140),
+      '  1 hi',
+      '╌'.repeat(140),
+      ' Do you want to create hello.txt?',
+      ' ❯ 1. Yes',
+      '   2. Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)',
+      '   3. No',
+      '',
+      ' Esc to cancel · Tab to amend',
+    ].join('\n');
+    expect(parseScreenPrompt(screen)).toEqual({
+      question: 'Do you want to create hello.txt?',
+      options: [
+        { n: 1, label: 'Yes', current: true },
+        {
+          n: 2,
+          label: 'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)',
+        },
+        { n: 3, label: 'No' },
+      ],
+    });
+  });
+
+  it('플랜 승인 — 안내 줄이 ctrl+g, 3번(고칠 점 쓰기)이 직접 답 자리', () => {
+    const screen = [
+      '   - hello.txt 를 읽어 내용이 hi 인지 확인한다.',
+      '  ' + '╌'.repeat(136),
+      '',
+      '',
+      '  ' + '─'.repeat(136),
+      '   Claude has written up a plan and is ready to execute. Would you like to proceed?',
+      '',
+      '   ❯ 1. Yes, and switch to BYPASS PERMISSIONS (no further prompts) for this session',
+      '     2. Yes, manually approve edits',
+      '     3. Tell Claude what to change',
+      '        shift+tab to approve with this feedback',
+      '',
+      '   ctrl+g to edit in Vim · ~/.claude/plans/hello-txt-hi-wondrous-badger.md',
+    ].join('\n');
+    expect(parseScreenPrompt(screen)).toEqual({
+      question: 'Claude has written up a plan and is ready to execute. Would you like to proceed?',
+      options: [
+        { n: 1, label: 'Yes, and switch to BYPASS PERMISSIONS (no further prompts) for this session', current: true },
+        { n: 2, label: 'Yes, manually approve edits' },
+        { n: 3, label: 'Tell Claude what to change', description: 'shift+tab to approve with this feedback' },
+      ],
+      freeText: 3,
+    });
+  });
+
   it('안내 줄이 없고 마지막 줄도 선택지가 아니면 읽지 않는다', () => {
     expect(parseScreenPrompt('❯ 1. 목록\n  2. 둘째\n\n그 아래 다른 글\n')).toBeNull();
   });

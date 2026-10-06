@@ -879,7 +879,8 @@ function PromptCard({
             <span className="term-chat__opt-label">
               {o.n}. {o.n === prompt.freeText ? '직접 답하기 — 아래 입력창' : o.label}
             </span>
-            {o.description && <span className="term-chat__opt-desc">{o.description}</span>}
+            {/* 직접 답 자리 아래 줄은 키 안내다(플랜 승인 'shift+tab to approve with this feedback') — 폰엔 맞지 않다 */}
+            {o.description && o.n !== prompt.freeText && <span className="term-chat__opt-desc">{o.description}</span>}
           </button>
         ))}
       </div>

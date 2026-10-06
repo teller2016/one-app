@@ -14,6 +14,9 @@
 //             ☐ 머리 / Bash command …
 //            Enter to select · Esc to cancel
 //   ⚠️ 대화상자 안에도 전체 폭 줄이 있다(질문의 'Chat about this' 위) — 대화 기록 줄을 만나기 전까지 **가장 위** 것.
+//   ⚠️ 플랜 승인 창('Would you like to proceed?')은 경계를 **좌우 2칸씩 들여** 그린다(2.1.290, 2026-10-06 실측) —
+//      0열 경계만 보면 못 찾아 직전 높이(입력 상자 몇 줄)가 남고 **선택지가 채팅 밑에 가려졌다**(사용자 신고).
+//      그래서 대화상자 단계에서만 조금 들여쓴 경계도 받는다(입력 상자는 늘 0열이다).
 //   ⚠️ 화면이 덜 찼으면 대화상자가 중간에 뜨고 아래는 빈 줄이다 — 그대로 둔다(아래 칸이 커질 뿐).
 //   ⚠️ 작업 중인 도구 줄(`⎿ $ sleep 6 (4s)`)은 스피너 위라 넣지 않는다 — 채팅에 '진행 중' 도구로 이미 보인다.
 // 못 찾으면 null — 호출부가 직전 값을 유지한다(빗나가도 모양만 어긋나고 입력은 터미널 그대로다).
@@ -27,6 +30,9 @@
  */
 const RULE_RE = /^─{3,}.*─$/;
 const isRuleLine = (line: string, cols: number) => line.length >= cols * 0.8 && RULE_RE.test(line);
+/** 대화상자 경계 — 0열 경계 + 플랜 승인 창처럼 몇 칸 들여 그린 전체 폭 줄(위 머리말) */
+const DIALOG_RULE_RE = /^ {0,4}─{3,}.*─$/;
+const isDialogRuleLine = (line: string, cols: number) => line.length >= cols * 0.8 && DIALOG_RULE_RE.test(line);
 /** 입력 상자 첫 줄 — 선택지 커서('❯ 1.')는 아니다 */
 const INPUT_RE = /^[❯!>](?!\s*\d+\.)/;
 /** 스피너 줄 — '…' 로 알아본다(완료 줄 '✻ Cogitated for 7s · done' 에는 없다) */
@@ -65,7 +71,7 @@ export function liveRegionTop(screen: string[], cols: number): number | null {
   let top: number | null = null;
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     if (HISTORY_RE.test(lines[i])) break;
-    if (isRule(i)) top = i;
+    if (isDialogRuleLine(lines[i], cols)) top = i;
   }
   return top;
 }
