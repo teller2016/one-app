@@ -155,14 +155,20 @@ export type ChatToolResult = { toolId: string; text: string; isError?: boolean }
 export type ChatPrompt = {
   header?: string;
   question: string;
-  options: { n: number; label: string; description?: string; current?: boolean }[];
+  /** checked = 다중 선택의 체크 상태(`[✔]`/`[ ]` — 번호 키가 토글한다). 단일 선택이면 없다 */
+  options: { n: number; label: string; description?: string; current?: boolean; checked?: boolean }[];
   /** 'Type something.' 번호 — 입력창 글은 이 번호로 옮긴 뒤 넣는다 */
   freeText?: number;
   /** 질문이 아닌 선택 화면 — 권한 확인(`Tab to amend`) · 플랜 승인(`ctrl+g`). 질문·검토 화면은 없음 */
   kind?: 'permission' | 'plan';
-  /** 권한 확인이 무엇을 허용하는지 — 질문 위 미리보기(도구·명령·파일 이름·내용 앞부분) 몇 줄 */
+  /** 권한 확인이 무엇을 허용하는지(질문 위 미리보기 몇 줄) · 검토 화면이면 고른 답 요약(`질문` / `→ 답`) */
   preview?: string;
+  /** 다중 선택 — 번호 키는 체크 토글이고, 제출은 따로(`PROMPT_SUBMIT` = → 키로 Submit 탭의 검토 화면으로) */
+  multiSelect?: true;
 };
+
+/** 다중 선택의 '선택 완료' — 번호 대신 보내면 → 키로 Submit 탭(검토 화면 'Ready to submit your answers?')으로 넘어간다 */
+export const PROMPT_SUBMIT = 0;
 
 export type ChatItem =
   /** ts = 보낸 시각(ISO) — 턴 머리에 HH:MM 으로 */

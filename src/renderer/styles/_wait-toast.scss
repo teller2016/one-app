@@ -48,20 +48,26 @@
     color: var(--text);
   }
 
-  // 권한 확인이 무엇을 허용하는지 — 도구·명령·파일 이름(식별자라 모노)
+  // 권한 확인이 무엇을 허용하는지(도구·명령·파일) · 검토 화면이면 고른 답 요약 — 줄마다 서체를 고른다
   &__preview {
-    margin: 0;
     max-height: 7.5em;
     overflow: hidden;
     padding: 7px 10px;
     border-radius: var(--r-md);
     background: var(--bg);
-    font-family: var(--font-mono);
     font-size: var(--fs-small);
     line-height: 1.5;
     color: var(--text-2);
+  }
+
+  &__pl {
     white-space: pre-wrap;
     word-break: break-all;
+
+    // 명령·경로 = 식별자라 모노. ⚠️ 한글이 섞인 줄은 본문 서체(JetBrains Mono 에 한글이 없다)
+    &--mono {
+      font-family: var(--font-mono);
+    }
   }
 
   &__opts {
@@ -99,8 +105,8 @@
       cursor: default;
     }
 
-    // 지금 커서가 있는 선택지(Enter 를 치면 고를 것) — 시안의 '추천' 강조 자리
-    &--current {
+    // 강조 — 단일 선택은 커서가 있는 것(Enter 를 치면 고를 것, 시안의 '추천' 자리), 다중 선택은 체크된 것
+    &--on {
       border-color: var(--accent);
       background: var(--accent-soft);
     }
@@ -126,6 +132,25 @@
     font-family: var(--font-mono);
     font-size: var(--fs-caption);
     color: var(--text-2);
+  }
+
+  // 다중 선택 체크 칸
+  &__check {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xs);
+    color: var(--accent);
+
+    &--on {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
   }
 
   &__label {

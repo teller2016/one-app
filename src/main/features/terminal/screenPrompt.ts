@@ -26,6 +26,12 @@
 //   플랜 승인  `   Claude has written up a plan … Would you like to proceed?` / `   ❯ 1. Yes, …` … /
 //              `     3. Tell Claude what to change`(커서를 두고 글을 치는 자리 = 직접 답) / `   ctrl+g to edit in Vim · <계획 파일>`
 // ⚠️ 읽지 못하면 null — 호출부는 '터미널에서 답 필요' 카드로 물러난다(틀린 버튼보다 버튼 없음이 낫다).
+// 다중 선택(AskUserQuestion multiSelect — 2026-10-06 실측):
+//   ←  ☒ 과일  ✔ Submit  →          ← 탭 줄(마지막 '✔ Submit' 탭은 검토 화면)
+//   ❯ 1. [✔] 사과                   ← 번호 키 = 체크 토글(고르기가 아니다)
+//     4. [ ] Type something
+//        Submit                      ← 제출 줄(번호 없음) — 이 줄이 있으면 다중 선택. → 키로 Submit 탭(검토 화면)에 간다
+//   검토 화면: `Review your answers` / ` ● 질문` / `   → 사과, 체리` / `Ready to submit your answers?` / `1. Submit answers` `2. Cancel`
 // 데스크톱 입력 대기 알림(2026-10-06 — 알림에서 바로 답하기)도 같은 결과를 쓴다: 권한 확인이면 **무엇을 허용하는지**
 // (질문 위 미리보기 — 위 경계 `─` 줄 아래부터)를 `preview` 로 함께 준다 — 그게 없으면 뭘 허용하는지 모르고 누르게 된다.
 import type { ChatPrompt } from '../../../shared/terminal-protocol';
@@ -39,6 +45,13 @@ const BORDER_RE = /^\s*─{3,}.*─$/;
 const TAB_RE = /[☐☒✔]/;
 /** 직접 답하는 자리 — 질문의 'Type something.' · 플랜 승인의 'Tell Claude what to change' */
 const FREE_TEXT_RE = /^(Type something|Tell Claude what to change)/i;
+/** 다중 선택 체크박스 — `[✔] 사과` · `[ ] 바나나` */
+const CHECK_RE = /^\[([ ✔✓xX])\]\s+(.*)$/;
+/** 다중 선택의 제출 줄 — 선택지 아래 번호 없이 `Submit` 한 낱말 */
+const SUBMIT_ROW_RE = /^\s*Submit\s*$/;
+/** 검토 화면 — 고른 답 요약이 그 위에 있다 */
+const REVIEW_Q_RE = /^Ready to submit your answers\?/;
+const REVIEW_HEAD_RE = /^\s*Review your answers\s*$/;
 /** 권한 확인 미리보기의 위 경계(상자 맨 위 `─` 줄)와 그 안의 구분 점선(`╌`) */
 const BOX_TOP_RE = /^\s*─{3,}/;
 const DASHED_RE = /^\s*╌{3,}\s*$/;
@@ -80,6 +93,7 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
   const wrapped = (line: string) => line.length >= width - 2;
   const options: ChatPrompt['options'] = [];
   let prevWrapped = false;
+  let submitRow = false;
   for (let i = start; i < end; i += 1) {
     const line = lines[i];
     if (!line.trim() || SEPARATOR_RE.test(line)) {
@@ -88,7 +102,16 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
     }
     const m = line.match(OPTION_RE);
     if (m && Number(m[1]) === options.length + 1) {
-      options.push({ n: Number(m[1]), label: m[2], ...(/^\s*❯/.test(line) ? { current: true } : {}) });
+      const check = m[2].match(CHECK_RE);
+      options.push({
+        n: Number(m[1]),
+        label: check ? check[2] : m[2],
+        ...(check ? { checked: check[1] !== ' ' } : {}),
+        ...(/^\s*❯/.test(line) ? { current: true } : {}),
+      });
+    } else if (options.length && SUBMIT_ROW_RE.test(line)) {
+      // 다중 선택의 제출 줄 — 앞 선택지의 설명이 아니다
+      submitRow = true;
     } else if (options.length && prevWrapped && !options[options.length - 1].description) {
       // 앞 선택지 줄이 폭 끝에서 잘렸다 — 이 줄은 설명이 아니라 라벨의 나머지(2026-10-06 실측: 권한 '항상 허용' 경로)
       options[options.length - 1].label += line.trim();
@@ -118,17 +141,47 @@ export function parseScreenPrompt(screen: string): ChatPrompt | null {
   const preview = kind === 'permission' ? permissionPreview(lines, i, wrapped) : undefined;
   skipBlank();
   if (i >= 0 && TAB_RE.test(lines[i])) {
-    header = lines[i].replace(/[☐☒✔←→]/g, ' ').replace(/\s+/g, ' ').trim() || undefined;
+    // 마지막 '✔ Submit' 탭(검토 화면 자리)은 질문 이름이 아니다
+    header =
+      lines[i]
+        .replace(/✔\s*Submit\s*(?=→|$)/, ' ')
+        .replace(/[☐☒✔←→]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || undefined;
   }
   const freeText = options.find((o) => FREE_TEXT_RE.test(o.label))?.n;
+  const question = q.join(' ');
+  const multiSelect = submitRow || options.some((o) => o.checked !== undefined);
+  // 검토 화면이면 고른 답 요약을 미리보기로 — 무엇을 제출하는지 보고 누르게
+  const reviewed = REVIEW_Q_RE.test(question) ? reviewSummary(lines, start) : undefined;
   return {
-    question: q.join(' '),
+    question,
     ...(header ? { header } : {}),
     options,
     ...(freeText ? { freeText } : {}),
     ...(kind ? { kind } : {}),
-    ...(preview ? { preview } : {}),
+    ...(preview || reviewed ? { preview: preview ?? reviewed } : {}),
+    ...(multiSelect ? { multiSelect: true as const } : {}),
   };
+}
+
+/** 검토 화면의 고른 답 요약 — `Review your answers` 아래부터 질문 위까지, `●`(질문 머리)를 걷어 `질문` / `→ 답` 줄로 */
+function reviewSummary(lines: string[], start: number): string | undefined {
+  let head = -1;
+  for (let k = start - 1; k >= 0 && start - k <= 30; k -= 1) {
+    if (REVIEW_HEAD_RE.test(lines[k])) {
+      head = k;
+      break;
+    }
+  }
+  if (head < 0) return undefined;
+  const out: string[] = [];
+  for (let k = head + 1; k < start; k += 1) {
+    const t = lines[k].trim().replace(/^●\s*/, '');
+    if (!t || REVIEW_Q_RE.test(t)) continue;
+    out.push(t);
+  }
+  return out.length ? out.slice(0, PREVIEW_LINES).join('\n') : undefined;
 }
 
 /**

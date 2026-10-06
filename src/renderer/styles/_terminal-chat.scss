@@ -466,6 +466,50 @@
     }
   }
 
+  // 다중 선택에서 체크된 선택지
+  &__opt--on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  // 다중 선택 체크 칸 — 라벨 앞
+  &__check {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-xs);
+    color: var(--accent);
+
+    &--on {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+  }
+
+  // 권한 확인이 무엇을 허용하는지 · 검토 화면의 고른 답 요약
+  &__ask-preview {
+    padding: 8px 10px;
+    border-radius: var(--r-md);
+    background: var(--bg);
+    font-size: var(--fs-small);
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  &__ask-pl {
+    white-space: pre-wrap;
+    word-break: break-all;
+
+    // 명령·경로 = 식별자라 모노. ⚠️ 한글이 섞인 줄은 본문 서체
+    &--mono {
+      font-family: var(--font-mono);
+    }
+  }
+
   // 직접 답 자리 — 누르는 버튼이 아니라 입력창 안내
   &__opt--free:disabled {
     border-style: dashed;
@@ -490,6 +534,9 @@
   }
 
   &__opt-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-weight: 600;
   }
 

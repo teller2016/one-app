@@ -2,12 +2,13 @@
 // 2026-10-06 시안 C '질문·권한에 바로 답하기'(캔버스 '입력 대기 알림 시안')를 사용자가 골랐다.
 //
 // 머리 = 저장소 색 타일 · '저장소 · 작업 제목' · 종류 뱃지 · ✕
-// 몸통 = ① 번호 선택 화면이면 질문(+ 권한 확인이면 무엇을 허용하는지 미리보기) + 번호 버튼 — 누르면 main 이 **화면이 같은
-//        질문일 때만** 그 번호 키를 보낸다(waitCard.ts). 이어지는 질문이 있으면 카드가 그 질문으로 바뀌고, 없으면 닫힌다.
+// 몸통 = ① 번호 선택 화면이면 질문(+ 권한 확인이면 무엇을 허용하는지 · 검토 화면이면 고른 답 요약) + 번호 버튼 — 누르면 main 이
+//        **화면이 같은 질문일 때만** 그 번호 키를 보낸다(waitCard.ts). 이어지는 질문이 있으면 카드가 그 질문으로 바뀌고, 없으면 닫힌다.
+//        다중 선택이면 번호 = 체크 토글(카드가 토글 결과로 다시 그려진다) + [선택 완료 →](검토 화면으로).
 //        ② 아니면 claude 의 마지막 답변 두 줄.
 // 꼬리 = 안내 한 줄 + [세션으로 이동]
 import { useState } from 'react';
-import type { ChatPrompt } from '../../../../shared/terminal-protocol';
+import { PROMPT_SUBMIT, type ChatPrompt } from '../../../../shared/terminal-protocol';
 import { promptKey, type TerminalWaitCard } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Button } from '../../../components/Button';
@@ -16,6 +17,8 @@ import { initials, tileColor } from '../lib/workspace';
 
 /** 이미 답한 질문을 눌렀을 때 안내를 보여 준 뒤 닫기까지 */
 const STALE_CLOSE_MS = 2500;
+/** 한글이 섞인 줄은 모노 금지(JetBrains Mono 에 한글이 없다) — 미리보기를 줄마다 서체를 고른다 */
+const HANGUL_RE = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
 
 /** 종류 뱃지 — 질문·플랜 승인은 파랑(액센트), 권한 확인·일반 입력 대기는 주황(탭 점과 같은 주의색) */
 function kindBadge(prompt: ChatPrompt | null): { label: string; variant: 'busy' | 'accent' } {
@@ -106,7 +109,18 @@ export function WaitingToast({
         <>
           {prompt.header && <div className="wait-toast__step">{prompt.header}</div>}
           {prompt.question && <div className="wait-toast__q">{prompt.question}</div>}
-          {prompt.preview && <pre className="wait-toast__preview">{prompt.preview}</pre>}
+          {prompt.preview && (
+            <div className="wait-toast__preview">
+              {prompt.preview.split('\n').map((line, i) => (
+                <div
+                  key={i}
+                  className={'wait-toast__pl' + (HANGUL_RE.test(line) ? '' : ' wait-toast__pl--mono')}
+                >
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="wait-toast__opts">
             {prompt.options.map((o) =>
               o.n === prompt.freeText ? (
@@ -118,11 +132,21 @@ export function WaitingToast({
                 <button
                   key={o.n}
                   type="button"
-                  className={'wait-toast__opt' + (o.current ? ' wait-toast__opt--current' : '')}
+                  className={
+                    'wait-toast__opt' +
+                    // 다중 선택은 체크된 것을, 단일 선택은 커서가 있는 것(Enter 자리)을 강조한다
+                    ((prompt.multiSelect ? o.checked : o.current) ? ' wait-toast__opt--on' : '')
+                  }
                   disabled={locked}
+                  aria-pressed={prompt.multiSelect ? !!o.checked : undefined}
                   onClick={() => void answer(o.n)}
                 >
                   <span className="wait-toast__num">{o.n}</span>
+                  {o.checked !== undefined && (
+                    <span className={'wait-toast__check' + (o.checked ? ' wait-toast__check--on' : '')} aria-hidden="true">
+                      {o.checked && <Icon name="check" size={11} />}
+                    </span>
+                  )}
                   <span className="wait-toast__label">
                     {o.label}
                     {o.description && <span className="wait-toast__desc">{o.description}</span>}
@@ -141,6 +165,12 @@ export function WaitingToast({
         <Button variant={prompt ? 'plain' : 'primary'} size="xs" onClick={onOpen}>
           세션으로 이동
         </Button>
+        {prompt?.multiSelect && (
+          // 다중 선택은 번호가 토글이라 제출이 따로다 — → 키로 Submit 탭(고른 답 검토 화면)으로 넘긴다
+          <Button variant="primary" size="xs" disabled={locked} onClick={() => void answer(PROMPT_SUBMIT)}>
+            선택 완료 →
+          </Button>
+        )}
       </div>
     </div>
   );

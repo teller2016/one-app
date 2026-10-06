@@ -842,7 +842,13 @@ function answerPairs(text: string): [string, string][] {
   return [...text.matchAll(/"([^"]+)"="([^"]*)"/g)].map((m) => [m[1], m[2]]);
 }
 
-/** claude 가 터미널에서 답을 기다리는 선택 화면 — 버튼 = 그 번호 키. 못 읽었으면 터미널 안내만 */
+/** 다중 선택의 '선택 완료' — → 키로 Submit 탭(고른 답 검토 화면)에 간다(번호 키는 체크 토글이라 제출이 따로다) */
+const SUBMIT_KEY = '\x1b[C';
+/** 한글이 섞인 줄은 모노 금지(JetBrains Mono 에 한글이 없다) — 미리보기를 줄마다 서체를 고른다 */
+const HANGUL_RE = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
+
+/** claude 가 터미널에서 답을 기다리는 선택 화면 — 버튼 = 그 번호 키. 못 읽었으면 터미널 안내만.
+ *  다중 선택이면 번호 = 체크 토글 + [선택 완료 →] · 권한 확인·검토 화면이면 미리보기(무엇을 허용/제출하는지) */
 function PromptCard({
   prompt,
   onKey,
@@ -866,17 +872,36 @@ function PromptCard({
     <div className="term-chat__ask">
       {prompt.header && <span className="term-chat__ask-step term-chat__ask-step--on">{prompt.header}</span>}
       {prompt.question && <div className="term-chat__ask-q">{prompt.question}</div>}
+      {prompt.preview && (
+        <div className="term-chat__ask-preview">
+          {prompt.preview.split('\n').map((line, i) => (
+            <div key={i} className={'term-chat__ask-pl' + (HANGUL_RE.test(line) ? '' : ' term-chat__ask-pl--mono')}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="term-chat__ask-opts">
         {prompt.options.map((o) => (
           <button
             key={o.n}
             type="button"
-            className={`term-chat__opt${o.n === prompt.freeText ? ' term-chat__opt--free' : ''}`}
+            className={
+              'term-chat__opt' +
+              (o.n === prompt.freeText ? ' term-chat__opt--free' : '') +
+              (o.checked ? ' term-chat__opt--on' : '')
+            }
             // 직접 답 자리는 버튼이 아니라 입력창으로 — 눌러도 커서만 옮겨 두고 글은 입력창에서
             onClick={() => (o.n === prompt.freeText ? undefined : onKey(String(o.n)))}
             disabled={o.n === prompt.freeText}
+            aria-pressed={o.checked !== undefined && o.n !== prompt.freeText ? o.checked : undefined}
           >
             <span className="term-chat__opt-label">
+              {o.checked !== undefined && o.n !== prompt.freeText && (
+                <span className={'term-chat__check' + (o.checked ? ' term-chat__check--on' : '')} aria-hidden="true">
+                  {o.checked && <Icon name="check" size={11} />}
+                </span>
+              )}
               {o.n}. {o.n === prompt.freeText ? '직접 답하기 — 아래 입력창' : o.label}
             </span>
             {/* 직접 답 자리 아래 줄은 키 안내다(플랜 승인 'shift+tab to approve with this feedback') — 폰엔 맞지 않다 */}
@@ -884,6 +909,11 @@ function PromptCard({
           </button>
         ))}
       </div>
+      {prompt.multiSelect && (
+        <button type="button" className="term-chat__opt term-chat__opt--primary" onClick={() => onKey(SUBMIT_KEY)}>
+          선택 완료 →
+        </button>
+      )}
       <div className="term-chat__ask-foot">
         <button type="button" className="term-chat__ask-term" onClick={onShowTerminal}>
           <Icon name="terminal" size={12} />

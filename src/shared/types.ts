@@ -471,9 +471,11 @@ export type TerminalPromptAnswerResult =
   /** 안 보냈다 — 이미 답했거나 화면이 바뀌었다(stale) · 세션이 없다(gone) · 직접 답 자리라 버튼으로 못 답한다(invalid) */
   | { ok: false; reason: 'stale' | 'gone' | 'invalid'; prompt: ChatPrompt | null };
 
-/** 선택 화면이 같은 질문인가 — 커서 위치(current)는 빼고 질문·선택지 글자로 비교한다(화살표로 커서만 옮겨도 같은 질문) */
+/** 선택 화면이 같은 질문인가 — 커서 위치(current)는 빼고 질문·선택지 글자(+ 다중 선택 체크)로 비교한다(화살표로 커서만 옮겨도 같은 질문) */
 export const promptKey = (p: ChatPrompt | null): string =>
-  p ? JSON.stringify([p.header ?? '', p.question, p.options.map((o) => o.label)]) : '';
+  p
+    ? JSON.stringify([p.header ?? '', p.question, p.options.map((o) => `${o.checked ? '[✔] ' : ''}${o.label}`)])
+    : ''; // 다중 선택의 체크 상태도 넣는다 — 토글하면 다른 화면이다(알림 카드가 토글 결과를 받아 다시 그린다)
 
 /**
  * 터미널 입력대기 토스트의 dedupeKey.

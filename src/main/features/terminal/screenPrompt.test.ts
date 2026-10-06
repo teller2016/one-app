@@ -66,6 +66,42 @@ describe('parseScreenPrompt', () => {
         { n: 1, label: 'Submit answers', current: true },
         { n: 2, label: 'Cancel' },
       ],
+      // 고른 답 요약 — 무엇을 제출하는지 보고 누르게(알림 카드 미리보기)
+      preview: '어떤 색을 선호하시나요?\n→ 파랑\n어떤 과일을 좋아하시나요?\n→ 사과',
+    });
+  });
+
+  it('다중 선택 — 체크 상태를 나누고, 제출 줄(Submit)은 설명이 아니라 다중 선택 표시다(2.1.291 실측)', () => {
+    const screen = [
+      '─'.repeat(100),
+      '←  ☒ 과일  ✔ Submit  →',
+      '',
+      '좋아하는 과일을 모두 고르세요',
+      '',
+      '❯ 1. [✔] 사과',
+      '         아삭하고 새콤달콤한 과일',
+      '  2. [ ] 바나나',
+      '         부드럽고 달콤한 과일',
+      '  3. [✔] 체리',
+      '  4. [ ] Type something',
+      '     Submit',
+      '─'.repeat(100),
+      '  5. Chat about this',
+      '',
+      'Enter to select · ↑/↓ to navigate · Esc to cancel',
+    ].join('\n');
+    expect(parseScreenPrompt(screen)).toEqual({
+      header: '과일',
+      question: '좋아하는 과일을 모두 고르세요',
+      options: [
+        { n: 1, label: '사과', checked: true, current: true, description: '아삭하고 새콤달콤한 과일' },
+        { n: 2, label: '바나나', checked: false, description: '부드럽고 달콤한 과일' },
+        { n: 3, label: '체리', checked: true },
+        { n: 4, label: 'Type something', checked: false },
+        { n: 5, label: 'Chat about this' },
+      ],
+      freeText: 4,
+      multiSelect: true,
     });
   });
 
@@ -94,6 +130,7 @@ describe('parseScreenPrompt', () => {
         { n: 1, label: 'Submit answers', current: true },
         { n: 2, label: 'Cancel' },
       ],
+      preview: '아침형 인간인가요 밤형 인간인가요?\n→ 아침형',
     });
   });
 
