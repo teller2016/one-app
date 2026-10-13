@@ -124,17 +124,29 @@ async function jiraFetch(apiPath: string): Promise<Record<string, unknown>> {
   return readJson<Record<string, unknown>>(response, "Jira");
 }
 
-async function jiraDownload(url: string, dest: string): Promise<void> {
-  const { authorization } = requireJiraAuth();
+/**
+ * 첨부 1건 내려받기 — 성공하면 true.
+ * ⚠️ Jira 와 같은 출처만 받는다 — 인증 헤더를 다른 호스트로 보내지 않는다(jira/work.ts 와 같은 원칙).
+ */
+async function jiraDownload(url: string, dest: string): Promise<boolean> {
+  const { url: base, authorization } = requireJiraAuth();
+  let sameOrigin = false;
+  try {
+    const origin = new URL(base).origin;
+    sameOrigin = new URL(url, origin).origin === origin;
+  } catch {
+    /* 주소가 깨졌으면 받지 않는다 */
+  }
+  if (!sameOrigin) return false;
   // 첨부는 이미지·문서라 본문 조회보다 오래 걸릴 수 있어 타임아웃을 넉넉히 준다
   const response = await fetch(
     url,
     { headers: { Authorization: authorization } },
     ATTACHMENT_TIMEOUT_MS,
   );
-  if (!response.ok)
-    throw new Error(`첨부 다운로드 실패 -> HTTP ${response.status}`);
+  if (!response.ok) return false;
   fs.writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
+  return true;
 }
 
 /** 미션이 남기는 result.json — 요약만 읽는다 */
@@ -543,14 +555,22 @@ async function processTicket(
       })),
       attachments: [] as string[],
     };
-    for (const att of issue.fields.attachment ?? []) {
+    // ⚠️ 첨부 1건의 실패(403·타임아웃·이상한 이름)로 분석 전체를 실패시키지 않는다 —
+    // 실패한 티켓은 원장에 남아 자동 순회가 다시 집지 않으므로, 영영 분석되지 않는다.
+    const usedNames = new Set<string>();
+    for (const [i, att] of (issue.fields.attachment ?? []).entries()) {
       if (att.size > ATTACHMENT_MAX_BYTES) continue;
-      const dest = path.join(
-        attachmentsDir,
-        att.filename.replace(/[/\\]/g, "_")
-      );
-      await jiraDownload(att.content, dest);
-      ticket.attachments.push(dest);
+      let name = att.filename.replace(/[/\\]/g, "_");
+      if (!name || name === "." || name === "..") name = `attachment-${i}`;
+      if (usedNames.has(name)) name = `${i}-${name}`; // 같은 이름 첨부가 서로 덮어쓰지 않게
+      usedNames.add(name);
+      const dest = path.join(attachmentsDir, name);
+      try {
+        if (await jiraDownload(att.content, dest)) ticket.attachments.push(dest);
+        else appendMissionLog(missionLogPath, `첨부 건너뜀: ${att.filename}`);
+      } catch (err) {
+        appendMissionLog(missionLogPath, `첨부 건너뜀: ${att.filename} — ${(err as Error).message}`);
+      }
     }
     const ticketJsonPath = path.join(ticketDir, "ticket.json");
     fs.writeFileSync(ticketJsonPath, `${JSON.stringify(ticket, null, 2)}\n`);

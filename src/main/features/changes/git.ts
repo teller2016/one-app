@@ -322,6 +322,19 @@ export async function getChangesDiff(
   if (abs !== repoPath && !abs.startsWith(repoPath + path.sep)) {
     return { ok: false, error: '저장소 밖 경로입니다.' };
   }
+  // ⚠️ untracked 는 --no-index 라 git 이 아니라 파일 시스템을 그대로 읽는다 — 위 문자열 검사만으로는
+  // 저장소가 아닌 cwd(홈 디렉터리 세션)나 저장소 안 디렉터리 심볼릭 링크를 통해 아무 파일이나 읽힌다
+  // (`untracked` 는 클라이언트가 정하는 값이고 폰에 열린 채널이다). git 이 실제로 untracked 로
+  // 보고하는 경로일 때만 읽는다 — 링크 디렉터리 안의 파일은 목록에 나오지 않는다.
+  if (file.untracked && !scope?.commit) {
+    const r = await read(
+      ['ls-files', '-z', '--others', '--exclude-standard', '--', file.path],
+      repoPath
+    );
+    if (r.code !== 0 || !r.stdout.split('\0').includes(file.path)) {
+      return { ok: false, error: '추적하지 않는 파일 목록에 없는 경로입니다.' };
+    }
+  }
 
   // full: 전체 파일을 context 로 포함 — 분할 뷰가 '변경 전 파일 | 변경 후 파일'이 된다.
   // (untracked 는 --no-index /dev/null 이라 원래 전체가 온다)

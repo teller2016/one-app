@@ -24,18 +24,22 @@ import {
   stopNightwatchScheduler,
 } from "./scheduler";
 import { saveNightwatchConfig } from "./store";
+import { IS_DEV_INSTANCE } from "../../lib/devInstance";
 
 /** Nightwatch(Jira 버그 티켓 헤드리스 분석) 관련 IPC 핸들러 등록 */
 export function registerNightwatchIpc() {
-  // 이전 세션에서 중단된 in_progress 항목 정리 + 종료 시 실행 중 미션 회수
-  sweepInterruptedTickets();
+  // 이전 세션에서 중단된 in_progress 항목 정리.
+  // ⚠️ 개발 인스턴스는 하지 않는다 — 설치본과 원장(userData)을 공유하므로 dev 를 켜는 순간
+  // 설치본에서 진행 중인 미션이 '중단됨'으로 찍힌다. (자동 순회의 dev 게이트는 scheduler.ts)
+  if (!IS_DEV_INSTANCE) sweepInterruptedTickets();
+  // 자동 순회는 ready 이후에 붙인다 — 부팅 경로에서 Jira REST·claude 탐지를 타므로
+  // 창이 뜨기 전에 돌리지 않는다(첫 확인은 인터벌 첫 tick, 즉 5분 뒤).
+  void app.whenReady().then(() => startNightwatchScheduler());
+  // 종료 시 실행 중 미션 회수
   app.on("will-quit", () => {
     stopNightwatchScheduler();
     cleanupOnQuit();
   });
-  // 자동 순회는 ready 이후에 붙인다 — 부팅 경로에서 Jira REST·claude 탐지를 타므로
-  // 창이 뜨기 전에 돌리지 않는다(첫 확인은 인터벌 첫 tick, 즉 5분 뒤).
-  void app.whenReady().then(() => startNightwatchScheduler());
 
   ipcMain.handle("nightwatch:status", () => getNightwatchStatus());
   ipcMain.handle(

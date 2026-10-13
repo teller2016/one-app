@@ -52,12 +52,18 @@ export async function parseJson<T>(res: Response): Promise<T> {
 }
 
 /** 그룹웨어가 HTML 이스케이프해 내려주는 텍스트 필드 복원 — "&lt;a@b&gt;" → "<a@b>" */
+/**
+ * 코드포인트 → 글자. 범위 밖(`&#99999999;`)이면 원문 그대로 둔다 —
+ * `String.fromCodePoint` 가 RangeError 를 던져 스팸 한 통이 받은편지함 목록 전체를 실패시켰다.
+ */
+function codePointOr(cp: number, original: string): string {
+  return Number.isInteger(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : original;
+}
+
 export function decodeEntities(raw: string): string {
   return raw
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) =>
-      String.fromCodePoint(parseInt(n, 16)),
-    )
+    .replace(/&#(\d+);/g, (m, n: string) => codePointOr(Number(n), m))
+    .replace(/&#x([0-9a-f]+);/gi, (m, n: string) => codePointOr(parseInt(n, 16), m))
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')

@@ -96,6 +96,20 @@ type SocketState = {
 };
 const socketState = new Map<WebSocket, SocketState>();
 
+/**
+ * 소켓 정리 — 채팅 구독 해제·쥔 크기 반환·상태 제거. 멱등.
+ * ⚠️ `terminate()` 의 close 이벤트는 비동기라, 그 전에 상태를 지우는 경로(ping 시간 초과·
+ * 전체 끊기)는 close 핸들러가 정리할 거리를 못 찾는다 → terminate 직전에 직접 부른다.
+ */
+function cleanupSocket(ws: WebSocket) {
+  const st = socketState.get(ws);
+  if (!st) return;
+  socketState.delete(ws);
+  st.chatOff?.(); // 폰이 사라졌다 — 대화 기록 읽기도 멈춘다
+  st.chatOff = null;
+  releaseHeldSize(st); // 쥐고 있던 크기도 데스크톱에 돌려준다
+}
+
 /** 폰이 쥔 크기를 놓는다 — 그 세션 PTY 를 데스크톱 크기로 되돌린다(pty.releaseRemoteSize) */
 function releaseHeldSize(state: SocketState) {
   if (state.heldId && state.cols > 0 && state.rows > 0) releaseRemoteSize(state.heldId, state.cols, state.rows);
@@ -209,7 +223,24 @@ function isAuthed(req: http.IncomingMessage, token: string | null): boolean {
   const m = (req.headers.cookie ?? '').match(
     new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`)
   );
-  return !!m && token !== null && timingEqual(decodeURIComponent(m[1]), token);
+  if (!m || token === null) return false;
+  // ⚠️ `%` 같은 깨진 인코딩은 URIError — 인증 전 경로라 예외가 아니라 '인증 안 됨'으로
+  let value: string;
+  try {
+    value = decodeURIComponent(m[1]);
+  } catch {
+    return false;
+  }
+  return timingEqual(value, token);
+}
+
+/** 요청 URL 파싱 — `//` 같은 주소는 `new URL` 이 던진다. 인증 전 경로라 null 로 받아 거절한다 */
+function parseReqUrl(req: http.IncomingMessage): URL | null {
+  try {
+    return new URL(req.url ?? '/', 'http://local');
+  } catch {
+    return null;
+  }
 }
 
 // ── 정적 서빙 (prod: asar 안 mobile_window 빌드 / dev: Vite dev 서버 프록시) ──
@@ -649,7 +680,12 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
   needsTailscale = false;
 
   const handler: http.RequestListener = (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://local');
+    const url = parseReqUrl(req);
+    if (!url) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', ...SECURITY_HEADERS });
+      res.end('Bad Request');
+      return;
+    }
     const token = getOrCreateToken(); // 요청당 1회 — 인증 판정·쿠키 승격이 함께 쓴다
     if (!isPublicPath(url.pathname) && !isAuthed(req, token)) {
       res.writeHead(403, {
@@ -712,9 +748,9 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
     // 403 을 쓰는 사이 상대가 끊으면 EPIPE/ECONNRESET 이 'error' 로 오고, 리스너가 없으면
     // throw → main 사망. 미인증으로도 닿는 경로라 반드시 받아 둔다.
     socket.on('error', (err) => console.error('[term:upgrade]', err.message));
-    const url = new URL(req.url ?? '/', 'http://local');
+    const url = parseReqUrl(req);
     const target =
-      url.pathname === WS_PATH ? wsServer : url.pathname === RPC_PATH ? rpcServer : null;
+      url?.pathname === WS_PATH ? wsServer : url?.pathname === RPC_PATH ? rpcServer : null;
     if (!target || !isSameOrigin(req) || !isAuthed(req, getOrCreateToken())) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();
@@ -757,12 +793,7 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
         console.error('[term:ws] 메시지 처리 실패', err);
       }
     });
-    ws.on('close', () => {
-      const st = socketState.get(ws);
-      st?.chatOff?.(); // 폰이 사라졌다 — 대화 기록 읽기도 멈춘다
-      if (st) releaseHeldSize(st); // 쥐고 있던 크기도 데스크톱에 돌려준다
-      socketState.delete(ws);
-    });
+    ws.on('close', () => cleanupSocket(ws));
     ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
     send(ws, { type: 'sessions', sessions: listSessions() });
     send(ws, {
@@ -792,8 +823,8 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
   pingTimer = setInterval(() => {
     for (const [ws, state] of socketState) {
       if (!state.alive) {
+        cleanupSocket(ws);
         ws.terminate();
-        socketState.delete(ws);
         continue;
       }
       state.alive = false;
@@ -853,8 +884,10 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
  * 끊긴 폰은 재연결 시 옛 토큰으로 upgrade 가 거부된다.
  */
 export function dropAllClients(): void {
-  for (const ws of socketState.keys()) ws.terminate();
-  socketState.clear();
+  for (const ws of [...socketState.keys()]) {
+    cleanupSocket(ws);
+    ws.terminate();
+  }
 }
 
 export async function stopServer(): Promise<void> {

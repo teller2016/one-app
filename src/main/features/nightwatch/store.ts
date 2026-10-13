@@ -7,6 +7,7 @@ import type {
   NightwatchTicket,
 } from "../../../shared/types";
 import { todayKey } from "../../../shared/date";
+import { readUserJson, writeUserJson } from "../../lib/store";
 import { app } from "electron";
 import fs from "node:fs";
 import os from "node:os";
@@ -83,20 +84,18 @@ function sanitizeAuto(
   };
 }
 
+// 읽기·쓰기는 공용 store 를 탄다 — pid 붙은 임시 파일 + fsync + rename, 깨진 파일은 `.corrupt-<시각>` 백업.
+// ⚠️ 예전 자체 구현은 임시 파일 이름이 고정이라 dev 인스턴스와 설치본(userData 공유)이 동시에 쓰면
+// 반쯤 쓴 원장이 옮겨질 수 있었고, 깨진 원장은 백업 없이 빈 원장으로 덮어써 이력이 사라졌다.
+const relToUserData = (file: string) => path.relative(app.getPath("userData"), file);
+
 function readJson<T>(file: string): T | null {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
-  } catch {
-    return null;
-  }
+  return readUserJson<T | null>(relToUserData(file), null);
 }
 
-// 야간 무인 갱신 중 크래시로 파일이 반파되지 않도록 tmp+rename 원자 쓰기 고정
 function writeJson(file: string, value: unknown) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(tmp, file);
+  writeUserJson(relToUserData(file), value);
 }
 
 const clamp = (n: unknown, min: number, max: number, fallback: number) => {

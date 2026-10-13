@@ -16,6 +16,7 @@
 // (빈 배열이면 제한 없음). ②의 후보 목록만 좁히면 ①의 학습값이 그 게이트를 우회한다 —
 // 한 번 잘못 고른 저장소가 repoDefaults 에 굳으면 계속 그리로 가므로 게이트는
 // usableRepoId() 한 곳에 둔다. 수동 [분석]은 이 게이트와 무관하다.
+import { IS_DEV_INSTANCE } from "../../lib/devInstance";
 import { isSystemAsleep } from "../power";
 import { getJiraApiConfig } from "../settings/store";
 import { findProjectsByJiraKey, getProject, listProjects } from "../projects/store";
@@ -244,6 +245,9 @@ async function tick() {
  * 설정을 저장할 때(`nightwatch:config:save`) 다시 불러 준다 — 그래야 재시작 없이 켜고 끌 수 있다.
  */
 export function refreshNightwatchSchedule(opts?: { immediate?: boolean }): void {
+  // 개발 인스턴스는 자동 순회를 붙이지 않는다 — 설치본과 설정을 공유해 dev 에서 토글을 저장해도
+  // 두 프로세스가 함께 돌게 된다(ipc.ts 의 부팅 게이트와 같은 이유)
+  if (IS_DEV_INSTANCE) return;
   const enabled = getNightwatchConfig().auto.enabled;
   if (enabled && !timer) {
     timer = setInterval(() => void tick(), TICK_MS);

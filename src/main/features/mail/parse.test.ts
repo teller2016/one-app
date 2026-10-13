@@ -1,7 +1,7 @@
 // 메일 응답 파서 — mail2 의 JSON 세션 만료 통지(code:-2)를 "빈 메일함"과 구분하는지 확인
 import { describe, expect, it } from 'vitest';
 import { AuthError } from './session';
-import { isAuthFailureJson, looksLikeLogin, parseJson } from './parse';
+import { decodeEntities, isAuthFailureJson, looksLikeLogin, parseJson } from './parse';
 
 // 2026-09-08 쿠키 없이 실측한 mail2 응답 — HTTP 200 text/plain
 const EXPIRED =
@@ -58,5 +58,15 @@ describe('looksLikeLogin', () => {
   it('보통의 메일 본문 HTML 은 만료가 아니다', () => {
     expect(looksLikeLogin('<div>안녕하세요 {"code":-2} 라는 문자열이 본문에 있어도</div>')).toBe(false);
     expect(looksLikeLogin('{"code":0,"html":"..."}')).toBe(false);
+  });
+});
+
+describe('decodeEntities', () => {
+  it('숫자 엔티티를 글자로 바꾼다', () => {
+    expect(decodeEntities('&#54620;&#xAE00; &amp; &lt;b&gt;')).toBe('한글 & <b>');
+  });
+
+  it('범위 밖 코드포인트는 던지지 않고 원문을 둔다', () => {
+    expect(decodeEntities('a&#99999999;b&#x110000;c')).toBe('a&#99999999;b&#x110000;c');
   });
 });
