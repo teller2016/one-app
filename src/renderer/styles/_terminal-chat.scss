@@ -262,11 +262,25 @@
   }
 
   // ── 도구 호출 한 줄 — 상태 점: 실행 중 = 초록 펄스 없음 · 완료 = 흐린 점 · 실패 = 빨강 ──
-  &__tool {
+  // 답변(카드)과 갈리게 도구는 '로그 줄'로 그린다(2026-10-13 사용자 결정): 면·테두리 없이 들여쓴 왼쪽 세로선 +
+  // 작고 흐린 글씨. 이어진 도구 줄은 목록 gap 만큼 당겨 세로선이 한 줄로 이어진다.
+  &__tool,
+  &__tools {
     min-width: 0;
-    border-radius: var(--r-lg);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
+    margin-left: 12px;
+    border-left: 2px solid var(--border-strong);
+  }
+
+  &__tool--err,
+  &__tools--err {
+    border-left-color: var(--danger);
+  }
+
+  &__list > &__tool + &__tool,
+  &__list > &__tool + &__tools,
+  &__list > &__tools + &__tool,
+  &__list > &__tools + &__tools {
+    margin-top: -8px; // 목록 gap(8)
   }
 
   &__tool-head {
@@ -274,16 +288,21 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    min-height: 34px;
+    min-height: var(--control-h-sm);
     padding: 0 10px;
     border: 0;
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
     background: none;
-    color: var(--text-2);
+    color: var(--text-3);
     font: inherit;
-    font-size: var(--fs-ui);
+    font-size: var(--fs-ui-sm);
     text-align: left;
     cursor: pointer;
     @include focus-ring(0px);
+
+    &:hover:not(:disabled) {
+      background: var(--bg-sunken);
+    }
 
     &:disabled {
       cursor: default;
@@ -313,8 +332,8 @@
 
   &__tool-name {
     flex-shrink: 0;
-    color: var(--text);
-    font-weight: 600;
+    color: var(--text-2);
+    font-weight: 500;
   }
 
   &__tool-sum {
@@ -644,28 +663,27 @@
   }
 
   // ── 도구 묶음 — '도구 N개 · Read 3 · Bash 2' 한 줄, 펼치면 안에 도구 줄들 ──
-  &__tools {
-    min-width: 0;
-    border-radius: var(--r-lg);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-  }
-
+  // (면·세로선은 위 &__tool 과 함께 정의)
   &__tools-head {
     display: flex;
     align-items: center;
     gap: 8px;
     width: 100%;
-    min-height: 34px;
+    min-height: var(--control-h-sm);
     padding: 0 10px;
     border: 0;
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
     background: none;
-    color: var(--text-2);
+    color: var(--text-3);
     font: inherit;
-    font-size: var(--fs-ui);
+    font-size: var(--fs-ui-sm);
     text-align: left;
     cursor: pointer;
     @include focus-ring(0px);
+
+    &:hover {
+      background: var(--bg-sunken);
+    }
 
     > svg {
       flex-shrink: 0;
@@ -681,12 +699,11 @@
     background: var(--danger);
   }
 
-  // 묶음 안 도구 줄 — 카드 테두리를 빼고 윗선만
+  // 묶음 안 도구 줄 — 세로선은 묶음이 갖고, 한 단 더 들여쓴다
   &__tool--nested {
-    border: 0;
-    border-top: 1px solid var(--border);
-    border-radius: 0;
-    background: none;
+    margin-left: 0;
+    border-left: 0;
+    padding-left: 12px;
   }
 
   // ── Edit diff 색 ──
@@ -769,6 +786,10 @@
   }
 
   // ── 서브에이전트 호출 — 묶지 않은 한 줄, 진행 중이면 스피너 ──
+  &__tool--agent:not(.term-chat__tool--err) {
+    border-left-color: var(--accent);
+  }
+
   &__tool--agent &__tool-name {
     color: var(--accent);
   }
