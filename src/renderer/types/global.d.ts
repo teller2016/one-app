@@ -7,6 +7,7 @@ import type {
   AppToastPayload,
   ScheduleRunPayload,
   ScheduleRunResult,
+  ScheduleRunStatus,
   ScheduleOutputChunk,
   ScheduleDoneInfo,
   ScheduleNotionRecordPayload,
@@ -119,6 +120,7 @@ declare global {
       schedule: {
         run: (payload: ScheduleRunPayload) => Promise<ScheduleRunResult>;
         cancel: () => Promise<{ ok: boolean }>;
+        getStatus: () => Promise<ScheduleRunStatus>;
         notionRecord: (
           payload: ScheduleNotionRecordPayload,
         ) => Promise<ScheduleNotionRecordResult>;

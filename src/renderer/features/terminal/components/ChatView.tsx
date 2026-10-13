@@ -158,11 +158,29 @@ function findRanges(root: HTMLElement, query: string): Range[] {
   return ranges;
 }
 
-const clearHighlights = () => {
-  if (typeof CSS === 'undefined' || !CSS.highlights) return;
-  CSS.highlights.delete(FIND_ALL);
-  CSS.highlights.delete(FIND_ON);
+/**
+ * 하이라이트 레지스트리(`CSS.highlights`)는 문서에 하나뿐이고 이름이 고정이다 — 분할된 pane 의 ChatView 들이
+ * 같은 이름을 덮어쓰고 지우면 A 의 검색 표시가 B 의 새 말풍선·검색·언마운트에 사라졌다.
+ * 그래서 인스턴스(owner)별 범위를 여기 모아 두고, 바뀔 때마다 전체를 합쳐 다시 등록한다.
+ */
+const ownedRanges: Record<string, Map<object, Range[]>> = {
+  [FIND_ALL]: new Map(),
+  [FIND_ON]: new Map(),
 };
+
+const highlightsSupported = () =>
+  typeof CSS !== 'undefined' && !!CSS.highlights && typeof Highlight !== 'undefined';
+
+/** owner 의 범위를 바꾸고(빈 배열 = 제거) 그 이름의 하이라이트를 전체 owner 기준으로 다시 그린다 */
+function setOwnedRanges(name: string, owner: object, ranges: Range[]) {
+  if (!highlightsSupported()) return;
+  const byOwner = ownedRanges[name];
+  if (ranges.length) byOwner.set(owner, ranges);
+  else if (!byOwner.delete(owner)) return; // 원래 없었으면 다시 그릴 것도 없다
+  const all = [...byOwner.values()].flat();
+  if (all.length) CSS.highlights.set(name, new Highlight(...all));
+  else CSS.highlights.delete(name);
+}
 
 export function ChatView({
   items,
@@ -282,12 +300,20 @@ export function ChatView({
   const showTodos = todos.some((t) => t.state !== 'done');
 
   // 새 항목이 오면 바닥에 붙어 있을 때만 따라 내려간다(위로 올려 읽는 중이면 '새 답변' 표시)
-  const lastCount = useRef(items.length);
+  // ⚠️ 개수로 판정하지 말 것 — 항목은 CHAT_MAX_ITEMS(400)에서 앞이 잘려 길이가 고정되므로 긴 세션에서
+  // 새 답이 와도 표시가 안 떴다. 마지막 항목 key 가 바뀌었고 예전 마지막이 아직 목록에 있으면(=뒤에 붙음) 새 것
+  const lastKey = useRef<string | null>(items.at(-1)?.key ?? null);
   useLayoutEffect(() => {
     const el = listRef.current;
+    const tail = items.at(-1)?.key ?? null;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-    else if (items.length > lastCount.current) setHasNew(true);
-    lastCount.current = items.length;
+    else if (
+      tail !== null &&
+      tail !== lastKey.current &&
+      (lastKey.current === null || items.some((i) => i.key === lastKey.current))
+    )
+      setHasNew(true);
+    lastKey.current = tail;
   }, [items, busy, prompt, status, queued]);
 
   // 목록 높이가 줄어도 바닥에 붙어 있었으면 마지막 내용을 계속 보인다 — 폰 키보드가 올라오면(셸이 `--mo-vh` 로
@@ -347,6 +373,7 @@ export function ChatView({
   const [findCount, setFindCount] = useState(0);
   const findRef = useRef<HTMLInputElement>(null);
   const rangesRef = useRef<Range[]>([]);
+  const [findOwner] = useState(() => ({})); // 이 인스턴스의 하이라이트 몫 (setOwnedRanges)
   useEffect(() => {
     if (!findSignal) return;
     setFindOpen(true);
@@ -358,10 +385,11 @@ export function ChatView({
   }, [findSignal]);
   // 검색어·대화가 바뀌면 일치를 다시 칠한다
   useEffect(() => {
-    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return;
+    if (!highlightsSupported()) return;
     const root = listRef.current;
     if (!findOpen || !findQ || !root) {
-      clearHighlights();
+      setOwnedRanges(FIND_ALL, findOwner, []);
+      setOwnedRanges(FIND_ON, findOwner, []);
       rangesRef.current = [];
       setFindCount(0);
       return;
@@ -369,20 +397,27 @@ export function ChatView({
     const ranges = findRanges(root, findQ);
     rangesRef.current = ranges;
     setFindCount(ranges.length);
-    CSS.highlights.set(FIND_ALL, new Highlight(...ranges));
-  }, [findOpen, findQ, items]);
+    setOwnedRanges(FIND_ALL, findOwner, ranges);
+  }, [findOpen, findQ, items, findOwner]);
   // 현재 일치 — 강조 + 화면 안으로
   useEffect(() => {
-    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return;
+    if (!highlightsSupported()) return;
     const r = rangesRef.current[findAt];
     if (!findOpen || !r) {
-      CSS.highlights.delete(FIND_ON);
+      setOwnedRanges(FIND_ON, findOwner, []);
       return;
     }
-    CSS.highlights.set(FIND_ON, new Highlight(r));
+    setOwnedRanges(FIND_ON, findOwner, [r]);
     r.startContainer.parentElement?.scrollIntoView({ block: 'center' });
-  }, [findAt, findCount, findOpen]);
-  useEffect(() => () => clearHighlights(), []);
+  }, [findAt, findCount, findOpen, findOwner]);
+  // 언마운트 — 내 몫만 걷는다(다른 pane 의 검색 표시는 그대로)
+  useEffect(
+    () => () => {
+      setOwnedRanges(FIND_ALL, findOwner, []);
+      setOwnedRanges(FIND_ON, findOwner, []);
+    },
+    [findOwner],
+  );
   const stepFind = (back: boolean) => {
     if (!findCount) return;
     setFindAt((i) => (i + (back ? -1 : 1) + findCount) % findCount);

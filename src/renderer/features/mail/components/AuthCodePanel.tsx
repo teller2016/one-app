@@ -11,6 +11,7 @@ import { Button } from '../../../components/Button';
 import { EmptyState } from '../../../components/EmptyState';
 import { Icon } from '../../../components/Icon';
 import { useCopy } from '../../../lib/useCopy';
+import { errMsg } from '../../../lib/errMsg';
 import { relativeTime } from '../lib/format';
 
 /**
@@ -37,14 +38,22 @@ export function AuthCodePanel() {
   const [codes, setCodes] = useState<Record<string, CodeState>>({});
   const copy = useCopy();
 
+  const [loadError, setLoadError] = useState('');
+
   useEffect(() => {
-    void window.oneApp.mail.authCodeAccounts().then(setAccounts);
+    window.oneApp.mail
+      .authCodeAccounts()
+      .then(setAccounts)
+      .catch((err: unknown) => setLoadError(errMsg(err, '계정 목록을 불러오지 못했습니다.')));
   }, []);
 
   const fetchCode = useCallback(
     async (loginId: string, service: AuthCodeServiceId) => {
       setCodes((prev) => ({ ...prev, [loginId]: { kind: 'loading', service } }));
-      const result = await window.oneApp.mail.getAuthCode(loginId, service);
+      // 거부돼도 버튼이 스피너에 갇히지 않게 실패 결과로 바꿔 둔다
+      const result: AuthCodeResult = await window.oneApp.mail
+        .getAuthCode(loginId, service)
+        .catch((err: unknown) => ({ ok: false, error: errMsg(err, '인증코드를 받지 못했습니다.') }));
       setCodes((prev) => ({
         ...prev,
         [loginId]: { kind: 'done', service, result },
@@ -59,6 +68,7 @@ export function AuthCodePanel() {
   );
 
   if (accounts === null) {
+    if (loadError) return <Banner variant="danger">{loadError}</Banner>;
     return <p className="hint">불러오는 중...</p>;
   }
 

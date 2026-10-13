@@ -47,6 +47,8 @@ let server: VpnServer | null = null; // CONNECTED 라인의 원격 서버 — �
  * 지나면 waitForConnected 가 SIGTERM 으로 데몬을 끝내므로 백그라운드 재연결은 여유를 더 둔다.
  */
 const RECONNECT_TIMEOUT_MS = 90_000;
+/** 이전 세션 포트 확인 — OpenVPN 은 접속 즉시 비밀번호 프롬프트를 보낸다. 이 안에 아무 말이 없으면 'silent' */
+const MGMT_PROBE_MS = 1500;
 
 // openvpn 실패 사유 코드 → 한국어 메시지
 const DROP_REASONS: Record<string, string> = {
@@ -105,7 +107,9 @@ function send(cmd: string) {
 }
 
 /** management 인자용 이스케이프 — 큰따옴표 문자열 안에서 \ 와 " 처리 */
-const mgmtEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+// ⚠️ 줄바꿈은 지운다 — management 는 줄 단위 명령이라 값에 섞인 \r\n 이 뒤에 다른 명령을 끼워 넣는다
+const mgmtEscape = (s: string) =>
+  s.replace(/[\r\n]/g, '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 // ── management 라인 처리 ─────────────────────────────
 
@@ -261,6 +265,50 @@ function connectSocketOnce(port: number, mgmtPw: string): Promise<void> {
       if (socket !== s) reject(err);
     });
   });
+}
+
+/**
+ * 이전 세션 포트에 붙기 전 확인 — 그 포트의 상대가 OpenVPN management 인가.
+ * - `openvpn`: 비밀번호 프롬프트·배너가 왔다 → 그 소켓을 이어서 쓴다
+ * - `silent`: 아무 말이 없다 → OpenVPN 이 다른 클라이언트(dev·설치본 중 다른 쪽)를 잡고 있어 이 접속을
+ *   TCP 백로그에 세워 둔 경우일 수 있다(features/system 규칙 실측) → 예전처럼 붙어 둔다.
+ *   ⚠️ 여기서 '데몬 없음'으로 보고 새로 띄우면 root 데몬이 둘 뜨고 옛 데몬은 고아가 된다.
+ * - `foreign`: OpenVPN 이 아닌 응답 → 데몬이 끝난 뒤 다른 프로그램이 그 포트를 쓰고 있다.
+ *   관리 비밀번호를 보내지 않고 끊는다.
+ */
+function probeManagement(port: number): Promise<{ kind: 'openvpn' | 'silent' | 'foreign'; s: net.Socket }> {
+  return new Promise((resolve, reject) => {
+    const s = net.createConnection({ host: '127.0.0.1', port });
+    let got = '';
+    let done = false;
+    const finish = (kind: 'openvpn' | 'silent' | 'foreign') => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      s.removeListener('data', onData);
+      resolve({ kind, s });
+    };
+    const onData = (chunk: Buffer) => {
+      got += chunk.toString('utf8');
+      if (/ENTER PASSWORD:|>INFO:OpenVPN Management Interface/.test(got)) finish('openvpn');
+      else if (got.length > 256 || got.includes('\n')) finish('foreign');
+    };
+    const timer = setTimeout(() => finish('silent'), MGMT_PROBE_MS);
+    s.on('data', onData);
+    s.once('error', (err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+/** 확인을 마친 소켓을 management 연결로 채택 — 첫 줄은 비밀번호 */
+function adoptSocket(s: net.Socket, mgmtPw: string) {
+  socket = s;
+  wireSocket(s);
+  s.write(mgmtPw + '\n');
 }
 
 async function attachManagement(port: number, mgmtPw: string, timeoutMs: number) {
@@ -481,11 +529,19 @@ export async function tryReattachVpn(): Promise<boolean> {
   } catch {
     return false;
   }
+  let probe: Awaited<ReturnType<typeof probeManagement>>;
   try {
-    await connectSocketOnce(port, mgmtPw);
+    probe = await probeManagement(port);
   } catch {
     return false;
   }
+  if (probe.kind === 'foreign') {
+    // 옛 세션 기록은 이제 쓸모없다 — 지우지 않으면 [연결] 마다 같은 프로그램에 붙으려 한다
+    probe.s.destroy();
+    for (const f of [sessionPath(), mgmtPwPath()]) fs.rmSync(f, { force: true });
+    return false;
+  }
+  adoptSocket(probe.s, mgmtPw);
   send('state on');
   send('state'); // 현재 상태 1회 조회 — 응답 라인은 handleLine 에서 파싱
   // 상태 응답이 도착할 시간을 잠깐 준다

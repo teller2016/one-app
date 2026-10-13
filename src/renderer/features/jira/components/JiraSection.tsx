@@ -430,12 +430,18 @@ export function JiraSection({
     menuSeq.current = seq;
     setMenuKey(key);
     setMenuState('loading');
-    const res = await window.oneApp.jira.getTransitions(key);
-    // 다른 이슈 메뉴로 넘어갔거나 메뉴를 닫았으면 이 응답은 버린다
-    // (안 그러면 지금 열린 메뉴에 남의 이슈 전환 목록이 뜬다)
-    if (seq !== menuSeq.current) return;
-    if (res.ok && res.transitions) setMenuState(res.transitions);
-    else setMenuState({ error: res.error ?? '전환 목록을 불러오지 못했습니다' });
+    try {
+      const res = await window.oneApp.jira.getTransitions(key);
+      // 다른 이슈 메뉴로 넘어갔거나 메뉴를 닫았으면 이 응답은 버린다
+      // (안 그러면 지금 열린 메뉴에 남의 이슈 전환 목록이 뜬다)
+      if (seq !== menuSeq.current) return;
+      if (res.ok && res.transitions) setMenuState(res.transitions);
+      else setMenuState({ error: res.error ?? '전환 목록을 불러오지 못했습니다' });
+    } catch (err) {
+      // 거부돼도 메뉴가 'loading' 에 머물지 않게 오류로 바꾼다
+      if (seq === menuSeq.current)
+        setMenuState({ error: errMsg(err, '전환 목록을 불러오지 못했습니다') });
+    }
   }, []);
 
   // 메뉴 밖 클릭·Escape 로 닫기
@@ -490,14 +496,20 @@ export function JiraSection({
     async (key: string, t: JiraTransition) => {
       setMenuKey(null);
       setTransitioningKey(key);
-      const res = await window.oneApp.jira.transition(key, t.id);
-      if (res.ok) {
-        toast(`${key} → ${t.name}`);
-        await load();
-      } else {
-        toast(res.error ?? '전환에 실패했습니다', 'fail');
+      // ⚠️ 거부돼도 '전환 중' 표시를 푼다 — 안 풀면 그 행이 계속 잠겨 있다
+      try {
+        const res = await window.oneApp.jira.transition(key, t.id);
+        if (res.ok) {
+          toast(`${key} → ${t.name}`);
+          await load();
+        } else {
+          toast(res.error ?? '전환에 실패했습니다', 'fail');
+        }
+      } catch (err) {
+        toast(errMsg(err, '전환에 실패했습니다'), 'fail');
+      } finally {
+        setTransitioningKey(null);
       }
-      setTransitioningKey(null);
     },
     [load, toast],
   );

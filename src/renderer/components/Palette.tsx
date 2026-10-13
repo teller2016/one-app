@@ -114,6 +114,7 @@ export function Palette<T>({
       run(items[active]);
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation(); // 아래 깔린 모달(document 리스너)까지 함께 닫지 않게
       onClose();
     }
   };

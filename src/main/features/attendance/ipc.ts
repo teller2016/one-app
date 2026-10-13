@@ -44,7 +44,10 @@ export function registerAttendanceIpc() {
   // 출근/퇴근 찍기 (MO 공유 — 폰에서도 확인 다이얼로그를 거친다)
   handleShared(
     'attendance:stamp',
-    async (action: 'come' | 'leave'): Promise<AttendanceResult> => {
+    async (action: unknown): Promise<AttendanceResult> => {
+      // ⚠️ 폰에 열린 채널 — 모르는 값이면 그룹웨어의 출퇴근 함수가 엉뚱한 인자로 실제 호출된다
+      if (action !== 'come' && action !== 'leave')
+        return { ok: false, error: '알 수 없는 출퇴근 동작입니다.' };
       const cred = getCredentials();
       if (!cred)
         return {

@@ -24,6 +24,9 @@ export type ScheduleOutputChunk = { stream: string; data: string };
 
 export type ScheduleDoneInfo = { code: number | null };
 
+/** 일정 등록 실행 상태 — 섹션 재마운트 때 [중지] 버튼·실행 로그 복원용 (schedule:status) */
+export type ScheduleRunStatus = { running: boolean; log: string };
+
 /** 하루 작업 기록 항목 — end 는 "HH:MM" (userData/worklog.json 에 저장) */
 export type ScheduleWorkItem = { id: string; end: string; title: string };
 

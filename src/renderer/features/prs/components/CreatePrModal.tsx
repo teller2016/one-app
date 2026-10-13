@@ -260,6 +260,8 @@ export function CreatePrModal({
       width={740}
       title={`새 PR — ${repoName}`}
       onClose={onClose}
+      // 생성 중에 닫아도 PR 은 만들어진다 — 끝날 때까지 막는다
+      closable={!creating}
       footer={
         <>
           <Button onClick={onClose} disabled={creating}>

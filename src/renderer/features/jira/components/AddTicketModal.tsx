@@ -2,7 +2,7 @@
 //
 // 저장 전에 Jira 에서 실제로 찾아보고(존재·권한) 제목까지 보여준 뒤 확정한다 —
 // 잘못된 키를 넣으면 목록에 조용히 안 나오는 게 아니라 그 자리에서 알 수 있어야 한다.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { JiraValidateResult } from '../../../../shared/types';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
@@ -11,6 +11,7 @@ import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
 import { Modal } from '../../../components/Modal';
 import { useToast } from '../../../components/Toast';
+import { errMsg } from '../../../lib/errMsg';
 
 export function AddTicketModal({
   onAdded,
@@ -26,9 +27,14 @@ export function AddTicketModal({
   const [adding, setAdding] = useState(false);
   const [found, setFound] = useState<JiraValidateResult | null>(null);
   const [error, setError] = useState('');
+  // 확인 요청 순번 — 확인 중에 입력을 고치면 늦게 온 옛 결과가 found 로 들어와
+  // [추가]가 고치기 전 티켓을 넣었다. 입력이 바뀌면 진행 중인 응답을 버린다.
+  const checkSeq = useRef(0);
 
   // 입력이 바뀌면 이전 확인 결과는 무효 — 확정 버튼이 낡은 티켓을 추가하지 않게
   const changeInput = (v: string) => {
+    checkSeq.current += 1;
+    setChecking(false);
     setInput(v);
     setFound(null);
     setError('');
@@ -36,20 +42,24 @@ export function AddTicketModal({
 
   const check = async () => {
     const value = input.trim();
-    if (!value) return;
+    if (!value || checking) return; // 확인 중 Enter 연타로 요청이 겹치지 않게
+    const seq = ++checkSeq.current;
     setChecking(true);
     setError('');
     try {
       const res = await window.oneApp.jira.added.validate(value);
+      if (seq !== checkSeq.current) return;
       if (res.ok) setFound(res);
       else setError(res.error ?? '티켓을 찾지 못했습니다.');
+    } catch (err) {
+      if (seq === checkSeq.current) setError(errMsg(err, '티켓을 확인하지 못했습니다.'));
     } finally {
-      setChecking(false);
+      if (seq === checkSeq.current) setChecking(false);
     }
   };
 
   const add = async () => {
-    if (!found?.key) return;
+    if (!found?.key || adding) return;
     setAdding(true);
     try {
       const res = await window.oneApp.jira.added.add(found.key);
@@ -60,6 +70,8 @@ export function AddTicketModal({
       toast(`${found.key} 를 목록에 추가했습니다`);
       onAdded(found.key);
       onClose();
+    } catch (err) {
+      setError(errMsg(err, '추가하지 못했습니다.'));
     } finally {
       setAdding(false);
     }

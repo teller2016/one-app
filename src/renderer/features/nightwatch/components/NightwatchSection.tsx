@@ -230,16 +230,27 @@ export function NightwatchSection() {
     }
   };
 
+  // 리포트 요청 순번 — 로딩 중 닫았거나 다른 리포트를 열었으면 늦게 온 응답을 버린다
+  // (안 그러면 닫은 모달이 다시 뜨거나 B 자리에 A 내용이 들어간다)
+  const reportSeq = useRef(0);
+  const closeReport = () => {
+    reportSeq.current += 1;
+    setModal(null);
+  };
   const openReport = async (key: string) => {
+    const seq = ++reportSeq.current;
     setModal({ key, content: "불러오는 중..." });
-    const res = await window.oneApp.nightwatch.getReport(key);
-    setModal({
-      key,
-      content:
+    let content: string;
+    try {
+      const res = await window.oneApp.nightwatch.getReport(key);
+      content =
         res.ok && res.content
           ? res.content
-          : res.error ?? "리포트를 불러오지 못했습니다",
-    });
+          : res.error ?? "리포트를 불러오지 못했습니다";
+    } catch (e) {
+      content = errMsg(e, "리포트를 불러오지 못했습니다");
+    }
+    if (seq === reportSeq.current) setModal({ key, content });
   };
 
   // 작업 프롬프트 복사 — 아침에 실제 저장소의 Claude Code 세션에 그대로 붙여넣는다
@@ -849,7 +860,7 @@ export function NightwatchSection() {
               <span className="nightwatch__modal-key">{modal.key}</span> 분석 리포트
             </>
           }
-          onClose={() => setModal(null)}
+          onClose={closeReport}
           width={840}
         >
           {/* 래퍼 클래스는 모달 높이(:has)·리포트 타이포 후크 — 스크롤은 modal__body 가 담당 */}

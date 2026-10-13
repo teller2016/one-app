@@ -90,6 +90,10 @@ export function ScheduleSection() {
   const [dateType, setDateType] = useState<DateType>('today');
   const [customDate, setCustomDate] = useState('');
   const [running, setRunning] = useState(false);
+  // [일정 등록]을 누른 뒤 실행 요청이 나가기 전(시작 시각 확인창 등) — 연속 클릭으로 두 번째
+  // 실행이 already_running 을 받아 running 을 풀던 것을 막는다. ref 는 같은 틱의 재진입용.
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
   const [done, setDone] = useState(false);
   const [log, setLog] = useState('');
   const [credsReady, setCredsReady] = useState<boolean | null>(null);
@@ -117,7 +121,20 @@ export function ScheduleSection() {
       setRunning(false);
       setLog((prev) => prev + `\n— 프로세스 종료 (code ${code}) —\n`);
     });
+    // 섹션을 옮겼다 돌아오면(재마운트) 진행 중인 실행의 [중지]·로그를 되살린다.
+    // 구독을 먼저 걸고 조회한다 — IPC 순서상 응답 이전 로그는 스냅샷에, 이후 로그는 구독에 온다.
+    let alive = true;
+    window.oneApp.schedule
+      .getStatus()
+      .then((st) => {
+        if (!alive) return;
+        if (st.log) setLog(st.log);
+        if (st.running) setRunning(true);
+        else if (st.log.includes('등록 완료')) setDone(true);
+      })
+      .catch((): void => undefined);
     return () => {
+      alive = false;
       offOutput();
       offDone();
     };
@@ -334,8 +351,20 @@ export function ScheduleSection() {
       setLog('[경고] 날짜를 선택하세요.\n');
       return;
     }
-    // 실제 등록만 검사 (테스트 모드는 등록하지 않으므로 제외)
-    if (!testMode && !(await confirmStartTime())) return;
+    if (startingRef.current || running) return;
+    startingRef.current = true;
+    setStarting(true);
+    try {
+      // 실제 등록만 검사 (테스트 모드는 등록하지 않으므로 제외)
+      if (!testMode && !(await confirmStartTime())) return;
+      await startRun(scheduleText, testMode);
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
+  };
+
+  const startRun = async (scheduleText: string, testMode: boolean) => {
     setLog('');
     setDone(false);
     setRunning(true);
@@ -350,7 +379,8 @@ export function ScheduleSection() {
         testMode,
       });
       if (!res.ok) {
-        setRunning(false);
+        // 이미 도는 실행이 있으면 그 실행의 [중지]가 보여야 한다 — 내리지 않는다
+        if (res.error !== 'already_running') setRunning(false);
         // 상세 사유는 main 이 로그에 쓴다 — 로그가 화면 아래라 놓치기 쉬워 토스트로도 알린다
         toast(RUN_FAIL_MSG[res.error ?? ''] ?? '일정 등록을 시작하지 못했습니다 — 아래 로그를 확인하세요', 'fail');
       }
@@ -379,13 +409,13 @@ export function ScheduleSection() {
                 중지
               </Button>
             )}
-            <Button onClick={() => run(true)} disabled={running || !hasItems}>
+            <Button onClick={() => run(true)} disabled={running || starting || !hasItems}>
               테스트 (등록 안 함)
             </Button>
             <Button
               variant="primary"
               onClick={() => run(false)}
-              loading={running}
+              loading={running || starting}
               disabled={!hasItems}
             >
               일정 등록

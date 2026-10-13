@@ -1,6 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { handleShared } from '../../lib/moIpc';
 import { playSound } from '../../lib/sound';
+import { isPositiveInt } from '../../lib/util';
 import { getNotifySound, isMailNotifyEnabled } from '../settings/store';
 import { getBody, getInbox, getUnreadCount } from './mail';
 import { forgetAltSession, getAuthCode } from './authcode';
@@ -91,9 +92,14 @@ export function registerMailIpc() {
     return res;
   });
   // 본문 조회 (unread=true 면 열 때 읽음 처리) — 읽음 처리됐으면 안읽은 수 캐시를 버린다
-  handleShared('mail:body', async (muid: number, unread: boolean) => {
-    const res = await getBody(muid, unread);
-    if (unread && res.ok) invalidateUnreadCache();
+  // ⚠️ 폰에 열린 채널 — muid 는 요청 본문·쿼리에 그대로 들어가므로 양의 정수만(숫자 문자열은 허용),
+  // unread 는 boolean 만(문자열 "false" 가 참으로 취급돼 읽음 처리되던 것 방지)
+  handleShared('mail:body', async (muid: unknown, unread: unknown) => {
+    const id = typeof muid === 'string' && /^\d+$/.test(muid) ? Number(muid) : muid;
+    if (!isPositiveInt(id)) return { ok: false, error: '잘못된 메일 번호입니다.' };
+    const markRead = unread === true;
+    const res = await getBody(id, markRead);
+    if (markRead && res.ok) invalidateUnreadCache();
     return res;
   });
   // 브라우저로 비즈박스 메일함 바로 열기 (SPA 진입점)

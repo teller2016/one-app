@@ -571,12 +571,12 @@ async function prepareEaWindow(
 }
 
 /** 사용자에게 창을 넘긴다 (자동화 장치 제거 + 안내 제목) */
-async function handOver(page: Page, title: string) {
+async function handOver(page: Page, title: string, opener: Page | null = null) {
   await releasePage(page).catch((): void => undefined);
   page.win.setTitle(title);
   page.win.show();
   page.win.focus();
-  keepPage(page);
+  keepPage(page, opener);
 }
 
 /**
@@ -690,11 +690,18 @@ export async function runVacationDraft(
       ready: false,
       missed: ['전자결재 창'],
     }));
+    // ⚠️ 작성 창은 보통 [결재상신] 과 함께 스스로 닫히지만, 서버 오류 등으로 남으면 자동화용
+    // confirm(항상 '예')이 붙은 채 사용자 손에 남는다 — 거기서 [결재상신] 을 다시 누르면 확인창 없이
+    // 근태신청이 중복 저장될 수 있다. 자동화 장치를 걷어내고(팝업인 전자결재 창은 닫지 않는다)
+    // 전자결재 창의 opener 로 묶어 함께 정리되게 한다.
+    const formAlive = !page.win.isDestroyed();
+    if (formAlive) await releasePage(page, { closeChildren: false }).catch((): void => undefined);
     await handOver(
       eaPage,
       prepared.ready && !prepared.missed.length
         ? '전자결재 — 내용 확인 후 [상신] 하세요'
         : '전자결재 — 빠진 항목을 채우고 [상신] 하세요',
+      formAlive ? page : null,
     );
     handed = true;
     return {

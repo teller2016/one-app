@@ -277,9 +277,11 @@ export function StartWorkModal({
       subtitle={summary}
       width={580}
       onClose={onClose}
+      // 준비(첨부 내려받기) 중에 닫으면 '취소'처럼 보이지만 세션은 그대로 만들어진다 — 끝날 때까지 막는다
+      closable={!busy}
       footer={
         <>
-          <Button variant="plain" onClick={onClose}>
+          <Button variant="plain" onClick={onClose} disabled={busy}>
             취소
           </Button>
           <Button

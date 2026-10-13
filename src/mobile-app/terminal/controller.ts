@@ -145,6 +145,9 @@ class MoTerminalController {
   private fit: FitAddon | null = null;
   private search: SearchAddon | null = null;
   private hostEl: HTMLElement | null = null;
+  /** 터치 리스너가 걸린 호스트와 그 해제 핸들 — 재마운트로 호스트가 바뀌면 옮겨 단다 */
+  private touchHost: HTMLElement | null = null;
+  private touchAbort: AbortController | null = null;
   private ws: WebSocket | null = null;
   private reconnectDelay = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -283,6 +286,9 @@ class MoTerminalController {
     if (this.term) {
       const node = this.term.element;
       if (node && node.parentElement !== el) el.appendChild(node);
+      // ⚠️ 터치 리스너는 호스트에 걸려 있다 — 재마운트(ErrorBoundary [다시 시도] 등)로 호스트가 바뀌면
+      // 옮겨 붙이지 않을 경우 스크롤·핀치·줄 선택이 전부 먹통이 된다(키보드도 안 열려 새로고침뿐)
+      if (this.touchHost !== el) this.bindTouch(el);
       this.refit();
       return;
     }
@@ -703,6 +709,8 @@ class MoTerminalController {
       requestAnimationFrame(() => this.claimSize());
     } else {
       this.closeKeyboard();
+      // 출력 선택은 터미널 보기 전용 — 남겨 두면 돌아왔을 때 키 바 대신 선택 바가 그대로 떠 있다
+      if (this.state.selecting) this.setSelecting(false);
       this.releaseSize(); // 채팅 보기는 크기를 주장하지 않는다 — 쥐고 있던 폰 크기를 데스크톱에 돌려준다
     }
   }
@@ -953,6 +961,12 @@ class MoTerminalController {
   };
 
   private bindTouch(el: HTMLElement) {
+    // 이전 호스트의 리스너는 떼고 새 호스트에만 단다 — 같은 요소에 두 번 걸면 스크롤이 두 배가 된다
+    this.touchAbort?.abort();
+    const ctl = new AbortController();
+    this.touchAbort = ctl;
+    this.touchHost = el;
+    const signal = ctl.signal;
     let screen: HTMLElement | null = null;
     const screenEl = () => (screen ??= el.querySelector<HTMLElement>('.xterm-screen')) ?? el;
     let dragY = 0;
@@ -994,7 +1008,7 @@ class MoTerminalController {
           selectTo(dragY);
         }
       },
-      { passive: true },
+      { passive: true, signal },
     );
 
     el.addEventListener(
@@ -1042,7 +1056,7 @@ class MoTerminalController {
           }),
         );
       },
-      { passive: false },
+      { passive: false, signal },
     );
 
     el.addEventListener(
@@ -1060,7 +1074,7 @@ class MoTerminalController {
         if (!this.state.kbdOpen || this.state.selecting) e.preventDefault();
         void dragged;
       },
-      { passive: false },
+      { passive: false, signal },
     );
   }
 
@@ -1271,6 +1285,12 @@ class MoTerminalController {
       sentinel.addEventListener('release', () => {
         if (this.wakeSentinel === sentinel) this.wakeSentinel = null;
       });
+      // ⚠️ 요청을 기다리는 사이 연결이 끊기거나(onclose → releaseWake 는 아직 null 을 봤다)
+      // 화면·탭이 바뀌었으면 늦게 온 잠금을 쥐지 말고 바로 놓는다 — 안 그러면 끊긴 채 화면이 켜져 있다
+      if (!this.wantWake()) {
+        void sentinel.release().catch(() => undefined);
+        return;
+      }
       this.wakeSentinel = sentinel;
     } catch {
       // 배터리 절약 모드 등에서 브라우저가 거부한다 — 그냥 넘어간다
@@ -1315,13 +1335,18 @@ class MoTerminalController {
     }, SEEN_DWELL_MS);
   }
 
-  private syncWakeLock() {
-    const want =
+  /** 화면을 켜 둘 조건 — 보임 + 터미널 탭 활성 + 연결됨 + 보는 세션이 작업 중 */
+  private wantWake(): boolean {
+    return (
       document.visibilityState === 'visible' &&
       this.active &&
       this.ws?.readyState === WebSocket.OPEN &&
-      this.watchingWork();
-    if (want) {
+      this.watchingWork()
+    );
+  }
+
+  private syncWakeLock() {
+    if (this.wantWake()) {
       if (this.wakeReleaseTimer !== null) {
         clearTimeout(this.wakeReleaseTimer);
         this.wakeReleaseTimer = null;
@@ -1332,7 +1357,7 @@ class MoTerminalController {
     if (!this.wakeSentinel || this.wakeReleaseTimer !== null) return;
     this.wakeReleaseTimer = setTimeout(() => {
       this.wakeReleaseTimer = null;
-      if (!this.watchingWork() || !this.active) this.releaseWake();
+      if (!this.wantWake()) this.releaseWake();
     }, 5000);
   }
 }

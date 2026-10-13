@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, type WebContents } from 'electron';
 import { closePage, type Page } from '../../lib/browser';
 import { runMacro } from './runMacro';
 import { resolveBaseDate } from './scheduleUtils';
@@ -14,7 +14,9 @@ import {
   SCHEDULE_DEFAULT_START_TIME,
   SCHEDULE_START_CONFIG_DEFAULT,
   type ScheduleNotionRecordPayload,
+  type ScheduleOutputChunk,
   type ScheduleRunPayload,
+  type ScheduleRunStatus,
   type ScheduleStartConfig,
   type ScheduleWorkItem,
   type ScheduleWorklog,
@@ -22,6 +24,22 @@ import {
 
 let running = false;
 let currentPage: Page | null = null;
+// 실행 세대 — [중지] 뒤 다시 실행하면 옛 실행의 로그·완료·정리가 새 실행 상태를 건드리지 않게
+// 한다(옛 실행은 창이 닫혀 늦게 실패하며 done(1)·running=false 를 보냈다).
+let runGen = 0;
+// 이번 실행의 로그 — 섹션을 옮겼다 돌아오면(재마운트) 렌더러가 schedule:status 로 되살린다
+let runLog: ScheduleOutputChunk[] = [];
+const RUN_LOG_MAX = 500;
+
+/** 창이 닫혔으면 보내지 않는다 — 파괴된 sender 의 send 는 throw 해 등록을 중간에 끊었다 */
+function safeSend(sender: WebContents, channel: string, payload: unknown): void {
+  if (sender.isDestroyed()) return;
+  try {
+    sender.send(channel, payload);
+  } catch {
+    // destroyed 체크 후에도 남는 종료 타이밍 예외 — 무시
+  }
+}
 
 // 작업 기록 — localStorage 는 강제 종료 시 디스크 flush 가 안 돼 유실되므로
 // (2026-07-29 실측: 쓰기 후 45초에도 leveldb 미커밋) userData JSON 에 즉시 저장한다.
@@ -94,14 +112,29 @@ export function startScheduleRegisterCheck(): void {
 export function registerScheduleIpc() {
   ipcMain.handle('schedule:run', async (event, payload: ScheduleRunPayload) => {
     const sender = event.sender;
-    const send = (stream: string, data: string) =>
-      sender.send('schedule:output', { stream, data });
-    const done = (code: number) => sender.send('schedule:done', { code });
 
     if (running) {
-      send('stderr', '이미 실행 중입니다. 잠시 후 다시 시도하세요.\n');
+      // 진행 중인 실행의 로그에는 섞지 않는다
+      safeSend(sender, 'schedule:output', {
+        stream: 'stderr',
+        data: '이미 실행 중입니다. 잠시 후 다시 시도하세요.\n',
+      });
       return { ok: false, error: 'already_running' };
     }
+
+    const gen = ++runGen;
+    runLog = [];
+    const isCurrent = () => gen === runGen;
+    const send = (stream: string, data: string) => {
+      if (!isCurrent()) return;
+      runLog.push({ stream, data });
+      if (runLog.length > RUN_LOG_MAX) runLog.splice(0, runLog.length - RUN_LOG_MAX);
+      safeSend(sender, 'schedule:output', { stream, data });
+    };
+    const done = (code: number) => {
+      if (!isCurrent()) return;
+      safeSend(sender, 'schedule:done', { code });
+    };
 
     // 1) 자격증명 확인 (로그인 자체는 공용 세션 모듈이 담당 — 여기서는 미설정만 걸러낸다)
     if (!getCredentials()) {
@@ -163,11 +196,14 @@ export function registerScheduleIpc() {
       testMode: !!payload.testMode,
       onLog: (msg) => send('stdout', msg),
       onPage: (pg) => {
-        currentPage = pg;
+        // 창이 뜨기 전에 [중지]됐으면 새로 뜬 창도 닫는다(남은 단계는 닫힌 창에서 실패한다)
+        if (isCurrent()) currentPage = pg;
+        else closePage(pg);
       },
     })
       .then(() => {
-        // 실제 등록만 기록한다 — 다음 평일 아침 누락 알림의 근거
+        // 실제 등록만 기록한다 — 다음 평일 아침 누락 알림의 근거.
+        // 메인 창이 닫혀 있어도(send 생략) 등록이 끝까지 갔으면 기록한다.
         if (!payload.testMode) markScheduleRegistered(baseDate);
         done(0);
       })
@@ -176,7 +212,7 @@ export function registerScheduleIpc() {
         done(1);
       })
       .finally(() => {
-        running = false;
+        if (isCurrent()) running = false;
       });
 
     return { ok: true };
@@ -209,13 +245,22 @@ export function registerScheduleIpc() {
       recordScheduleToNotion(payload),
   );
 
+  // 실행 상태 — 섹션 재마운트 때 [중지] 버튼·로그를 되살린다
+  ipcMain.handle(
+    'schedule:status',
+    (): ScheduleRunStatus => ({
+      running,
+      log: runLog.map((c) => c.data).join(''),
+    }),
+  );
+
   ipcMain.handle('schedule:cancel', () => {
-    if (currentPage) {
-      closePage(currentPage);
-      currentPage = null;
-      running = false;
-      return { ok: true };
-    }
-    return { ok: false };
+    if (!currentPage && !running) return { ok: false };
+    // 세대를 넘겨 옛 실행의 남은 로그·완료·정리를 무시한다
+    runGen++;
+    if (currentPage) closePage(currentPage);
+    currentPage = null;
+    running = false;
+    return { ok: true };
   });
 }

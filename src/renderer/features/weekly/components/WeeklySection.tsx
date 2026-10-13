@@ -6,6 +6,7 @@ import { Banner } from '../../../components/Banner';
 import { Badge } from '../../../components/Badge';
 import { Icon } from '../../../components/Icon';
 import { EmptyState } from '../../../components/EmptyState';
+import { errMsg } from '../../../lib/errMsg';
 import { useCopy } from '../../../lib/useCopy';
 import { RosterRow } from './RosterRow';
 import { EmployeeDetail } from './EmployeeDetail';
@@ -118,7 +119,7 @@ export function WeeklySection() {
     } catch (err) {
       // IPC 자체가 실패해도(핸들러 미등록 등) 로딩이 멈추지 않게 처리
       setLoading(false);
-      setError((err as Error)?.message ?? '수집 요청에 실패했습니다.');
+      setError(errMsg(err, '수집 요청에 실패했습니다.'));
       return;
     }
     setLoading(false);

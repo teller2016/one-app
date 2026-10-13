@@ -13,6 +13,7 @@ import { Modal } from '../../../components/Modal';
 import { Pagination } from '../../../components/Pagination';
 import { RefreshButton } from '../../../components/RefreshButton';
 import { Tooltip } from '../../../components/Tooltip';
+import { errMsg } from '../../../lib/errMsg';
 import { mailTime, senderName } from '../lib/format';
 import { AuthCodePanel } from './AuthCodePanel';
 
@@ -94,23 +95,29 @@ export function MailModal({
     const seq = reqSeq.current + 1;
     reqSeq.current = seq;
     setLoading(true);
-    const res = await window.oneApp.mail.getInbox({
-      folder: f,
-      page: p,
-      pageSize: PAGE_SIZE,
-    });
-    if (seq !== reqSeq.current) return; // 더 최신 요청이 진행 중 — 이 응답은 버림
-    if (res.ok && res.items) {
-      setItems(res.items);
-      setTotal(res.total ?? res.items.length);
-      // 폴더별 안읽음은 목록과 같은 응답에 실려 온다(추가 왕복 없음)
-      if (res.folderUnread) setUnread(res.folderUnread);
-      onCount?.(res.unreadCount);
-      setListError('');
-    } else {
-      setListError(res.error ?? '메일을 불러오지 못했습니다.');
+    // ⚠️ IPC 가 거부(폰 WS 끊김 등)돼도 loading 을 풀어야 한다 — 안 풀면 목록이 '불러오는 중'에 갇힌다
+    try {
+      const res = await window.oneApp.mail.getInbox({
+        folder: f,
+        page: p,
+        pageSize: PAGE_SIZE,
+      });
+      if (seq !== reqSeq.current) return; // 더 최신 요청이 진행 중 — 이 응답은 버림
+      if (res.ok && res.items) {
+        setItems(res.items);
+        setTotal(res.total ?? res.items.length);
+        // 폴더별 안읽음은 목록과 같은 응답에 실려 온다(추가 왕복 없음)
+        if (res.folderUnread) setUnread(res.folderUnread);
+        onCount?.(res.unreadCount);
+        setListError('');
+      } else {
+        setListError(res.error ?? '메일을 불러오지 못했습니다.');
+      }
+    } catch (err) {
+      if (seq === reqSeq.current) setListError(errMsg(err, '메일을 불러오지 못했습니다.'));
+    } finally {
+      if (seq === reqSeq.current) setLoading(false);
     }
-    setLoading(false);
   }, [onCount]);
 
   useEffect(() => {

@@ -1935,6 +1935,11 @@ input.input--bare {
   overflow: hidden; // 둥근 모서리 — 안쪽 팝업은 전부 body portal 이라 잘리지 않는다
   @include rise-in;
 
+  // 열릴 때 포커스를 받는 다이얼로그 자체(tabindex -1) — 테두리 링은 그리지 않는다
+  &:focus {
+    outline: none;
+  }
+
   // 넓은 콘텐츠(로그·표)용
   &--wide {
     max-width: var(--modal-w, 880px);

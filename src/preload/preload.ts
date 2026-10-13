@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.invoke("schedule:run", payload),
     // 실행 중지 (자동화 브라우저 닫기)
     cancel: () => ipcRenderer.invoke("schedule:cancel"),
+    // 실행 상태(실행 중 여부·이번 실행 로그) — 섹션 재마운트 때 복원
+    getStatus: () => ipcRenderer.invoke("schedule:status"),
     // 노션 기록 — [노션용 복사] 텍스트를 노션 날짜 페이지에 직접 쓴다
     notionRecord: (payload: ScheduleNotionRecordPayload) =>
       ipcRenderer.invoke("schedule:notion:record", payload),

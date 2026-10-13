@@ -5,6 +5,7 @@ import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { errMsg } from '../../../lib/errMsg';
+import { PORTAL_LAYERS } from '../../../lib/portalLayers';
 import { useBackClose } from '../../../lib/useBackClose';
 import { useThemeMode } from '../../../lib/theme';
 import { isDone } from '../lib/issue';
@@ -182,6 +183,8 @@ export function JiraDetailPanel({
       const t = e.target as HTMLElement;
       if (panelRef.current?.contains(t)) return;
       if (t.closest('.jira__title')) return;
+      // 패널이 띄운 모달([작업] 등)·확인창·피커는 body portal 이라 DOM 상 '바깥'이다
+      if (t.closest(PORTAL_LAYERS)) return;
       onClose();
     };
     window.addEventListener('click', onClick);

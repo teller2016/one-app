@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { PORTAL_LAYERS } from '../lib/portalLayers';
 import { usePopover } from '../lib/usePopover';
 import { StatusBarItem, useInStatusBar } from './StatusBar';
 
 /**
- * 이 팝오버가 닫히면 안 되는 바깥 레이어 — 위젯이 띄운 모달·확인창·토스트·피커는
+ * 이 팝오버가 닫히면 안 되는 바깥 레이어(`PORTAL_LAYERS`) — 위젯이 띄운 모달·확인창·토스트·피커는
  * `body` 로 portal 되므로 좌표상 '팝오버 밖'이다. 그 클릭까지 외부 클릭으로 보면
  * 야근 결재 모달을 여는 순간 배경 팝오버가 닫히고, 확인창의 [확인] 클릭도 함께 닫는다.
  */
-const OUTER_LAYERS = '.modal-overlay, .picker__pop, .toasts';
 
 /**
  * 상태바 위젯 셸 (VPN·폰 미러링·근태) — 상태바에는 한 줄 요약만 두고, 누르면 위젯 본체가
@@ -57,7 +57,7 @@ export function StatusWidget({
       const t = e.target as HTMLElement | null;
       if (!t) return;
       if (popRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
-      if (t.closest(OUTER_LAYERS)) return;
+      if (t.closest(PORTAL_LAYERS)) return;
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {

@@ -5,6 +5,7 @@ import { Button } from '../../../components/Button';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { Icon } from '../../../components/Icon';
 import { Input } from '../../../components/Input';
+import { errMsg } from '../../../lib/errMsg';
 
 /**
  * 환경설정의 **'추가 비즈박스 계정'** 카드 — 내 계정 외에 조회용으로 쓸 그룹웨어 계정을 등록한다.
@@ -24,20 +25,29 @@ export function AltAccountsCard() {
   const confirm = useConfirm();
 
   useEffect(() => {
-    void window.oneApp.mail.authCodeAccounts().then(setAccounts);
+    window.oneApp.mail
+      .authCodeAccounts()
+      .then(setAccounts)
+      .catch((err: unknown) => setError(errMsg(err, '계정 목록을 불러오지 못했습니다.')));
   }, []);
 
   const addAccount = async () => {
     setSaving(true);
     setError('');
-    const res = await window.oneApp.mail.saveAuthCodeAccount(newId, newPw);
-    setSaving(false);
-    if (res.ok && res.accounts) {
-      setAccounts(res.accounts);
-      setNewId('');
-      setNewPw('');
-    } else {
-      setError(res.error ?? '계정을 저장하지 못했습니다.');
+    // ⚠️ 거부돼도 saving 을 푼다 — 안 풀면 [추가] 버튼이 잠긴 채 남는다
+    try {
+      const res = await window.oneApp.mail.saveAuthCodeAccount(newId, newPw);
+      if (res.ok && res.accounts) {
+        setAccounts(res.accounts);
+        setNewId('');
+        setNewPw('');
+      } else {
+        setError(res.error ?? '계정을 저장하지 못했습니다.');
+      }
+    } catch (err) {
+      setError(errMsg(err, '계정을 저장하지 못했습니다.'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -48,8 +58,12 @@ export function AltAccountsCard() {
       danger: true,
     });
     if (!ok) return;
-    const res = await window.oneApp.mail.removeAuthCodeAccount(loginId);
-    if (res.accounts) setAccounts(res.accounts);
+    try {
+      const res = await window.oneApp.mail.removeAuthCodeAccount(loginId);
+      if (res.accounts) setAccounts(res.accounts);
+    } catch (err) {
+      setError(errMsg(err, '계정을 삭제하지 못했습니다.'));
+    }
   };
 
   return (
