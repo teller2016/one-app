@@ -60,7 +60,8 @@ export function DeployConfirmModal({
   preview: PreviewState;
   /** 환경설정의 Jira 주소 — 있으면 티켓 칩이 링크가 된다 */
   jiraUrl?: string;
-  onConfirm: () => void;
+  /** confirmName = 운영(PROD) 확인란에 입력한 대상 이름 (main 이 다시 대조한다) */
+  onConfirm: (confirmName: string) => void;
   onClose: () => void;
 }) {
   const [typed, setTyped] = useState('');
@@ -92,7 +93,7 @@ export function DeployConfirmModal({
           <Button onClick={onClose}>취소</Button>
           <Button
             variant={project.production ? 'warn' : 'primary'}
-            onClick={onConfirm}
+            onClick={() => onConfirm(typed.trim())}
             disabled={!prodOk}
           >
             {project.production ? '운영 배포 실행' : '배포 시작'}

@@ -224,6 +224,7 @@ export function registerPrsIpc() {
         return { ok: false, error: (err as Error).message };
       }
     },
+    { audit: 'PR 생성' },
   );
 
   // 머지 전 상태 확인 (mergeable)
@@ -281,5 +282,6 @@ export function registerPrsIpc() {
         return { ok: false, error: (err as Error).message };
       }
     },
+    { audit: 'PR 머지' },
   );
 }

@@ -121,9 +121,10 @@ contextBridge.exposeInMainWorld("oneApp", {
     // 프로젝트(젠킨스 서버) 단위 현황(실행 중 + 대기) 조회
     fetchActivity: (projectId: string) =>
       ipcRenderer.invoke("deploy:activity:fetch", projectId),
-    // 배포 실행 — 이후 진행 상태는 onStatus 로 전달됨
-    trigger: (projectId: string, targetId: string) =>
-      ipcRenderer.invoke("deploy:trigger", projectId, targetId),
+    // 배포 실행 — 이후 진행 상태는 onStatus 로 전달됨.
+    // confirmName = 운영(PROD) 확인 모달에 입력한 대상 이름 (main 이 다시 대조한다)
+    trigger: (projectId: string, targetId: string, confirmName?: string) =>
+      ipcRenderer.invoke("deploy:trigger", projectId, targetId, confirmName),
     // 빌드 상세(커밋 내역 등) 조회. buildNumber 없으면 최근 빌드
     getBuildDetail: (
       projectId: string,

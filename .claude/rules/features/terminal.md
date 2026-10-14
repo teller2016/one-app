@@ -36,7 +36,7 @@ paths:
 - ⚠️ **`TMUX` 를 지우고 실행**(남기면 256색 폴백) — 에이전트 세션은 위 형태, **셸 세션도 `env -u TMUX -u TMUX_PANE <sh> -il`**(2026-10-01 — 셸 탭에서 손으로 친 claude 가 분홍 로고·칙칙한 화면이 됐다). 색이 이상하면 SGR 유형(`38;2`/`38;5`)부터. 상세: 노트 '⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)'.
 - tmux 미설치 폴백만 PTY write — 첫 출력 후 350ms 잠잠하면 전송, 상한 3초.
 - `terminal:sessions` 브로드캐스트는 **payload(전체 목록)** 를 싣는다(재조회 없음).
-- ⚠️ **PTY 쓰기는 `ptyWrite()` 경유**(`s.pty.write` 직접 금지) — 동기 throw 가 앱 전체를 내린다.
+- ⚠️ **PTY 쓰기는 `ptyWrite()` 경유**(`s.pty.write` 직접 금지) — 동기 throw 가 main 전역 처리기(`lib/errorLog.ts`)까지 올라가 그 뒤 처리가 끊긴다.
 - 진단: `ONEAPP_TERM_DEBUG=1` → `[term:life]`. 죽은 pane 재현은 전용 소켓 + `remain-on-exit on` + `capture-pane -p`.
 - 상세: 노트 '⚠️ 자동 실행 명령은 **입력으로 주입하지 않는다** (2026-08-08)'.
 

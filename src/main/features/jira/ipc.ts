@@ -30,13 +30,19 @@ export function registerJiraIpc() {
   // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
   handleShared('jira:detail', (key: string) => fetchIssueDetail(key));
   handleShared('jira:transitions', (key: string) => getTransitions(key));
-  handleShared('jira:transition', (key: string, id: string) =>
-    transitionIssue(key, id),
+  handleShared(
+    'jira:transition',
+    (key: string, id: string) => transitionIssue(key, id),
+    { audit: 'Jira 상태 변경' },
   );
   // PR 머지 직후 원클릭 해결 처리 — 해결/완료 계열 전환 자동 선택
-  handleShared('jira:resolve', (key: string) => resolveIssue(key));
+  handleShared('jira:resolve', (key: string) => resolveIssue(key), {
+    audit: 'Jira 해결 처리',
+  });
   // 작업 시작 직후 원클릭 진행 처리 — 진행 계열 전환 자동 선택
-  handleShared('jira:start-progress', (key: string) => startProgressIssue(key));
+  handleShared('jira:start-progress', (key: string) => startProgressIssue(key), {
+    audit: 'Jira 진행 처리',
+  });
 
   // 주간 활동 — 기간(YYYY-MM-DD) 안에 내가 작업한 티켓 + 관여도 + 내 변경 이력.
   // ⚠️ 날짜가 JQL 문자열에 들어가므로 형식 검증은 `activity.ts` 진입부에서 한다.

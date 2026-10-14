@@ -148,9 +148,11 @@ declare global {
           force?: boolean,
         ) => Promise<Record<string, DeployStatus>>;
         fetchActivity: (projectId: string) => Promise<DeployActivityResult>;
+        /** confirmName = 운영(PROD) 확인 모달에 입력한 대상 이름 — PROD 면 main 이 대조한다 */
         trigger: (
           projectId: string,
           targetId: string,
+          confirmName?: string,
         ) => Promise<DeployTriggerResult>;
         getBuildDetail: (
           projectId: string,

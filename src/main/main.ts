@@ -13,6 +13,7 @@ import { registerNightwatchIpc } from "./features/nightwatch/ipc";
 import { registerPowerIpc, startPowerWatch } from "./features/power";
 import {
   getNotifyWindow,
+  sendToast,
   setNotifyWindow,
   registerNotifyIpc,
 } from "./features/notify/notify";
@@ -34,6 +35,12 @@ import { registerWeeklyIpc } from "./features/weekly/ipc";
 import { registerWorkspacesIpc } from "./features/workspaces/ipc";
 import { IS_DEV_INSTANCE } from "./lib/devInstance";
 import { initDockBadge } from "./lib/dockBadge";
+import {
+  getFailedFeatures,
+  installMainErrorGuards,
+  MAIN_ERROR_LOG,
+  runIsolated,
+} from "./lib/errorLog";
 import { warmUpSecrets } from "./lib/store";
 import {
   loadWindowState,
@@ -49,27 +56,45 @@ if (started) {
   app.quit();
 }
 
-// IPC 핸들러 등록
-registerScheduleIpc();
-registerSettingsIpc();
-registerDeployIpc();
-registerAttendanceIpc();
-registerVpnIpc();
-registerWeeklyIpc();
-registerNotifyIpc();
-registerPrsIpc();
-registerApplinkIpc();
-registerMirrorIpc();
-registerJiraIpc();
-registerMailIpc();
-registerNightwatchIpc();
-registerApprovalIpc();
-registerProjectsIpc();
-registerTerminalIpc();
-registerChangesIpc();
-registerWorkspacesIpc();
-registerPowerIpc();
-registerPortsIpc();
+// 처리되지 않은 예외는 Electron 오류 대화상자(닫을 때까지 main 을 멈춘다) 대신 기록 + 토스트로
+// — lib/errorLog.ts. 토스트는 오류가 연달아 나도 5분에 1장까지만
+const MAIN_ERROR_TOAST_GAP_MS = 5 * 60_000;
+let lastMainErrorToastAt = 0;
+installMainErrorGuards((err) => {
+  const now = Date.now();
+  if (now - lastMainErrorToastAt < MAIN_ERROR_TOAST_GAP_MS) return;
+  const reason = err instanceof Error ? err.message : String(err);
+  const sent = sendToast({
+    title: "앱 내부 오류",
+    message: `${reason.slice(0, 200)} — ${MAIN_ERROR_LOG} 에 기록했습니다.`,
+    variant: "fail",
+    sticky: true,
+    dedupeKey: "main-error",
+  });
+  if (sent) lastMainErrorToastAt = now;
+});
+
+// IPC 핸들러 등록 — 하나가 던져도 나머지 기능과 창 생성은 계속한다(실패는 기록 + 창이 뜬 뒤 토스트)
+runIsolated("일정 등록", registerScheduleIpc);
+runIsolated("환경설정", registerSettingsIpc);
+runIsolated("배포", registerDeployIpc);
+runIsolated("출퇴근", registerAttendanceIpc);
+runIsolated("VPN", registerVpnIpc);
+runIsolated("주간보고", registerWeeklyIpc);
+runIsolated("알림", registerNotifyIpc);
+runIsolated("PR", registerPrsIpc);
+runIsolated("딥링크", registerApplinkIpc);
+runIsolated("폰 미러링", registerMirrorIpc);
+runIsolated("Jira", registerJiraIpc);
+runIsolated("메일", registerMailIpc);
+runIsolated("Nightwatch", registerNightwatchIpc);
+runIsolated("결재", registerApprovalIpc);
+runIsolated("프로젝트", registerProjectsIpc);
+runIsolated("터미널", registerTerminalIpc);
+runIsolated("변경사항", registerChangesIpc);
+runIsolated("워크스페이스", registerWorkspacesIpc);
+runIsolated("잠자기 감시", registerPowerIpc);
+runIsolated("포트", registerPortsIpc);
 
 // 외부 브라우저로 링크 열기 (http/https 만 허용)
 ipcMain.handle("app:openExternal", async (_e, url: string) => {
@@ -156,6 +181,18 @@ const createWindow = () => {
   mainWindow.webContents.once("did-finish-load", () => {
     if (mainWindow.isDestroyed()) return;
     warmUpSecrets();
+    // 시작 때 등록·시작에 실패한 기능을 알린다 — 토스트 구독(App 의 effect)이 붙을 시간을 둔다
+    const failed = getFailedFeatures();
+    if (failed.length > 0)
+      setTimeout(() => {
+        sendToast({
+          title: "일부 기능을 불러오지 못했습니다",
+          message: `${failed.join(", ")} — ${MAIN_ERROR_LOG} 에 기록했습니다.`,
+          variant: "fail",
+          sticky: true,
+          dedupeKey: "main-feature-failed",
+        });
+      }, 1500);
   });
   // 렌더러가 죽으면 빈 창이 영영 남는다 — 정상 종료가 아니면 다시 로드한다.
   // 카운터는 **이 창의 것**이다(createWindow 클로저) — 창을 닫고 다시 만들면(activate) 0 부터 센다.
@@ -241,11 +278,11 @@ app.on("ready", () => {
   initDockBadge();
   createWindow();
   // 출퇴근 리마인더 스케줄러 시작 (창을 닫아도 앱이 살아 있으면 계속 동작)
-  startReminderScheduler();
+  runIsolated("출퇴근 리마인더", startReminderScheduler);
   // 일정 등록 누락 알림 — 다음 평일 아침에 직전 평일 미등록을 알린다
-  startScheduleRegisterCheck();
+  runIsolated("일정 등록 누락 알림", startScheduleRegisterCheck);
   // 잠자기 상태 감시 — 덮개 닫힘 뒤 다크웨이크 동안 폴러를 멈추고, 복귀 때 폭주면 알린다
-  startPowerWatch();
+  runIsolated("잠자기 감시", startPowerWatch);
 });
 
 // 앱 종료 시 PTY 클라이언트·MO 서버 정리 — tmux 백엔드 세션은 서버에 남아

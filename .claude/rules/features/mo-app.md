@@ -17,6 +17,7 @@ paths:
 `ipcMain` 에는 등록된 handle 을 main 에서 호출하는 API 가 없다 → `lib/moIpc.ts` 의 **`handleShared(channel, fn)`** 이 `ipcMain.handle` 등록과 동시에 함수를 레지스트리에 잡아 두고, `/rpc` WS 가 그 함수를 그대로 부른다(로직 중복 0).
 
 - ⚠️ 시그니처에서 `IpcMainInvokeEvent` 를 **의도적으로 제거**했다 — `event.sender` 에 의존하는 핸들러를 실수로 폰에 열 수 없게 타입으로 막는다.
+- 쓰기 채널은 `{ audit }` 옵션으로 폰 감사 기록·PC 알림 대상이 된다(`main-process` 규칙 'MO 노출' 절, `features/terminal/moAudit.ts`).
 - **`handleShared` 로 등록하는 것 자체가 MO 화이트리스트 선언**이고, 안 여는 채널(`projects:pick-dir`·`settings:theme:set`·`mail:open-web`·vpn·mirror·schedule·nightwatch)은 기존 `ipcMain.handle` 로 남긴다. 2026-09-10 에 `jira:report:*`(보고)와 `mail:authcode:accounts`·`fetch`(인증코드 조회)를 열었다 — 폰이 같은 화면을 마운트하는데 닫혀 있어 죽던 것.
 
 ## push — broadcast fan-out

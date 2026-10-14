@@ -66,6 +66,13 @@ paths:
 - ⚠️ 시그니처에서 `IpcMainInvokeEvent` 를 **의도적으로 제거**했다 — `event.sender` 에 의존하는 핸들러를 실수로 폰에 열 수 없게 타입으로 막는다.
 - **`handleShared` 로 등록하는 것 자체가 MO 화이트리스트 선언**이다. 폰에 안 여는 채널(`projects:pick-dir`·`settings:theme:set`·`mail:open-web`·vpn·mirror·schedule·nightwatch)은 기존 `ipcMain.handle` 로 남긴다.
 - ⚠️ 폰에 열리는 채널은 **클라이언트가 경로를 직접 넘기게 하지 말 것** — 식별자(projectId/sessionId)만 받아 main 이 해석하고, 파일 경로는 저장소 밖 탈출을 검증한다.
+- **상태를 바꾸는 채널은 `handleShared(채널, fn, { audit: '동작 이름' })`**(2026-10-14) — 폰에서 부르면 `userData/mo-audit.log`(dev 는 `-dev`)에 시각·결과·인자 요약이 남고 PC 에 고정 토스트 1장(마지막 동작)이 뜬다(`features/terminal/moAudit.ts`). 현재: 출퇴근 찍기·커밋·push·배포 실행/중지·PR 생성/머지·Jira 상태 변경/해결/진행. ⚠️ 조회 채널엔 달지 말 것(폴링이 기록을 덮는다). ⚠️ 폰 터미널(`/term`) 셸 입력은 RPC 가 아니라 기록되지 않는다.
+
+## 예외 처리 — `lib/errorLog.ts` (2026-10-14)
+- main 의 `uncaughtException`·`unhandledRejection` 은 `userData/main-errors.log`(dev 는 `main-errors-dev.log`, 1MB 넘으면 `.1`)에 남는다. uncaught 는 '앱 내부 오류' 토스트(5분에 1장)도 띄운다.
+- ⚠️ Electron 기본 동작(43.4.1 실측)은 앱을 **죽이지 않는다** — 리스너가 없으면 영문 오류 대화상자를 띄우고 닫을 때까지 main 이 멈췄다. 거부(rejection)는 경고만 찍고 흔적이 없었다.
+- **새 기능의 `register*Ipc()`·`start*()` 는 main.ts 에서 `runIsolated('이름', fn)` 으로** 부른다 — 시작 중 하나가 던지면 나머지 등록과 `app.on('ready')` 가 안 돌아 **창 없이 Dock 에만 떠 있는 앱**이 됐다. 실패한 기능은 창이 뜬 뒤 토스트로 알린다.
+- userData 에 기록 파일을 더 둘 일이 있으면 `appendUserLog(파일명, 글)`(같은 파일, 1MB 회전·절대 안 던짐)을 쓴다.
 
 ## 비밀 정보
 - 비밀번호·토큰은 `safeStorage` 로 암호화해 userData 에만 저장. 코드·리포에 하드코딩 금지. `.env`/`settings.json`(계정) 커밋 금지.

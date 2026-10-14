@@ -238,7 +238,11 @@ export function DeploySection() {
     return onDeployRequest(consume);
   }, [loading, projects]);
 
-  const doDeploy = async (projectId: string, targetId: string) => {
+  const doDeploy = async (
+    projectId: string,
+    targetId: string,
+    confirmName: string,
+  ) => {
     setConfirm(null);
     const key = statusKey(projectId, targetId);
     optimistic.current.add(key); // watchBuild 가 몰고 갈 대상 — 주기 조회 보호
@@ -246,7 +250,11 @@ export function DeploySection() {
     // ⚠️ invoke 거부(폰 셸 WS 끊김 등)도 잡아야 한다 — 안 잡으면 낙관적 '대기중'이
     // 주기 조회 보호(optimistic)에 걸려 폴링으로도 회복되지 않고 영영 남는다
     try {
-      const res = await window.oneApp.deploy.trigger(projectId, targetId);
+      const res = await window.oneApp.deploy.trigger(
+        projectId,
+        targetId,
+        confirmName,
+      );
       if (!res.ok) throw new Error(res.error ?? '실행 실패');
     } catch (err) {
       optimistic.current.delete(key);
@@ -670,8 +678,8 @@ export function DeploySection() {
               target={target}
               preview={preview}
               jiraUrl={linkCfg.jiraUrl}
-              onConfirm={() =>
-                void doDeploy(confirm.projectId, confirm.targetId)
+              onConfirm={(confirmName) =>
+                void doDeploy(confirm.projectId, confirm.targetId, confirmName)
               }
               onClose={() => setConfirm(null)}
             />

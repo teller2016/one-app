@@ -1009,9 +1009,10 @@ export function writeSession(id: string, data: string): void {
  * PTY 쓰기 — **반드시 이걸 거칠 것**(`s.pty.write` 직접 호출 금지).
  *
  * ⚠️ node-pty 의 write 는 동기로 던진다 — 세션이 방금 죽었는데 렌더러·폰이 아직 모르고
- * 보낸 키, 형이 어긋난 WS 프레임(`{type:'input', data:123}`) 등이 그 경로다. main 에는
- * uncaughtException 핸들러가 없어 그 예외 하나가 **앱 전체를 내린다** — 세션을 끊는 것보다
- * 훨씬 나쁘다. 삼킨 결과는 '그 입력만 유실'이고, 죽은 세션이면 어차피 갈 곳이 없다.
+ * 보낸 키, 형이 어긋난 WS 프레임(`{type:'input', data:123}`) 등이 그 경로다. 여기서 놓치면
+ * main 전역 처리기(`lib/errorLog.ts`)까지 올라가 '앱 내부 오류' 토스트가 뜨고 그 뒤 처리가
+ * 통째로 끊긴다(처리기 이전엔 main 을 멈추는 Electron 오류 대화상자였다). 삼킨 결과는
+ * '그 입력만 유실'이고, 죽은 세션이면 어차피 갈 곳이 없다.
  */
 function ptyWrite(s: Session, data: string): void {
   try {

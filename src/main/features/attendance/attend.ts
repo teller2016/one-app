@@ -7,6 +7,7 @@
 // confirm 자동 수락은 browser.ts 의 DIALOG_OVERRIDE 가 담당한다(출퇴근 저장 시 confirm 이 뜬다).
 import { ATTENDANCE_CONFIG } from './config';
 import { invalidateAttendance } from './statusCache';
+import { AttendanceAlreadyStampedError, alreadyStampedTime } from './stampGuard';
 import type { AttendanceInfo } from '../../../shared/types';
 import { sleep, localDateKey } from '../../lib/util';
 import { pad2 } from '../../../shared/date';
@@ -47,6 +48,19 @@ export function getKnownAttendanceToday(): {
 function widgetToday(): string {
   const d = new Date();
   return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+}
+
+/**
+ * 조회 성공 → 오늘 확인된 근태로 기록 (리마인더 폴백 판단에 사용).
+ * 위젯이 다른 날짜(자정 직후의 전날 기록 등)를 보여주면 오늘 값으로 믿지 않는다.
+ */
+function rememberToday(info: AttendanceInfo) {
+  const isToday = info.date === widgetToday();
+  knownToday = {
+    date: localDateKey(new Date()),
+    comeTime: isToday ? info.comeTime : null,
+    leaveTime: isToday ? info.leaveTime : null,
+  };
 }
 
 /** 메인 페이지 재방문 (찍은 뒤 결과 확인용) — 세션은 이미 창에 있다 */
@@ -132,8 +146,15 @@ export async function runAttendance(
       // 찍고 나면 캐시된 조회 결과는 옛것이다 — 어느 경로로 찍든(위젯·트레이·리마인더)
       // 여기를 지나므로 무효화를 한곳에 둔다
       invalidateAttendance();
-      // 위젯 로드 확인 후 그룹웨어 자체 함수 호출 (사이트와 동일한 저장 흐름)
-      await readInfo(page);
+      // 위젯 로드 확인 후 그룹웨어 자체 함수 호출 (사이트와 동일한 저장 흐름).
+      // ⚠️ 찍기 직전 상태로 이중 찍기를 막는다 — 폰·리마인더 경로는 화면의 버튼 판정을
+      // 거치지 않고, 그룹웨어 confirm 은 자동 수락이라 그대로 두면 찍힌 시각이 덮어써진다
+      const before = await readInfo(page);
+      const stamped = alreadyStampedTime(action, before, widgetToday());
+      if (stamped) {
+        rememberToday(before);
+        throw new AttendanceAlreadyStampedError(action, stamped, before);
+      }
       const flag = ATTENDANCE_CONFIG.flags[action];
       const called = await evalInPage(
         page,
@@ -178,14 +199,7 @@ export async function runAttendance(
         );
       }
     }
-    // 조회 성공 → 오늘 확인된 근태로 기록 (리마인더 폴백 판단에 사용).
-    // 위젯이 다른 날짜(자정 직후의 전날 기록 등)를 보여주면 오늘 값으로 믿지 않는다.
-    const isToday = info.date === widgetToday();
-    knownToday = {
-      date: localDateKey(new Date()),
-      comeTime: isToday ? info.comeTime : null,
-      leaveTime: isToday ? info.leaveTime : null,
-    };
+    rememberToday(info);
     return info;
   } finally {
     running = false;

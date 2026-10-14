@@ -768,7 +768,7 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
       if (st) st.alive = true;
     });
     ws.on('close', () => socketState.delete(ws));
-    ws.on('error', (err) => console.error('[rpc:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
+    ws.on('error', (err) => console.error('[rpc:ws]', err.message)); // 리스너 없으면 throw → main 전역 처리기(lib/errorLog)까지 올라간다
     attachRpcSocket(ws);
   });
 
@@ -786,7 +786,7 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
         return;
       }
       // ⚠️ 처리도 try 로 감싼다 — 형이 어긋난 프레임(`{type:'input', data:123}`)이면
-      // pty.write 가 동기 throw 하고, main 에 uncaughtException 핸들러가 없어 앱이 죽는다.
+      // pty.write 가 동기 throw 하고, 그대로 두면 main 전역 처리기(lib/errorLog)까지 올라간다.
       try {
         handleMessage(ws, msg);
       } catch (err) {
@@ -794,7 +794,7 @@ async function startServerOnce(): Promise<TerminalServerStatus> {
       }
     });
     ws.on('close', () => cleanupSocket(ws));
-    ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → 앱 사망
+    ws.on('error', (err) => console.error('[term:ws]', err.message)); // 리스너 없으면 throw → main 전역 처리기(lib/errorLog)까지 올라간다
     send(ws, { type: 'sessions', sessions: listSessions() });
     send(ws, {
       type: 'cwds',

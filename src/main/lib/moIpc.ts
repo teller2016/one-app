@@ -12,18 +12,28 @@ import { ipcMain } from 'electron';
 
 type SharedHandler = (...args: never[]) => unknown;
 
-const shared = new Map<string, SharedHandler>();
+export type SharedOptions = {
+  /**
+   * 폰에서 부르면 감사 기록(`mo-audit.log`)을 남기고 PC 에 알릴 **쓰기 동작의 이름**(예: '배포 실행').
+   * 조회 채널에는 달지 않는다 — 폴링이 기록을 덮는다.
+   */
+  audit?: string;
+};
+
+const shared = new Map<string, { fn: SharedHandler; audit?: string }>();
 
 /**
  * 데스크톱 IPC(`ipcMain.handle`)로 등록하면서 **MO 브리지에도 노출**한다.
  * 폰에 열 채널은 이 함수로 등록하는 것 자체가 화이트리스트 선언이다.
+ * 상태를 바꾸는 채널(찍기·push·배포·머지 등)은 `{ audit }` 로 이름을 단다.
  */
 export function handleShared<A extends unknown[], R>(
   channel: string,
-  fn: (...args: A) => R
+  fn: (...args: A) => R,
+  options: SharedOptions = {}
 ): void {
   ipcMain.handle(channel, (_e, ...args) => fn(...(args as A)));
-  shared.set(channel, fn as unknown as SharedHandler);
+  shared.set(channel, { fn: fn as unknown as SharedHandler, audit: options.audit });
 }
 
 /** MO 에 열려 있는 채널인가 */
@@ -31,12 +41,17 @@ export function isSharedChannel(channel: string): boolean {
   return shared.has(channel);
 }
 
+/** 감사 대상 쓰기 채널이면 그 동작 이름 */
+export function sharedAuditLabel(channel: string): string | undefined {
+  return shared.get(channel)?.audit;
+}
+
 /** MO 브리지가 채널을 호출한다 — 열려 있지 않으면 throw (브리지가 에러로 응답) */
 export async function callShared(
   channel: string,
   args: unknown[]
 ): Promise<unknown> {
-  const fn = shared.get(channel);
-  if (!fn) throw new Error(`폰에서 쓸 수 없는 기능입니다 (${channel})`);
-  return await (fn as (...a: unknown[]) => unknown)(...args);
+  const entry = shared.get(channel);
+  if (!entry) throw new Error(`폰에서 쓸 수 없는 기능입니다 (${channel})`);
+  return await (entry.fn as (...a: unknown[]) => unknown)(...args);
 }

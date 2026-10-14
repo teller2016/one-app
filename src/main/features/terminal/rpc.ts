@@ -4,7 +4,9 @@
 import type WebSocket from 'ws';
 import type { MoClientMsg, MoServerMsg } from '../../../shared/mo-protocol';
 import { onBroadcast } from '../../lib/broadcast';
-import { callShared } from '../../lib/moIpc';
+import { callShared, sharedAuditLabel } from '../../lib/moIpc';
+import { recordMoAction } from './moAudit';
+import { failureOf } from './moAuditFormat';
 
 // 소켓별 구독 채널 — 폰이 실제로 구독한 것만 보낸다(불필요한 트래픽·배터리 절약)
 const sockets = new Map<WebSocket, Set<string>>();
@@ -19,11 +21,17 @@ const send = (ws: WebSocket, msg: MoServerMsg) => {
 };
 
 async function handleCall(ws: WebSocket, msg: Extract<MoClientMsg, { type: 'call' }>) {
+  // 쓰기 동작(`handleShared` 의 audit)이면 결과와 함께 감사 기록 + PC 알림 — moAudit.ts
+  const audit = sharedAuditLabel(msg.channel);
+  const args = Array.isArray(msg.args) ? msg.args : [];
   try {
     const result = await callShared(msg.channel, msg.args);
+    if (audit) recordMoAction(audit, msg.channel, args, failureOf(result));
     send(ws, { type: 'result', id: msg.id, ok: true, result });
   } catch (err) {
-    send(ws, { type: 'result', id: msg.id, ok: false, error: (err as Error).message });
+    const message = err instanceof Error ? err.message : String(err);
+    if (audit) recordMoAction(audit, msg.channel, args, message);
+    send(ws, { type: 'result', id: msg.id, ok: false, error: message });
   }
 }
 

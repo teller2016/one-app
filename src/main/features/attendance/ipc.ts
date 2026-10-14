@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron';
+import { broadcast } from '../../lib/broadcast';
 import { handleShared } from '../../lib/moIpc';
 import { runAttendance } from './attend';
+import { AttendanceAlreadyStampedError } from './stampGuard';
 import {
   cacheAttendance,
   getCachedAttendance,
@@ -58,9 +60,13 @@ export function registerAttendanceIpc() {
         // 캐시 무효화는 runAttendance 안에서 — 트레이·리마인더로 찍어도 걸리게
         return { ok: true, info: await runAttendance(action) };
       } catch (err) {
+        // 이미 찍혀 있었다 — 낡은 화면을 보고 누른 것이니 위젯(데스크톱·폰)을 실제 상태로 맞춘다
+        if (err instanceof AttendanceAlreadyStampedError)
+          broadcast('attendance:changed', err.info);
         return { ok: false, error: (err as Error).message };
       }
     },
+    { audit: '출퇴근 찍기' },
   );
 
   // 출퇴근 리마인더 설정 조회/저장 (스케줄러는 저장값을 매 tick 읽으므로 재시작 불필요)

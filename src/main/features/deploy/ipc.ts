@@ -358,6 +358,7 @@ export function registerDeployIpc() {
         return { ok: false, error: (err as Error).message };
       }
     },
+    { audit: '빌드 중지' },
   );
 
   // 배포 트리거 — 이후 진행 상태는 deploy:status 이벤트(broadcast)로 전달
@@ -366,10 +367,22 @@ export function registerDeployIpc() {
     async (
       projectId: string,
       targetId: string,
+      confirmName?: unknown,
     ): Promise<DeployTriggerResult> => {
       const key = `${projectId}:${targetId}`;
       if (inFlight.has(key))
         return { ok: false, error: '이미 배포가 진행 중입니다.' };
+      // ⚠️ 운영(PROD) 확인은 화면 모달만으로는 부족하다 — 폰(MO)에 열린 채널이라 RPC 를 직접
+      // 부르면 모달을 건너뛴다. 모달에 입력한 대상 이름을 함께 받아 main 이 한 번 더 대조한다
+      const view = listProjects().find((p) => p.id === projectId);
+      if (view?.production) {
+        const name = view.targets.find((t) => t.id === targetId)?.name;
+        if (!name || typeof confirmName !== 'string' || confirmName.trim() !== name)
+          return {
+            ok: false,
+            error: '운영(PROD) 배포는 대상 이름을 입력해 확인해야 합니다.',
+          };
+      }
       invalidateDeployStatus(projectId); // 이 프로젝트의 캐시된 상태는 곧 옛것이 된다
 
       const cred = getProjectCredentials(projectId);
@@ -389,8 +402,7 @@ export function registerDeployIpc() {
         secret: cred.secret,
       };
       // 알림 라벨용 프로젝트 이름 (대상 이름은 target.name)
-      const projectName =
-        listProjects().find((p) => p.id === projectId)?.name ?? '';
+      const projectName = view?.name ?? '';
       const label = `${projectName ? `${projectName} · ` : ''}${target.name}`;
       let notified = false;
 
@@ -448,5 +460,6 @@ export function registerDeployIpc() {
         return { ok: false, error: (err as Error).message };
       }
     },
+    { audit: '배포 실행' },
   );
 }

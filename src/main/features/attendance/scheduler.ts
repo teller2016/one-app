@@ -3,6 +3,7 @@
 // 반복 알림이 켜져 있으면 설정 시각 이후 안 찍은 동안 N분 간격으로 재알림한다.
 // 창을 닫아도(맥) 앱 프로세스가 살아 있는 한 동작한다.
 import { runAttendance, getKnownAttendanceToday } from './attend';
+import { AttendanceAlreadyStampedError } from './stampGuard';
 import { getReminderConfig } from './reminders';
 import { getCredentials } from '../settings/store';
 import { notify } from '../notify/notify';
@@ -204,6 +205,17 @@ async function stampFromAlert(type: 'come' | 'leave', key: string) {
       body: time ? `${time} 에 ${label} 처리됐습니다.` : `${label} 처리됐습니다.`,
     });
   } catch (err) {
+    // 이미 찍혀 있었다(다른 경로로 먼저 찍음) — 실패가 아니므로 그날 알림을 멈춘다
+    if (err instanceof AttendanceAlreadyStampedError) {
+      markDone(key);
+      pushAttendanceChanged(err.info);
+      console.log(`[reminder] 알럿에서 ${label} 찍기 생략 — 이미 찍힘`, err.time);
+      await notify({
+        title: `✅ 이미 ${label}했습니다`,
+        body: `${err.time} 에 ${label}이 찍혀 있어 다시 찍지 않았습니다.`,
+      });
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[reminder] 알럿에서 ${label} 찍기 실패:`, msg);
     await notify({

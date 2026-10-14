@@ -90,10 +90,15 @@ export function registerChangesIpc() {
     }
     return getCommitFiles(await resolveTarget(target), hash);
   });
-  handleShared('changes:commit', async (target: ChangesTarget, message: string) =>
-    commitChanges(await resolveTarget(target), String(message ?? ''))
+  handleShared(
+    'changes:commit',
+    async (target: ChangesTarget, message: string) =>
+      commitChanges(await resolveTarget(target), String(message ?? '')),
+    { audit: '커밋' }
   );
-  handleShared('changes:push', async (target: ChangesTarget) =>
-    pushChanges(await resolveTarget(target))
+  handleShared(
+    'changes:push',
+    async (target: ChangesTarget) => pushChanges(await resolveTarget(target)),
+    { audit: 'push' }
   );
 }
