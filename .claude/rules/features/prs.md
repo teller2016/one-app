@@ -36,7 +36,7 @@ push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **마스터-
 **브랜치 후보** — 모달을 열 때 두 채널을 함께 부른다: `prs:base-branches`(주요 브랜치 = 저장소 `default_branch` + 보호 + `mainBranchRank()` 관례 이름)와 `prs:all-branches`(전체 이름, 검색용 프리페치). 정렬은 `renderer/features/prs/lib/baseBranches.ts` 한 곳 — **프로젝트 설정 defaultBranch → Gitea default_branch → 최근 사용(MRU) → 관례 이름표 → 보호 → 커밋 최신순**. head 는 최근 push 8개(시각 표시)를 위로, 나머지 전체를 이름순으로 붙인다. 팝오버는 `limit={50}` 이라 초과분은 개수만 알리고 검색으로 좁히게 한다.
 
 - 고른 base 는 **저장소별로 `userData/prs.json`(`PrsConfig.recentBases`)에 영구 저장** → 다음 PR 의 기본 선택값.
-- 프로젝트 기본 브랜치가 **아닌 주요 브랜치**(보호 또는 관례 이름 — 예: `main`, 판정은 `needsBaseConfirm`)로 가는 PR 은 **머지할 때 브랜치명 타이핑 확인**을 요구한다 — 상세 패널 [머지]의 확인창(`useConfirm` 의 `requireText`)에서 받는다. 생성 모달은 경고 배너만 띄우고 막지 않는다(2026-10-15 사용자 지시: 생성이 아니라 머지가 사고 지점). 보호 여부는 머지 클릭 시 `prs:base-branches`(60초 캐시)로 보고, 레지스트리 밖 저장소는 기본 브랜치를 `develop` 으로 간주한다. 임의 feature 브랜치는 확인 없음.
+- 프로젝트 기본 브랜치가 **아닌 주요 브랜치**(보호 또는 관례 이름 — 예: `main`, 판정은 `needsBaseConfirm`)로 가는 PR 은 **머지할 때 브랜치명 타이핑 확인**을 요구한다 — 상세 패널 [머지]의 확인창(`useConfirm` 의 `requireText` + `warn` — 배포 PROD 확인과 같은 강조: 주황 버튼·빨간 띠·주황 입력 링)에서 받고, 패널의 [머지] 버튼도 누르기 전부터 주황(warn)이다(관례 이름 기준 — 렌더 중엔 보호 여부를 모른다). 생성 모달은 경고 배너만 띄우고 막지 않는다(2026-10-15 사용자 지시: 생성이 아니라 머지가 사고 지점). 보호 여부는 머지 클릭 시 `prs:base-branches`(60초 캐시)로 보고, 레지스트리 밖 저장소는 기본 브랜치를 `develop` 으로 간주한다. 임의 feature 브랜치는 확인 없음.
 
 ⚠️ **Gitea 브랜치 API 실측**(2026-08-06, 사내 서버):
 - `/branches` 는 **페이지당 최대 50개**(`limit` 을 더 크게 줘도 무시) · `X-Total-Count` 로 총수 · **커밋 최신순**. 실제 저장소는 브랜치가 **700개 내외**라 전수 페이징은 금지.

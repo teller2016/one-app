@@ -18,7 +18,10 @@ type ConfirmOptions = {
   confirmLabel?: string; // 기본 '확인'
   cancelLabel?: string; // 기본 '취소'
   danger?: boolean; // 파괴적 동작(삭제·중지) — danger 버튼으로
-  warning?: string; // 메시지 아래 경고 띠 (Banner warning)
+  /** 되돌리기 어려운 운영급 동작 강조 — 확인 버튼 주황 채움(warn) · 경고 띠 빨강 · 입력칸 주황 링.
+   *  배포 PROD 확인 모달과 같은 모양이다 */
+  warn?: boolean;
+  warning?: ReactNode; // 메시지 아래 경고 띠 (warn 이면 빨강, 아니면 주황)
   /** 이중 확인 — 이 문자열을 그대로 입력해야 확인 버튼이 눌린다 (예: 머지 대상 브랜치명) */
   requireText?: string;
 };
@@ -103,7 +106,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         <div className="modal-overlay modal-overlay--center confirm-overlay">
           <div
             ref={dialogRef}
-            className="confirm"
+            className={'confirm' + (pending.warn ? ' confirm--warn' : '')}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
@@ -116,7 +119,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             )}
             {(pending.warning || pending.requireText) && (
               <div className="confirm__check">
-                {pending.warning && <Banner variant="warning">{pending.warning}</Banner>}
+                {pending.warning && (
+                  <Banner variant={pending.warn ? 'danger' : 'warning'}>{pending.warning}</Banner>
+                )}
                 {pending.requireText && (
                   <>
                     <label className="confirm__label" htmlFor="confirm-text">
@@ -139,7 +144,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 {pending.cancelLabel ?? '취소'}
               </Button>
               <Button
-                variant={pending.danger ? 'danger' : 'primary'}
+                variant={pending.danger ? 'danger' : pending.warn ? 'warn' : 'primary'}
                 // 입력칸이 있으면 포커스는 입력칸에 (버튼이 나중에 마운트돼 가져가지 않게)
                 autoFocus={!pending.requireText}
                 disabled={!ready}

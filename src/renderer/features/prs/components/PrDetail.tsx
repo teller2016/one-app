@@ -127,7 +127,13 @@ export function PrDetail({
       message: `#${pr.number} · ${pr.title}`,
       confirmLabel: '머지',
       ...(mustType && {
-        warning: `프로젝트 기본 브랜치가 아닌 ${base} 로 머지합니다.`,
+        warn: true,
+        warning: (
+          <>
+            <b>{base} 브랜치로 머지합니다.</b> 프로젝트 기본 브랜치(
+            {defaultBranch || 'develop'})가 아닙니다.
+          </>
+        ),
         requireText: base,
       }),
     });
@@ -151,6 +157,9 @@ export function PrDetail({
   };
 
   const off = !!base && !!defaultBranch && base !== defaultBranch;
+  // 주요 브랜치(main 등)로 가는 PR 은 [머지]를 누르기 전부터 주황으로 — 배포 PROD 버튼과 같은 신호.
+  // 렌더 중이라 관례 이름만 본다(보호 여부는 클릭 때 확인창 판정에서 본다)
+  const riskyBase = !!base && needsBaseConfirm(base, defaultBranch || 'develop', undefined);
   // 제목의 Jira 이슈 키 — 주소 미설정이면 제목에 이미 있는 키를 되풀이할 뿐이라 칩을 그리지 않는다
   const issueKeys = jiraUrl ? issueKeysIn(pr.title) : [];
 
@@ -285,7 +294,7 @@ export function PrDetail({
             disabled={merging}
           />
           <Button
-            variant="primary"
+            variant={riskyBase ? 'warn' : 'primary'}
             loading={merging}
             disabled={mergeable !== true}
             onClick={() => void merge()}

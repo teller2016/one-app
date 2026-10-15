@@ -2091,6 +2091,18 @@ input.input--bare {
     gap: 8px;
     margin-top: 20px;
   }
+
+  // 운영급 강조(warn) — 배포 PROD 확인과 같은 모양: 입력할 이름은 주황 글자, 입력칸 포커스는 주황 링
+  &--warn {
+    .confirm__label code {
+      color: var(--warning);
+    }
+
+    .input:focus {
+      outline: 3px solid var(--warning-soft);
+      border-color: var(--warning);
+    }
+  }
 }
 
 // ===== 컨텍스트 메뉴 (공용 ContextMenu — 우클릭 지점에 body portal) =====
