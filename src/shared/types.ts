@@ -719,7 +719,7 @@ export type PrBranchesResult = {
 export type PrBaseBranch = {
   name: string;
   isDefault?: boolean; // Gitea 저장소가 선언한 default_branch
-  protected?: boolean; // 보호 브랜치 — 선택 시 타이핑 확인을 요구한다
+  protected?: boolean; // 보호 브랜치 — 이 브랜치로 머지할 때 타이핑 확인을 요구한다
   committedAt?: number;
   lastMessage?: string;
 };

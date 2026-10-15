@@ -2056,6 +2056,35 @@ input.input--bare {
     word-break: break-word;
   }
 
+  // 경고 띠 + 이중 확인 입력 (warning·requireText) — 필드 세로 배치: 라벨 위 · gap 6
+  &__check {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 14px;
+
+    .banner {
+      margin: 0 0 8px;
+    }
+
+    input {
+      font-family: var(--font-mono);
+      font-size: var(--fs-ui);
+    }
+  }
+
+  // 목업: 필드 라벨(12 · 500 · 보조색)
+  &__label {
+    font-size: var(--fs-small);
+    font-weight: 500;
+    color: var(--text-2);
+
+    code {
+      font-family: var(--font-mono);
+      color: var(--text);
+    }
+  }
+
   &__actions {
     display: flex;
     justify-content: flex-end;

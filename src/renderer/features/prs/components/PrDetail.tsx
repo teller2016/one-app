@@ -17,6 +17,7 @@ import { IssueChip } from '../../../components/IssueChip';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
+import { needsBaseConfirm } from '../lib/baseBranches';
 import { RECHECK_POLL_MS } from '../lib/conflictRecheck';
 import { rel } from '../lib/relTime';
 
@@ -108,11 +109,27 @@ export function PrDetail({
     };
   }, [pr.repo, base, head]);
 
+  // 프로젝트 기본이 아닌 주요 브랜치(main 등)로 머지할 때는 브랜치명 타이핑 확인 — 오머지 방지.
+  // 보호 여부는 base 후보 채널로 본다(메인 프로세스 60초 캐시). 조회가 실패해도 관례 이름 판정은 남는다.
+  // 레지스트리 밖 저장소는 생성 모달과 같이 develop 을 기본으로 간주한다
+  const mustTypeBase = async () => {
+    const projectDefault = defaultBranch || 'develop';
+    if (!base || base === projectDefault) return false;
+    const res = await window.oneApp.prs.getBaseBranches(pr.repo).catch(() => null);
+    const candidate = res?.ok ? res.branches?.find((b) => b.name === base) : undefined;
+    return needsBaseConfirm(base, projectDefault, candidate);
+  };
+
   const merge = async () => {
+    const mustType = await mustTypeBase();
     const ok = await confirmDialog({
       title: `${base ?? '대상 브랜치'} 로 머지할까요?`,
       message: `#${pr.number} · ${pr.title}`,
       confirmLabel: '머지',
+      ...(mustType && {
+        warning: `프로젝트 기본 브랜치가 아닌 ${base} 로 머지합니다.`,
+        requireText: base,
+      }),
     });
     if (!ok) return;
     setMerging(true);

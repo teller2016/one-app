@@ -61,7 +61,7 @@ export function CreatePrModal({
   repo: string;
   /** 프로젝트 표시명 — 모달 제목용 */
   repoName: string;
-  /** 프로젝트 defaultBranch (빈 값은 develop 폴백) — 초기 대상·타이핑 확인 기준 */
+  /** 프로젝트 defaultBranch (빈 값은 develop 폴백) — 초기 대상·경고 기준 */
   projectDefault: string;
   /** 이 저장소에서 마지막으로 고른 base (MRU) — 초기 대상 선택값 */
   recentBase?: string;
@@ -76,7 +76,6 @@ export function CreatePrModal({
   const [allNames, setAllNames] = useState<string[]>([]); // 검색용 전체 목록
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [typed, setTyped] = useState(''); // 주요 브랜치 base 확인용 타이핑
   const [commits, setCommits] = useState<DeployCommit[] | null>(null);
   const [files, setFiles] = useState<PrChangedFile[]>([]);
   const [stats, setStats] = useState<{ additions: number; deletions: number } | null>(null);
@@ -99,7 +98,6 @@ export function CreatePrModal({
     setCandidates(null);
     setAllNames([]);
     setCommits(null);
-    setTyped('');
     setHead('');
     setBase(mruBase || effectiveDefault);
     void window.oneApp.prs.getBranches(repo).then((res) => {
@@ -215,12 +213,12 @@ export function CreatePrModal({
   }, [candidates, allNames, base, head, effectiveDefault, mruBase]);
 
   const selected = (candidates ?? []).find((b) => b.name === base);
-  const mustConfirm = needsBaseConfirm(base, effectiveDefault, selected);
-  const confirmOk = !mustConfirm || typed.trim() === base;
+  // 주요 브랜치(main 등)로 가는 PR — 경고만 하고, 브랜치명 타이핑 확인은 머지 때 받는다(PrDetail)
+  const offBase = needsBaseConfirm(base, effectiveDefault, selected);
   const noHead = recent !== null && !head; // push 된 브랜치가 없는 저장소
 
   const create = async () => {
-    if (!title.trim() || !confirmOk || !head) return;
+    if (!title.trim() || !head) return;
     setCreating(true);
     setCreateError('');
     // invoke 거부(폰 셸 WS 끊김 등)도 잡는다 — 안 잡으면 creating 스피너가 영영 남는다
@@ -275,8 +273,7 @@ export function CreatePrModal({
               !title.trim() ||
               !head ||
               commits === null ||
-              commits.length === 0 ||
-              !confirmOk
+              commits.length === 0
             }
           >
             PR 생성
@@ -312,10 +309,7 @@ export function CreatePrModal({
             searchPlaceholder="브랜치 검색"
             disabled={creating}
             value={base}
-            onChange={(value) => {
-              setBase(value);
-              setTyped('');
-            }}
+            onChange={setBase}
             options={baseOptions}
           />
         </FormRow>
@@ -323,24 +317,12 @@ export function CreatePrModal({
 
       {branchError && <Banner variant="danger">{branchError}</Banner>}
 
-      {/* 주요 브랜치(main 등)로 PR 을 만들 때는 브랜치명 타이핑 확인 — 오PR 방지.
-          커밋 목록이 길어도 눈에 들어오도록 브랜치 선택 바로 아래에 둔다 */}
-      {mustConfirm && (
-        <div className="prs__base-confirm">
-          <Banner variant="warning">
-            프로젝트 기본 브랜치가 아닌 <b>{base}</b> 로 PR 을 만듭니다.
-          </Banner>
-          <label className="form-label">
-            확인을 위해 브랜치명(<code>{base}</code>)을 입력하세요
-          </label>
-          <Input
-            type="text"
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            placeholder={base}
-            disabled={creating}
-          />
-        </div>
+      {/* 주요 브랜치(main 등)로 PR 을 만들 때의 경고 — 커밋 목록이 길어도 눈에 들어오도록
+          브랜치 선택 바로 아래에 둔다 */}
+      {offBase && (
+        <Banner variant="warning">
+          프로젝트 기본 브랜치가 아닌 <b>{base}</b> 로 PR 을 만듭니다.
+        </Banner>
       )}
 
       {recent === null ? (

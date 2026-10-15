@@ -56,8 +56,8 @@ export const baseTagOf = (b: BaseOption): string | null =>
         : null;
 
 /**
- * 이 base 를 고르면 타이핑 확인을 요구할지 — 프로젝트 기본이 아닌 주요 브랜치(보호 또는
- * 관례 이름)로 PR 을 만드는 경우. main 에 실수로 PR 을 만드는 사고를 막는다.
+ * 프로젝트 기본이 아닌 주요 브랜치(보호 또는 관례 이름)로 가는 PR 인지 — 머지할 때 브랜치명
+ * 타이핑 확인을 요구하고(PrDetail), 생성 모달은 경고만 한다. main 에 실수로 머지하는 사고를 막는다.
  */
 export const needsBaseConfirm = (
   base: string,
