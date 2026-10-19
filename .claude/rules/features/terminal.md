@@ -212,6 +212,7 @@ paths:
 - ⚠️ `workspaces` 는 **접속 시 1회 + 시트를 열 때만**(폴링 금지 — git 조회). 타일 색은 노드의 `color`(데스크톱 지정색) → `tileColor`.
 - 뒤로가기: 시트는 공용 **`useBackClose`**(셸 모달과 같은 규칙 — 옛 페이지의 자체 `hideTopOverlay` 구현은 없앴다).
 - ⚠️ 영역 밖 세션은 칩에 '다른 영역'으로 남긴다. `mo:lastSession` 우선. ⚠️ 자동 attach 는 **`!attachedId && !pendingAttachId`** 일 때만(`pickAutoAttach`).
+- **앱 전환 복귀의 재연결은 조용히**(2026-10-19 사용자 요청 — 안드로이드는 다녀올 때마다 소켓을 끊는다): 끊김 띠·흐림은 `offline`(끊긴 뒤 `OFFLINE_GRACE_MS` 1.5초, 복귀 순간부터 다시 셈)만 보고, 띠는 머리 아래 **떠 있는 카드로 겹쳐** 띄운다(흐름에 끼우면 xterm 이 두 번 다시 맞춰지고, 전체 폭으로 겹치면 아래 알림 띠 밑단이 삐져나온다). 복귀 뒤 첫 끊김은 백오프 없이 바로 재시도(`quickRetry` 1회 — 끊김이 복귀 **뒤에** 알려지면 1초 백오프 + 핸드셰이크가 유예를 넘길 수 있다). 끊기면 `attachedId` 는 비우되 `resumeId` 로 보던 세션을 남겨 화면(채팅·칩·변경 탭 대상)을 유지한다 — 화면은 `shownSessionId`, 입력·종료·채팅 전송은 `attachedId`(없으면 `ChatView offline` 으로 잠금, 쓰던 글 유지). ⚠️ `syncView` 의 채팅 구독은 **소켓이 열렸을 때만** 정한다(끊긴 동안 정하면 다시 붙어도 chat-open 을 안 보낸다).
 - **키 바는 키보드 없이도 1단 고정**(esc tab ctrl ↑↓←→ ⏎ + ⌨), 키보드가 뜨면 2단(⇧tab·alt·| ~ / -·home end pgup pgdn·^C). ctrl·alt 는 한 번 적용(`applyModifiers` — alt = ESC 접두). 키보드 판정은 **뷰포트 높이 감소**(`KEYBOARD_MIN_DELTA` 120px) — ⚠️ focus/blur 금지. 열림이면 `html.mo-kbd` + `--mo-vh` → 셸이 높이를 줄이고 탭바를 숨긴다.
 - ⚠️ **화면 탭은 읽기 — 키보드를 열지 않는다**: touchend 에서 `preventDefault` 로 합성 mousedown(=xterm 포커스)을 막는다. 키보드는 ⌨ 버튼으로만(`term.focus()`), 닫기는 `term.blur()`.
 - 출력 복사: 세션 메뉴 → 선택 모드(드래그 = **줄 단위** `selectLines`, 스크롤 대신) → [복사](`useCopy` — http 폴백 포함). 검색: `SearchAddon`(데스크톱과 같은 하이라이트 합성).

@@ -198,6 +198,7 @@ export function ChatView({
   persistKey,
   findSignal = 0,
   composer = true,
+  offline = false,
   onReturnFocus,
   onSend,
   onKey,
@@ -234,6 +235,11 @@ export function ChatView({
    * 대기 중 선택 화면·스피너도 거기 그대로 보이므로 여기서 다시 그리지 않는다
    */
   composer?: boolean;
+  /**
+   * 보낼 곳이 없다(폰 — 연결이 끊겨 다시 붙는 중). 보내기·중단·선택지를 잠그고 쓰던 글은 그대로 둔다.
+   * 화면은 끊기기 직전 대화를 계속 보인다
+   */
+  offline?: boolean;
   /** 검색 줄을 닫을 때 키보드를 돌려줄 곳 — 입력창이 없을 때(데스크톱 = 터미널) */
   onReturnFocus?: () => void;
   /** 입력창이 있을 때만 쓴다(composer) */
@@ -432,7 +438,7 @@ export function ChatView({
 
   const send = () => {
     const text = draft.trim();
-    if (!text || promptBlocksInput || !onSend) return;
+    if (!text || promptBlocksInput || !onSend || offline) return;
     if (prompt?.freeText) {
       // 질문에 직접 답한다 — 'Type something.' 으로 옮겨 글을 넣는다(그냥 쓰면 선택 화면이 글을 버린다)
       sendKey(String(prompt.freeText));
@@ -447,7 +453,7 @@ export function ChatView({
 
   /** claude 중단 — Esc, 그리고 되돌아온 글을 비운다(위 STOP_CLEAR_DELAY_MS). 중단 처리 중의 거듭 누름은 무시 */
   const stop = () => {
-    if (stopping) return;
+    if (stopping || offline) return;
     setStopping(true);
     sendKey('\x1b');
     window.setTimeout(() => sendKey('\x15'), STOP_CLEAR_DELAY_MS);
@@ -586,7 +592,7 @@ export function ChatView({
           ))}
           {composer &&
             (prompt ? (
-              <PromptCard prompt={prompt} onKey={sendKey} onShowTerminal={onShowTerminal} />
+              <PromptCard prompt={prompt} disabled={offline} onKey={sendKey} onShowTerminal={onShowTerminal} />
             ) : (
               working && (
                 <div className="term-chat__typing" role="status">
@@ -693,6 +699,7 @@ export function ChatView({
                 type="button"
                 className="term-chat__send term-chat__send--stop"
                 aria-label="중단 (Esc)"
+                disabled={offline}
                 onClick={stop}
               >
                 <span className="term-chat__stop-mark" aria-hidden="true" />
@@ -702,7 +709,7 @@ export function ChatView({
                 type="submit"
                 className="term-chat__send"
                 aria-label="보내기"
-                disabled={!draft.trim() || promptBlocksInput}
+                disabled={!draft.trim() || promptBlocksInput || offline}
               >
                 <Icon name="arrow-up-right" size={18} />
               </button>
@@ -886,10 +893,13 @@ const HANGUL_RE = /[가-힣ㄱ-ㅎㅏ-ㅣ]/;
  *  다중 선택이면 번호 = 체크 토글 + [선택 완료 →] · 권한 확인·검토 화면이면 미리보기(무엇을 허용/제출하는지) */
 function PromptCard({
   prompt,
+  disabled = false,
   onKey,
   onShowTerminal,
 }: {
   prompt: ChatPrompt;
+  /** 보낼 곳이 없다(ChatView offline) — 번호·선택 완료를 잠근다 */
+  disabled?: boolean;
   onKey: (data: string) => void;
   onShowTerminal: () => void;
 }) {
@@ -928,7 +938,7 @@ function PromptCard({
             }
             // 직접 답 자리는 버튼이 아니라 입력창으로 — 눌러도 커서만 옮겨 두고 글은 입력창에서
             onClick={() => (o.n === prompt.freeText ? undefined : onKey(String(o.n)))}
-            disabled={o.n === prompt.freeText}
+            disabled={disabled || o.n === prompt.freeText}
             aria-pressed={o.checked !== undefined && o.n !== prompt.freeText ? o.checked : undefined}
           >
             <span className="term-chat__opt-label">
@@ -945,7 +955,12 @@ function PromptCard({
         ))}
       </div>
       {prompt.multiSelect && (
-        <button type="button" className="term-chat__opt term-chat__opt--primary" onClick={() => onKey(SUBMIT_KEY)}>
+        <button
+          type="button"
+          className="term-chat__opt term-chat__opt--primary"
+          disabled={disabled}
+          onClick={() => onKey(SUBMIT_KEY)}
+        >
           선택 완료 →
         </button>
       )}

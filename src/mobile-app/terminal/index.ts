@@ -2,7 +2,7 @@
 // 셸은 탭바 배지(입력 대기 수)·변경 탭 대상(터미널이 보는 워크트리)을 `moTerminal` 로 읽는다.
 // ⚠️ 배럴이 아니라 순수 헬퍼 파일 — 배럴은 데스크톱 xterm 을 끌고 온다(MoTerminalTab 주석)
 import { tileColor } from '../../renderer/features/terminal/lib/workspace';
-import { controller, type MoTermState } from './controller';
+import { controller, shownSessionId, type MoTermState } from './controller';
 
 export { MoTerminalTab } from './MoTerminalTab';
 
@@ -39,7 +39,8 @@ function deriveTarget(s: MoTermState): MoTerminalTarget | null {
       branch: s.scope.branch,
     };
   }
-  const sess = s.attachedId ? s.sessions.find((x) => x.id === s.attachedId) : undefined;
+  const shown = shownSessionId(s); // 끊긴 동안에도 변경 탭 대상이 풀리지 않게
+  const sess = shown ? s.sessions.find((x) => x.id === shown) : undefined;
   if (!sess) return null;
   // 세션 위치가 속한 워크트리 — 트리는 접속 직후 컨트롤러가 한 번 받아 둔다
   for (const ws of s.workspaces) {

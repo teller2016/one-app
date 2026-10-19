@@ -14,7 +14,7 @@ import { initials, tileColor } from '../../renderer/features/terminal/lib/worksp
 import type { TerminalPreset, TerminalSessionInfo } from '../../shared/types';
 import { isUnseenWait, presetsForWorkspace } from '../../shared/types';
 import type { TermWorkspaceNode } from '../../shared/terminal-protocol';
-import { controller, FONT_MAX, FONT_MIN, type MoScope } from './controller';
+import { controller, FONT_MAX, FONT_MIN, shownSessionId, type MoScope } from './controller';
 import type { KeyName } from './logic';
 // 채팅 화면은 데스크톱 pane 과 공용 — 배럴이 아니라 파일을 직접(위 workspace 헬퍼와 같은 이유)
 import { ChatView } from '../../renderer/features/terminal/components/ChatView';
@@ -121,7 +121,9 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
   }, [searchOpen]);
 
   const chips = controller.chipSessions(); // st 가 바뀔 때마다 렌더되므로 매번 계산(작은 배열)
-  const attached = st.attachedId ? st.sessions.find((s) => s.id === st.attachedId) : undefined;
+  // 보이는 세션 — 끊긴 동안엔 끊기기 직전 세션(화면을 그대로 둔다). 서버에 붙었는지는 st.attachedId
+  const shownId = shownSessionId(st);
+  const attached = shownId ? st.sessions.find((s) => s.id === shownId) : undefined;
   const closeSheet = useCallback(() => setSheet(null), []);
 
   // 상단 작업 영역 표시 — 고른 영역, 없으면 보고 있는 세션이 속한 워크트리(→ 그 위치), 없으면 '전체 세션'
@@ -205,7 +207,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           }}
         >
           {head ? (
-            <Tile name={head.name} color={head.color} dim={!st.connected} />
+            <Tile name={head.name} color={head.color} dim={st.offline} />
           ) : (
             <span className="moterm__tile moterm__tile--all" aria-hidden="true">
               <Icon name="terminal" size={14} />
@@ -271,14 +273,15 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           role="img"
           aria-label={st.statusText}
         />
+        {/* 끊김 띠 — 유예(OFFLINE_GRACE_MS)가 지나도 못 붙었을 때만. 칩 줄 위에 겹쳐 띄워 터미널을 밀지 않는다
+            (밀면 xterm 이 다시 맞춰지고, 붙어서 띠가 사라질 때 또 밀렸다) */}
+        {st.offline && (
+          <div className="moterm__band" role="status">
+            <Icon name="refresh" size={14} />
+            <span>{st.statusText}</span>
+          </div>
+        )}
       </header>
-
-      {!st.connected && (
-        <div className="moterm__band" role="status">
-          <Icon name="refresh" size={14} />
-          <span>{st.statusText}</span>
-        </div>
-      )}
 
       {st.notifyBar && (
         <div className="moterm__notify">
@@ -294,10 +297,10 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
       )}
 
       {/* 세션 칩 — 드롭다운 대신 한 줄 가로 스크롤. 확인 전 = 연두 점 · 입력 대기 = 주황 점 · 작업 중 = 초록 링 */}
-      <div className={`moterm__chips${st.connected ? '' : ' moterm__chips--off'}`} role="tablist" aria-label="세션">
+      <div className={`moterm__chips${st.offline ? ' moterm__chips--off' : ''}`} role="tablist" aria-label="세션">
         {chips.map((s) => {
           const status = statusOf(s);
-          const on = s.id === st.attachedId;
+          const on = s.id === shownId;
           const outside = st.scope && s.cwd !== st.scope.path;
           return (
             <button
@@ -392,6 +395,8 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
           files={st.chatFiles?.id === attached?.id ? st.chatFiles.items : null}
           onRequestFiles={requestFiles}
           busy={!!attached && (attached.working || attached.status === 'busy')}
+          // 다시 붙기 전엔 보낼 곳이 없다 — 잠가 두면 쓰던 글이 남는다(안 잠그면 글을 비우고 조용히 버렸다)
+          offline={!st.attachedId}
           onSend={sendChat}
           onKey={sendChatKey}
           onShowTerminal={showTerminal}
@@ -401,7 +406,7 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
       {/* ⚠️ 채팅 보기에서도 언마운트하지 않는다 — xterm 인스턴스·attach 를 그대로 두고 숨기기만(display:none).
           숨은(폭 0) 호스트는 controller.refit 이 건너뛴다 */}
       <div
-        className={`moterm__term${st.connected ? '' : ' moterm__term--off'}${chatView ? ' moterm__term--hidden' : ''}`}
+        className={`moterm__term${st.offline ? ' moterm__term--off' : ''}${chatView ? ' moterm__term--hidden' : ''}`}
       >
         <div ref={hostRef} className="moterm__host" />
         {st.scrolledUp && (
@@ -625,7 +630,7 @@ function MenuSheet({
             void controller.paste();
           },
           {
-            disabled: !attached || !st.canPaste || chat,
+            disabled: !attached || !st.attachedId || !st.canPaste || chat,
             sub: chat ? '터미널 보기에서 쓸 수 있습니다' : st.canPaste ? undefined : 'HTTPS 접속에서만 됩니다',
           },
         )}
@@ -677,7 +682,8 @@ function MenuSheet({
           </div>
         )}
         <span className="moterm__menu-divider" />
-        {row('power', '세션 종료', onKill, { disabled: !attached, danger: true })}
+        {/* 끊긴 동안(보이기만 하는 세션)엔 종료 요청이 갈 곳이 없다 */}
+        {row('power', '세션 종료', onKill, { disabled: !attached || !st.attachedId, danger: true })}
       </div>
     </Sheet>
   );

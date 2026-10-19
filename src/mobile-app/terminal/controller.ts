@@ -72,8 +72,16 @@ export type MoTermState = {
   connected: boolean;
   /** 연결 상태 문구 — '연결 중…' · '연결 끊김 — 재연결 중…' · '연결됨' */
   statusText: string;
+  /**
+   * 끊김을 화면에 드러낸다(띠·흐림) — 끊긴 뒤 `OFFLINE_GRACE_MS` 가 지나도 못 붙었을 때만.
+   * 안드로이드는 다른 앱에 다녀올 때마다 소켓을 끊어서, 바로 띄우면 복귀할 때마다 띠가 번쩍였다
+   */
+  offline: boolean;
   sessions: TerminalSessionInfo[];
+  /** 서버에 붙은 세션 — 입력·크기·채팅 전송의 대상. 소켓이 끊기면 비운다 */
   attachedId: string | null;
+  /** 끊기기 직전 보던 세션 — 다시 붙을 때까지 그 화면(채팅·터미널)을 그대로 보인다(`shownSessionId`) */
+  resumeId: string | null;
   scope: MoScope | null;
   workspaces: TermWorkspaceNode[];
   /** 펼쳐 둔 워크스페이스 id */
@@ -123,6 +131,12 @@ export type MoTermState = {
 
 type Listener = () => void;
 
+/** 화면에 보이는 세션 — 붙은 세션, 끊긴 동안엔 끊기기 직전 세션 */
+export const shownSessionId = (s: MoTermState) => s.attachedId ?? s.resumeId;
+
+// 끊김 표시 유예 — 앱 전환 복귀의 재연결(대개 1초 안)은 띠 없이 넘긴다
+const OFFLINE_GRACE_MS = 1500;
+
 const readJson = <T>(key: string, fallback: T): T => {
   try {
     const raw = localStorage.getItem(key);
@@ -151,6 +165,9 @@ class MoTerminalController {
   private ws: WebSocket | null = null;
   private reconnectDelay = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private offlineTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 화면으로 돌아왔다 — 그다음 끊김 한 번은 백오프 없이 바로 다시 붙는다(onclose) */
+  private quickRetry = false;
   private attachSeq = 0; // 이 값 이하의 data 는 replay 에 이미 포함 — 버린다
   /** attach 응답(`attached`)을 기다리는 세션 — 대기 중 같은 요청을 또 보내지 않는다 */
   private pendingAttachId: string | null = null;
@@ -173,8 +190,10 @@ class MoTerminalController {
     this.state = {
       connected: false,
       statusText: '연결 중…',
+      offline: false,
       sessions: [],
       attachedId: null,
+      resumeId: null,
       scope: readJson<MoScope | null>(SCOPE_KEY, null),
       workspaces: [],
       expandedWs: readJson<string[]>(WS_EXPANDED_KEY, []),
@@ -261,6 +280,10 @@ class MoTerminalController {
     document.addEventListener('visibilitychange', () => {
       this.sendVisibility();
       if (document.visibilityState === 'visible') {
+        // 유예는 돌아온 순간부터 다시 센다 — 숨어 있는 동안 지난 시간은 사용자가 보지 못했다
+        if (!this.state.connected) this.armOffline(true);
+        // 소켓이 죽었다는 사실이 복귀 **뒤에** 알려질 수도 있다(아직 열린 줄 안다) — 그때도 바로 다시 붙게
+        this.quickRetry = true;
         if (!this.ws) {
           this.reconnectDelay = 1000;
           this.connect();
@@ -269,6 +292,7 @@ class MoTerminalController {
         void this.closeNotificationsFor(() => true);
         requestAnimationFrame(() => this.claimSize()); // 다시 보고 있다 — 터미널 보기면 폰 크기로
       } else {
+        this.quickRetry = false; // 숨은 채 끊기면 서두를 이유가 없다 — 돌아오면 그때 바로 붙는다
         this.releaseSize(); // 화면 꺼짐·앱 전환 — PC 가 제 크기로 돌아가게
       }
       this.syncWakeLock();
@@ -435,13 +459,18 @@ class MoTerminalController {
       this.reconnectTimer = null;
     }
     this.set({ connected: false, statusText: '연결 중…' });
+    this.armOffline();
     // 스킴은 페이지를 따라간다 — https 페이지에서 ws:// 는 mixed content 로 막힌다
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     const sock = new WebSocket(`${scheme}://${location.host}/term`);
     this.ws = sock;
     sock.onopen = () => {
       this.reconnectDelay = 1000;
-      this.set({ connected: true, statusText: '연결됨' });
+      if (this.offlineTimer !== null) {
+        clearTimeout(this.offlineTimer);
+        this.offlineTimer = null;
+      }
+      this.set({ connected: true, offline: false, statusText: '연결됨' });
       this.syncWakeLock();
       this.syncSeen();
       // 작업 영역 트리를 한 번 받아 둔다 — 상단 타일 색과 변경 탭 대상(세션 위치 → 워크트리)이 쓴다.
@@ -464,14 +493,40 @@ class MoTerminalController {
       this.pendingAttachId = null; // 못 받은 응답을 기다리며 재attach 를 막으면 안 된다
       this.releaseWake(); // 끊긴 화면을 켜 둘 이유가 없다
       this.chatSubId = null; // 서버 쪽 구독도 소켓과 함께 끝났다 — 재attach 때 다시 연다
-      this.set({ attachedId: null, connected: false, statusText: '연결 끊김 — 재연결 중…' });
+      this.set({
+        attachedId: null,
+        // 보던 화면은 그대로 둔다 — 다시 붙으면 같은 세션으로 이어진다(autoAttach 가 mo:lastSession 을 고른다).
+        // 예전엔 비우기만 해서 채팅 보기가 흐린 터미널로 바뀌었다가 재attach 뒤 돌아왔다
+        resumeId: this.state.attachedId ?? this.state.resumeId,
+        connected: false,
+        statusText: '연결 끊김 — 재연결 중…',
+      });
+      this.armOffline();
+      // 복귀 직후 첫 끊김은 기다리지 않는다 — 백오프 1초에 핸드셰이크까지 더하면 유예(1.5초)를 넘길 수 있다.
+      // 한 번만(quickRetry 를 쓰고 끈다) — 열자마자 끊기는 서버를 쉬지 않고 두드리지 않게
+      const delay = this.quickRetry ? 0 : this.reconnectDelay;
+      this.quickRetry = false;
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
         this.connect();
-      }, this.reconnectDelay);
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, 5000); // 1→2→4→5초 백오프
+      }, delay);
+      if (delay) this.reconnectDelay = Math.min(this.reconnectDelay * 2, 5000); // 1→2→4→5초 백오프
     };
     sock.onerror = () => sock.close();
+  }
+
+  /**
+   * 끊김 표시(`offline`)를 `OFFLINE_GRACE_MS` 뒤로 미룬다 — 그 안에 붙으면(onopen) 띠 없이 넘어간다.
+   * 이미 세는 중이거나 드러난 뒤면 그대로 둔다(재시도마다 띠가 깜빡이지 않게). `restart` 면 드러난 띠도 거두고 다시 센다
+   */
+  private armOffline(restart = false) {
+    if (!restart && (this.state.offline || this.offlineTimer !== null)) return;
+    if (this.offlineTimer !== null) clearTimeout(this.offlineTimer);
+    if (this.state.offline) this.set({ offline: false });
+    this.offlineTimer = setTimeout(() => {
+      this.offlineTimer = null;
+      this.set({ offline: true });
+    }, OFFLINE_GRACE_MS);
   }
 
   private handle(msg: TermServerMsg) {
@@ -482,7 +537,10 @@ class MoTerminalController {
           this.state.attachedId && sessions.some((s) => s.id === this.state.attachedId)
             ? this.state.attachedId
             : null;
-        this.set({ sessions, attachedId });
+        // 끊긴 사이 그 세션이 사라졌으면 더 붙들고 있지 않는다
+        const resumeId =
+          this.state.resumeId && sessions.some((s) => s.id === this.state.resumeId) ? this.state.resumeId : null;
+        this.set({ sessions, attachedId, resumeId });
         this.syncView();
         this.onWaitingChanged(this.stable.update(sessions));
         this.syncWakeLock();
@@ -531,7 +589,7 @@ class MoTerminalController {
           if (msg.cols > 0 && msg.rows > 0 && (msg.cols !== term.cols || msg.rows !== term.rows))
             term.resize(msg.cols, msg.rows);
         }
-        this.set({ attachedId: msg.id, selecting: false, selectedLines: 0 });
+        this.set({ attachedId: msg.id, resumeId: null, selecting: false, selectedLines: 0 });
         this.syncView();
         this.syncBottom();
         this.syncWakeLock();
@@ -624,6 +682,8 @@ class MoTerminalController {
         // ⚠️ 연결 끊김으로 표시하지 말 것 — attach 실패 한 번에 UI 가 통째로 잠겨 "아무것도 안 된다"가
         // 됐다(2026-08-08). 연결은 멀쩡하므로 안내만 띄운다.
         this.pendingAttachId = null; // attach 실패였다면 다시 시도할 수 있어야 한다
+        // 재attach 가 실패했으면 끊기기 전 화면을 계속 보이면 안 된다 — 붙지 않은 채 입력만 잠겨 있게 된다
+        if (this.state.resumeId) this.set({ resumeId: null });
         this.notice(msg.message);
         break;
     }
@@ -673,9 +733,13 @@ class MoTerminalController {
 
   /** 보기 방식·채팅 구독을 보고 있는 세션에 맞춘다 — attach·세션 목록·탭 활성 변화마다 */
   private syncView() {
-    const id = this.state.attachedId;
+    // 끊긴 동안·재attach 전에도 보던 세션의 보기를 유지한다 — attachedId 만 보면 채팅이 터미널로 튀었다
+    const id = shownSessionId(this.state);
     const view = id ? this.viewFor(id) : 'term';
     if (view !== this.state.view) this.set({ view });
+    // ⚠️ 구독은 소켓이 열려 있을 때만 정한다 — 끊긴 동안 정하면 보내지도 못한 구독을 연 것으로 기억해
+    // 다시 붙은 뒤 chat-open 을 보내지 않는다(onclose 가 chatSubId 를 비운다)
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
     // 구독은 채팅을 **보는 동안만** — 숨은 탭·터미널 보기에서는 대화 기록을 읽을 이유가 없다
     const want = id && view === 'chat' && this.active ? id : null;
     if (want === this.chatSubId) return;
@@ -741,9 +805,10 @@ class MoTerminalController {
 
   /** 지금 보여줄 세션 — 보고 있는 세션이 영역 밖이면(다른 영역에서 이어보는 중) 끝에 남긴다 */
   chipSessions(): TerminalSessionInfo[] {
-    const { sessions, scope, attachedId } = this.state;
+    const { sessions, scope } = this.state;
     const list = visibleSessions(sessions, scope?.path ?? null);
-    const attached = attachedId ? sessions.find((s) => s.id === attachedId) : undefined;
+    const shown = shownSessionId(this.state); // 끊긴 동안에도 칩이 빠졌다 돌아오지 않게
+    const attached = shown ? sessions.find((s) => s.id === shown) : undefined;
     return attached && !list.includes(attached) ? [...list, attached] : list;
   }
 

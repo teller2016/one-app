@@ -22,6 +22,7 @@
 
   // ── 상단 (52 · 패널 면) — 작업 영역 · 검색 · 세션 메뉴 · 연결 점 ──
   &__top {
+    position: relative; // 끊김 띠(__band)의 기준
     display: flex;
     align-items: center;
     gap: 6px;
@@ -163,16 +164,26 @@
   }
 
   // ── 띠 — 연결 끊김(가라앉은 면) · 알림 권한(정보 틴트) ──
+  // 끊김 띠는 머리 바로 아래에 **떠 있는 카드**로 겹쳐 띄운다 — 흐름에 끼우면 터미널이 밀려 xterm 이 다시
+  // 맞춰지고, 다시 붙어 사라질 때 또 밀렸다(앱 전환 복귀마다 화면이 출렁였다). 전체 폭 띠로 겹치면 아래의
+  // 알림 권한 띠·칩 줄이 높이가 달라 밑단이 삐져나와 깨진 것처럼 보였다 → 양옆을 띄우고 토스트와 같은 그림자
   &__band {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 12px;
+    right: 12px;
+    z-index: 3;
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-shrink: 0;
     min-height: 40px;
-    padding: 0 16px;
+    padding: 0 14px;
+    border-radius: var(--r-card);
     background: var(--surface-2);
+    box-shadow: var(--shadow-2);
     color: var(--text-2);
     font-size: var(--fs-ui);
+    @include fade-in;
 
     > svg {
       color: var(--text-3);
