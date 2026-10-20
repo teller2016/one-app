@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { JiraIssueDetail } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
 import { errMsg } from '../../../lib/errMsg';
+import { beginPointerDrag } from '../../../lib/pointerDrag';
 import { PORTAL_LAYERS } from '../../../lib/portalLayers';
 import { useBackClose } from '../../../lib/useBackClose';
 import { useThemeMode } from '../../../lib/theme';
@@ -97,6 +99,27 @@ function detailDoc(detail: JiraIssueDetail, dark: boolean): string {
   </body></html>`;
 }
 
+// 패널 폭 — 왼쪽 경계를 끌어 바꾼다 (UI 취향이라 localStorage 로 충분 — 유실돼도 기본값)
+const WIDTH_KEY = 'jira:detailWidth';
+const DEFAULT_W = 440; // 목업 폭 — _base.scss 의 --jira-detail-w 기본값
+const MIN_W = 360;
+// 넓혀도 목록에 남길 폭 — 키·상태·상위항목 칩이 있는 행이 깨지지 않는 선.
+// ⚠️ _jira.scss 의 $detail-w(창이 좁아질 때 깎는 식)와 같은 값이어야 드래그 상한과 맞는다
+const LIST_MIN_W = 480;
+
+const savedWidth = () => {
+  const n = Number(localStorage.getItem(WIDTH_KEY));
+  return Number.isFinite(n) && n >= MIN_W ? n : DEFAULT_W;
+};
+
+/** 지금 창에서 넓힐 수 있는 최대 폭 — $detail-w 와 같은 식 (기본 폭 아래로는 내려가지 않는다) */
+const maxWidth = () => {
+  const sidebar = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')
+  );
+  return Math.max(DEFAULT_W, window.innerWidth - (sidebar || 0) - LIST_MIN_W);
+};
+
 /** 상태 → 뱃지 색 (목록 IssueRow 와 동일 규칙) */
 const badgeVariant = (d: JiraIssueDetail) =>
   isDone(d) ? ('ok' as const) : d.statusCategory === 'indeterminate' ? ('busy' as const) : ('idle' as const);
@@ -122,6 +145,53 @@ export function JiraDetailPanel({
   const panelRef = useRef<HTMLElement>(null);
   // 테마가 바뀌면 srcDoc 팔레트도 함께 재생성된다
   const dark = useThemeMode() === 'dark';
+
+  const [width, setWidth] = useState(savedWidth);
+  const widthRef = useRef(width);
+  const [resizing, setResizing] = useState(false);
+  // 드래그를 놓은 직후의 click 한 번 — 아래 '패널 밖 클릭 닫힘'이 잡지 않게
+  const suppressClickRef = useRef(false);
+
+  // 패널(.jira-view)과 목록이 비켜서는 폭(.jira--detail)이 같은 값을 보도록 전역 변수로 둔다
+  // (Sidebar 의 --sidebar-w 와 같은 방식). 첫 페인트 전에 걸어야 기본 폭에서 튀지 않는다.
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty('--jira-detail-w', `${width}px`);
+  }, [width]);
+
+  const onGripDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    // 저장된 폭이 아니라 **지금 그려진 폭**에서 시작한다 — 창이 좁아 깎여 있으면 둘이 달라서
+    // 잡는 순간 패널이 튄다
+    const startW = panelRef.current?.getBoundingClientRect().width ?? widthRef.current;
+    const maxW = maxWidth();
+    setResizing(true);
+    beginPointerDrag(e, {
+      cursor: 'col-resize',
+      onMove: (ev) => {
+        // 패널은 오른쪽에 붙어 있어 왼쪽으로 끌수록 넓어진다
+        const w = Math.round(Math.min(maxW, Math.max(MIN_W, startW + (startX - ev.clientX))));
+        widthRef.current = w;
+        setWidth(w);
+      },
+      onEnd: () => {
+        setResizing(false);
+        // 넓히며 놓은 자리는 패널 밖(목록)이라 뒤따르는 click 이 '바깥 클릭'으로 잡혀 패널이
+        // 닫힌다 — 같은 입력의 click 은 이 tick 안에 오므로 다음 tick 에 푼다
+        suppressClickRef.current = true;
+        setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 0);
+        localStorage.setItem(WIDTH_KEY, String(widthRef.current));
+      },
+    });
+  };
+
+  const resetWidth = () => {
+    widthRef.current = DEFAULT_W;
+    setWidth(DEFAULT_W);
+    localStorage.removeItem(WIDTH_KEY);
+  };
 
   // 폰 뒤로가기로 닫힌다 — ⚠️ 이 패널은 Modal 이 아니라 슬라이드 패널이라 공용 Modal 의
   // 처리가 닿지 않는다. 안 걸어두면 상세를 연 채 뒤로가기를 누르는 순간 앱이 닫힌다
@@ -180,6 +250,7 @@ export function JiraDetailPanel({
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
+      if (suppressClickRef.current) return; // 폭 드래그를 놓은 click
       const t = e.target as HTMLElement;
       if (panelRef.current?.contains(t)) return;
       if (t.closest('.jira__title')) return;
@@ -198,9 +269,20 @@ export function JiraDetailPanel({
   return (
     <aside
       ref={panelRef}
-      className={'jira-view' + (open ? ' jira-view--open' : '')}
+      className={
+        'jira-view' + (open ? ' jira-view--open' : '') + (resizing ? ' jira-view--resizing' : '')
+      }
       aria-hidden={!open}
     >
+      {/* 왼쪽 경계 손잡이 — 끌어서 폭 조절, 더블클릭으로 기본 폭 (폰에서는 mo.scss 가 숨긴다) */}
+      <div
+        className="jira-view__grip"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="상세 패널 폭 조절 (더블클릭: 기본 폭)"
+        onPointerDown={onGripDown}
+        onDoubleClick={resetWidth}
+      />
       <button
         type="button"
         className="icon-btn jira-view__close"

@@ -215,7 +215,8 @@
   --titlebar-h: 44px;
   // 하단 상태바 높이 — .app 그리드의 둘째 행 (VPN·메일·미러링·MO·근태)
   --statusbar-h: 28px;
-  // Jira 상세 패널 폭 — 패널(.jira-view)과 목록이 비켜서는 폭(.jira--detail)이 함께 쓴다 (목업 440)
+  // Jira 상세 패널 폭 — 패널(.jira-view)과 목록이 비켜서는 폭(.jira--detail)이 함께 쓴다 (목업 440).
+  // 끌어서 바꾼 폭은 JiraDetailPanel 이 덮어쓰고, 창 폭에 맞춰 깎는 식은 _jira.scss 의 $detail-w
   --jira-detail-w: 440px;
   // 표 행 높이 (Jira 보고 결과 표 등 — 목업 36)
   --row-h-table: 36px;

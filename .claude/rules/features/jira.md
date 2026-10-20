@@ -75,6 +75,7 @@ paths:
 - ⚠️ **셸 명령 조립은 main 에서만** — 티켓 제목·본문이 섞인 프롬프트라 인용이 곧 사고다. `lib/util.ts` 의 `shQuote`(pty.ts 에서 이관, 두 곳이 공유)를 쓴다. 실측 검증: 공백 경로·개행·`'`·`"` 가 모두 온전히 한 인자로 전달됨.
 - ⚠️ **시각은 `renderedFields` 가 아니라 원본 ISO** 를 쓴다 — 렌더된 값은 "오늘 9:44 오전" 같은 상대 표기라 나중에 읽는 에이전트에겐 기준이 없다.
 - 시작 스킬은 모달에서 고른다(기본 `자동` = 버그 계열 → `/bugfix`, 그 외 → `/dev`. 선택은 localStorage `jira:workSkill`). `/run-ticket` 은 femc 하네스가 아니라 **개인 계정 스킬**(`~/.claude/skills`, 2026-10-20 추가)이라 Team 계정으로 시작하면 못 찾는다.
+- 시작 모달은 **좌우 2단**(2026-10-20) — 좌: 위치(칸 높이 전부, 목록만 스크롤) · 우: 계정·시작·부가 설명(설명 칸이 남은 높이를 받는다). 모달 높이는 720 고정(작은 창은 공용 max-height 가 깎는다). 세로 한 줄일 땐 부가 설명을 키우자 위치가 두 줄 남짓으로 눌렸다.
 - '부가 설명'은 여러 줄 `Textarea`(Enter 줄바꿈 · ⌘Enter 시작)이고 프롬프트 끝에 붙는다. 이어서 쓰기(`paste`)에선 줄바꿈을 ` / ` 로 잇는다.
   - ⚠️ **tmux 는 명령이 약 16KB 를 넘으면 `command too long` 으로 거절한다**(3.7b 실측: 한글 5,400자 통과·6,000자 실패) — 실행 명령이 `new-session` 인자라 세션이 뜨자마자 죽는다. 그래서 두 번 인용한 크기가 8KB(`NOTE_INLINE_MAX_BYTES`)를 넘으면 티켓 폴더의 `note.md` 로 넘기고 프롬프트엔 경로만 싣는다(상한 직전 최악 명령 9.5KB 실측 수락).
 - **시작 성공 직후 진행중 전환을 제안**한다(2026-08-19) — PR 머지 → 해결됨 제안과 같은 패턴. `jira:start-progress`(`startProgressIssue`, 전환 이름 `/진행|progress/i` 휴리스틱)로 전환하고, 이슈가 이미 진행중 계열(`statusCategory === 'indeterminate'`)이면 묻지 않는다. 확인창은 App 루트 `ConfirmProvider` 라 모달이 닫히고 터미널 섹션으로 이동한 뒤에도 뜬다.
@@ -221,6 +222,10 @@ HTTP 200 + `text/html`** 을 돌려준다(본문이 `<div id="jira-frontend">…
 - 내 이슈 목록은 **풀블리드**(행 padding 0 20 · 40px · 바닥선) — 옛 그룹 카드·`.section` 여백 없음. 주간·보고 화면만 `.jira--panel` 여백(16 24).
 - **상세 패널은 목록 오른쪽에 붙는 패널**(`--jira-detail-w` 440 · 패널 면 · 왼쪽 경계선, 탑바~상태바 높이) — 떠 있는 카드·그림자 아님. 패널이 fixed 라 열리면 `.jira--detail` 이 목록을 `padding-right` 로 비켜 세운다(폰은 전체화면 시트라 0).
   - ⚠️ 상세 본문 iframe(srcdoc)은 앱 CSS 변수를 못 읽는다 — `detailDoc` 의 팔레트가 Signal 토큰 값을 **그대로 복사**해 둔 것이다. 토큰 값을 바꾸면 함께 고칠 것.
+  - **폭 조절**(2026-10-20): 패널 왼쪽 경계 손잡이(`.jira-view__grip`, 사이드바 grip 과 같은 모양)를 끌면 360 ~ 목록 480 을 남길 때까지, 더블클릭이면 기본 440. 폭은 localStorage `jira:detailWidth` → `JiraDetailPanel` 이 `<html>` 의 `--jira-detail-w` 를 덮어쓰고(`--sidebar-w` 와 같은 방식), 실제 폭은 `_jira.scss` 의 `$detail-w` 가 **창이 좁아지면 넓혀 둔 폭만 깎는다**(440 아래로는 안 깎음 — 안 넓혔으면 예전과 같다). 폰은 손잡이를 숨긴다.
+    - ⚠️ **드래그를 놓은 click 을 흘려보낸다**(`suppressClickRef`) — 넓히며 놓은 자리는 패널 밖(목록)이라 '바깥 클릭 닫힘'이 패널을 닫는다.
+    - 끄는 동안 `.jira-view--resizing` — 목록 `padding-right` 전환을 끄고(안 끄면 손잡이를 뒤따라온다), 본문 iframe 의 `pointer-events` 를 막는다(좁히며 iframe 위로 가면 드래그가 끊긴다).
+    - `DEFAULT_W`·`LIST_MIN_W`(TS)와 `$detail-w` 의 440·480 은 **같은 값**이어야 드래그 상한과 CSS 깎임이 맞는다.
 - 목록 행에서 상세에 열린 이슈는 `jira__row--sel`(틴트 + 좌측 액센트) — `IssueRow` 의 `selected` prop(원시값이라 memo 계약 유지).
 - femc 세션 칩 점: 작업 중 = `StatusDot run`(초록) · 입력 대기 = `wait`(주황) — 터미널과 같은 의미.
 - 보고 화면 조건 카드는 `[이름 60][컨트롤]` grid + 줄마다 바닥선(셀 둘 다에 border — 세로 gap 0 이어야 선이 이어진다), JQL 직접 입력 줄은 카드 **밖**. ⚠️ 이 패널은 Lite 에도 실린다.

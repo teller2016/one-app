@@ -1,6 +1,12 @@
 // Jira 내 이슈 — 타입별 그룹 카드 + 한 줄 행 (전체 클릭)
 @use './base' as *;
 
+// 상세 패널 실제 폭 — 사용자가 끌어 정한 폭(--jira-detail-w, JiraDetailPanel 이 덮어쓴다)을 쓰되
+// 창이 좁아지면 목록 자리 480 을 남기도록 깎는다. 단 기본 440 아래로는 깎지 않는다 — 넓혀 둔
+// 폭만 줄어들고, 넓히지 않았으면 예전 고정 440 과 똑같이 동작한다.
+// ⚠️ 440·480 은 JiraDetailPanel 의 DEFAULT_W·LIST_MIN_W 와 같은 값이어야 드래그 상한과 맞는다
+$detail-w: min(var(--jira-detail-w), max(440px, calc(100vw - var(--sidebar-w) - 480px)));
+
 .jira {
   // 기본은 .section 여백 + 와이드 폭 — ⚠️ Lite 가 `section jira` 로 보고 패널을 감싸 이 폭을 빌린다
   max-width: var(--w-wide);
@@ -14,7 +20,13 @@
   }
 
   &--detail {
-    padding-right: var(--jira-detail-w);
+    padding-right: $detail-w;
+  }
+
+  // 패널 폭을 끄는 동안엔 비켜서는 애니메이션을 끈다 — 안 끄면 목록이 손잡이를 뒤따라온다
+  // (사이드바 .sidebar--dragging · 터미널 .terminal--dragging 과 같은 규칙)
+  &--mine:has(.jira-view--resizing) {
+    transition: none;
   }
 
   // 주간·보고 화면 — 목업의 본문 여백
@@ -469,14 +481,14 @@
 
 // ===== 이슈 상세 패널 — 목록 오른쪽에 붙는 패널 (목업: 440px · 패널 면 · 왼쪽 경계선) =====
 // 섹션은 스크롤 영역이라 fixed 로 띄우고, 열리면 목록이 .jira--detail 로 그만큼 비켜선다
-// (예전의 떠 있는 카드 + 그림자는 목업에 없다). 폭은 --jira-detail-w 하나로 두 곳이 맞춘다.
+// (예전의 떠 있는 카드 + 그림자는 목업에 없다). 폭은 $detail-w 하나로 두 곳이 맞춘다.
 .jira-view {
   position: fixed;
   top: var(--titlebar-h);
   right: 0;
   bottom: var(--statusbar-h);
   z-index: 30; // 상태 전환 드롭다운(20) 위
-  width: var(--jira-detail-w);
+  width: $detail-w;
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
@@ -491,6 +503,44 @@
     transform: none;
     visibility: visible;
     transition: transform var(--dur-2) var(--ease);
+  }
+
+  // 왼쪽 경계 손잡이 — 끌어서 폭 조절, 더블클릭으로 기본 폭.
+  // 사이드바 grip 과 같은 모양(히트 11 · 선 2, hover·드래그 중 액센트)이고 경계선 위에 걸친다
+  &__grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 11px;
+    z-index: 2;
+    cursor: col-resize;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 4px;
+      width: 2px;
+      border-radius: var(--r-full);
+      background: transparent;
+      transition: background var(--dur-1) var(--ease);
+    }
+
+    &:hover::after {
+      background: var(--accent);
+    }
+  }
+
+  &--resizing &__grip::after {
+    background: var(--accent);
+  }
+
+  // 좁히려고 오른쪽으로 끌면 포인터가 본문 iframe 위로 올라간다 — 끄는 동안엔 iframe 이
+  // 포인터를 받지 않게 해 드래그가 끊기지 않게 한다
+  &--resizing &__frame {
+    pointer-events: none;
   }
 
   // 우상단 [×] — 목업: top 14 · right 14
@@ -601,9 +651,17 @@
 // ⚠️ 본문 전체가 아니라 **위치 목록만** 스크롤한다 — 본문이 스크롤되면 저장소가 많을 때
 // 계정·시작 스킬·부가 설명이 화면 밖으로 밀려 있는 줄도 몰랐다(2026-10-06 사용자 지적).
 // 본문을 세로 flex 로 세워 위치 행만 줄어들게 하고, 나머지 입력칸은 늘 버튼 위에 남긴다.
+// 2026-10-20 좌우 2단(좌 위치 · 우 계정·시작·부가 설명) — 한 줄로 쌓으니 부가 설명을 키우자 위치가
+// 두 줄 남짓으로 눌렸다(사용자 지적). 2단은 **틀이 높이를 정한다**: 720 을 주고 작은 창에선 공용
+// max-height(100vh - 96)가 깎는다. 그래야 위치는 세로 전부, 부가 설명은 오른쪽 남은 높이를 받는다.
+.modal:has(.jira-work) {
+  height: 720px;
+}
+
 .modal:has(.jira-work) .modal__body {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto; // 공용 본문엔 없다 — 틀 높이를 본문이 채워야 아래 2단이 늘어난다
 }
 
 .jira-work {
@@ -614,13 +672,42 @@
   gap: 16px;
   padding-top: 2px; // 목업 본문 위 6 = 공용 4 + 2
 
-  // 줄어드는 건 위치 행 하나뿐 — 나머지(배너·계정·시작·부가 설명)는 내용 높이를 지킨다
+  // 배너(femc 없음)는 내용 높이 그대로, 2단이 남은 높이를 받는다
   > * {
     flex-shrink: 0;
   }
 
-  > .form-row:has(> .jira-work__list) {
-    flex-shrink: 1;
+  // 두 칸 — 행 높이를 틀에 묶어야(minmax(0, 1fr)) 칸 안에서 목록이 스크롤되고 설명 칸이 늘어난다.
+  // auto 행이면 내용 높이로 커져 본문 밖으로 넘친다
+  &__cols {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 20px;
+  }
+
+  &__col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+
+    > * {
+      flex-shrink: 0;
+    }
+  }
+
+  // 왼쪽 — 위치 행이 칸 높이를 다 받고 넘치면 목록만 스크롤
+  &__col > .form-row:has(> .jira-work__list) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  // 오른쪽 — 부가 설명 행이 계정·시작 아래 남은 높이를 다 받는다
+  &__col > .form-row:has(> .jira-work__note) {
+    flex: 1 1 auto;
     min-height: 0;
   }
 
@@ -635,12 +722,13 @@
     font-size: var(--fs-ui);
   }
 
-  // 부가 설명 — 여러 줄 지시용으로 약 8줄을 기본으로 깔고, 더 필요하면 아래로 끌어 늘린다.
-  // 늘린 만큼은 위치 목록(유일하게 줄어드는 행)이 내준다
+  // 부가 설명 — 오른쪽 칸의 남은 높이를 채운다(공용 .input 의 flex: 1). 높이를 칸이 정하므로
+  // 끌어서 늘리는 손잡이는 없앤다(인라인 높이가 생기면 flex 채움과 싸운다).
+  // 하한은 약 5줄 — 180 이면 최소 창(900×600)에서 본문이 8px 넘쳐 스크롤바가 생겼다(실측)
   &__note {
-    min-height: 180px;
+    min-height: 120px;
     line-height: 1.5;
-    resize: vertical;
+    resize: none;
   }
 
   // 위치 목록 — 저장소 그룹 사이 10. 남은 높이를 넘치면 **여기만** 스크롤된다.

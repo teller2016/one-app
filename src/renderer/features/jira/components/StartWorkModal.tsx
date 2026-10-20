@@ -276,7 +276,7 @@ export function StartWorkModal({
         </>
       }
       subtitle={summary}
-      width={720}
+      width={920}
       onClose={onClose}
       // 준비(첨부 내려받기) 중에 닫으면 '취소'처럼 보이지만 세션은 그대로 만들어진다 — 끝날 때까지 막는다
       closable={!busy}
@@ -305,124 +305,132 @@ export function StartWorkModal({
           </Banner>
         )}
 
-        <FormRow label="위치" column>
-          {loadError ? (
-            <Banner variant="danger">{loadError}</Banner>
-          ) : !ready ? (
-            <p className="hint">위치 목록을 불러오는 중...</p>
-          ) : !hasWorkspace ? (
-            <p className="hint">
-              터미널 섹션에서 저장소(워크스페이스)를 먼저 등록하세요.
-            </p>
-          ) : (
-            <div className="jira-work__list" role="radiogroup" aria-label="시작할 위치">
-              {ordered.map((ws) => (
-                <div className="jira-work__ws" key={ws.id}>
-                  <div className="jira-work__ws-head">
-                    <span className="jira-work__ws-name">{ws.name}</span>
-                    {matchedWsIds.has(ws.id) && (
-                      <span className="jira-work__match">{projectKey} 매칭</span>
-                    )}
-                    {/* 고를 행이 없다 — 이유를 남겨 둔다(정리는 터미널 섹션에서 워크스페이스 삭제) */}
-                    {broken[ws.id] !== undefined && (
-                      <span
-                        className="jira-work__ws-missing"
-                        title={`${ws.repoPath}\n${broken[ws.id]}`}
-                      >
-                        {/no such file/i.test(broken[ws.id]) ? '폴더 없음' : '불러오지 못함'}
-                      </span>
-                    )}
-                  </div>
-                  {(worktrees[ws.id] ?? []).map((wt) => {
-                    const on = spot?.wsId === ws.id && spot.path === wt.path;
-                    const count = sessionCount(wt.path);
-                    return (
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={on}
-                        key={wt.path}
-                        className={'jira-work__wt' + (on ? ' jira-work__wt--on' : '')}
-                        disabled={wt.missing}
-                        title={wt.path}
-                        onClick={() => setSpot({ wsId: ws.id, path: wt.path })}
-                      >
-                        <span className="jira-work__wt-mark">
-                          {on && <Icon name="check" size={11} />}
-                        </span>
-                        <span className="jira-work__wt-name">{worktreeName(wt)}</span>
-                        <span className="jira-work__wt-branch">{worktreeRef(wt) ?? ''}</span>
-                        {/* 작업 중인 곳에 새 티켓을 얹지 않도록 미커밋 변경량을 보여준다.
-                            ⚠️ untracked 만 있으면 증감이 0 이라 '±0' 이 되므로 말로 쓴다 */}
-                        {wt.dirty && (
+        {/* 좌: 위치(본문 높이 전부 — 여기만 스크롤) · 우: 계정·시작·부가 설명(남은 높이를 설명 칸이 받는다).
+            세로 한 줄로 쌓았더니 부가 설명을 키우자 위치 목록이 두 줄 남짓으로 눌렸다(2026-10-20 사용자 지적) */}
+        <div className="jira-work__cols">
+          <div className="jira-work__col">
+            <FormRow label="위치" column>
+              {loadError ? (
+                <Banner variant="danger">{loadError}</Banner>
+              ) : !ready ? (
+                <p className="hint">위치 목록을 불러오는 중...</p>
+              ) : !hasWorkspace ? (
+                <p className="hint">
+                  터미널 섹션에서 저장소(워크스페이스)를 먼저 등록하세요.
+                </p>
+              ) : (
+                <div className="jira-work__list" role="radiogroup" aria-label="시작할 위치">
+                  {ordered.map((ws) => (
+                    <div className="jira-work__ws" key={ws.id}>
+                      <div className="jira-work__ws-head">
+                        <span className="jira-work__ws-name">{ws.name}</span>
+                        {matchedWsIds.has(ws.id) && (
+                          <span className="jira-work__match">{projectKey} 매칭</span>
+                        )}
+                        {/* 고를 행이 없다 — 이유를 남겨 둔다(정리는 터미널 섹션에서 워크스페이스 삭제) */}
+                        {broken[ws.id] !== undefined && (
                           <span
-                            className="jira-work__wt-dirty"
-                            title="미커밋 변경이 있습니다"
+                            className="jira-work__ws-missing"
+                            title={`${ws.repoPath}\n${broken[ws.id]}`}
                           >
-                            {wt.additions + wt.deletions > 0
-                              ? `±${wt.additions + wt.deletions}`
-                              : '미커밋'}
+                            {/no such file/i.test(broken[ws.id]) ? '폴더 없음' : '불러오지 못함'}
                           </span>
                         )}
-                        {count > 0 && (
-                          <span className="jira-work__wt-count">{count}세션</span>
-                        )}
-                      </button>
-                    );
-                  })}
+                      </div>
+                      {(worktrees[ws.id] ?? []).map((wt) => {
+                        const on = spot?.wsId === ws.id && spot.path === wt.path;
+                        const count = sessionCount(wt.path);
+                        return (
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={on}
+                            key={wt.path}
+                            className={'jira-work__wt' + (on ? ' jira-work__wt--on' : '')}
+                            disabled={wt.missing}
+                            title={wt.path}
+                            onClick={() => setSpot({ wsId: ws.id, path: wt.path })}
+                          >
+                            <span className="jira-work__wt-mark">
+                              {on && <Icon name="check" size={11} />}
+                            </span>
+                            <span className="jira-work__wt-name">{worktreeName(wt)}</span>
+                            <span className="jira-work__wt-branch">{worktreeRef(wt) ?? ''}</span>
+                            {/* 작업 중인 곳에 새 티켓을 얹지 않도록 미커밋 변경량을 보여준다.
+                                ⚠️ untracked 만 있으면 증감이 0 이라 '±0' 이 되므로 말로 쓴다 */}
+                            {wt.dirty && (
+                              <span
+                                className="jira-work__wt-dirty"
+                                title="미커밋 변경이 있습니다"
+                              >
+                                {wt.additions + wt.deletions > 0
+                                  ? `±${wt.additions + wt.deletions}`
+                                  : '미커밋'}
+                              </span>
+                            )}
+                            {count > 0 && (
+                              <span className="jira-work__wt-count">{count}세션</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </FormRow>
+              )}
+            </FormRow>
 
-        {resumable && (
-          <Checkbox
-            label={`이어서 쓰기 — 이 위치의 femc 세션(${resumable.title})에 전달`}
-            checked={resume}
-            onChange={(e) => setResume(e.currentTarget.checked)}
-          />
-        )}
+            {resumable && (
+              <Checkbox
+                label={`이어서 쓰기 — 이 위치의 femc 세션(${resumable.title})에 전달`}
+                checked={resume}
+                onChange={(e) => setResume(e.currentTarget.checked)}
+              />
+            )}
+          </div>
 
-        {accounts.length > 1 && (
-          <FormRow label="Claude 계정" column>
-            <Select
-              aria-label="Claude 계정"
-              value={account}
-              onChange={changeAccount}
-              options={accounts.map((a) => ({
-                value: a.id,
-                label: a.email ? `${a.label} — ${a.email}` : `${a.label} (미로그인)`,
-                search: `${a.label} ${a.email ?? ''}`,
-              }))}
-            />
-          </FormRow>
-        )}
+          <div className="jira-work__col">
+            {accounts.length > 1 && (
+              <FormRow label="Claude 계정" column>
+                <Select
+                  aria-label="Claude 계정"
+                  value={account}
+                  onChange={changeAccount}
+                  options={accounts.map((a) => ({
+                    value: a.id,
+                    label: a.email ? `${a.label} — ${a.email}` : `${a.label} (미로그인)`,
+                    search: `${a.label} ${a.email ?? ''}`,
+                  }))}
+                />
+              </FormRow>
+            )}
 
-        <FormRow label="시작" column>
-          <Select
-            aria-label="시작 스킬"
-            value={skill}
-            onChange={changeSkill}
-            options={SKILL_OPTIONS}
-          />
-        </FormRow>
+            <FormRow label="시작" column>
+              <Select
+                aria-label="시작 스킬"
+                value={skill}
+                onChange={changeSkill}
+                options={SKILL_OPTIONS}
+              />
+            </FormRow>
 
-        {/* 여러 줄 지시를 받는다 — Enter 는 줄바꿈, ⌘Enter 가 [작업 시작].
-            길면 main 이 note.md 로 넘기므로(tmux 명령 길이 한도) 여기서 자르지 않는다 */}
-        <FormRow label="부가 설명 (선택)" column>
-          <Textarea
-            className="jira-work__note"
-            value={note}
-            placeholder={'예: 어드민만 보면 돼\n(Enter 줄바꿈 · ⌘Enter 작업 시작)'}
-            onChange={(e) => setNote(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' || !e.metaKey || e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              if (spot && !busy) void start();
-            }}
-          />
-        </FormRow>
+            {/* 여러 줄 지시를 받는다 — Enter 는 줄바꿈, ⌘Enter 가 [작업 시작].
+                길면 main 이 note.md 로 넘기므로(tmux 명령 길이 한도) 여기서 자르지 않는다 */}
+            <FormRow label="부가 설명 (선택)" column>
+              <Textarea
+                className="jira-work__note"
+                value={note}
+                placeholder={'예: 어드민만 보면 돼\n(Enter 줄바꿈 · ⌘Enter 작업 시작)'}
+                onChange={(e) => setNote(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || !e.metaKey || e.nativeEvent.isComposing) return;
+                  e.preventDefault();
+                  if (spot && !busy) void start();
+                }}
+              />
+            </FormRow>
+          </div>
+        </div>
       </div>
     </Modal>
   );
