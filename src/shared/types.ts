@@ -396,8 +396,9 @@ export type JiraReportPrefs = {
 /**
  * 작업을 시작할 femc 스킬.
  * 'auto' = 이슈 타입으로 판정(버그 계열 → /bugfix, 그 외 → /dev), 'none' = 스킬 없이 일반 프롬프트.
+ * 'run-ticket' 은 femc 하네스가 아니라 **개인 계정 스킬**(`~/.claude/skills`)이다 — Team 계정엔 없다.
  */
-export type JiraWorkSkill = "auto" | "bugfix" | "dev" | "qa" | "none";
+export type JiraWorkSkill = "auto" | "bugfix" | "dev" | "qa" | "run-ticket" | "none";
 
 /**
  * femc 를 띄울 Claude 계정 — 원래 `~/.zshrc` 의 femc()/claude() 함수가 물어보던 선택이다.

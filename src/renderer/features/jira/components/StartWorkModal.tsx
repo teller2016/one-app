@@ -21,9 +21,9 @@ import { Button } from '../../../components/Button';
 import { Checkbox } from '../../../components/Checkbox';
 import { FormRow } from '../../../components/FormRow';
 import { Icon } from '../../../components/Icon';
-import { Input } from '../../../components/Input';
 import { Modal } from '../../../components/Modal';
 import { Select } from '../../../components/Select';
+import { Textarea } from '../../../components/Textarea';
 import { useToast } from '../../../components/Toast';
 import { openTerminalSession } from '../../../lib/sectionNav';
 import { worktreeName, worktreeRef } from '../../../../shared/types';
@@ -37,6 +37,7 @@ const SKILL_OPTIONS: { value: JiraWorkSkill; label: string }[] = [
   { value: 'bugfix', label: '/bugfix — 버그 분류·수정' },
   { value: 'dev', label: '/dev — 페이지·기능 개발' },
   { value: 'qa', label: '/qa — 검증' },
+  { value: 'run-ticket', label: '/run-ticket — 구현·aside 검증·결과 보고 (Personal)' },
   { value: 'none', label: '지정 없음 (femc 가 판단)' },
 ];
 
@@ -275,7 +276,7 @@ export function StartWorkModal({
         </>
       }
       subtitle={summary}
-      width={580}
+      width={720}
       onClose={onClose}
       // 준비(첨부 내려받기) 중에 닫으면 '취소'처럼 보이지만 세션은 그대로 만들어진다 — 끝날 때까지 막는다
       closable={!busy}
@@ -407,11 +408,19 @@ export function StartWorkModal({
           />
         </FormRow>
 
+        {/* 여러 줄 지시를 받는다 — Enter 는 줄바꿈, ⌘Enter 가 [작업 시작].
+            길면 main 이 note.md 로 넘기므로(tmux 명령 길이 한도) 여기서 자르지 않는다 */}
         <FormRow label="부가 설명 (선택)" column>
-          <Input
+          <Textarea
+            className="jira-work__note"
             value={note}
-            placeholder="예: 어드민만 보면 돼"
+            placeholder={'예: 어드민만 보면 돼\n(Enter 줄바꿈 · ⌘Enter 작업 시작)'}
             onChange={(e) => setNote(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || !e.metaKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              if (spot && !busy) void start();
+            }}
           />
         </FormRow>
       </div>

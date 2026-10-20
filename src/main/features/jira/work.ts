@@ -35,6 +35,12 @@ const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
 const ATTACHMENT_CONCURRENCY = 3;
 const ISSUE_TIMEOUT_MS = 20_000;
 const ATTACHMENT_TIMEOUT_MS = 60_000;
+/**
+ * 부가 설명을 프롬프트에 그대로 싣는 상한(인용 후 바이트) — 넘으면 `note.md` 로 넘긴다.
+ * ⚠️ 실행 명령은 tmux `new-session` 인자로 가는데 tmux 는 **명령이 약 16KB 를 넘으면
+ * `command too long`** 으로 거절한다(3.7b 실측: 한글 5,400자 통과·6,000자 실패) — 세션이 뜨자마자 죽는다.
+ */
+const NOTE_INLINE_MAX_BYTES = 8 * 1024;
 
 const WORK_FIELDS =
   'summary,status,issuetype,priority,reporter,assignee,created,updated,description,comment,attachment';
@@ -469,6 +475,19 @@ export async function prepareJiraWork(
   const note = input.note?.trim();
   const hasAttachments = savedById.size > 0;
 
+  // 긴 부가 설명은 파일로 — 명령이 tmux 한도를 넘지 않게(NOTE_INLINE_MAX_BYTES 주석).
+  // 인용 비용까지 잰다: 프롬프트가 여기서 한 번, pty 의 launchShellCommand 에서 한 번 더 인용돼
+  // `'` 하나가 십여 바이트로 불어난다.
+  const notePath = path.join(dir, 'note.md');
+  const noteInFile =
+    !!note && Buffer.byteLength(shQuote(shQuote(note)), 'utf8') > NOTE_INLINE_MAX_BYTES;
+  try {
+    if (noteInFile) fs.writeFileSync(notePath, `${note}\n`, 'utf8');
+    else fs.rmSync(notePath, { force: true }); // 지난 시작의 긴 설명이 남아 오해를 만들지 않게
+  } catch (err) {
+    return { ok: false, error: `부가 설명 파일을 쓰지 못했습니다 — ${(err as Error).message}` };
+  }
+
   const head = `${skillCmd ? `${skillCmd} ` : ''}${key} — ${summary}`;
   // ⚠️ `@경로` 파일 참조를 쓰지 않는다 — userData 경로에 **공백이 있어서**
   // (`~/Library/Application Support/One App/…`) `@` 뒤가 공백에서 잘린다.
@@ -482,16 +501,24 @@ export async function prepareJiraWork(
   if (hasAttachments) {
     lines.push(`- 첨부(이미지 포함, 본문에서 참조): ${attachmentsDir}`);
   }
-  if (note) lines.push('', `부가 설명: ${note}`);
+  if (noteInFile) {
+    lines.push('', `부가 설명(내 지시 — 길어서 파일로 넘긴다, 이것도 먼저 읽어줘): ${notePath}`);
+  } else if (note) {
+    lines.push('', `부가 설명: ${note}`);
+  }
   const prompt = lines.join('\n');
 
   // 이미 떠 있는 femc 에 넣을 문구는 **한 줄**이어야 한다 — TUI 에 그대로 쓰면
-  // 개행이 곧 전송이라 중간에 잘려 제출된다.
+  // 개행이 곧 전송이라 중간에 잘려 제출된다. 여러 줄 부가 설명은 ' / ' 로 잇는다.
   const paste = [
     `${head} 티켓을 작업해줘.`,
     `티켓 파일을 먼저 읽어줘: ${ticketPath}`,
     hasAttachments ? `첨부: ${attachmentsDir}` : '',
-    note ? `부가 설명: ${note}` : '',
+    noteInFile
+      ? `부가 설명(내 지시 — 먼저 읽어줘): ${notePath}`
+      : note
+        ? `부가 설명: ${note.replace(/\s*\n\s*/g, ' / ')}`
+        : '',
   ]
     .filter(Boolean)
     .join(' · ');
