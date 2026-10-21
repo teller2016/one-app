@@ -145,8 +145,9 @@ paths:
 - 링크는 `window.oneApp.openExternal`(http/s), Finder 는 `terminal:reveal-cwd`(세션 id 만).
 - 검색 하이라이트는 `#RRGGBB` → `mixHex` 선합성. ⚠️ 검색바는 **오버레이**(PTY 행 불변).
 - ⚠️ **xterm 6**: 네이티브 스크롤 없음(`scrollLines`·`viewportY`·`onScroll`) · 전역 스크롤바 CSS 안 먹음 · 배경은 `theme.background: 'rgba(0,0,0,0)'`(`'transparent'` 금지) + `allowTransparency`. 오버라이드는 특정도 한 단계 좁게.
-- ⚠️ **텍스처 아틀라스는 pane 공유물** — `clearTextureAtlas()` 는 **마운트 시 `monoFontLoaded` false 일 때만**. 복귀는 `term.refresh(0, rows-1)` + ⚠️ **rAF 한 번 더**(DEC 2026).
-- 색은 **`lib/xtermTheme.ts`**(`buildTerminalTheme`·`searchDecorations`) 한 벌을 데스크톱·MO 가 함께 쓴다 — 다크 패널 토큰에서(hex 금지, 마젠타·시안 예외), 선택 틴트도 `--accent-on-dark` 파생. ⚠️ 복사본을 두지 말 것(리디자인 때 MO 만 고쳐져 어긋났다). **JetBrains Mono NL 13px / lineHeight 1.0** ⚠️ 자연 줄높이에 곱해지고 `<1` 거부. 폰트 로드 후 `fit()`.
+- ⚠️ **텍스처 아틀라스는 pane 공유물** — `clearTextureAtlas()` 는 부르지 않는다(2026-10-21 부터 폰트 늦게 옴도 옵션 교체로 처리 — 아래 글꼴 항목). 복귀는 `term.refresh(0, rows-1)` + ⚠️ **rAF 한 번 더**(DEC 2026).
+- 색은 **`lib/xtermTheme.ts`**(`buildTerminalTheme`·`searchDecorations`) 한 벌을 데스크톱·MO 가 함께 쓴다 — 다크 패널 토큰에서(hex 금지, 마젠타·시안 예외), 선택 틴트도 `--accent-on-dark` 파생. ⚠️ 복사본을 두지 말 것(리디자인 때 MO 만 고쳐져 어긋났다). **글꼴 `--font-terminal`(Nordwand Mono → 빠진 기호는 JetBrains Mono NL) 13px / lineHeight 1.0** ⚠️ 자연 줄높이에 곱해지고 `<1` 거부.
+  ⚠️ **xterm 은 웹폰트 로드를 감지하지 않는다**(`open()` 때 canvas `measureText` 로 한 번 재고 끝, `fit()` 은 다시 안 잰다 — 폰트가 늦으면 Menlo 줄높이 15px 로 굳어 45→51행, 2026-10-21 실측). 그래서 `lib/terminalFont.ts` — 아직이면 첫 후보를 뺀 스택으로 열고 로드 뒤 `term.options.fontFamily` 를 바꿔 다시 재게 한다(데스크톱·MO 공용). Nordwand 는 글리프 307개(박스·블록은 xterm customGlyphs 가 그림), `liga`(`->` `=>`)는 `.xterm { font-variant-ligatures: none }` 으로 끈다(폰 DOM 렌더러에서 붙는다).
 - 상세: 노트 'xterm addon 구성 (2026-08-05)'·'색·글꼴'.
 
 ## 스크롤 (tmux 위임)
@@ -225,7 +226,7 @@ paths:
 - ⚠️ **`DA_REPLY_RE` 는 MO·데스크톱 둘 다 필수**, ESC 는 `String.fromCharCode(27)`.
 - ⚠️ 예측 입력 억제 `autocomplete=off`+`autocapitalize=none`+`inputmode="url"`. `.composition-view` 는 **MO 에만**(`--fs-title` 고정, `!important`).
 - 터미널 색은 데스크톱과 **같은 모듈**(`renderer/features/terminal/lib/xtermTheme.ts`)에서 읽는다(폰도 이제 셸 테마를 따르고, 터미널 면은 두 테마 모두 `--surface-dark`).
-- 폰트 JetBrains Mono NL + `lineHeight 1.0` + **Unicode11 + allowProposedApi 한 쌍**. 키보드: `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 작은 값 + `overscroll-behavior: none`. ⚠️ 텍스트 기호는 VS16 + 컬러 이모지 폰트.
+- 폰트 `--font-terminal`(데스크톱과 같은 `lib/terminalFont.ts` 경로) + `lineHeight 1.0` + **Unicode11 + allowProposedApi 한 쌍**. 키보드: `interactive-widget=resizes-content` + `visualViewport`/`innerHeight` 작은 값 + `overscroll-behavior: none`. ⚠️ 텍스트 기호는 VS16 + 컬러 이모지 폰트.
 - 상세: 노트 'MO 터미널 페이지 UI'·'자리를 비운 동안 알기'.
 
 ## MO 채팅 보기 (2026-10-01 — `main/.../chat.ts`·`transcript.ts` + `mobile-app/terminal/MoChatView.tsx`)

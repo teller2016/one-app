@@ -1585,6 +1585,9 @@
     .xterm {
       height: 100%;
       padding: 14px 10px 14px 16px; // 목업 14·16 — 우측은 스크롤바 자리라 좁게
+      // Nordwand 의 `->` `=>` 리가처 끄기 — WebGL 은 칸 단위라 원래 안 붙지만, WebGL 이 실패해
+      // DOM 렌더러로 떨어지면 붙는다. 폰(DOM 렌더러)과 같은 화면이 되게 양쪽 다 끈다
+      font-variant-ligatures: none;
     }
 
     // xterm 번들 CSS 가 뷰포트 배경을 #000 으로 하드코딩해 둬서 테마를 안 따른다 —

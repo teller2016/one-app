@@ -45,6 +45,7 @@ paths:
 - NL(리가처 없음)을 고른 이유 — xterm 은 ligatures addon 없이 리가처를 그리지 않으므로, 리가처가 아예 없는 쪽이 폰트와 화면이 일치한다. 공식 배포에 **NL 은 ttf 만** 있어 woff2 는 `fontTools` 로 변환해 넣었다.
 - `font-display: block` 필수 — 폴백으로 먼저 그리면 xterm 이 그 폭으로 셀을 재고 굳는다(`features/terminal.md` 참고).
 - ⚠️ **`vite.renderer.config.ts` 의 `base: './'` 를 지우지 말 것** — prod 렌더러는 `loadFile`(= `file://`)이라 기본값 `'/'` 이면 CSS 안의 폰트 URL이 `file:///assets/…` 로 해석돼 로드에 실패한다.
+- **터미널(xterm)만 `--font-terminal` = Nordwand Mono**(2026-10-21, OFL-1.1 — `NordwandMono-OFL.txt`, 공식 woff2 4종) → 둘째 후보 JetBrains. ⚠️ 글리프가 307개라(화살표·`·`·`●` 없음) 앱 UI 의 `--font-mono` 로 쓰지 말 것 — `liga` 도 있어 DOM 글자에선 `->` 가 합쳐진다. 상세는 `features/terminal.md` xterm 구성.
 - `mobile-app/styles/mo.scss` 가 `_base.scss` 를 `@use` 하므로 **폰 셸도 같은 폰트를 받는다**(MO 서버 MIME 맵에 `.woff2` 가 이미 있다). MO 터미널 탭(`mobile-app/styles/_terminal.scss`)도 같은 토큰·폰트를 쓴다.
 
 ## 공통 레이아웃 클래스 (`_base.scss`)

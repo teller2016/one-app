@@ -39,6 +39,12 @@ import {
   type Modifiers,
   type MoView,
 } from './logic';
+import {
+  bundledFontLoaded,
+  openingStack,
+  terminalFontStack,
+  whenBundledFontLoaded,
+} from '../../renderer/features/terminal/lib/terminalFont';
 import { buildTerminalTheme, searchDecorations } from '../../renderer/features/terminal/lib/xtermTheme';
 
 const LAST_SESSION_KEY = 'mo:lastSession';
@@ -316,12 +322,14 @@ class MoTerminalController {
       this.refit();
       return;
     }
+    // 데스크톱과 같은 번들 폰트(`--font-terminal`) — 기기 기본 monospace 는 폰마다 자폭·줄높이가
+    // 달라 박스 드로잉과 커서가 어긋났다. 폰트가 아직이면 첫 후보를 빼고 열어 로드 뒤 바꾼다(아래)
+    const fontFamily = terminalFontStack();
+    const fontReady = bundledFontLoaded(fontFamily, this.state.fontSize);
     const term = new Terminal({
       fontSize: this.state.fontSize,
-      // 데스크톱과 같은 번들 폰트(_base.scss @font-face) — 기기 기본 monospace 는 폰마다 자폭·줄높이가
-      // 달라 박스 드로잉과 커서가 어긋났다
-      fontFamily: "'JetBrains Mono NL', ui-monospace, Menlo, monospace",
-      // ⚠️ xterm 의 lineHeight 는 **폰트의 자연 줄높이**에 곱해진다 — 이 폰트는 1.346 배라 1.25 면
+      fontFamily: openingStack(fontFamily, fontReady),
+      // ⚠️ xterm 의 lineHeight 는 **폰트의 자연 줄높이**에 곱해진다 — 번들 폰트는 약 1.33 배라 1.25 면
       // 행간이 크게 벌어져 폰의 보이는 행 수까지 줄었다. 1.0 이 최소값이다(xterm 은 1 미만 거부)
       lineHeight: 1.0,
       cursorBlink: true,
@@ -354,11 +362,14 @@ class MoTerminalController {
       ta.setAttribute('inputmode', 'url');
     }
 
-    // 웹폰트가 늦게 오면 xterm 이 폴백 폭으로 잰 셀 크기가 굳는다 — 로드 후 한 번 다시 잰다
-    void document.fonts.ready.then(() => {
-      term.clearTextureAtlas();
-      this.refit();
-    });
+    // 웹폰트가 늦게 오면 xterm 이 폴백 폰트로 잰 셀 크기가 굳는다 — 옵션을 바꿔야 다시 잰다
+    // (`fit()` 만으로는 안 고쳐진다 — renderer `lib/terminalFont.ts` 주석)
+    if (!fontReady) {
+      whenBundledFontLoaded(fontFamily, this.state.fontSize, () => {
+        term.options.fontFamily = fontFamily;
+        this.refit();
+      });
+    }
 
     term.onData((raw) => {
       const data = stripDaReplies(raw);

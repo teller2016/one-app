@@ -417,6 +417,9 @@
     .xterm {
       height: 100%;
       padding: 10px 6px 6px 12px;
+      // 폰은 DOM 렌더러라 글자를 span 으로 그려 Nordwand 의 `->` `=>` 리가처가 붙는다 — 데스크톱
+      // (WebGL, 칸 단위)과 화면을 맞춰 끈다
+      font-variant-ligatures: none;
     }
 
     // 배경은 패널(__term)이 칠한다 — xterm.css 의 viewport 검정 배경을 걷어낸다(데스크톱과 같은 선택자 특정도)

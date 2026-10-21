@@ -21,29 +21,19 @@ import { terminalBackend } from '../lib/backend';
 import { useChatView } from '../lib/chatViews';
 import { liveRegionTop } from '../lib/claudeLiveRegion';
 import { TerminalChatPane } from './TerminalChatPane';
+import {
+  bundledFontLoaded,
+  openingStack,
+  terminalFontStack,
+  whenBundledFontLoaded,
+} from '../lib/terminalFont';
 import { buildTerminalTheme, searchDecorations } from '../lib/xtermTheme';
 
-const cssVar = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-/**
- * 번들 모노 폰트가 **이미 로드돼 있는지** — 폰트 스택의 첫 후보만 본다
- * (뒤의 시스템 폰트는 항상 available 이라 스택 전체를 넘기면 판정이 무의미해진다).
- *
- * ⚠️ 이 판정이 필요한 이유는 **텍스처 아틀라스가 pane 사이 공유물**이기 때문이다 —
- * 같은 폰트·크기의 xterm 들은 하나의 `TextureAtlas` 를 나눠 쓰는데,
- * `clearTextureAtlas()` 는 **호출한 pane 의 model 만** 다시 그리고 나머지 pane 에는
- * 알리지 않는다(addon-webgl 의 `clearTexture()` 가 `_requestClearModel` 을 세우지 않는다).
- * 그래서 pane 하나가 부르면 살아 있던 다른 pane 들이 **무효가 된 옛 글리프 좌표로**
- * 계속 그려 글자가 겹쳐 보인다(2026-08-12 사용자 신고).
- */
-const monoFontLoaded = (stack: string, size: number) => {
-  try {
-    return document.fonts.check(`${size}px ${stack.split(',')[0].trim()}`);
-  } catch {
-    return false; // check 가 파싱에 실패하면 보수적으로 '아직 아니다'
-  }
-};
+// ⚠️ **텍스처 아틀라스는 pane 사이 공유물**이다 — 같은 폰트·크기의 xterm 들은 하나의
+// `TextureAtlas` 를 나눠 쓰는데, `clearTextureAtlas()` 는 **호출한 pane 의 model 만** 다시 그리고
+// 나머지 pane 에는 알리지 않는다(addon-webgl 의 `clearTexture()` 가 `_requestClearModel` 을 세우지
+// 않는다). 그래서 pane 하나가 부르면 살아 있던 다른 pane 들이 **무효가 된 옛 글리프 좌표로**
+// 계속 그려 글자가 겹쳐 보인다(2026-08-12 사용자 신고). 이 파일에서는 부르지 않는다.
 
 // PTY 크기 전달 지연 — 창 드래그가 멈춘 뒤 한 번만 SIGWINCH 를 보낸다
 const PTY_RESIZE_DEBOUNCE_MS = 120;
@@ -205,16 +195,17 @@ export const TerminalView = memo(function TerminalView({
     if (!host) return;
 
     let disposed = false;
-    const fontFamily = cssVar('--font-mono') || 'ui-monospace, Menlo, monospace';
-    // 마운트 시점에 번들 폰트가 와 있었는지 — 아래 아틀라스 재굽기 판정에 쓴다(선언 위치 주의:
-    // term 생성이 폰트를 '쓰기 시작'하는 지점이라 그 전에 재 둬야 한다).
-    const fontWasReady = monoFontLoaded(fontFamily, fontSizeRef.current);
+    const fontFamily = terminalFontStack();
+    // 마운트 시점에 번들 폰트가 와 있었는지 — 아니면 첫 후보를 뺀 스택으로 열고 로드 뒤 바꾼다
+    // (lib/terminalFont.ts 주석 — xterm 은 폰트 로드를 감지하지 않는다)
+    const fontWasReady = bundledFontLoaded(fontFamily, fontSizeRef.current);
     const term = new Terminal({
-      fontFamily,
+      fontFamily: openingStack(fontFamily, fontWasReady),
       fontSize: fontSizeRef.current, // 앱 본문(type-body)과 같은 13px 기본 + 툴바로 조절
       // ⚠️ xterm 의 lineHeight 는 **fontSize 가 아니라 폰트의 자연 줄높이에 곱해진다** —
       // 그 값이 폰트마다 달라서(13px 기준 실측: JetBrains Mono 17.5px = 1.346배,
       // Menlo 15px = 1.154배) 같은 lineHeight 라도 폰트를 바꾸면 행간이 통째로 달라진다.
+      // (지금 쓰는 Nordwand Mono 는 JetBrains 와 메트릭이 같다 — 1.325em vs 1.320em, 폭 0.6em)
       // TUI 가 블록 문자(█·▀)로 그리는 그림은 셀 종횡비가 그대로 픽셀 종횡비라 세로로 늘어나는데,
       // xterm 은 lineHeight < 1 을 거부하므로(최소 1) 이 폰트에서 가능한 가장 촘촘한 값이 1.0 이다
       // (셀 1:2.22 — 실측: 1.0→20px, 1.1→22px, 1.2→24px @ fontSize 15).
@@ -262,23 +253,18 @@ export const TerminalView = memo(function TerminalView({
     }
     fit.fit();
 
-    // ⚠️ 번들 폰트(JetBrains Mono NL)가 아직 로드되지 않은 채로 측정하면 xterm 은 **폴백 폰트
-    // 폭으로 셀 크기를 확정**하고 그대로 쓴다 — 글자와 커서·박스 드로잉이 어긋난다.
-    // `font-display: block`(_base.scss)이 폴백 렌더 자체를 막지만 측정 시점이 로드보다
-    // 앞설 수 있어, 로드 완료 후 한 번 다시 잰다. WebGL 렌더러는 글리프를 아틀라스에
-    // 캐시하므로 함께 버려야 옛 폰트로 구운 글리프가 남지 않는다.
-    //
-    // ⚠️ 단, 아틀라스 버리기는 **폰트가 아직 안 온 상태로 마운트됐을 때만** 한다 —
-    // 아틀라스는 pane 사이 공유물이라(`monoFontLoaded` 주석) 이미 폰트가 준비된 뒤에 생기는
-    // pane 이 부르면 **살아 있던 다른 pane 들의 화면을 통째로 깨뜨린다.** 탭을 처음 옮길 때
-    // 그 세션의 pane 이 새로 마운트되므로(livePanes), 예전엔 **탭 전환 한 번마다** 보고 있던
-    // claude 화면이 겹쳐 그려졌다(2026-08-12 사용자 신고 — 출력이 멈춘 선택지 화면에서 특히
-    // 눈에 띄었다). 늦게 생긴 pane 은 애초에 제 폰트로 셀을 쟀으므로 다시 구울 이유도 없다.
-    void document.fonts.ready.then(() => {
-      if (disposed) return;
-      if (!fontWasReady) term.clearTextureAtlas();
-      fit.fit();
-    });
+    // ⚠️ 번들 폰트(Nordwand Mono)가 오기 전에 열린 pane 은 폴백 폰트로 셀을 쟀다 — 로드되면
+    // 원래 스택을 넣어 **옵션 변경으로** 다시 재게 한다(`fit()` 만으로는 다시 재지 않는다).
+    // 옛 방식(fonts.ready → `clearTextureAtlas()` + fit)은 셀 크기를 못 고쳤고(2026-10-21 실측
+    // 15px 행), 공유 아틀라스를 지워 다른 pane 을 깨뜨릴 위험도 있었다(파일 머리 주석).
+    // 늦게 생긴 pane 은 애초에 제 폰트로 셀을 쟀으므로 아무것도 하지 않는다.
+    if (!fontWasReady) {
+      whenBundledFontLoaded(fontFamily, fontSizeRef.current, () => {
+        if (disposed) return;
+        term.options.fontFamily = fontFamily;
+        fit.fit();
+      });
+    }
 
     const resultSub = search.onDidChangeResults((e) =>
       setHits({ index: e.resultIndex, count: e.resultCount })
@@ -786,7 +772,7 @@ export const TerminalView = memo(function TerminalView({
     // 숨어 있는 동안 들어온 출력이 그리다 만 프레임으로 남아 있을 수 있어 전체를 다시 그린다.
     //
     // ⚠️ 여기서 `clearTextureAtlas()` 를 부르면 안 된다 — 아틀라스는 pane 사이 공유물이라
-    // 탭을 옮길 때마다 **나머지 pane 을 전부 깨뜨린다**(`monoFontLoaded` 주석). 2026-08-06 에
+    // 탭을 옮길 때마다 **나머지 pane 을 전부 깨뜨린다**(파일 머리 '텍스처 아틀라스' 주석). 2026-08-06 에
     // 이 자리에 넣었던 clear 는 증상의 해결이 아니라 **깨짐을 옆 pane 으로 옮기는 것**이었다.
     //
     // ⚠️ refresh 한 번으로는 부족할 수 있다 — `RenderService.refreshRows()` 는 동기화 출력

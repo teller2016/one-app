@@ -38,6 +38,42 @@
   font-display: block;
 }
 
+// ===== 터미널 폰트 — Nordwand Mono (xterm 전용, `--font-terminal`) =====
+// 글자 폭(0.6em)·자연 줄높이(1.325em)가 JetBrains Mono 와 사실상 같아 셀 크기·행 수가 그대로다.
+// ⚠️ 글리프가 307개뿐이다(박스·블록·화살표·`·`·`●`·`✓` 없음) — 그래서 앱 UI 의 `--font-mono` 는
+// 바꾸지 않고, 터미널 스택 둘째에 JetBrains Mono NL 을 둬 빠진 기호를 같은 폭으로 채운다.
+// 박스·블록 문자는 xterm 6 의 customGlyphs 가 폰트 대신 직접 그린다. `liga`(`->` `=>`)가 들어
+// 있어 DOM 렌더러(폰)에선 붙으므로 `.xterm` 에서 끈다(_terminal.scss 두 곳). 라이선스 OFL-1.1(`NordwandMono-OFL.txt`).
+// ⚠️ xterm 은 폰트 로드를 감지하지 않는다 — 여는 순서는 `features/terminal/lib/terminalFont.ts`.
+@font-face {
+  font-family: 'Nordwand Mono';
+  src: url('../assets/fonts/NordwandMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Nordwand Mono';
+  src: url('../assets/fonts/NordwandMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Nordwand Mono';
+  src: url('../assets/fonts/NordwandMono-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Nordwand Mono';
+  src: url('../assets/fonts/NordwandMono-BoldItalic.woff2') format('woff2');
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+
 :root {
   color-scheme: light; // 네이티브 컨트롤(체크박스·피커·스크롤바)도 라이트로
   // height: auto 를 transition 대상으로 만든다 — Collapsible 펼침이 콘텐츠 높이를
@@ -202,6 +238,8 @@
   --fs-code-lg: 26px; // 큰 코드 숫자 — 메일 인증코드(목업 MailAuthCode 26/600 · 자간 .12em)
   // 번들 폰트가 정본 — 뒤 후보는 폰트 로드 실패 시 폴백용 (위 @font-face 주석 참고)
   --font-mono: 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
+  // 터미널(xterm — 데스크톱·폰) 전용 — 빠진 기호는 둘째 후보 JetBrains 로 (위 Nordwand 주석 참고)
+  --font-terminal: 'Nordwand Mono', 'JetBrains Mono NL', ui-monospace, Menlo, monospace;
   // 디스플레이 = 본문과 같은 IBM Plex Sans KR (lib/fonts.ts 번들)
   --font-display: 'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
 

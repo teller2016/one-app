@@ -109,6 +109,7 @@ icon: { source: "Lucide path (ISC)", viewBox: 24, stroke: 1.7 }
 
 - **본문 = IBM Plex Sans KR** — `@fontsource/ibm-plex-sans-kr` 400/500/600/700 을 `src/renderer/lib/fonts.ts` 가 import(진입점 3곳: renderer · mobile-app · standalone/lite). 한글은 unicode-range 로 나뉘어 쓰는 글자 묶음만 로드된다. 오프라인에서도 같은 글꼴.
 - **모노 = JetBrains Mono NL** — 기존 번들 그대로(`assets/fonts`, `font-display: block` — xterm 셀 폭 때문).
+- **터미널(xterm) = Nordwand Mono**(`--font-terminal`, 2026-10-21) — 메트릭이 JetBrains 와 같아 셀 크기는 그대로, 빠진 기호는 JetBrains 로 채운다. 앱 UI 모노는 위 JetBrains 그대로.
 - **웨이트 래더 400/500/600/700** — 본문 400, UI 라벨·버튼 500, 제목·강조 600, 로고·큰 제목만 700.
 
 | 믹스인 | 스펙 | 용도 |

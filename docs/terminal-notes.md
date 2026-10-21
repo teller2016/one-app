@@ -182,7 +182,7 @@ Finder 파일을 pane 에 끌어다 놓으면 **경로를 셸 입력으로** 넣
 
 - 증상: 탭을 옮겼다 돌아오면 화면이 겹쳐 깨져 있고 **리사이즈나 재전환으로만 복구**된다(2026-08-12 사용자 신고). **claude 의 선택지 대기처럼 출력이 완전히 멈춘 화면에서만 눈에 띈다** — 스피너가 도는 동안엔 다음 프레임이 곧바로 덮어써서 안 보일 뿐, 깨짐 자체는 늘 일어나고 있었다.
 - 원인은 `TerminalView` 가 **pane 마다** `document.fonts.ready` 에서 아틀라스를 버리던 것이다. 탭을 처음 옮기면 그 세션의 pane 이 새로 마운트되므로(`livePanes`) **탭 전환 한 번마다** 보고 있던 화면이 깨졌고, 두 번째부터는 pane 이 재사용돼 멀쩡했다(사용자가 관찰한 "다시 전환하면 정상"의 정체).
-- 지금은 **마운트 시점에 번들 폰트가 아직 안 왔을 때만** 버린다(`monoFontLoaded` = `document.fonts.check` 로 스택 첫 후보만 판정). 폰트가 준비된 뒤 생기는 pane 은 애초에 제 폰트로 셀을 쟀으므로 다시 구울 이유가 없다.
+- 그 뒤 **마운트 시점에 번들 폰트가 아직 안 왔을 때만** 버리도록 줄였다가, 2026-10-21 터미널 폰트를 Nordwand Mono 로 바꾸며 **아예 부르지 않는다** — 폰트가 늦은 pane 은 첫 후보를 뺀 스택으로 열고 로드 뒤 `fontFamily` 옵션을 바꾼다(옵션이 바뀌면 렌더러가 그 글꼴의 아틀라스를 새로 받는다). 아래 '색·글꼴' 절.
 - ⚠️ **보이게 된 pane 에서 `clearTextureAtlas()` 를 부르지 말 것** — 2026-08-06 에 "숨어 있는 동안 아틀라스가 깨진다"며 넣었던 그 clear 는 해결이 아니라 **깨짐을 옆 pane 으로 옮기는 것**이었다(그 시절 증상의 진짜 원인도 위의 pane 별 clear 였다). 복구는 `term.refresh(0, rows-1)` 로 충분하다.
 - ⚠️ **`refresh()` 는 조용히 무시될 수 있다** — `RenderService.refreshRows()` 는 `synchronizedOutput`(DEC 2026 — tmux conf 의 `sync` feature 로 켜 둔 그것)이 켜져 있는 동안엔 렌더 대신 **범위만 버퍼링**하고 돌아간다(`_isPaused` 도 같은 자리에서 걸러낸다). 출력이 멈춘 화면에는 그 버퍼를 흘려보낼 다음 프레임이 없으므로, 복귀 시 refresh 는 **rAF 로 한 번 더** 건다.
 
@@ -289,7 +289,9 @@ TUI 구간은 attach 가 어차피 replay 를 버리니 링버퍼에 안 쌓으�
 - **xterm 은 `lineHeight < 1` 을 거부한다**(`_sanitizeAndValidateOption` 이 throw) — 이 폰트에서 가능한 최소가 1.0 이고 그때 셀이 **1:2.22** 다. 블록 문자 그림의 정사각 픽셀(1:2)은 이 폰트로는 도달할 수 없다(Menlo 는 1.0 에서 1:2.0).
 - 실측값(fontSize 15 기준): `1.0 → 9x20px(1:2.22)` · `1.1 → 9x22(1:2.44)` · `1.2 → 9x24(1:2.67)`.
 - 셀 크기를 잴 때는 `.xterm-screen` 의 `clientWidth/Height ÷ term.cols/rows` 를 쓴다(캔버스 렌더러라 DOM 행이 없다).
-- 폰트 로드 완료(`document.fonts.ready`) 후 `fit()` 을 한 번 더 돌린다 — 폴백 폰트 폭으로 셀을 재고 굳으면 커서·박스 드로잉이 어긋난다. ⚠️ 함께 돌리던 `clearTextureAtlas()` 는 **그 pane 이 폰트보다 먼저 마운트됐을 때만** 한다(위 '텍스처 아틀라스는 pane 사이 공유물' 절 — 무조건 부르면 살아 있는 다른 pane 을 깨뜨린다).
+- ⚠️ **xterm 6 은 웹폰트 로드를 감지하지 않는다**(2026-10-21 실측) — `CharSizeService` 가 `open()` 때 OffscreenCanvas `measureText('W')`(fontBoundingBox)로 한 번 재고 끝이고, `fit()` 은 그 값을 쓸 뿐 다시 재지 않는다. 다시 재는 건 `fontFamily`·`fontSize` 옵션이 **바뀔 때**뿐이다. 예전의 'fonts.ready → `clearTextureAtlas()` + `fit()`' 은 셀 크기를 고치지 못했다 — JetBrains 는 앱 UI 의 모노 글자가 먼저 불러 둬서 드러나지 않았을 뿐이다. Nordwand 로 바꾸자 앱 UI 에서 안 쓰는 폰트라 첫 pane 이 늘 폰트보다 먼저 열렸고, 13px 에서 행이 Menlo 줄높이 **15px(정상 17px) — 같은 pane 45행 → 51행**으로 굳었다.
+  - 그래서 `lib/terminalFont.ts`: `bundledFontLoaded`(첫 후보 `document.fonts.check`)가 false 면 첫 후보를 뺀 스택으로 열고(둘째가 같은 메트릭의 JetBrains 라 행이 거의 안 튄다), `document.fonts.load()` 뒤 원래 스택을 옵션에 넣어 다시 재게 한 다음 `fit()`. 공유 아틀라스를 지우지 않는다. 데스크톱·MO 가 같은 함수를 쓴다.
+  - ⚠️ dev 에서 stash·HMR 로 CSS 와 JS 가 따로 바뀌는 순간엔 `@font-face` 가 아직 없어 `check()` 가 **true**(일치하는 FontFace 가 없으면 '쓸 수 있음')로 나와 51행이 다시 생길 수 있다 — 새로고침하면 정상(실사용 경로는 CSS 가 먼저다).
 
 ### ⚠️ 에이전트 실행은 `TMUX` 를 지우고 띄운다 (트루컬러)
 **Claude Code 는 `TMUX` 환경변수가 있으면 트루컬러를 포기하고 256색 팔레트로 폴백한다**(2026-08-06 실측). 그래서 시작 로고가 브랜드 코랄(`#d77757`) 대신 팔레트 174번(`#d78787`)으로 나와 **분홍빛으로 보였다**.
