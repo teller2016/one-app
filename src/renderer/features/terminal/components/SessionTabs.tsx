@@ -62,6 +62,7 @@ export const SessionTabs = memo(function SessionTabs({
   onDragEndSession,
   onDetachSession,
   onDetachToWindow,
+  onSendToDock,
   onRevealCwd,
   onOpenEditorFor,
   onFocusWindow,
@@ -97,6 +98,8 @@ export const SessionTabs = memo(function SessionTabs({
   /** 별도 창으로 분리 — 좌표를 주면 그 자리에, 없으면 기억된 자리·크기로 뜬다.
    *  창 밖 드롭(dragend)은 좌표를 주고, 우클릭 메뉴는 생략한다(없으면 기능 꺼짐) */
   onDetachToWindow?: (id: string, x?: number, y?: number) => void;
+  /** 우클릭 메뉴 [독으로 보내기] — 독 오른쪽 터미널 패널에 띄운다(메인 창 일반 탭만, 없으면 숨김) */
+  onSendToDock?: (id: string) => void;
   /** 우클릭 메뉴 [Finder 에서 열기] — 세션 cwd 를 Finder 로 (없으면 항목 숨김) */
   onRevealCwd?: (id: string) => void;
   /** 우클릭 메뉴 [IDE 로 열기] — **그 세션이 속한 워크트리**를 IDE 로. 팝아웃처럼
@@ -471,6 +474,16 @@ export const SessionTabs = memo(function SessionTabs({
           onSelect={() => {
             setMenu(null);
             onDetachToWindow(menu.session.id); // 좌표 없음 = 기억된 자리·크기
+          }}
+        />
+      )}
+      {menu.kind !== 'detached' && !isPopout && onSendToDock && (
+        <ContextMenuItem
+          icon="panel-bottom"
+          label="독으로 보내기"
+          onSelect={() => {
+            setMenu(null);
+            onSendToDock(menu.session.id);
           }}
         />
       )}

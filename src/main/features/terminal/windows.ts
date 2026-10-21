@@ -15,7 +15,7 @@ import type {
   TerminalPopoutOpenInput,
   TerminalWindowInfo,
 } from '../../../shared/types';
-import { termWaitToastKey } from '../../../shared/types';
+import { TERMINAL_DOCK_ID, termWaitToastKey } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { getNotifyWindow } from '../notify/notify';
 import { IS_DEV_INSTANCE, runtimeFile } from '../../lib/devInstance';
@@ -27,13 +27,29 @@ import {
   pruneWindowStates,
   trackWindowState,
 } from '../../lib/windowState';
+import {
+  dockState,
+  ensureDockWindow,
+  hideDockPanel,
+  isDockShown,
+  registerDockPanelIpc,
+  showDockPanel,
+} from './dock';
 import { sessionLocationLabel } from './location';
-import { listSessions, onTerminalExit } from './pty';
+import { createSession, listSessions, onTerminalExit } from './pty';
 
 // 배정 영속 — 창 bounds 는 windowState(`popout:<id>` 키)가, 배정은 이 sidecar 가 맡는다.
 // 개발 인스턴스는 별도 파일(runtimeFile) — 창·세션(tmux 소켓)이 갈라져 있으므로 배정도 가른다.
 const FILE = runtimeFile('terminal-windows.json');
-type PersistedWindows = Record<string, { sessionIds: string[]; alwaysOnTop?: boolean }>;
+type PersistedWindows = Record<
+  string,
+  {
+    sessionIds: string[];
+    alwaysOnTop?: boolean;
+    /** 독 패널 항목만 — 전용 셸과 열림 여부(재시작 복원) */
+    dock?: { shellId?: string; open?: boolean };
+  }
+>;
 
 const POPOUT_DEFAULT = { width: 900, height: 600 };
 const POPOUT_MIN = { width: 480, height: 320 };
@@ -51,6 +67,13 @@ type PopoutEntry = {
   visibleIds: string[];
   /** 항상 위 — 한 화면에서 다른 앱을 쓰며 세션을 지켜보는 용도. 재시작 복원 대상 */
   alwaysOnTop: boolean;
+  /**
+   * 독 패널 항목(id `dock`)만 — 창은 dock.ts 가 만들고, 여기는 배정만 든다.
+   * 일반 팝아웃과 다른 점: ①닫기 = 숨기기(항목·배정이 남는다) ②전용 셸(shellId)이 늘 맨 앞에
+   * 있고 가져온 세션(손님)은 한 번에 하나 — 패널은 마지막을 보여 준다 ③비면 숨고, 다음에 열 때
+   * 셸을 새로 만든다(셸에서 `exit` = 독 닫기).
+   */
+  dock?: { shellId: string | null; open: boolean };
 };
 
 const popouts = new Map<string, PopoutEntry>();
@@ -70,12 +93,22 @@ const windowsRestored = new Promise<void>((r) => {
 function persist(): void {
   const out: PersistedWindows = {};
   for (const [id, entry] of popouts)
-    out[id] = { sessionIds: entry.sessionIds, alwaysOnTop: entry.alwaysOnTop || undefined };
+    out[id] = {
+      sessionIds: entry.sessionIds,
+      alwaysOnTop: (!entry.dock && entry.alwaysOnTop) || undefined,
+      dock: entry.dock
+        ? { shellId: entry.dock.shellId ?? undefined, open: entry.dock.open }
+        : undefined,
+    };
   writeUserJson(FILE, out);
 }
 
 function windowInfoList(): TerminalWindowInfo[] {
-  return [...popouts].map(([id, e]) => ({ id, sessionIds: [...e.sessionIds] }));
+  return [...popouts].map(([id, e]) => ({
+    id,
+    sessionIds: [...e.sessionIds],
+    dockShellId: e.dock?.shellId ?? undefined,
+  }));
 }
 
 function broadcastWindows(): void {
@@ -97,6 +130,10 @@ function removePopout(id: string): void {
 /** 빈 창 닫기 — close 핸들러(removePopout)가 레코드·windowState 를 정리한다.
  *  창이 이미 파괴됐으면(닫힘 이벤트 유실) 레코드만 직접 걷어낸다. */
 function closeEmptyWindow(id: string): void {
+  if (id === TERMINAL_DOCK_ID) {
+    hideDockPanel(); // 독은 숨기기만 — 항목은 남고, 다음에 열 때 셸을 새로 만든다
+    return;
+  }
   const entry = popouts.get(id);
   if (entry?.win && !entry.win.isDestroyed()) entry.win.close();
   else removePopout(id);
@@ -128,7 +165,7 @@ function detachFromAll(sessionIds: readonly string[]): {
 /** 창 타이틀 — "워크스페이스 · 워크트리" (등록 밖이면 폴더명). 포커스 세션 변경 시 갱신 */
 async function updateTitle(id: string): Promise<void> {
   const entry = popouts.get(id);
-  if (!entry?.win || entry.win.isDestroyed()) return;
+  if (!entry?.win || entry.win.isDestroyed() || entry.dock) return; // 독은 타이틀바가 없다
   const sid = entry.visibleIds[0] ?? entry.sessionIds[0];
   const s = sid ? listSessions().find((x) => x.id === sid) : undefined;
   const label = s ? ((await sessionLocationLabel(s.cwd)) ?? path.basename(s.cwd)) : '터미널';
@@ -224,6 +261,11 @@ function createPopoutWindow(id: string, at?: { x: number; y: number }): void {
 }
 
 function focusPopout(id: string): boolean {
+  if (id === TERMINAL_DOCK_ID) {
+    // 자리표시자 클릭·토스트 [이동] — 숨겨 둔 독도 다시 띄워 포커스한다(본창은 앞으로 오지 않는다)
+    openDock(true);
+    return true;
+  }
   const entry = popouts.get(id);
   if (!entry?.win || entry.win.isDestroyed()) return false;
   if (entry.win.isMinimized()) entry.win.restore();
@@ -276,14 +318,90 @@ function moveSession(sessionId: string, to: string): { ok: boolean; error?: stri
   return { ok: true };
 }
 
+// ── 독 패널 — 배정은 일반 팝아웃과 같은 popouts 맵(id `dock`), 창은 dock.ts ──
+
+/** 독 항목 — 없으면 만든다(배정만, 창은 아직) */
+function dockEntry(): PopoutEntry {
+  let entry = popouts.get(TERMINAL_DOCK_ID);
+  if (!entry) {
+    entry = {
+      win: null,
+      sessionIds: [],
+      visibleIds: [],
+      alwaysOnTop: true,
+      dock: { shellId: null, open: false },
+    };
+    popouts.set(TERMINAL_DOCK_ID, entry);
+  }
+  return entry;
+}
+
+/** 전용 셸 보장 — 죽었거나 없으면 새로 띄운다. 셸은 늘 맨 앞(패널은 마지막을 보여 준다) */
+function ensureDockShell(entry: PopoutEntry): void {
+  const dock = entry.dock;
+  if (!dock) return;
+  const alive = dock.shellId && listSessions().some((s) => s.id === dock.shellId);
+  if (!alive) dock.shellId = createSession({ title: '독' }).id;
+  const shellId = dock.shellId as string;
+  entry.sessionIds = [shellId, ...entry.sessionIds.filter((id) => id !== shellId)];
+}
+
+/** 독 창 보장 — 보임 여부가 곧 '열림'(재시작 복원 대상). ⌘W(숨기기)·토글 모두 show/hide 로 모인다 */
+function ensureDockWin(entry: PopoutEntry): void {
+  if (entry.win && !entry.win.isDestroyed()) return;
+  const win = ensureDockWindow(() => {
+    if (entry.win === win) entry.win = null;
+  });
+  entry.win = win;
+  const sync = () => {
+    if (quitting || !entry.dock || win.isDestroyed()) return;
+    entry.dock.open = win.isVisible();
+    persist();
+  };
+  win.on('show', sync);
+  win.on('hide', sync);
+}
+
+/** 독 열기 — focus 면 바로 입력(상태바 버튼·자리표시자), 아니면 포커스를 뺏지 않는다(앱 시작 복원) */
+function openDock(focus: boolean): void {
+  const entry = dockEntry();
+  ensureDockShell(entry);
+  ensureDockWin(entry);
+  persist();
+  broadcastWindows();
+  showDockPanel(focus);
+}
+
+/** 세션을 독으로 — 손님은 한 번에 하나라 먼저 와 있던 손님은 메인 창으로 돌려보낸다 */
+function sendToDock(sessionId: string): { ok: boolean; error?: string } {
+  if (!listSessions().some((s) => s.id === sessionId))
+    return { ok: false, error: '세션이 이미 종료됐습니다.' };
+  const entry = dockEntry();
+  const shellId = entry.dock?.shellId ?? null;
+  if (sessionId !== shellId) {
+    const prevGuests = entry.sessionIds.filter((id) => id !== shellId && id !== sessionId);
+    // 다른 팝아웃에 있던 세션이면 그 창에서도 걷는다 — 그 창이 비면 닫는다(독은 곧 다시 채운다)
+    const { emptied } = detachFromAll([sessionId, ...prevGuests]);
+    for (const id of emptied) if (id !== TERMINAL_DOCK_ID) closeEmptyWindow(id);
+    entry.sessionIds.push(sessionId);
+  }
+  openDock(true);
+  return { ok: true };
+}
+
 /** 팝아웃 창 IPC 등록 — registerTerminalIpc() 가 부른다 */
 export function registerTerminalWindowsIpc(): void {
   app.on('before-quit', () => {
     quitting = true;
   });
 
+  registerDockPanelIpc();
+
   // 세션이 죽으면 배정에서도 걷어낸다 — 마지막 세션이 죽은 창은 자동으로 닫힌다
   onTerminalExit((sessionId) => {
+    // 독 전용 셸이 죽었다(`exit`) — 다음에 열 때 새로 띄운다
+    const dock = popouts.get(TERMINAL_DOCK_ID)?.dock;
+    if (dock?.shellId === sessionId) dock.shellId = null;
     const { changed, emptied } = detachFromAll([sessionId]);
     for (const id of emptied) closeEmptyWindow(id);
     if (changed) {
@@ -392,6 +510,15 @@ export function registerTerminalWindowsIpc(): void {
     }
   );
 
+  // 독 패널 — 상태바 버튼(열기/숨기기)·탭 우클릭 [독으로 보내기]
+  ipcMain.handle('terminal:dock:toggle', (_e, open?: boolean) => {
+    const want = typeof open === 'boolean' ? open : !isDockShown();
+    if (want) openDock(true);
+    else hideDockPanel();
+    return dockState();
+  });
+  ipcMain.handle('terminal:dock:send', (_e, sessionId: string) => sendToDock(sessionId));
+
   // 팝아웃 렌더러의 화면 세션 보고 — 알림 게이트(isVisibleInPopout)·창 타이틀 갱신
   ipcMain.on(
     'terminal:windows:visible',
@@ -454,6 +581,18 @@ export async function initTerminalWindows(): Promise<void> {
   const alive = new Set(listSessions().map((s) => s.id));
   for (const [id, rec] of Object.entries(saved)) {
     const ids = (rec.sessionIds ?? []).filter((sid) => alive.has(sid));
+    // 독 항목은 비어도 남긴다 — 열려 있었으면 (필요하면 새 셸로) 접힌 채 다시 띄운다
+    if (id === TERMINAL_DOCK_ID) {
+      const shellId = rec.dock?.shellId && alive.has(rec.dock.shellId) ? rec.dock.shellId : null;
+      popouts.set(id, {
+        win: null,
+        sessionIds: ids,
+        visibleIds: [],
+        alwaysOnTop: true,
+        dock: { shellId, open: rec.dock?.open === true },
+      });
+      continue;
+    }
     if (ids.length === 0) {
       clearWindowState(`popout:${id}`);
       continue; // 세션이 전부 죽은 창은 되살리지 않는다
@@ -470,4 +609,7 @@ export async function initTerminalWindows(): Promise<void> {
   pruneWindowStates((key) => popouts.has(key.slice('popout:'.length)));
   if (popouts.size > 0) broadcastWindows();
   markWindowsRestored(); // 이제부터 list 응답 허용 — 렌더러의 win:* 청소 게이트가 풀린다
+  // 열려 있던 독은 복원이 다 끝난 뒤에 — 루프 도중 열면 openDock 의 persist 가 아직 안 읽은
+  // 팝아웃 레코드를 뺀 채 sidecar 를 덮어쓴다. 포커스는 뺏지 않는다(접힌 채)
+  if (popouts.get(TERMINAL_DOCK_ID)?.dock?.open) openDock(false);
 }

@@ -1496,6 +1496,25 @@ export type TerminalOverviewItem = {
 export type TerminalWindowInfo = {
   id: string; // popoutId — 창·windowState·레이아웃 selKey(`win:<id>`)의 축
   sessionIds: string[];
+  /** 독 패널(id `dock`)의 전용 셸 — 메인 창은 이 세션을 자리표시자로도 그리지 않는다.
+   *  패널은 sessionIds 의 **마지막**(가져온 세션이 있으면 그것)을 보여 준다 */
+  dockShellId?: string;
+};
+
+/** 독 패널 창 id — 세션 배정(windows.ts)에서 팝아웃과 같은 자리를 쓴다 */
+export const TERMINAL_DOCK_ID = 'dock';
+
+/** 독 패널(독 오른쪽 터미널) 창 상태 — main `terminal/dock.ts` 가 `terminal:dock` 으로 방송한다 */
+export type TerminalDockState = {
+  /** 패널이 화면에 떠 있다 (상태바 버튼 켜짐) */
+  open: boolean;
+  /** 위로 펼친 상태 — 패널이 포커스를 가진 동안 */
+  expanded: boolean;
+  /** 독 자리 맞추기 — auto: 접근성 권한으로 독 끝을 실측 · manual: 왼쪽 손잡이로 정한 경계 ·
+   *  floating: 독이 아래에 없다(자동 숨김·좌우 배치) — 화면 오른쪽 아래에 뜬다 */
+  fit: 'auto' | 'manual' | 'floating';
+  /** 접근성 권한 — null 은 아직 모름(패널을 띄운 적 없음) */
+  axTrusted: boolean | null;
 };
 
 /** 창 간 드래그 중계 — `terminal:dragState` 브로드캐스트. null = 드래그 없음 */

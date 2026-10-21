@@ -1,6 +1,8 @@
 export { TerminalSection } from './components/TerminalSection';
 // 상태바 MO 항목 — 앱 셸(App.tsx)만 쓴다 (MO 접속 모달의 유일한 진입점)
 export { MoStatusItem } from './components/MoStatusItem';
+// 상태바 독 터미널 항목 — 앱 셸(App.tsx)만 쓴다 (독 오른쪽 터미널 패널 열기/숨기기)
+export { DockStatusItem } from './components/DockStatusItem';
 // ⌘⇧P Claude 세션 빠른 전환 팝업 — 앱 셸(App.tsx)만 쓴다
 export { SessionSwitcher } from './components/SessionSwitcher';
 // 입력 대기 알림 카드(질문·권한에 바로 답하기) — 앱 셸의 토스트 브리지만 쓴다

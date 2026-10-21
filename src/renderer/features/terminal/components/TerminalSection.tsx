@@ -131,7 +131,8 @@ function savedSelection(): WorkspaceSelection | null {
 export function TerminalSection({ active = true }: { active?: boolean }) {
   const toast = useToast();
   const dismissToast = useToastDismiss();
-  const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
+  // 살아 있는 세션 전부 — 화면에 쓰는 목록은 독 전용 셸을 뺀 `sessions`(아래 배정 미러 뒤에서 만든다)
+  const [allSessions, setSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const [workspaces, setWorkspaces] = useState<TerminalWorkspace[]>([]);
@@ -178,8 +179,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   const [sessionsReady, setSessionsReady] = useState(false);
   // 종료된 세션의 보기(채팅/터미널) 기록을 걷는다 — 목록이 처음 도착한 뒤부터(빈 초기값으로 다 지우지 않게)
   useEffect(() => {
-    if (sessionsReady) pruneChatViews(sessions.map((x) => x.id));
-  }, [sessions, sessionsReady]);
+    if (sessionsReady) pruneChatViews(allSessions.map((x) => x.id));
+  }, [allSessions, sessionsReady]);
   useEffect(() => {
     const api = window.oneApp?.workspaces;
     if (!api) return;
@@ -265,6 +266,16 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     if (!windowsReady) return;
     pruneWindowScreenState(termWindows.map((w) => w.id));
   }, [windowsReady, termWindows]);
+  /** 독 패널 전용 셸 — 독이 유일한 자리라 메인 창은 자리표시자로도 그리지 않는다
+   *  (독으로 '보낸' 세션은 일반 분리 세션처럼 자리표시자로 남는다) */
+  const dockShellId = useMemo(
+    () => termWindows.find((w) => w.dockShellId)?.dockShellId,
+    [termWindows]
+  );
+  const sessions = useMemo(
+    () => (dockShellId ? allSessions.filter((s) => s.id !== dockShellId) : allSessions),
+    [allSessions, dockShellId]
+  );
   /** 분리 세션 id → 팝아웃 창 id */
   const detachedIds = useMemo(() => {
     const m = new Map<string, string>();
@@ -820,6 +831,18 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     },
     [peekGroup]
   );
+  /** 독으로 보내기 — 독 패널이 열리며 이 세션을 보여 준다(먼저 와 있던 세션은 메인으로 돌아온다).
+   *  이 화면의 트리·배정 정리는 배정 브로드캐스트 뒤 sanitize 가 한다(분리와 같다) */
+  const sendToDock = useCallback(
+    (id: string) => {
+      void terminalApi()
+        ?.dock?.send(id)
+        .then((res) => {
+          if (res && !res.ok) toast(res.error || '독으로 보내지 못했습니다.', 'fail');
+        });
+    },
+    [toast]
+  );
 
   // 입력대기 토스트 억제 — "그 세션을 지금 보고 있는가"를 App 의 토스트 브리지에 제공.
   // 최신값은 activeIdRef 와 같은 render 시점 대입 패턴 (콜백 identity 는 고정).
@@ -1234,6 +1257,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
+          onSendToDock={sendToDock}
           onRevealCwd={revealSessionCwd}
           onOpenEditorFor={openEditorFor}
           onFocusWindow={focusWindow}

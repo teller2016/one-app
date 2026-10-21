@@ -28,6 +28,7 @@ import type {
   ChangesDiffScope,
   ChangesMode,
   TerminalCreateInput,
+  TerminalDockState,
   TerminalDragState,
   TerminalNotifyLevel,
   TerminalPopoutOpenInput,
@@ -588,6 +589,26 @@ contextBridge.exposeInMainWorld("oneApp", {
         const listener = (_e: unknown, state: TerminalDragState) => cb(state);
         ipcRenderer.on("terminal:dragState", listener);
         return () => ipcRenderer.removeListener("terminal:dragState", listener);
+      },
+    },
+    // 독 패널 — 독 오른쪽 빈자리에 붙는 작은 터미널 창 (main features/terminal/dock.ts)
+    dock: {
+      state: () => ipcRenderer.invoke("terminal:dock:state"),
+      // 열기/숨기기 — open 생략 = 토글. 열면 펼쳐서 바로 입력할 수 있다
+      toggle: (open?: boolean) => ipcRenderer.invoke("terminal:dock:toggle", open),
+      // 탭 우클릭 [독으로 보내기] — 먼저 와 있던 세션은 메인 창으로 돌아간다
+      send: (sessionId: string) => ipcRenderer.invoke("terminal:dock:send", sessionId),
+      // 수동 경계 — 패널 왼쪽 손잡이를 끈 화면 x 좌표 (fire-and-forget). commit 은 놓을 때만 — 그때 저장한다
+      setLeft: (screenX: number, commit: boolean) =>
+        ipcRenderer.send("terminal:dock:set-left", { screenX, commit }),
+      // 펼치기/접기 — 패널 안 ⌘↑/⌘↓ (fire-and-forget). 포커스를 잃으면 main 이 알아서 접는다
+      expand: (on: boolean) => ipcRenderer.send("terminal:dock:expand", on),
+      // 독 너비 자동 맞춤 — 시스템 접근성 권한 요청 창을 띄운다
+      requestAuto: () => ipcRenderer.invoke("terminal:dock:request-auto"),
+      onState: (cb: (state: TerminalDockState) => void) => {
+        const listener = (_e: unknown, state: TerminalDockState) => cb(state);
+        ipcRenderer.on("terminal:dock", listener);
+        return () => ipcRenderer.removeListener("terminal:dock", listener);
       },
     },
     // 세션 위치 라벨 ("워크스페이스 · 워크트리") — 팝아웃 헤더 표시용

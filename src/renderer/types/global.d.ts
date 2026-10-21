@@ -107,6 +107,7 @@ import type {
   TerminalServerStatus,
   TerminalAgentInfo,
   TerminalNotifyLevel,
+  TerminalDockState,
   TerminalDragState,
   TerminalPopoutOpenInput,
   TerminalWindowInfo,
@@ -457,6 +458,16 @@ declare global {
           reportVisible: (windowId: string, ids: string[]) => void;
           drag: (state: TerminalDragState) => void;
           onDragState: (cb: (state: TerminalDragState) => void) => () => void;
+        };
+        // 독 패널 — 독 오른쪽 터미널 창. ?. 옵셔널 — 구 preload(재시작 전)·폰 셸에는 없다
+        dock?: {
+          state: () => Promise<TerminalDockState>;
+          toggle: (open?: boolean) => Promise<TerminalDockState>;
+          send: (sessionId: string) => Promise<{ ok: boolean; error?: string }>;
+          setLeft: (screenX: number, commit: boolean) => void;
+          expand: (on: boolean) => void;
+          requestAuto: () => Promise<{ trusted: boolean }>;
+          onState: (cb: (state: TerminalDockState) => void) => () => void;
         };
         locationLabel?: (sessionId: string) => Promise<string | null>;
         // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비

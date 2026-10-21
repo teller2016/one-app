@@ -18,6 +18,7 @@ import { PrSection } from "../features/prs";
 import { ScheduleSection } from "../features/schedule";
 import { SettingsSection } from "../features/settings";
 import {
+  DockStatusItem,
   MoStatusItem,
   SessionSwitcher,
   TerminalSection,
@@ -586,9 +587,15 @@ export function App() {
               </>
             }
             right={
-              <ErrorBoundary label="근태" compact>
-                <AttendanceWidget />
-              </ErrorBoundary>
+              <>
+                {/* 독 터미널 — 패널이 화면 오른쪽 아래(독 옆)에 뜨므로 오른쪽 묶음에 둔다 */}
+                <ErrorBoundary label="독 터미널" compact>
+                  <DockStatusItem />
+                </ErrorBoundary>
+                <ErrorBoundary label="근태" compact>
+                  <AttendanceWidget />
+                </ErrorBoundary>
+              </>
             }
           />
         </div>

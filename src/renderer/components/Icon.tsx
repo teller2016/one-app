@@ -82,7 +82,8 @@ export type IconName =
   | "message-square"
   | "keyboard-off"
   | "clipboard"
-  | "type";
+  | "type"
+  | "panel-bottom";
 
 const PATHS: Record<IconName, ReactNode> = {
   calendar: (
@@ -312,6 +313,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <polyline points="9 14 4 9 9 4" />
       <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+    </>
+  ),
+  "panel-bottom": (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M3 15h18" />
     </>
   ),
   "app-window": (

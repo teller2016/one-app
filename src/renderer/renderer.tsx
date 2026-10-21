@@ -34,8 +34,14 @@ if (container) {
   // 팝아웃 창 — main(features/terminal/windows.ts)이 같은 엔트리를 `?popout=<id>` 로
   // 로드한다(새 Vite 엔트리 금지 — cacheDir 분리 함정). 마운트 전에 배정(init)을
   // 받아야 해서 비동기 마운트 함수를 쓴다.
-  const popoutId = new URLSearchParams(location.search).get('popout');
-  if (popoutId) {
+  const params = new URLSearchParams(location.search);
+  const popoutId = params.get('popout');
+  if (params.get('dock') === '1') {
+    // 독 패널 — 독 오른쪽 빈자리의 작은 터미널(main features/terminal/dock.ts). 같은 엔트리 재사용
+    void import('./features/terminal/components/DockTerminalApp').then((m) =>
+      m.mountDockTerminal(container)
+    );
+  } else if (popoutId) {
     void import('./features/terminal/components/TerminalPopoutApp').then((m) =>
       m.mountTerminalPopout(container, popoutId)
     );

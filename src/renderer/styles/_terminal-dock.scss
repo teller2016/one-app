@@ -1,0 +1,82 @@
+@use './base' as *;
+
+// ===== 독 패널 (features/terminal/components/DockTerminalApp.tsx) =====
+// macOS 독 오른쪽 빈자리에 붙는 작은 터미널 창. 창은 투명이고(main terminal/dock.ts — OS 그림자 없음)
+// 둥근 다크 패널과 테두리를 여기서 그린다. 접힘 = 독 높이(아이콘 27 기준 41px)에 터미널만,
+// 펼침 = 머리줄 + 터미널.
+.dock-term {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  @include panel-dark;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+
+  // 수동 경계 손잡이 — 왼쪽 가장자리. 독 너비를 실측하지 못할 때(접근성 권한 없음)만 그린다
+  &__grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    width: 6px;
+    cursor: ew-resize;
+    transition: background var(--dur-1) var(--ease);
+
+    &:hover,
+    &:active {
+      background: var(--border-dark);
+    }
+  }
+
+  &__head {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    height: var(--control-h-sm);
+    padding: 0 6px 0 12px;
+    border-bottom: 1px solid var(--border-dark);
+    @include type-small;
+    font-size: var(--fs-ui-sm);
+    color: var(--text-3);
+  }
+
+  &__title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta {
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+
+  &__space {
+    flex: 1;
+  }
+
+  &__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  // 터미널 면은 패널이 칠한다 — host 의 다크 면과 겹치지 않게 비운다
+  .terminal__host {
+    background: transparent;
+  }
+
+  // ⚠️ 여백은 host 가 아니라 `.xterm` 이 갖는다(FitAddon 계산 — _terminal.scss `__host` 주석).
+  // 메인 pane 의 위아래 14 는 독 높이(41)에 한 줄만 남겨서 줄인다
+  .terminal__host .xterm {
+    padding: 4px 8px 4px 12px;
+  }
+}

@@ -76,6 +76,7 @@ paths:
 - **탭 우클릭 `ContextMenu`** 가 주 진입점. `onDetachToWindow(id, x?, y?)` 좌표 생략 = 기억된 자리 + 히트테스트 생략. ⚠️ 탭 더블클릭 이름 편집 되살리지 말 것.
 - 알림 게이트 `isVisibleInPopout` = **창 포커스 여부**, `sendToast` 에만(⚠️ `notifyToast` 알럿은 통과). ⚠️ 토스트 회수는 팝아웃 `focus` 에도 재보고, main 은 **매번** `app:toast:dismiss`.
 - 메인 창 판정은 `getNotifyWindow()`(`getAllWindows()[0]` 금지), `setNotifyWindow` 는 메인 전용.
+- **독 패널**(id `dock`)도 이 맵의 항목이다 — 닫기 = 숨기기(항목 유지)·전용 셸은 메인에서 숨김. 규칙은 `features/terminal-dock.md`.
 
 ## 분할(스플릿) 그룹
 - ⚠️ 트리 규칙('한 세션 = pane 하나', 무변화 시 **원본 참조 반환**)은 `lib/layout.test.ts` 가 고정 — `npm test`.

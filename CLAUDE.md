@@ -44,8 +44,8 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 
 **기능 목록**
 - **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 포트 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
-- **상태바 위젯**(창 하단 — `components/StatusBar`): VPN · 메일 · 폰 미러링 · MO(모바일 접속) · 출퇴근(오른쪽 — 야근 결재 모달 진입점 포함)
-- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용) · 메일 리더·MO 접속 모달(상태바 항목) · ⌘P 명령 팔레트 · ⌘⇧P Claude 세션 전환(어느 섹션에서든)
+- **상태바 위젯**(창 하단 — `components/StatusBar`): VPN · 메일 · 폰 미러링 · MO(모바일 접속) · 독 터미널 · 출퇴근(오른쪽 — 야근 결재 모달 진입점 포함)
+- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용) · 메일 리더·MO 접속 모달(상태바 항목) · ⌘P 명령 팔레트 · ⌘⇧P Claude 세션 전환(어느 섹션에서든) · 독 패널(독 오른쪽 빈자리의 작은 터미널 창 — 상태바 항목)
 - **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리)
 
 ## ⚠️ 반드시 지킬 것
@@ -98,6 +98,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `groupware-session.md` | 그룹웨어 계열 main 기능 | 공용 세션·`gotoWithSession`·쿠키 함정 |
 | `build-packaging.md` | `forge.config.ts` · `vite.*.config.ts` | external 의존성·node-pty 패키징·cacheDir |
 | `features/terminal.md` | terminal · `src/mobile-app/terminal/**` | tmux 백엔드·attach 프로토콜·xterm 6 함정·MO 접속 |
+| `features/terminal-dock.md` | terminal `dock.ts` · `Dock*.tsx` | 독 패널 — panel 창 배치(`enableLargerThanScreen`)·AX 독 너비 실측·전용 셸 배정 |
 | `features/mo-app.md` | `src/mobile-app/**` · moIpc · rpc | RPC shim·broadcast fan-out·폰 셸 |
 | `features/approval.md` | approval | 결재 3종(야근·휴가·지출결의서)·BrowserWindow 자동화 함정 |
 | `features/schedule.md` | schedule | 하루 일정 등록·노션 기록 |
