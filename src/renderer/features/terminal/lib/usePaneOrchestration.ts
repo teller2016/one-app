@@ -102,6 +102,10 @@ export function usePaneOrchestration({
     if (activeIdRef.current)
       paneHandles.current.get(activeIdRef.current)?.scrollToBottom();
   }, [activeIdRef]);
+  // 포커스 pane 으로 키보드 포커스 — 아래 안전망과 툴바 팝오버(Esc 로 닫힘)가 쓴다
+  const focusActivePane = useCallback(() => {
+    if (activeIdRef.current) paneHandles.current.get(activeIdRef.current)?.focus();
+  }, [activeIdRef]);
 
   // ── 포커스 안전망 — 섹션 안을 클릭했으면 키보드 포커스를 pane 으로 되돌린다 ────────
   // ⌘C/⌘V 는 이 앱이 처리하지 않는다 — Electron 기본 메뉴의 role:copy/paste 라
@@ -130,11 +134,10 @@ export function usePaneOrchestration({
         // 이 판정에 걸리는데, 그때는 이미 포커스가 터미널이므로 할 일이 없다.
         if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA') return;
         if (el?.isContentEditable) return;
-        if (activeIdRef.current)
-          paneHandles.current.get(activeIdRef.current)?.focus();
+        focusActivePane();
       });
     },
-    [activeIdRef, rootRef]
+    [focusActivePane, rootRef]
   );
 
   // 스크롤백을 위로 올린 pane — 상단 바 [맨 아래로] 노출 판정.
@@ -152,6 +155,7 @@ export function usePaneOrchestration({
     registerPaneHandle,
     openActiveSearch,
     scrollActiveToBottom,
+    focusActivePane,
     reclaimFocus,
     scrolledUp,
     onScrolledChange,

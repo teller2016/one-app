@@ -54,7 +54,7 @@ import { NewWorkspaceModal } from './NewWorkspaceModal';
 import { NewWorktreeModal } from './NewWorktreeModal';
 import { SessionTabs } from './SessionTabs';
 import { TerminalPanes } from './TerminalPanes';
-import { FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN } from './TerminalView';
+import { FontSizeControl } from './FontSizeControl';
 import { usePaneOrchestration } from '../lib/usePaneOrchestration';
 import { useTerminalShortcuts } from '../lib/useTerminalShortcuts';
 import { pruneChatViews } from '../lib/chatViews';
@@ -776,6 +776,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     registerPaneHandle,
     openActiveSearch,
     scrollActiveToBottom,
+    focusActivePane,
     reclaimFocus,
     scrolledUp,
     onScrolledChange,
@@ -943,40 +944,11 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
               </button>
             </Tooltip>
             <span className="terminal__bar-sep" aria-hidden="true" />
-            <Tooltip label="글자 작게">
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="글자 작게"
-                disabled={fontSize <= FONT_SIZE_MIN}
-                onClick={() => changeFontSize(Math.max(FONT_SIZE_MIN, fontSize - 1))}
-              >
-                <Icon name="minus" size={14} />
-              </button>
-            </Tooltip>
-            <Tooltip
-              label={`글자 크기 ${fontSize}px — 눌러서 기본(${FONT_SIZE_DEFAULT}px)으로`}
-            >
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label={`글자 크기 ${fontSize}px — 기본으로 되돌리기`}
-                onClick={() => changeFontSize(FONT_SIZE_DEFAULT)}
-              >
-                <span className="terminal__bar-size">{fontSize}</span>
-              </button>
-            </Tooltip>
-            <Tooltip label="글자 크게">
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="글자 크게"
-                disabled={fontSize >= FONT_SIZE_MAX}
-                onClick={() => changeFontSize(Math.min(FONT_SIZE_MAX, fontSize + 1))}
-              >
-                <Icon name="plus" size={14} />
-              </button>
-            </Tooltip>
+            <FontSizeControl
+              fontSize={fontSize}
+              onChange={changeFontSize}
+              onEscape={focusActivePane}
+            />
             {activeScrolledUp && (
               <Tooltip label="맨 아래로">
                 <button
@@ -1002,6 +974,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       openActiveSearch,
       fontSize,
       changeFontSize,
+      focusActivePane,
       activeScrolledUp,
       scrollActiveToBottom,
     ]

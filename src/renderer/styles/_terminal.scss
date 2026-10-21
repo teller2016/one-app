@@ -1527,6 +1527,29 @@
     font-variant-numeric: tabular-nums;
   }
 
+  // 글자 크기 팝오버가 열린 동안 트리거를 hover 상태로 붙잡아 둔다 (FontSizeControl)
+  &__size-btn--on {
+    color: var(--text);
+    background: var(--surface-2);
+  }
+
+  // 글자 크기 팝오버 — [− 값 +] 한 줄. 틀은 공용 .picker__pop
+  &__size-pop {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  &__size-val {
+    min-width: 44px;
+    text-align: center;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
   // 검색바 — 터미널 위에 **떠 있는** 오버레이.
   // ⚠️ 세로 스택에 한 줄로 끼우면 host 높이가 줄어 PTY 행이 바뀌고(62→60 실측),
   // 검색을 열고 닫을 때마다 claude 같은 TUI 가 전체 리플로우한다(SIGWINCH 주의 — terminal.md).
