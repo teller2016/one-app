@@ -95,7 +95,7 @@ const SECTIONS: AppSection[] = [
     id: "prs",
     group: "개발",
     label: "PR",
-    icon: <Icon name="git-pull-request" size={16} />,
+    icon: <Icon name="git-pull-request-arrow" size={16} />,
     render: () => <PrSection />,
   },
   {

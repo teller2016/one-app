@@ -33,7 +33,7 @@ export type IconName =
   | "equal"
   | "arrow-up-right"
   | "arrow-right"
-  | "git-pull-request"
+  | "git-pull-request-arrow"
   | "layout-grid"
   | "link"
   | "clipboard-list"
@@ -328,12 +328,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 18h.01" />
     </>
   ),
-  "git-pull-request": (
+  // 화살촉 있는 PR(Gitea·GitHub 웹의 PR 아이콘과 같은 모양) — 화살촉 없는 git-pull-request 는 git-branch 와 헷갈렸다
+  "git-pull-request-arrow": (
     <>
-      <circle cx="18" cy="18" r="3" />
-      <circle cx="6" cy="6" r="3" />
-      <path d="M13 6h3a2 2 0 0 1 2 2v7" />
-      <path d="M6 9v12" />
+      <circle cx="5" cy="6" r="3" />
+      <path d="M5 9v12" />
+      <circle cx="19" cy="18" r="3" />
+      <path d="m15 9-3-3 3-3" />
+      <path d="M12 6h5a2 2 0 0 1 2 2v7" />
     </>
   ),
   "layout-grid": (

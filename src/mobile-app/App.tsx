@@ -28,7 +28,7 @@ const TABS: { id: TabId; label: string; icon: IconName }[] = [
   { id: 'terminal', label: '터미널', icon: 'terminal' },
   { id: 'changes', label: '변경', icon: 'git-branch' },
   { id: 'jira', label: 'Jira', icon: 'clipboard-list' },
-  { id: 'prs', label: 'PR', icon: 'git-pull-request' },
+  { id: 'prs', label: 'PR', icon: 'git-pull-request-arrow' },
   { id: 'more', label: '더보기', icon: 'layout-grid' },
 ];
 

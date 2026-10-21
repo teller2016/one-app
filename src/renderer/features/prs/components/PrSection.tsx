@@ -421,7 +421,7 @@ export function PrSection() {
           ) : repoTabs.length === 0 ? (
             <div className="prs__notice">
               <EmptyState
-                icon="git-pull-request"
+                icon="git-pull-request-arrow"
                 message="저장소가 없습니다."
                 hint="프로젝트 탭에서 Gitea 원격이 있는 프로젝트를 등록하면 저장소 탭이 생깁니다."
               />
@@ -463,7 +463,7 @@ export function PrSection() {
               ) : (
                 <div className="prs__detail prs__detail--empty">
                   <EmptyState
-                    icon="git-pull-request"
+                    icon="git-pull-request-arrow"
                     message="PR 을 선택하세요"
                     hint="왼쪽 목록에서 고르면 커밋·변경 파일·충돌 여부와 머지 버튼이 여기 표시됩니다."
                   />
