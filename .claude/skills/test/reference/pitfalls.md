@@ -15,13 +15,14 @@
 - ⚠️ **창을 프로그램으로 앞으로 가져오는 건 믿을 수 없다**(2026-10-21 실측):
   - `page.bringToFront()` 는 OS 가려짐을 못 푼다.
   - `tell application "Electron"` 은 이름이 같은 다른 앱(사용자 IDE)을 잡는다.
-  - 이 셸이 launchd Background 세션이면(`launchctl managername` → `Background`) 여기서 띄운 dev 는 **System Events 에 안 보인다**.
   - main 에서 `app.focus({ steal: true })` 를 불러도 macOS 가 포커스 뺏기를 막는다(`hasFocus` false 그대로).
   → `hidden` 이면 사용자에게 "dev 창을 잠깐 앞으로" 부탁하거나, IPC·수치·`realShot` 으로 판정하고 보고에 "가려져 못 본 것" 을 적는다.
-- **화면이 꼭 보여야 하는 검증**(xterm 렌더·색·애니메이션)인데 셸이 Background 세션이면, dev 를 사용자 GUI 세션에서 띄운다
-  (2026-10-21 다른 세션 실측 — Bash 로 띄운 dev 는 `document.hidden=true` 로 xterm 이 안 그려졌고, 아래로 띄우니 `visible`):
-  `osascript -e 'tell application "Terminal" to do script "cd /Users/sbjung/coding/one-app && npm start -- -- --remote-debugging-port=9333 2>&1 | tee <스크래치>/dev.log"'`
-  사용자 화면에 Terminal 창이 뜨고, 끝난 뒤 그 창 `close` 는 확인 시트에 막힐 수 있다 — 내리는 건 `dev.sh down` 으로 똑같다.
+- **셸이 launchd Background 세션이면**(`launchctl managername` → `Background`, 설치본 터미널의 tmux) Bash 로 직접 띄운 dev 는
+  창이 안 보인다 — `document.hidden=true`·dpr 1·System Events 목록에도 없음, xterm 이 안 그려진다(2026-10-21 실측).
+  → `dev.sh up` 이 `launchctl bootstrap gui/<uid>` 로 **GUI(Aqua) 세션의 LaunchAgent** 로 띄워 해결한다(창 없이 — 예전엔 Terminal.app 에
+  `do script` 로 띄워 사용자 화면에 터미널 창이 떴다). System Events `do shell script` 는 **안 된다** — osascript 자신의 세션(Background)에서 돈다.
+- launchd 로 띄운 dev 는 macOS 권한(TCC)을 **`node_modules` 의 Electron 기준**으로 본다(Terminal.app 으로 띄우면 Terminal 기준이었다) —
+  dev 에서 독 패널을 처음 테스트할 때 접근성 허용을 한 번 더 요구할 수 있다(`dock.ts` 의 `isTrustedAccessibilityClient`).
 
 ## 클릭
 - `evaluate(() => el.click())` 은 **click 이벤트만** 보낸다. onMouseDown·pointerdown 기반(Select 옵션·외부클릭 닫힘·TimePicker)은

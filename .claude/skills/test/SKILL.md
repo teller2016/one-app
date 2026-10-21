@@ -67,6 +67,8 @@ git status --short; .claude/skills/test/dev.sh status
 .claude/skills/test/dev.sh wait                         # 포트 + 메인 창 페이지까지. 옛 고아가 포트를 쥐면 실패로 알려준다
 .claude/skills/test/dev.sh down                         # 포트가 빌 때까지 TERM→KILL + 설치본 생존 확인
 ```
+- `up` 은 dev 를 **사용자 GUI 세션의 LaunchAgent** 로 띄운다 — 이 셸이 설치본 터미널(launchd Background 세션)이어도 창이 보이고,
+  Terminal.app 창이 뜨지 않는다. **`npm start` 를 Bash 로 직접 부르지 말 것**(Background 세션이면 `document.hidden` 으로 xterm 이 안 그려진다).
 - `up` 은 이미 떠 있으면 거부한다. 손으로 `pkill` 하지 않는다 — 첫 TERM 에 Electron 이 안 죽는 게 **거의 매번**이었고,
   `electron-forge start` 패턴은 단독판 lite 까지 죽인다(`dev.sh` 는 작업 폴더로 걸러낸다).
 - 내가 띄운 dev 를 내리면 백그라운드 작업 종료 알림이 온다 — 내가 내린 것이니 진단하지 않는다.
