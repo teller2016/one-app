@@ -1,5 +1,8 @@
-import type { PrItem } from '../../../../shared/types';
+import type { JiraIssueStatus, PrItem } from '../../../../shared/types';
+import { Badge } from '../../../components/Badge';
 import { Icon } from '../../../components/Icon';
+import { statusBadgeVariant } from '../../jira';
+import { primaryIssueKey } from '../lib/prIssueKeys';
 import { rel } from '../lib/relTime';
 
 const keyOf = (pr: PrItem) => `${pr.repo}#${pr.number}`;
@@ -13,12 +16,15 @@ export function PrList({
   selectedKey,
   onSelect,
   defaultBranchOf,
+  issueStatuses,
 }: {
   items: PrItem[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
   /** 저장소의 프로젝트 기본 브랜치 — 그 외 브랜치로 가는 PR 강조용 */
   defaultBranchOf: (repo: string) => string | undefined;
+  /** 티켓 키 → Jira 상태 — 대표 키(브랜치 우선 → 제목)의 상태를 행 윗줄에 뱃지로 */
+  issueStatuses: Record<string, JiraIssueStatus>;
 }) {
   return (
     <div className="prs__list">
@@ -26,6 +32,9 @@ export function PrList({
         const key = keyOf(pr);
         const projectDefault = defaultBranchOf(pr.repo);
         const off = !!pr.base && !!projectDefault && pr.base !== projectDefault;
+        // 브랜치 우선 → 제목의 대표 키 하나 — 머지 후 해결 제안도 같은 키다(나머지는 상세 패널에)
+        const issueKey = primaryIssueKey(pr, issueStatuses);
+        const issue = issueKey ? issueStatuses[issueKey] : undefined;
         return (
           <button
             type="button"
@@ -41,6 +50,19 @@ export function PrList({
               {pr.createdAt ? (
                 <span className="prs__item-when">{rel(pr.createdAt)}</span>
               ) : null}
+              {/* 티켓 상태(2026-10-21 사용자 요청) — '해결됨'·'운영배포대기' 처럼 PR 바깥의 진척을
+                  목록에서 훑는다. 상태를 모르면(Jira 미설정·없는 키) 자리도 비운다 */}
+              {issue && (
+                <span className="prs__item-issue">
+                  <Badge
+                    variant={statusBadgeVariant(issue)}
+                    dot={false}
+                    title={`${issueKey} — Jira 상태: ${issue.status}`}
+                  >
+                    {issue.status}
+                  </Badge>
+                </span>
+              )}
             </span>
             <span className="prs__item-title" title={pr.title}>
               {pr.title}

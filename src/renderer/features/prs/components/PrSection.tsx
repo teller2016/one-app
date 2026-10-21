@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  JiraIssueStatus,
   PrItem,
   PrListResult,
   PrsConfig,
   Project,
 } from '../../../../shared/types';
 import { ownerRepoFromUrl } from '../../../../shared/types';
-import { issueKeysIn } from '../../../../shared/jira-url';
 import { TopbarSlot } from '../../../components/TopbarSlot';
 import { Icon } from '../../../components/Icon';
 import { Banner } from '../../../components/Banner';
@@ -18,6 +18,7 @@ import { useConfirm } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
 import { RECHECK_MS, RECHECK_POLL_MS } from '../lib/conflictRecheck';
+import { primaryIssueKey, prIssueKeys } from '../lib/prIssueKeys';
 import { CreatePrModal, CreatedPr } from './CreatePrModal';
 import { PrList } from './PrList';
 import { PrDetail } from './PrDetail';
@@ -48,6 +49,8 @@ export function PrSection() {
   const [hasToken, setHasToken] = useState(false);
   const [giteaUrl, setGiteaUrl] = useState(''); // 저장소 PR 경로 링크용 (빈 값이면 링크 생략)
   const [jiraUrl, setJiraUrl] = useState(''); // 상세 패널 티켓 칩 링크용 (빈 값이면 칩 생략)
+  // 제목의 티켓 키 → Jira 상태 (목록 행·상세 패널 뱃지). 없는 키는 그냥 빠져 있다
+  const [issueStatuses, setIssueStatuses] = useState<Record<string, JiraIssueStatus>>({});
   const [query, setQuery] = useState('');
   // 저장소 탭(owner/repo) — 마지막 선택을 기억한다 (휘발성 UI 상태라 localStorage)
   const [repoTab, setRepoTab] = useState<string>(
@@ -67,11 +70,20 @@ export function PrSection() {
   const toast = useToast();
   const confirmDialog = useConfirm();
 
-  // 머지 직후 — PR 제목에서 Jira 이슈 키를 추출해 해결됨 전환을 제안한다
-  // (새 PR 이 브랜치명의 이슈 키를 제목에 넣으므로 문자열 패턴 매칭으로 충분 — 상세 패널
-  // 티켓 칩과 같은 `issueKeysIn`. 키가 여럿이면 첫 번째만 제안한다)
-  const offerJiraResolve = async (prTitle: string) => {
-    const key = issueKeysIn(prTitle)[0];
+  // 티켓 상태 조회 — Gitea 조회와 따로 돈다. Jira 가 미설정·실패여도 PR 목록은 그대로고
+  // 뱃지만 빠진다(그래서 오류를 띄우지 않는다). 부분 갱신(해결 전환 직후 한 키)도 받으려고 병합한다
+  const loadStatuses = useCallback(async (items: PrItem[], force = false) => {
+    const keys = [...new Set(items.flatMap(prIssueKeys))];
+    if (keys.length === 0) return;
+    const res = await window.oneApp.jira.statuses(keys, force).catch(() => null);
+    const next = res?.ok ? res.statuses : undefined;
+    if (next) setIssueStatuses((prev) => ({ ...prev, ...next }));
+  }, []);
+
+  // 머지 직후 — PR 의 Jira 이슈 키(브랜치 우선 → 제목, `primaryIssueKey`)에 해결됨 전환을
+  // 제안한다. 목록 뱃지와 같은 키를 고른다 — 키가 여럿이어도 하나만 제안한다
+  const offerJiraResolve = async (pr: PrItem) => {
+    const key = primaryIssueKey(pr, issueStatuses);
     if (!key) return; // 이슈 키 없는 PR 이면 조용히 넘어감
     const ok = await confirmDialog({
       title: `${key} 해결됨으로 전환할까요?`,
@@ -80,8 +92,10 @@ export function PrSection() {
     });
     if (!ok) return;
     const res = await window.oneApp.jira.resolve(key);
-    if (res.ok) toast(`${key} → ${res.status ?? '해결됨'}`);
-    else toast(res.error ?? '전환에 실패했습니다', 'fail');
+    if (res.ok) {
+      toast(`${key} → ${res.status ?? '해결됨'}`);
+      void loadStatuses([pr]); // 전환이 main 의 그 키 캐시를 버렸다 — 뱃지를 바로 맞춘다
+    } else toast(res.error ?? '전환에 실패했습니다', 'fail');
   };
 
   // 뒤늦은 응답이 최신 화면을 덮지 않게 하는 순번 (2단계 로딩·수동 새로고침이 겹칠 때)
@@ -100,11 +114,15 @@ export function PrSection() {
       const quick = await window.oneApp.prs.fetch({ light: true, force });
       if (seq !== loadSeq.current) return;
       setResult(quick);
+      // 제목은 1단계에 이미 있다 — 보강을 기다리지 않고 제목 키의 티켓 상태부터 묻는다
+      if (quick.ok) void loadStatuses(quick.prs ?? [], force);
       // 2단계는 force 를 넘기지 않는다 — 1단계가 이미 캐시를 새로 채웠고,
       // main 은 light 캐시를 보강 요청의 히트로 쳐주지 않는다
       const full = await window.oneApp.prs.fetch();
       if (seq !== loadSeq.current) return;
       setResult(full);
+      // 보강본에서야 브랜치(head)가 온다 — 브랜치 키를 마저 묻는다(제목 키는 main 캐시가 받는다)
+      if (full.ok) void loadStatuses(full.prs ?? []);
     } catch (err) {
       if (seq !== loadSeq.current) return;
       setResult({
@@ -115,7 +133,7 @@ export function PrSection() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, []);
+  }, [loadStatuses]);
 
   // 진입 시 설정·토큰 여부 로드 (1회) + 프로젝트 레지스트리 구독 (새 PR 저장소 소스)
   useEffect(() => {
@@ -289,7 +307,7 @@ export function PrSection() {
     // 머지가 base 를 밀었으니 같은 저장소의 다른 PR 은 잠시 재검사 상태다
     setRecheck({ repo: pr.repo, until: Date.now() + RECHECK_MS });
     void load();
-    void offerJiraResolve(pr.title);
+    void offerJiraResolve(pr);
   };
 
   return (
@@ -449,6 +467,7 @@ export function PrSection() {
                 selectedKey={selectedKey}
                 onSelect={setSelectedKey}
                 defaultBranchOf={defaultBranchOf}
+                issueStatuses={issueStatuses}
               />
               {selected ? (
                 <PrDetail
@@ -456,6 +475,7 @@ export function PrSection() {
                   pr={selected}
                   defaultBranch={defaultBranchOf(selected.repo)}
                   jiraUrl={jiraUrl}
+                  issueStatuses={issueStatuses}
                   hasToken={hasToken}
                   conflictPending={conflictPending}
                   onMerged={onMerged}

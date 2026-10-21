@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   isMergeCommit,
   type DeployCommit,
+  type JiraIssueStatus,
   type PrChangedFile,
   type PrItem,
   type PrMergeInfoResult,
   type PrMergeMethod,
 } from '../../../../shared/types';
-import { issueKeysIn } from '../../../../shared/jira-url';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
@@ -17,8 +17,10 @@ import { IssueChip } from '../../../components/IssueChip';
 import { useConfirm } from '../../../components/ConfirmDialog';
 import { errMsg } from '../../../lib/errMsg';
 import { usePolling } from '../../../lib/usePolling';
+import { statusBadgeVariant } from '../../jira';
 import { needsBaseConfirm } from '../lib/baseBranches';
 import { RECHECK_POLL_MS } from '../lib/conflictRecheck';
+import { prIssueKeys } from '../lib/prIssueKeys';
 import { rel } from '../lib/relTime';
 
 const METHOD_OPTIONS: { value: PrMergeMethod; label: string }[] = [
@@ -39,6 +41,7 @@ export function PrDetail({
   pr,
   defaultBranch,
   jiraUrl,
+  issueStatuses,
   hasToken,
   conflictPending,
   onMerged,
@@ -48,6 +51,8 @@ export function PrDetail({
   defaultBranch?: string;
   /** 환경설정의 Jira 주소 — 있으면 제목의 이슈 키를 티켓 칩(클릭 = Jira 열기)으로 붙인다 */
   jiraUrl?: string;
+  /** 티켓 키 → Jira 상태 — 칩마다 상태 뱃지를 붙인다(목록은 첫 키만, 여기는 전부) */
+  issueStatuses: Record<string, JiraIssueStatus>;
   hasToken: boolean;
   /** 머지 직후 Gitea 재검사 창 — 이때의 mergeable=false 는 충돌로 단정하지 않는다 */
   conflictPending?: boolean;
@@ -160,8 +165,8 @@ export function PrDetail({
   // 주요 브랜치(main 등)로 가는 PR 은 [머지]를 누르기 전부터 주황으로 — 배포 PROD 버튼과 같은 신호.
   // 렌더 중이라 관례 이름만 본다(보호 여부는 클릭 때 확인창 판정에서 본다)
   const riskyBase = !!base && needsBaseConfirm(base, defaultBranch || 'develop', undefined);
-  // 제목의 Jira 이슈 키 — 주소 미설정이면 제목에 이미 있는 키를 되풀이할 뿐이라 칩을 그리지 않는다
-  const issueKeys = jiraUrl ? issueKeysIn(pr.title) : [];
+  // Jira 이슈 키(브랜치 우선 → 제목) — 주소 미설정이면 클릭할 수 없는 키를 되풀이할 뿐이라 칩을 그리지 않는다
+  const issueKeys = jiraUrl ? prIssueKeys({ head, title: pr.title }) : [];
 
   return (
     <div className="prs__detail">
@@ -175,9 +180,19 @@ export function PrDetail({
             {pr.createdAt ? ` · ${rel(pr.createdAt)}` : ''}
           </span>
         )}
-        {issueKeys.map((k) => (
-          <IssueChip key={k} issueKey={k} jiraUrl={jiraUrl} />
-        ))}
+        {issueKeys.map((k) => {
+          const issue = issueStatuses[k];
+          return (
+            <span key={k} className="prs__detail-issue">
+              <IssueChip issueKey={k} jiraUrl={jiraUrl} />
+              {issue && (
+                <Badge variant={statusBadgeVariant(issue)} dot={false} title="Jira 상태">
+                  {issue.status}
+                </Badge>
+              )}
+            </span>
+          );
+        })}
         {pr.url && (
           <button
             type="button"

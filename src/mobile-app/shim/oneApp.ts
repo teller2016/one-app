@@ -33,6 +33,7 @@ export const SPEC: Spec = {
   jira: {
     list: { ch: 'jira:list' },
     getDetail: { ch: 'jira:detail' },
+    statuses: { ch: 'jira:statuses' },
     getTransitions: { ch: 'jira:transitions' },
     transition: { ch: 'jira:transition' },
     resolve: { ch: 'jira:resolve' },

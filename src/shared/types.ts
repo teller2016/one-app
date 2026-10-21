@@ -173,6 +173,17 @@ export type JiraListResult = {
   addedError?: string;
 };
 
+/** 이슈 상태만 — PR 목록처럼 키만 아는 화면이 상태 뱃지를 그릴 때 쓴다 */
+export type JiraIssueStatus = Pick<JiraIssue, "status" | "statusCategory">;
+
+export type JiraStatusesResult = {
+  ok: boolean;
+  configured: boolean;
+  /** 키 → 상태. 없는 키·권한 없는 키는 빠진다(오류가 아니다) */
+  statuses?: Record<string, JiraIssueStatus>;
+  error?: string;
+};
+
 export type JiraActionResult = {
   ok: boolean;
   error?: string;

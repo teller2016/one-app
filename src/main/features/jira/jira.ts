@@ -6,7 +6,9 @@ import type {
   JiraComment,
   JiraDetailResult,
   JiraIssue,
+  JiraIssueStatus,
   JiraListResult,
+  JiraStatusesResult,
   JiraTransition,
   JiraTransitionsResult,
   JiraValidateResult,
@@ -337,6 +339,81 @@ export function listAdded(): JiraAddedTicket[] {
   return listAddedTickets();
 }
 
+// ── 키 목록의 상태만 (PR 목록의 티켓 상태 뱃지) ──
+
+/** bulkfetch 1회 상한 — 필드를 명시하면 1000 까지지만 PR 목록에 그만큼 쌓일 일이 없다 */
+const STATUS_MAX_KEYS = 100;
+const ISSUE_KEY_ONLY = /^[A-Z][A-Z0-9]{1,9}-\d+$/;
+// 키별 캐시 — PR 목록이 2분마다 다시 묻는다. **없는 키도 null 로 캐시**한다: PR 제목의
+// `UTF-8` 같은 키 모양 오탐이 조회마다 다시 실리지 않게. 상태 전환이 성공하면 그 키만 버린다
+const statusCache = new Map<string, { at: number; value: JiraIssueStatus | null }>();
+
+/**
+ * 이슈 키 목록 → 상태. `POST /rest/api/3/issue/bulkfetch` 1회.
+ *
+ * ⚠️ `key IN (…)` JQL 을 쓰지 말 것 — 지워졌거나 권한이 없는 키, 키 모양 오탐이 하나만 섞여도
+ * 400 으로 쿼리 전체가 죽는다(직접 추가 티켓과 같은 함정). bulkfetch 는 그런 키를 **응답에서
+ * 조용히 뺄 뿐**이다(공식 OpenAPI 스펙 — 400 은 키 0개·상한 초과뿐). 다른 프로젝트로 옮겨진
+ * 이슈는 새 키로 돌아와 매칭되지 않는다 — 뱃지가 안 뜰 뿐이라 감수한다.
+ * Cloud 전용 엔드포인트라 설치형(404)이면 실패로 돌려주고, 화면은 뱃지 없이 그린다.
+ */
+export async function fetchIssueStatuses(
+  input: unknown[],
+  force = false,
+): Promise<JiraStatusesResult> {
+  const auth = jiraAuth();
+  if (!auth) return { ok: false, configured: false };
+  // 폰(MO)에서도 부르는 채널이라 값 모양을 검사한다 — 문자열·키 형식만 통과
+  const keys = [
+    ...new Set(input.filter((k): k is string => typeof k === 'string' && ISSUE_KEY_ONLY.test(k))),
+  ].slice(0, STATUS_MAX_KEYS);
+
+  // 만료분은 지우고 시작한다 — 머지돼 사라진 PR 의 키가 앱을 켜 둔 동안 계속 쌓이지 않게
+  const now = Date.now();
+  for (const [k, v] of statusCache) {
+    if (now - v.at >= LIST_TTL_MS) statusCache.delete(k);
+  }
+  const missing = force ? keys : keys.filter((k) => !statusCache.has(k));
+
+  if (missing.length > 0) {
+    try {
+      const res = await fetch(
+        `${auth.url}/rest/api/3/issue/bulkfetch`,
+        {
+          method: 'POST',
+          headers: { ...auth.headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issueIdsOrKeys: missing, fields: ['status'] }),
+        },
+        JIRA_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        return { ok: false, configured: true, error: await describeJiraHttpError(res, '상태 조회') };
+      }
+      const data = await readJson<{ issues?: RawIssue[] }>(res, 'Jira');
+      const found = new Map((data.issues ?? []).map((it) => [it.key, it]));
+      const at = Date.now();
+      for (const k of missing) {
+        const it = found.get(k);
+        if (!it) {
+          statusCache.set(k, { at, value: null });
+          continue;
+        }
+        const { status, statusCategory } = mapIssue(it, auth.url, false);
+        statusCache.set(k, { at, value: { status, statusCategory } });
+      }
+    } catch (err) {
+      return { ok: false, configured: true, error: describeFetchError(err, 'Jira') };
+    }
+  }
+
+  const statuses: Record<string, JiraIssueStatus> = {};
+  for (const k of keys) {
+    const value = statusCache.get(k)?.value;
+    if (value) statuses[k] = value;
+  }
+  return { ok: true, configured: true, statuses };
+}
+
 // ── 이슈 상세 (본문·댓글 — 앱 내 패널 표시용) ──
 
 const DETAIL_FIELDS =
@@ -615,6 +692,7 @@ export async function transitionIssue(
       return { ok: false, error: await describeJiraHttpError(res, '상태 전환') };
     }
     invalidateListCache(); // 상태가 바뀌었으니 캐시된 목록은 낡았다
+    statusCache.delete(key);
     return { ok: true };
   } catch (err) {
     return {

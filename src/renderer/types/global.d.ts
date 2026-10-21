@@ -21,6 +21,7 @@ import type {
   JiraActionResult,
   JiraActivityResult,
   JiraDetailResult,
+  JiraStatusesResult,
   JiraTransitionsResult,
   JiraAddedResult,
   JiraAddedTicket,
@@ -201,6 +202,8 @@ declare global {
         // force=true 는 수동 새로고침·전환 직후 — main 의 TTL 캐시 우회
         list: (force?: boolean) => Promise<JiraListResult>;
         getDetail: (key: string) => Promise<JiraDetailResult>;
+        /** 키 목록의 상태만 (PR 목록의 티켓 상태 뱃지) — 없는 키는 결과에서 빠진다 */
+        statuses: (keys: string[], force?: boolean) => Promise<JiraStatusesResult>;
         getTransitions: (key: string) => Promise<JiraTransitionsResult>;
         transition: (key: string, id: string) => Promise<JiraActionResult>;
         resolve: (key: string) => Promise<JiraActionResult>;

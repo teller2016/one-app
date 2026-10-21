@@ -210,6 +210,15 @@
   color: var(--text-3);
 }
 
+// 티켓 상태 뱃지 — 윗줄 오른쪽 끝. 뱃지(20)가 글줄(11.5 × 1.5)보다 커서 그대로 두면 뱃지가
+// 있는 행만 3px 높아진다 → 세로 음수 여백으로 글줄 안에 눌러 행 높이를 통일한다
+.prs__item-issue {
+  display: flex;
+  min-width: 0;
+  max-width: 60%;
+  margin: -2px 0 -2px auto;
+}
+
 .prs__item-title {
   min-width: 0;
   overflow: hidden;
@@ -302,6 +311,13 @@
 
 .prs__detail-num {
   font-family: var(--font-mono);
+}
+
+// 티켓 칩 + 그 상태 뱃지 한 묶음 — 메타 줄의 12 간격보다 붙여 짝으로 읽히게
+.prs__detail-issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .prs__detail-flags {

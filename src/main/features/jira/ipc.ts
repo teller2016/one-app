@@ -5,6 +5,7 @@ import { fetchMyActivity } from './activity';
 import {
   addTicketToList,
   fetchIssueDetail,
+  fetchIssueStatuses,
   fetchMyIssues,
   getTransitions,
   listAdded,
@@ -30,6 +31,10 @@ export function registerJiraIpc() {
   // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
   handleShared('jira:detail', (key: string) => fetchIssueDetail(key));
   handleShared('jira:transitions', (key: string) => getTransitions(key));
+  // 키 목록의 상태만 — PR 목록 행의 티켓 상태 뱃지. 키 형식 검사는 함수 진입부에서 한다
+  handleShared('jira:statuses', (keys: unknown, force?: boolean) =>
+    fetchIssueStatuses(Array.isArray(keys) ? keys : [], force === true),
+  );
   handleShared(
     'jira:transition',
     (key: string, id: string) => transitionIssue(key, id),

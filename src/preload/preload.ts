@@ -183,6 +183,9 @@ contextBridge.exposeInMainWorld("oneApp", {
     list: (force?: boolean) => ipcRenderer.invoke("jira:list", force),
     // 이슈 상세 — 본문·댓글 HTML (앱 내 패널 표시용)
     getDetail: (key: string) => ipcRenderer.invoke("jira:detail", key),
+    // 키 목록의 상태만 (PR 목록의 티켓 상태 뱃지) — 없는 키는 결과에서 빠진다
+    statuses: (keys: string[], force?: boolean) =>
+      ipcRenderer.invoke("jira:statuses", keys, force),
     // 이 이슈에서 지금 가능한 상태 전환 목록 (이슈별·프로젝트별로 다름)
     getTransitions: (key: string) =>
       ipcRenderer.invoke("jira:transitions", key),
