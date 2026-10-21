@@ -48,6 +48,22 @@ function copyRuntimeDeps(buildPath: string): number {
   return count;
 }
 
+// 빌드 서명 인증서 — 유효한 **Apple Development** 인증서가 있으면 그것, 없으면 자가서명 'One App Sign'.
+// 자가서명은 Team ID 가 없어 키체인이 앱을 빌드마다 바뀌는 cdhash 로 기억해 **재빌드 뒤 첫 실행마다
+// 로그인 비밀번호를 물었다.** Apple 발급 인증서는 Team ID 로 기억돼 한 번 허용하면 다음 빌드도 그대로다
+// (2026-10-21 실측 — .claude/rules/build-packaging.md). 이름에 개인 계정이 들어 있어 SHA-1 로 지정한다.
+// 둘 다 없으면 null — 서명 없이 통과(인증서 없는 Mac 의 기존 동작).
+function pickSigningIdentity(): { hash: string; name: string } | null {
+  let out = '';
+  try {
+    out = execSync('security find-identity -v -p codesigning', { encoding: 'utf8' });
+  } catch {
+    return null;
+  }
+  const ids = [...out.matchAll(/^\s*\d+\)\s+([0-9A-F]{40})\s+"(.+)"$/gm)].map((m) => ({ hash: m[1], name: m[2] }));
+  return ids.find((i) => i.name.startsWith('Apple Development:')) ?? ids.find((i) => i.name === 'One App Sign') ?? null;
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     // node-pty 는 asar 밖에서 실행돼야 한다 — spawn-helper(확장자 없는 실행파일)는
@@ -63,19 +79,16 @@ const config: ForgeConfig = {
        
       console.log(`[forge] 런타임 의존성 ${count}개 패키지에 포함`);
     },
-    // 자가서명 인증서로 고정 서명 — adhoc 서명은 빌드마다 바뀌어 safeStorage 의
+    // 고정 인증서로 서명(`pickSigningIdentity`) — adhoc 서명은 빌드마다 바뀌어 safeStorage 의
     // 키체인 접근이 끊기고, 폴백 저장으로 암호화 설정이 날아간다(2026-07 실사고).
     // packagerConfig.osxSign 은 서명 실패(FinderInfo 등 detritus)를 경고로만 삼켜
     // adhoc 산출물이 조용히 나오므로, 여기서 속성 정리 후 직접 서명하고 실패 시 빌드를 멈춘다.
     // 인증서가 없는 Mac 에서는 서명 없이 통과(기존 동작 유지).
     postPackage: async (_forgeConfig, packageResult) => {
       if (packageResult.platform !== 'darwin') return;
-      const identity = 'One App Sign';
-      try {
-        if (!execSync('security find-identity -v -p codesigning', { encoding: 'utf8' }).includes(identity)) return;
-      } catch {
-        return;
-      }
+      const signer = pickSigningIdentity();
+      if (!signer) return;
+      const identity = signer.hash;
       for (const outputPath of packageResult.outputPaths) {
         const appPath = path.join(outputPath, 'One App.app');
         if (!fs.existsSync(appPath)) continue;
@@ -115,7 +128,7 @@ const config: ForgeConfig = {
           }
         }
          
-        console.log(`[forge] "${identity}" 로 서명 완료: ${appPath}`);
+        console.log(`[forge] "${signer.name}" 로 서명 완료: ${appPath}`);
       }
     },
   },

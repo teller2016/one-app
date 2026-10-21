@@ -28,8 +28,9 @@ darwin 빌드에서 건너뛴다). `.app` 자체는 `package` 와 **완전히 �
 것이 목적이라면 `--make` 는 시간만 더 쓴다.
 
 ## ⚠️ 반드시 지킬 것
-- **서명을 검증하기 전에 교체하지 않는다.** `forge.config.ts` 의 `postPackage` 가 자가서명 인증서
-  `One App Sign` 으로 서명하는데, 이 인증서가 없는 Mac 에서는 **서명 없이 조용히 통과**한다.
+- **서명을 검증하기 전에 교체하지 않는다.** `forge.config.ts` 의 `postPackage` 가 **Apple Development**
+  인증서(없으면 자가서명 `One App Sign`)로 서명하는데, 둘 다 없는 Mac 에서는 **서명 없이 조용히 통과**한다.
+  Apple Development 라야 재빌드 뒤 키체인 비밀번호를 다시 묻지 않는다(`.claude/rules/build-packaging.md`).
   서명이 adhoc 이거나 없으면 **`safeStorage` 의 키체인 접근이 끊겨 저장된 계정·비밀번호가 전부 날아간다**
   (2026-07 실사고). 검증에 실패하면 교체하지 말고 사용자에게 보고한다.
 - **설정은 싱크할 필요가 없다.** 개발 인스턴스와 빌드 앱은 같은 userData
@@ -56,15 +57,18 @@ npm run icon:dev
 npm run package     # 또는 --make 면 npm run make
 ```
 산출물: `out/One App-darwin-arm64/One App.app`
-로그에 `[forge] "One App Sign" 로 서명 완료` 가 보이는지 확인한다.
+로그에 `[forge] "Apple Development: …" 로 서명 완료` 가 보이는지 확인한다(인증서가 없는 Mac 이면 `"One App Sign"`).
 
 ### 3. 서명 검증 (교체 전 필수)
 ```bash
 codesign -dv --verbose=2 "out/One App-darwin-arm64/One App.app" 2>&1 | grep -E "Authority|Signature"
 ```
-- ✅ `Authority=One App Sign` → 진행
+- ✅ 첫 `Authority=Apple Development: …` → 진행
+- 🟡 `Authority=One App Sign` → 진행하되 보고한다 — 서명은 유효하지만 **재빌드 뒤 첫 실행마다 키체인 비밀번호를
+  다시 묻는다.** 보통 Apple Development 인증서가 만료됐거나(무료 계정은 1년 — 2027-10-21) 중간 인증서 G3 가 빠진
+  것이다: `security find-identity -v -p codesigning` 에 `Apple Development:` 가 '유효'로 보이는지 확인한다.
 - ⛔ `Signature=adhoc` 이거나 Authority 가 없음 → **중단**하고 보고한다.
-  원인은 보통 키체인에 인증서가 없는 것: `security find-identity -v -p codesigning | grep "One App Sign"`
+  원인은 보통 키체인에 인증서가 없는 것: `security find-identity -v -p codesigning`
   으로 확인하고, 없으면 사용자에게 알린다(교체를 강행하면 저장된 계정 정보가 날아간다).
 
 ⚠️ **이 단계에서 `--verify --deep --strict` 로 판정하지 말 것** — `out/` 은 iCloud 동기화 폴더
@@ -117,7 +121,11 @@ pgrep -fl "$BIN" && echo "⛔ 빌드 앱이 안 내려갔다 — 교체 중단"
 rm -rf "/Applications/One App.app"
 cp -R "out/One App-darwin-arm64/One App.app" "/Applications/"
 xattr -cr "/Applications/One App.app"
-codesign --force --deep --sign "One App Sign" "/Applications/One App.app"
+# 빌드가 쓴 것과 같은 인증서로 — 산출물의 첫 Authority(서명자)를 그대로 쓴다
+# ⚠️ `--verbose=2` 필수 — 기본 상세 수준은 Authority 줄을 안 찍어 SIGNER 가 비고 'no identity found' 로 재서명을 건너뛴다
+SIGNER=$(codesign -dv --verbose=2 "out/One App-darwin-arm64/One App.app" 2>&1 | awk -F= '/^Authority=/{print $2; exit}')
+[ -n "$SIGNER" ] || { echo "⛔ 서명자를 못 읽었다 — 교체 중단"; exit 1; }
+codesign --force --deep --sign "$SIGNER" "/Applications/One App.app"
 ```
 
 ### 6. 결과 확인
@@ -126,7 +134,7 @@ defaults read "/Applications/One App.app/Contents/Info.plist" CFBundleShortVersi
 codesign -dv --verbose=2 "/Applications/One App.app" 2>&1 | grep Authority
 codesign --verify --deep --strict "/Applications/One App.app" && echo "✅ 검증 통과"
 ```
-버전·서명(`One App Sign`)·엄격 검증 통과를 사용자에게 보고한다.
+버전·서명(`Apple Development: …` — 첫 Authority)·엄격 검증 통과를 사용자에게 보고한다.
 엄격 검증이 여기서도 실패하면 **실행하지 말고** 보고한다.
 
 ### 7. 재실행 (`--no-launch` 가 아니면 항상)
@@ -137,7 +145,7 @@ open -a "/Applications/One App.app"
 
 ## 보고 형식
 - 🔧 빌드: 성공/실패 · 소요 시간
-- ✅ 서명: `One App Sign` 확인 여부
+- ✅ 서명: `Apple Development` 확인 여부 (`One App Sign` 으로 떨어졌으면 그 이유)
 - 📁 설치: 교체된 경로 · 버전
 - ⚠️ 설정: 공유 userData 라 그대로 유지됨을 한 줄로 확인
 
