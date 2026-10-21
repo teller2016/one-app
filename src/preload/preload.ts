@@ -601,6 +601,9 @@ contextBridge.exposeInMainWorld("oneApp", {
       // 수동 경계 — 패널 왼쪽 손잡이를 끈 화면 x 좌표 (fire-and-forget). commit 은 놓을 때만 — 그때 저장한다
       setLeft: (screenX: number, commit: boolean) =>
         ipcRenderer.send("terminal:dock:set-left", { screenX, commit }),
+      // 펼친 높이 — 펼친 패널의 윗변 손잡이를 끈 화면 y 좌표. commit(놓을 때)에 저장한다
+      setTop: (screenY: number, commit: boolean) =>
+        ipcRenderer.send("terminal:dock:set-top", { screenY, commit }),
       // 펼치기/접기 — 패널 안 ⌘↑/⌘↓ (fire-and-forget). 포커스를 잃으면 main 이 알아서 접는다
       expand: (on: boolean) => ipcRenderer.send("terminal:dock:expand", on),
       // 독 너비 자동 맞춤 — 시스템 접근성 권한 요청 창을 띄운다

@@ -4,8 +4,8 @@
 // - 어느 세션을 그리나: main 배정(windows.ts 의 `dock` 항목)의 **마지막** — 가져온 세션(손님)이
 //   있으면 그것, 없으면 전용 셸. 정본은 main 이고 여기는 미러만 한다.
 // - 접힘/펼침: 포커스만으로는 펼치지 않는다(사용자 결정 — 접힌 채로도 입력한다). ⌘↑ 펼치기 · ⌘↓ 접기,
-//   바깥 클릭(포커스 잃음)도 접는다. 창 크기는 main 이 바꾸고 `terminal:dock` 으로 알린다 — 여기는 글자
-//   크기와 머리줄만 바꾼다(접힘 = 독 높이에 맞춘 작은 글자, 펼침 = 머리줄 + 사용자가 고른 글자).
+//   바깥 클릭(포커스 잃음)도 접는다. 창 크기는 main 이 바꾸고 `terminal:dock` 으로 알린다 — 여기는 머리줄·
+//   높이 손잡이만 켜고 끈다. 글자는 접힘·펼침이 같다(펼치면 줄 수만 는다).
 // - ⚠️ Esc 를 가로채지 않는다 — claude 의 작업 중단 키다.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
@@ -27,21 +27,61 @@ import { FontSizeControl } from './FontSizeControl';
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, TerminalView } from './TerminalView';
 import type { TerminalPaneHandle } from './TerminalView';
 
-/** 접힌 상태 글자 — 독 높이(아이콘 27 기준 47pt)에 두 줄이 들어가는 크기 */
-const COLLAPSED_FONT = 10;
-// 펼친 상태 글자 — 메인 터미널(terminal:fontSize)과 따로 기억한다(화면 취향이라 localStorage 로 충분)
-const EXPANDED_FONT_KEY = 'terminal:dock:fontSize';
-const EXPANDED_FONT_DEFAULT = 12;
+// 글자 크기 — 접힘·펼침 공용 한 값(사용자 요청: 펼칠 때 글자가 바뀌면 화면이 출렁인다. 높이만 는다).
+// 기본 10 = 독 높이(아이콘 27 기준 47pt)에 두 줄이 들어가는 크기 — 11 이상이면 접힌 상태는 한 줄이다.
+// 메인 터미널(terminal:fontSize)과 따로 기억한다(화면 취향이라 localStorage 로 충분).
+// ⚠️ 키를 옛 `terminal:dock:fontSize`(펼친 상태 전용, 기본 12)로 되돌리지 말 것 — 그 값이 접힌 상태까지 키운다
+const FONT_KEY = 'terminal:dock:font';
+const FONT_DEFAULT = 10;
 
-function savedExpandedFont(): number {
+function savedFont(): number {
   try {
-    const n = Number(localStorage.getItem(EXPANDED_FONT_KEY));
+    const n = Number(localStorage.getItem(FONT_KEY));
     if (Number.isFinite(n) && n >= FONT_SIZE_MIN && n <= FONT_SIZE_MAX) return n;
   } catch {
     // 저장소 접근 실패 — 기본값
   }
-  return EXPANDED_FONT_DEFAULT;
+  return FONT_DEFAULT;
 }
+
+/**
+ * 손잡이 드래그 — 창이 손잡이를 따라 움직이므로 창 기준 좌표가 아니라 **화면 좌표**를 보낸다.
+ * 끄는 동안은 프레임당 한 번(commit=false), 놓을 때 한 번 더(commit=true — main 이 그때 저장한다).
+ */
+function useScreenDrag(send: (pt: { x: number; y: number }, commit: boolean) => void) {
+  const dragRef = useRef<{ raf: number | null; x: number; y: number } | null>(null);
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { raf: null, x: e.screenX, y: e.screenY };
+  }, []);
+  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    d.x = e.screenX;
+    d.y = e.screenY;
+    if (d.raf !== null) return; // 창 이동이 pointermove 빈도를 따라가지 않게
+    d.raf = requestAnimationFrame(() => {
+      d.raf = null;
+      sendRef.current({ x: d.x, y: d.y }, false);
+    });
+  }, []);
+  const onPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.raf !== null) cancelAnimationFrame(d.raf);
+    dragRef.current = null;
+    sendRef.current({ x: e.screenX, y: e.screenY }, true);
+  }, []);
+  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp };
+}
+
+const sendLeft = (pt: { x: number }, commit: boolean) =>
+  window.oneApp?.terminal?.dock?.setLeft(pt.x, commit);
+const sendTop = (pt: { y: number }, commit: boolean) =>
+  window.oneApp?.terminal?.dock?.setTop(pt.y, commit);
 
 const NOOP_FOCUS_PANE = () => {
   /* pane 이 하나뿐 — 포커스 이동할 곳이 없다 (TerminalView memo 를 위해 참조 고정) */
@@ -131,17 +171,16 @@ function DockBody() {
     return () => cancelAnimationFrame(raf);
   }, [expanded, focusPane]);
 
-  // ── 글자 크기 ──
-  const [expandedFont, setExpandedFont] = useState(savedExpandedFont);
+  // ── 글자 크기 — 접힘·펼침 공용 ──
+  const [fontSize, setFontSize] = useState(savedFont);
   const changeFont = useCallback((n: number) => {
-    setExpandedFont(n);
+    setFontSize(n);
     try {
-      localStorage.setItem(EXPANDED_FONT_KEY, String(n));
+      localStorage.setItem(FONT_KEY, String(n));
     } catch {
       // 저장 실패 — 이번 실행 동안만 유지
     }
   }, []);
-  const fontSize = expanded ? expandedFont : COLLAPSED_FONT;
 
   // ── 화면 세션 보고 — 입력대기 토스트 게이트(main isVisibleInPopout: 창 포커스 = 펼침) ──
   useEffect(() => {
@@ -151,9 +190,10 @@ function DockBody() {
     window.addEventListener('focus', report);
     return () => window.removeEventListener('focus', report);
   }, [currentId]);
-  // 펼쳐서 보고 있을 때만 '확인함' — 접힌 두 줄을 스쳐 본 것까지 확인으로 치지 않는다
+  // 패널에 포커스가 있으면 '확인함' — 접힌 채로도 입력하므로 펼침이 아니라 포커스가 기준이다
+  // (포커스 판정은 훅 안의 useWindowActive. main 의 입력대기 토스트 게이트도 창 포커스다)
   const shownIds = useMemo(() => (currentId ? [currentId] : []), [currentId]);
-  useMarkSeen(sessions, shownIds, expanded);
+  useMarkSeen(sessions, shownIds, true);
 
   // ── 머리줄 동작 ──
   const returnToMain = useCallback(() => {
@@ -178,31 +218,9 @@ function DockBody() {
     })();
   }, [toast]);
 
-  // ── 수동 경계 손잡이 — 독 너비를 실측할 수 없을 때(접근성 권한 없음)만 ──
-  // 창이 손잡이를 따라 움직이므로 창 기준 좌표가 아니라 화면 좌표(screenX)를 보낸다
-  const dragRef = useRef<{ raf: number | null; x: number } | null>(null);
-  const onGripDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { raf: null, x: e.screenX };
-  }, []);
-  const onGripMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    d.x = e.screenX;
-    if (d.raf !== null) return; // 프레임당 한 번 — 창 이동이 pointermove 빈도를 따라가지 않게
-    d.raf = requestAnimationFrame(() => {
-      d.raf = null;
-      window.oneApp?.terminal?.dock?.setLeft(d.x, false);
-    });
-  }, []);
-  const onGripUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    if (d.raf !== null) cancelAnimationFrame(d.raf);
-    dragRef.current = null;
-    window.oneApp?.terminal?.dock?.setLeft(e.screenX, true);
-  }, []);
+  // ── 손잡이 — 왼쪽 = 수동 경계(독 너비를 실측할 수 없을 때만) · 위쪽 = 펼친 높이(펼쳤을 때만) ──
+  const leftGrip = useScreenDrag(sendLeft);
+  const topGrip = useScreenDrag(sendTop);
 
   const busy = !!current && (current.working || current.status === 'busy');
 
@@ -214,10 +232,16 @@ function DockBody() {
           role="separator"
           aria-orientation="vertical"
           aria-label="독 터미널 왼쪽 경계 조절"
-          onPointerDown={onGripDown}
-          onPointerMove={onGripMove}
-          onPointerUp={onGripUp}
-          onPointerCancel={onGripUp}
+          {...leftGrip}
+        />
+      )}
+      {expanded && (
+        <div
+          className="dock-term__grip dock-term__grip--top"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="펼친 높이 조절"
+          {...topGrip}
         />
       )}
       {expanded && (
@@ -236,7 +260,7 @@ function DockBody() {
               </TextLink>
             </Tooltip>
           )}
-          <FontSizeControl fontSize={expandedFont} onChange={changeFont} onEscape={focusPane} />
+          <FontSizeControl fontSize={fontSize} onChange={changeFont} onEscape={focusPane} />
           {isGuest && (
             <Tooltip label="메인 창으로 되돌리기">
               <button

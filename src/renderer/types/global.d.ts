@@ -465,6 +465,7 @@ declare global {
           toggle: (open?: boolean) => Promise<TerminalDockState>;
           send: (sessionId: string) => Promise<{ ok: boolean; error?: string }>;
           setLeft: (screenX: number, commit: boolean) => void;
+          setTop: (screenY: number, commit: boolean) => void;
           expand: (on: boolean) => void;
           requestAuto: () => Promise<{ trusted: boolean }>;
           onState: (cb: (state: TerminalDockState) => void) => () => void;

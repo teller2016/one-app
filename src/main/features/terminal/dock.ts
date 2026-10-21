@@ -5,7 +5,8 @@
 // (windows.ts 가 이 모듈을 import 한다 — 반대 방향 import 는 두지 않는다)
 //
 // 접힘/펼침: 포커스만으로는 펼치지 않는다(2026-10-21 사용자 결정 — 접힌 채로도 입력한다).
-// 패널 안 ⌘↑ 로 위로 펼치고(EXPANDED_H) ⌘↓ 또는 포커스를 잃으면 독 높이로 접는다.
+// 패널 안 ⌘↑ 로 위로 펼치고(기본 EXPANDED_H, 윗변을 끌면 기억) ⌘↓ 또는 포커스를 잃으면 독 높이로 접는다.
+// 글꼴은 접힘·펼침이 같다(사용자 요청) — 펼치면 줄 수만 는다.
 // ⚠️ Esc 로 접지 않는다 — Esc 는 claude 의 작업 중단 키라 패널이 가로채면 안 된다.
 import path from 'node:path';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
@@ -18,11 +19,13 @@ import { readUserJson, writeUserJson } from '../../lib/store';
 
 // 화면 취향(경계 위치)이라 개발 인스턴스와 공유한다 — 세션 배정(runtimeFile)과 다르다
 const PREFS_FILE = 'terminal-dock.json';
-type DockPrefs = { leftRatio?: number };
+type DockPrefs = { leftRatio?: number; expandedHeight?: number };
 
 const GAP = 8; // 독 ↔ 패널, 패널 ↔ 화면 오른쪽 끝
 const INSET_Y = 3; // 독 띠 안의 위아래 여백
+/** 펼친 높이 기본값 — 펼친 상태에서 윗변을 끌어 바꾸면 expandedHeight 로 기억한다 */
 const EXPANDED_H = 320;
+const EXPANDED_MIN_H = 120;
 const MIN_W = 280;
 /** 독이 아래에 없을 때(자동 숨김·좌우 배치) 화면 오른쪽 아래에 띄울 크기 */
 const FLOATING = { width: 520, height: 44 };
@@ -188,7 +191,7 @@ function applyAxLine(line: string): void {
   dockFrame = nextFrame;
   syncTrustPoll();
   if (!changed) return;
-  layout(false);
+  layout();
   emitState();
 }
 
@@ -237,18 +240,22 @@ function currentFit(): TerminalDockState['fit'] {
   return measuredDockRight(spot.strip) !== null ? 'auto' : 'manual';
 }
 
+/** 펼친 높이 — 기억한 값(없으면 기본)을 [최소, 화면에 들어가는 최대] 로 자른다. 접힌 높이보다 낮아지지 않는다 */
+function expandedHeight(collapsedH: number, maxH: number): number {
+  const want = readPrefs().expandedHeight ?? EXPANDED_H;
+  return Math.max(collapsedH, Math.min(Math.max(want, EXPANDED_MIN_H), maxH));
+}
+
 function panelBounds(): Rectangle {
   const spot = findDockSpot();
   if (spot.kind === 'floating') {
     const w = spot.display.workArea;
     const width = Math.min(FLOATING.width, w.width - GAP * 2);
-    const height = expanded ? Math.min(EXPANDED_H, w.height - GAP * 2) : FLOATING.height;
-    return {
-      x: w.x + w.width - width - GAP,
-      y: w.y + w.height - height - GAP,
-      width,
-      height,
-    };
+    const bottom = w.y + w.height - GAP;
+    const height = expanded
+      ? expandedHeight(FLOATING.height, bottom - w.y - GAP)
+      : FLOATING.height;
+    return { x: w.x + w.width - width - GAP, y: bottom - height, width, height };
   }
   const { strip, display } = spot;
   const right = strip.x + strip.width - GAP;
@@ -260,14 +267,17 @@ function panelBounds(): Rectangle {
   const bottom = strip.y + strip.height - INSET_Y;
   const collapsedH = strip.height - INSET_Y * 2;
   const height = expanded
-    ? Math.max(collapsedH, Math.min(EXPANDED_H, bottom - display.workArea.y - GAP))
+    ? expandedHeight(collapsedH, bottom - display.workArea.y - GAP)
     : collapsedH;
   return { x: left, y: bottom - height, width: right - left, height };
 }
 
-function layout(animate: boolean): void {
+// ⚠️ 펼침·접힘에 `setBounds(…, true)` 애니메이션을 쓰지 말 것 — 투명 창은 크기가 바뀌는 프레임마다
+// 화면 전체를 다시 그리고 xterm 도 매 프레임 다시 맞춰서 올라오는 내내 심하게 깜빡였다(2026-10-21 사용자 확인).
+// 한 번에 바꾼다
+function layout(): void {
   if (!win || win.isDestroyed()) return;
-  win.setBounds(panelBounds(), animate);
+  win.setBounds(panelBounds());
 }
 
 // ── 상태 방송 — 상태바 버튼·패널 렌더러가 미러한다 ──
@@ -287,7 +297,7 @@ function emitState(): void {
 function setExpanded(next: boolean): void {
   if (expanded === next) return;
   expanded = next;
-  layout(true);
+  layout();
   emitState();
 }
 
@@ -370,7 +380,7 @@ export function ensureDockWindow(onClosed: () => void): BrowserWindow {
 /** 패널 보이기 — focus 면 바로 키 입력을 받게, 아니면 포커스를 뺏지 않고(앱 시작 복원). 둘 다 접힌 채 */
 export function showDockPanel(focus: boolean): void {
   if (!win || win.isDestroyed()) return;
-  layout(false);
+  layout();
   if (focus) {
     win.show();
     win.focus();
@@ -398,7 +408,7 @@ export function registerDockPanelIpc(): void {
   // 모니터 연결·해제, 독 이동·크기 변경(= workArea 변화) — 다시 앉힌다.
   // ⚠️ screen 은 app ready 전에 쓰면 throw 다 — 이 등록은 main.ts 최상위(ready 전)에서 불린다
   const relayout = () => {
-    layout(false);
+    layout();
     emitState();
   };
   void app.whenReady().then(() => {
@@ -425,7 +435,20 @@ export function registerDockPanelIpc(): void {
     const ratio = (screenX - spot.strip.x) / spot.strip.width;
     const clamped = Math.round(Math.min(Math.max(ratio, 0.05), 0.95) * 1000) / 1000;
     prefsCache = { ...readPrefs(), leftRatio: clamped };
-    layout(false);
+    layout();
+    if (args.commit) writeUserJson(PREFS_FILE, prefsCache);
+  });
+
+  // 펼친 높이 — 펼친 상태에서 윗변 손잡이를 끈 화면 y 좌표. 바닥은 그대로 두고 위로 늘이고 줄인다.
+  // 저장은 실제로 적용된 높이(화면 위로 넘치게 끌었으면 잘린 값) — 다음에 펼칠 때 그대로 나온다
+  ipcMain.on('terminal:dock:set-top', (_e, args: { screenY: number; commit: boolean }) => {
+    const screenY = args?.screenY;
+    if (typeof screenY !== 'number' || !Number.isFinite(screenY)) return;
+    if (!win || win.isDestroyed() || !expanded) return;
+    const b = win.getBounds();
+    prefsCache = { ...readPrefs(), expandedHeight: Math.round(b.y + b.height - screenY) };
+    layout();
+    prefsCache = { ...prefsCache, expandedHeight: win.getBounds().height };
     if (args.commit) writeUserJson(PREFS_FILE, prefsCache);
   });
 

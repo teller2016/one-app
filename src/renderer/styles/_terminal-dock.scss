@@ -29,6 +29,15 @@
     &:active {
       background: var(--border-dark);
     }
+
+    // 펼친 높이 손잡이 — 윗변. 머리줄 위로 겹쳐 머리줄 위 6px 를 잡는다
+    &--top {
+      right: 0;
+      bottom: auto;
+      width: auto;
+      height: 6px;
+      cursor: ns-resize;
+    }
   }
 
   &__head {

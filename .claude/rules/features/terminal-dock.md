@@ -27,9 +27,12 @@ paths:
 - 자리: 독 있는 화면 = workArea 아래가 24pt 이상 깎인 화면. 높이 = 띠 − 위아래 3, 오른쪽 끝 = 화면 − 8.
   왼쪽 끝 = 실측 독 오른쪽 + 8(auto) · 저장된 비율(manual, `terminal-dock.json` — 개발 인스턴스와 공유하는 화면 취향) ·
   독이 아래에 없으면(자동 숨김·좌우) 화면 오른쪽 아래 520×44(floating). `display-metrics-changed` 에 다시 앉힌다(⚠️ `screen` 은 ready 뒤에 구독).
-- 접힘/펼침: **포커스로는 펼치지 않는다**(사용자 결정 — 접힌 2줄로 입력). 패널 안 ⌘↑ 펼침(위로 320) · ⌘↓·포커스 잃음 = 접힘.
+- 접힘/펼침: **포커스로는 펼치지 않는다**(사용자 결정 — 접힌 2줄로 입력). 패널 안 ⌘↑ 펼침 · ⌘↓·포커스 잃음 = 접힘.
+  펼친 높이는 기본 320, 펼친 상태에서 윗변 6px 손잡이로 바꾸면 `expandedHeight` 로 기억(최소 120 · 화면 위까지).
   ⚠️ Esc 금지(claude 중단 키). ⌘↑/↓ 는 xterm 이 원래 버리는 키라 가로채도 잃는 입력이 없다.
-- 글자: 접힘 10(독 아이콘 27 → 띠 47 → 2줄) · 펼침은 따로 기억(`terminal:dock:fontSize`). `.xterm` 여백은 4·8·4·12(메인 14 는 한 줄만 남는다).
+- 글자: **접힘·펼침 한 값**(`terminal:dock:font`, 기본 10 — 사용자 요청: 펼칠 때 글자가 바뀌면 화면이 출렁인다).
+  10 = 독 아이콘 27 → 띠 47 → 2줄, 11 이상이면 접힌 상태는 1줄. `.xterm` 여백은 4·8·4·12(메인 14 는 한 줄만 남는다).
+- '확인함'(useMarkSeen)·입력대기 토스트 게이트는 **창 포커스** 기준 — 접힌 채로 입력하므로 펼침으로 판정하지 않는다.
 
 ## 독 너비 실측 (접근성 권한)
 - 창 목록 API(CGWindowList)는 독 창을 **화면 전체**로 준다 — 못 쓴다. AX 로 Dock 프로세스의 `AXList` 프레임을 읽는다.
@@ -37,6 +40,9 @@ paths:
   - ⚠️ AX 속성 이름은 **`$('AXChildren')`(NSString)** — JS 문자열이면 -25201(IllegalArgument). AXValue 는 구조체로 못 풀어 `description`("x:85 y:932")을 파싱한다.
   - ⚠️ **상주 프로세스는 시작 때의 권한을 붙든다** — 허용해도 계속 untrusted 를 찍었다(새 프로세스만 읽음). 그래서 untrusted 동안 main 이
     `isTrustedAccessibilityClient(false)` 를 2초마다 보고 **미허용→허용으로 바뀌는 순간 한 번만** 다시 띄운다('허용이면 재시작'은 판정 주체가 엇갈릴 때 무한 재시작).
+- ⚠️ **스위치가 켜져 있어도 서명이 바뀌었으면 허용이 아니다** — 10-21 Apple Development 서명 전환 뒤 설치본이 옛 자가서명
+  기준 항목에 걸려 거부됐다(`/usr/bin/log show --predicate 'process == "tccd"'` → `Failed to match existing code requirement
+  for subject com.electron.one-app`). `tccutil reset Accessibility com.electron.one-app` 로 지우고 [독 너비 자동]으로 다시 허용한다.
 - 권한은 osascript 를 띄운 **앱**에 붙는다(dev = Electron, 설치본 = One App — 각각 한 번). 허용 전엔 왼쪽 6px 손잡이로 수동 경계
   (끄는 동안 메모리만, 놓을 때 저장). 펼친 머리줄 [독 너비 자동] = 시스템 권한 요청 창.
 
