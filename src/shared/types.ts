@@ -120,6 +120,8 @@ export type AppSettingsView = {
    */
   approvalDept: string;
   theme: ThemePref; // 테마 (기본 system)
+  /** 메뉴 사이드바에서 숨긴 섹션 id — 접힌 사이드바에서만 빠지고 펼치면 흐리게 남는다 */
+  sidebarHidden: string[];
   /**
    * 키체인(safeStorage) 암호화가 가능한가 — false 면 위 비밀들이 **평문 base64** 로 저장된다.
    * 정상 환경에선 항상 true 다. 환경설정 화면이 false 일 때만 경고 배너를 띄운다.

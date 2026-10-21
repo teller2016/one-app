@@ -36,6 +36,7 @@ interface StoredSettings {
   notionTokenEnc?: string; // safeStorage 로 암호화된 노션 개인 액세스 토큰
   approvalDept?: string; // 결재 근무자 표의 '소속' 문구 (빈 값이면 approval/config 의 기본값)
   theme?: ThemePref; // 테마 (기본 system) — 창 배경색 결정에 main 도 읽음
+  sidebarHidden?: string[]; // 메뉴 사이드바에서 숨긴 섹션 id (접힌 사이드바에서만 빠진다)
 }
 
 const readStored = (): StoredSettings =>
@@ -87,6 +88,7 @@ export function getSettingsForRenderer(): AppSettingsView {
     hasNotionToken: !!s.notionTokenEnc,
     approvalDept: s.approvalDept ?? '',
     theme: s.theme ?? 'system',
+    sidebarHidden: s.sidebarHidden ?? [],
     secureStorage: isSecureStorageAvailable(),
   };
 }
@@ -94,6 +96,19 @@ export function getSettingsForRenderer(): AppSettingsView {
 /** 테마 설정만 저장 (환경설정 세그먼트 — 즉시 적용·즉시 저장) */
 export function saveTheme(theme: ThemePref): AppSettingsView {
   writeStored({ ...readStored(), theme });
+  return getSettingsForRenderer();
+}
+
+/** 메뉴 사이드바 숨김 목록만 저장 (눈 버튼 — 즉시 저장). 렌더러 입력이라 문자열 id 만 추린다 */
+export function saveSidebarHidden(ids: unknown): AppSettingsView {
+  const valid = Array.isArray(ids)
+    ? ids.filter(
+        (v): v is string =>
+          typeof v === 'string' && v.length > 0 && v.length <= 64,
+      )
+    : [];
+  const clean = [...new Set(valid)].slice(0, 64);
+  writeStored({ ...readStored(), sidebarHidden: clean });
   return getSettingsForRenderer();
 }
 

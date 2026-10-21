@@ -4,6 +4,7 @@ import { listSounds, playSound } from '../../lib/sound';
 import {
   getSettingsForRenderer,
   saveSettings,
+  saveSidebarHidden,
   saveTheme,
   setNotifySound,
 } from './store';
@@ -29,6 +30,10 @@ export function registerSettingsIpc() {
     nativeTheme.themeSource = theme;
     return saveTheme(theme);
   });
+  // 메뉴 사이드바 숨김 — 눈 버튼을 누르는 즉시 단독 저장. 데스크톱 셸 전용이라 MO 에는 열지 않는다
+  ipcMain.handle('settings:sidebar-hidden:set', async (_e, ids: unknown) =>
+    saveSidebarHidden(ids),
+  );
 
   // ── 알림음 (환경설정 전용 — 맥에서만 소리가 나므로 MO 에는 열지 않는다) ──
   // 고를 수 있는 음원 목록: /System/Library/Sounds + ~/Library/Sounds 스캔

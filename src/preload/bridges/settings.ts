@@ -19,6 +19,8 @@ export interface SettingsBridge {
   set: (input: SaveSettingsInput) => Promise<AppSettingsView>;
   /** 테마만 즉시 저장 (다음 실행의 창 배경색 결정에 main 이 읽음) */
   setTheme: (theme: ThemePref) => Promise<AppSettingsView>;
+  /** 메뉴 사이드바 숨김 목록만 즉시 저장 (섹션 id 배열) */
+  setSidebarHidden: (ids: string[]) => Promise<AppSettingsView>;
   /** 알림음 — 목록·미리듣기·선택 저장 (선택은 [저장] 버튼 없이 즉시 저장) */
   sounds: {
     list: () => Promise<string[]>;
@@ -34,6 +36,8 @@ export const settingsBridge = (ipcRenderer: IpcRenderer): SettingsBridge => ({
   get: () => ipcRenderer.invoke('settings:get'),
   set: (input) => ipcRenderer.invoke('settings:set', input),
   setTheme: (theme) => ipcRenderer.invoke('settings:theme:set', theme),
+  setSidebarHidden: (ids) =>
+    ipcRenderer.invoke('settings:sidebar-hidden:set', ids),
   sounds: {
     list: () => ipcRenderer.invoke('settings:sounds:list'),
     preview: (name) => ipcRenderer.invoke('settings:sounds:preview', name),

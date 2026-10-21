@@ -2,7 +2,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useRegisterCommands } from '../lib/commands';
 import { beginPointerDrag } from '../lib/pointerDrag';
+import { useSidebarHidden } from '../lib/sidebarHidden';
 import { Icon } from './Icon';
+import { Tooltip } from './Tooltip';
 
 export interface SidebarSection {
   id: string;
@@ -66,6 +68,9 @@ export function Sidebar({
   const [hidden, setHidden] = useState(
     () => localStorage.getItem('sidebar:hidden') === '1',
   );
+
+  // 메뉴별 숨김(눈 버튼) — 사이드바 전체 숨김(⌘\)과 별개다. 접힌 사이드바에서만 빠진다
+  const [offIds, toggleOff] = useSidebarHidden();
 
   const applied = hidden ? 0 : collapsed ? COLLAPSED_W : width;
 
@@ -155,33 +160,75 @@ export function Sidebar({
     localStorage.setItem('sidebar:collapsed', next ? '1' : '0');
   };
 
-  const item = (s: SidebarSection) => (
-    <button
-      key={s.id}
-      className={
-        'sidebar__item' + (s.id === activeId ? ' sidebar__item--active' : '')
-      }
-      // 축소 모드에선 라벨이 감춰지므로 title 이 이름을 대신한다
-      title={s.label}
-      onClick={() => onSelect(s.id)}
-    >
-      <span className="sidebar__item-icon">{s.icon}</span>
-      <span className="sidebar__item-label">{s.label}</span>
-      {s.badge != null && s.badge > 0 && (
-        <span
+  // 하단 그룹(환경설정)은 숨길 수 없다 — 눈 버튼은 펼친 사이드바의 메인 메뉴에만
+  const item = (s: SidebarSection) => {
+    const off = !s.bottom && offIds.includes(s.id);
+    return (
+      <div
+        key={s.id}
+        // 흐림은 펼친 사이드바에서만 — 접힌 쪽에 남는 숨긴 메뉴는 지금 보고 있는 섹션뿐이다
+        className={
+          'sidebar__row' + (off && !collapsed ? ' sidebar__row--off' : '')
+        }
+      >
+        <button
           className={
-            'sidebar__item-badge' +
-            (s.badgeAccent ? ' sidebar__item-badge--accent' : '')
+            'sidebar__item' +
+            (s.id === activeId ? ' sidebar__item--active' : '')
           }
+          // 축소 모드에선 라벨이 감춰지므로 title 이 이름을 대신한다
+          title={s.label}
+          onClick={() => onSelect(s.id)}
         >
-          {s.badge}
-        </span>
-      )}
-    </button>
-  );
+          <span className="sidebar__item-icon">{s.icon}</span>
+          <span className="sidebar__item-label">{s.label}</span>
+          {s.badge != null && s.badge > 0 && (
+            <span
+              className={
+                'sidebar__item-badge' +
+                (s.badgeAccent ? ' sidebar__item-badge--accent' : '')
+              }
+            >
+              {s.badge}
+            </span>
+          )}
+        </button>
+        {/* 숨김 토글 — 행 hover·포커스 때 뱃지 자리에 겹쳐 뜬다. 숨긴 메뉴는 되돌릴 수 있게 항상 보인다
+            (터미널 워크스페이스 행의 눈 버튼과 같은 규칙) */}
+        {!s.bottom && !collapsed && (
+          <span className={'sidebar__hide' + (off ? ' sidebar__hide--on' : '')}>
+            <Tooltip
+              side="right"
+              label={
+                off
+                  ? '숨김 해제 — 접은 메뉴에 다시 표시'
+                  : '숨기기 — 접은 메뉴에서 감춘다 (펼치면 흐리게 남는다)'
+              }
+            >
+              <button
+                type="button"
+                className="icon-btn"
+                aria-pressed={off}
+                aria-label={`'${s.label}' ${off ? '숨김 해제' : '숨기기'}`}
+                onClick={() => toggleOff(s.id)}
+              >
+                <Icon name={off ? 'eye-off' : 'eye'} size={14} />
+              </button>
+            </Tooltip>
+          </span>
+        )}
+      </div>
+    );
+  };
 
-  // 그룹 라벨 — 앞 항목과 group 이 달라지는 자리에만 (축소 모드에선 짧은 구분선이 된다)
-  const main = sections.filter((s) => !s.bottom);
+  // 접힌 사이드바에선 숨긴 메뉴를 뺀다 — 자리를 아끼려고 접는 것이라 안 쓰는 아이콘이 남으면 의미가 없다.
+  // ⚠️ 지금 보고 있는 섹션은 숨김이어도 남긴다 — 빼면 활성 표시가 어디에도 없어 위치를 알 수 없다
+  const main = sections.filter(
+    (s) =>
+      !s.bottom && (!collapsed || !offIds.includes(s.id) || s.id === activeId),
+  );
+  // 그룹 라벨 — 앞 항목과 group 이 달라지는 자리에만 (축소 모드에선 짧은 구분선이 된다).
+  // 숨김을 뺀 목록 기준이라 그룹이 통째로 숨으면 구분선도 함께 빠진다
   const grouped = main.map((s, i) => (
     <Fragment key={s.id}>
       {s.group && s.group !== main[i - 1]?.group && (
