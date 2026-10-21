@@ -23,6 +23,7 @@ import {
   removeTicket,
 } from './store';
 import { sanitizeHtml } from '../../lib/sanitize';
+import { isIssueKey } from '../../../shared/jira-url';
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 // (검색은 자체 10초 AbortController 를 쓰며, 호출부 signal 이 우선한다)
 import { fetchWithTimeout as fetch, readJson, describeFetchError } from '../../lib/http';
@@ -343,7 +344,6 @@ export function listAdded(): JiraAddedTicket[] {
 
 /** bulkfetch 1회 상한 — 필드를 명시하면 1000 까지지만 PR 목록에 그만큼 쌓일 일이 없다 */
 const STATUS_MAX_KEYS = 100;
-const ISSUE_KEY_ONLY = /^[A-Z][A-Z0-9]{1,9}-\d+$/;
 // 키별 캐시 — PR 목록이 2분마다 다시 묻는다. **없는 키도 null 로 캐시**한다: PR 제목의
 // `UTF-8` 같은 키 모양 오탐이 조회마다 다시 실리지 않게. 상태 전환이 성공하면 그 키만 버린다
 const statusCache = new Map<string, { at: number; value: JiraIssueStatus | null }>();
@@ -365,7 +365,7 @@ export async function fetchIssueStatuses(
   if (!auth) return { ok: false, configured: false };
   // 폰(MO)에서도 부르는 채널이라 값 모양을 검사한다 — 문자열·키 형식만 통과
   const keys = [
-    ...new Set(input.filter((k): k is string => typeof k === 'string' && ISSUE_KEY_ONLY.test(k))),
+    ...new Set(input.filter(isIssueKey)),
   ].slice(0, STATUS_MAX_KEYS);
 
   // 만료분은 지우고 시작한다 — 머지돼 사라진 PR 의 키가 앱을 켜 둔 동안 계속 쌓이지 않게

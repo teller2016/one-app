@@ -41,6 +41,26 @@ export function normalizeJiraBase(raw: string): string {
  */
 export const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
 
+// ── 키 판별 (2026-10-21 공통화 — 세 갈래가 패턴을 각자 들고 있었다) ──
+//
+// 쓰임새가 달라 정규식을 일부러 둘로 둔다:
+//  - **찾기**(`JIRA_KEY_RE` 위) — 산문 속에서 집으므로 오탐을 줄이려고 접두를 2~10자로 묶고 밑줄을 뺀다.
+//  - **검사**(아래) — 이미 키라고 건네받은 값이라 Jira 프로젝트 키 규칙 그대로(대문자 시작 +
+//    대문자·숫자·밑줄) 받는다. 경로·JQL·REST 에 들어가기 전 형식 검사다.
+// 사용자가 붙여넣은 주소·소문자 입력의 정규화는 main `jira/store.ts` 의 `normalizeIssueKey`(용도가 다르다).
+
+/** 값 전체가 이슈 키 하나인지 — IPC 인자처럼 타입을 믿을 수 없는 값도 받는다 */
+export const isIssueKey = (value: unknown): value is string =>
+  typeof value === 'string' && /^[A-Z][A-Z0-9_]*-\d+$/.test(value);
+
+/**
+ * 문자열 **앞머리**의 이슈 키 — Jira [작업] 이 세션 제목을 티켓 키로 주므로 세션 ↔ 티켓 매칭에 쓴다
+ * (렌더러: Jira 목록의 femc 세션 칩 · main: 세션이 물고 있는 티켓 폴더 정리 보호).
+ * 앞뒤 공백·대소문자는 무시한다 — 사용자가 세션 이름을 `ssb-86 …` 로 고쳐도 맞는다.
+ */
+export const leadingIssueKey = (text: string): string | undefined =>
+  /^[A-Z][A-Z0-9_]*-\d+/.exec(text.trim().toUpperCase())?.[0];
+
 /** 이슈 브라우저 주소 — `{base}/browse/{key}` */
 export const jiraIssueUrl = (jiraUrl: string, key: string) =>
   `${jiraUrl.replace(/\/+$/, '')}/browse/${key}`;

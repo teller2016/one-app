@@ -6,9 +6,9 @@ import type {
   JiraReportQuery,
 } from "./types";
 import { dayKey, parseDayKey, shiftMonthKey } from "./date";
+import { isIssueKey } from "./jira-url";
 
 const PROJECT_KEY_RE = /^[A-Z][A-Z0-9_]*$/;
-const ISSUE_KEY_RE = /^[A-Z][A-Z0-9_]*-\d+$/;
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,7 +46,7 @@ export function normalizeEpicKeys(keys: string[] | undefined): string[] {
     const k = String(raw ?? "")
       .trim()
       .toUpperCase();
-    if (ISSUE_KEY_RE.test(k) && !out.includes(k)) out.push(k);
+    if (isIssueKey(k) && !out.includes(k)) out.push(k);
     if (out.length >= EPIC_MAX) break;
   }
   return out;

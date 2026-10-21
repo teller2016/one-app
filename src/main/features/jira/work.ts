@@ -23,6 +23,7 @@ import type {
 } from '../../../shared/types';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { mapLimit, shQuote } from '../../lib/util';
+import { leadingIssueKey } from '../../../shared/jira-url';
 import { jiraAuth } from './jira';
 import { listSessions } from '../terminal/pty';
 
@@ -136,8 +137,8 @@ function safeFileName(name: string, fallback: string): string {
 function ticketKeysInUse(): Set<string> {
   const keys = new Set<string>();
   for (const s of listSessions()) {
-    const m = /^[A-Z][A-Z0-9]*-\d+/.exec(s.title.trim().toUpperCase());
-    if (m) keys.add(m[0]);
+    const key = leadingIssueKey(s.title);
+    if (key) keys.add(key);
   }
   return keys;
 }

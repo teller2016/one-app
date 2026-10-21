@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { issueKeysIn, jiraIssueUrl, normalizeJiraBase } from './jira-url';
+import {
+  isIssueKey,
+  issueKeysIn,
+  jiraIssueUrl,
+  leadingIssueKey,
+  normalizeJiraBase,
+} from './jira-url';
 
 describe('normalizeJiraBase', () => {
   it('정상 사이트 주소는 그대로 둔다 (끝 슬래시만 정리)', () => {
@@ -64,5 +70,33 @@ describe('issueKeysIn', () => {
 
   it('소문자·글자에 붙어 쓴 것은 키로 보지 않는다', () => {
     expect(issueKeysIn('bbj-1 xBBJ-2')).toEqual([]);
+  });
+});
+
+describe('isIssueKey', () => {
+  it('값 전체가 키 하나일 때만 참 — 밑줄 프로젝트 키 허용', () => {
+    expect(isIssueKey('SSB-86')).toBe(true);
+    expect(isIssueKey('MY_PROJ-12')).toBe(true);
+    expect(isIssueKey('ssb-86')).toBe(false); // 정규화는 호출부 몫
+    expect(isIssueKey('SSB-86 결제')).toBe(false);
+    expect(isIssueKey('../SSB-86')).toBe(false);
+  });
+
+  it('IPC 로 들어온 문자열이 아닌 값은 거짓', () => {
+    expect(isIssueKey(123)).toBe(false);
+    expect(isIssueKey(null)).toBe(false);
+    expect(isIssueKey(['SSB-1'])).toBe(false);
+  });
+});
+
+describe('leadingIssueKey', () => {
+  it('세션 제목 앞머리의 키 — 공백·소문자 무시, 접미사는 뗀다', () => {
+    expect(leadingIssueKey('SSB-86 탈퇴회원 후기')).toBe('SSB-86');
+    expect(leadingIssueKey('  ssb-137-v2 정기결제')).toBe('SSB-137');
+  });
+
+  it('앞머리가 아니면 없음', () => {
+    expect(leadingIssueKey('작업 SSB-86')).toBeUndefined();
+    expect(leadingIssueKey('zsh')).toBeUndefined();
   });
 });

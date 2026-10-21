@@ -5,6 +5,7 @@ import type {
   TerminalSessionInfo,
 } from '../../../../shared/types';
 import { isUnseenWait } from '../../../../shared/types';
+import { leadingIssueKey } from '../../../../shared/jira-url';
 import { Badge } from '../../../components/Badge';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
@@ -28,9 +29,6 @@ import { JiraDetailPanel } from './JiraDetailPanel';
 import { JiraReportPanel } from './JiraReportPanel';
 import { StartWorkModal } from './StartWorkModal';
 import { WeekActivityPanel } from './WeekActivityPanel';
-
-/** 세션 제목 앞머리의 티켓 키 (작업 시작 시 제목을 키로 준다) */
-const KEY_RE = /^[A-Z][A-Z0-9]*-\d+/;
 
 const PROJECT_KEY = 'jira:project'; // 마지막 선택 프로젝트 탭 (localStorage)
 const VIEW_KEY = 'jira:view'; // 마지막 선택 화면 (내 이슈 / 주간 / 보고)
@@ -372,12 +370,13 @@ export function JiraSection({
     const map = new Map<string, TerminalSessionInfo>();
     for (const s of sessions) {
       if (s.agentId !== 'femc') continue;
-      const hit = KEY_RE.exec(s.title.trim().toUpperCase());
-      if (!hit) continue;
-      const cur = map.get(hit[0]);
+      // 세션 제목 앞머리의 티켓 키 (작업 시작 시 제목을 키로 준다)
+      const key = leadingIssueKey(s.title);
+      if (!key) continue;
+      const cur = map.get(key);
       // 같은 티켓 세션이 여럿이면 내 입력을 기다리는 쪽을 보여준다
       if (!cur || (cur.status !== 'waiting' && s.status === 'waiting')) {
-        map.set(hit[0], s);
+        map.set(key, s);
       }
     }
     return map;

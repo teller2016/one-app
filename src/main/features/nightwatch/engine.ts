@@ -14,6 +14,7 @@ import type {
   NightwatchTicket,
   Project,
 } from "../../../shared/types";
+import { isIssueKey } from "../../../shared/jira-url";
 import { fetchMyIssues, jiraAuth } from "../jira";
 // 전역 fetch 를 타임아웃 래퍼로 대체 — 소켓 hang 시 무한 대기 방지
 import { fetchWithTimeout as fetch, readJson } from "../../lib/http";
@@ -56,7 +57,6 @@ const toAnalysisRepo = (p: Project): AnalysisRepo => ({
   name: p.name,
   path: p.localPath,
 });
-const TICKET_KEY_RE = /^[A-Z][A-Z0-9]*-\d+$/;
 const ISSUE_FIELDS =
   "summary,description,priority,labels,created,comment,attachment";
 const RETENTION_DAYS = 30; // 처리한 티켓 자동 정리 기한
@@ -201,7 +201,7 @@ function removeTicketArtifacts(key: string) {
 
 /** 처리한 티켓 1건 삭제 — 원장 기록 + 산출물 파일 */
 export function deleteTicket(key: string): NightwatchCommandResult {
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, output: "잘못된 티켓 키입니다" };
   }
   if (runningTicket === key) {
@@ -334,7 +334,7 @@ export async function listCandidates(): Promise<NightwatchCandidatesResult> {
 
 /** 후보 숨김 — 분석이 필요 없는 티켓을 목록에서 제외 (해결되면 자동 정리) */
 export function hideCandidate(key: string): NightwatchCommandResult {
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, output: "잘못된 티켓 키입니다" };
   }
   const state = loadNwState();
@@ -362,7 +362,7 @@ export async function analyzeTicket(
   rawOpts?: NightwatchAnalyzeOpts
 ): Promise<NightwatchCommandResult> {
   const opts = sanitizeAnalyzeOpts(rawOpts);
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, output: "잘못된 티켓 키입니다" };
   }
   if (!getJiraApiConfig()) {
@@ -807,7 +807,7 @@ async function detectRepoTampering(
 
 // ── 리포트·프롬프트·로그 조회 ───────────────────────────────────────────
 export function readNightwatchReport(key: string): NightwatchTextResult {
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, error: "잘못된 티켓 키입니다." };
   }
   try {
@@ -823,7 +823,7 @@ export function readNightwatchReport(key: string): NightwatchTextResult {
 
 /** 작업 프롬프트(md) — 아침에 Claude Code 세션에 붙여넣을 작업 지시문 (fixable 일 때 생성) */
 export function readNightwatchPrompt(key: string): NightwatchTextResult {
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, error: "잘못된 티켓 키입니다." };
   }
   try {
@@ -853,7 +853,7 @@ export function readMissionLog(
   key: string,
   knownSize?: number
 ): NightwatchMissionLogResult {
-  if (!TICKET_KEY_RE.test(key)) {
+  if (!isIssueKey(key)) {
     return { ok: false, error: "잘못된 티켓 키입니다." };
   }
   let fd: number | null = null;
