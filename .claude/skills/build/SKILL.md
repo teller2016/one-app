@@ -80,15 +80,32 @@ pgrep -fl "/Applications/One App.app/Contents/MacOS/One App"
 ⚠️ **개발 인스턴스가 떠 있는지에 따라 종료 방식이 갈린다** — 두 앱의 이름이 같아서
 `osascript -e 'quit app "One App"'` 은 **dev 까지 함께 끈다**(2026-09-01 실측 — 사용자의 dev 를
 말없이 내렸다). dev 가 있으면 전체 경로로 빌드 앱만 특정한다.
+⚠️ **One App 터미널 안에서는 `osascript quit` 이 조용히 아무 일도 안 한다**(2026-10-21 실측 — 두 번
+연속 30초를 기다려도 안 꺼졌다). 그 터미널의 tmux 서버는 launchd **`Background`** 세션에서 돌아
+LaunchServices 에 GUI 앱이 하나도 안 보인다(`lsappinfo list` 에 npm·MCP 만, `Application('One App').running()`
+이 이름·경로·번들 id 어느 쪽이든 `false`). 그래서 quit 이 '실행 중이 아닌 앱'에 가서 **오류 없이 끝난다.**
+늘 그런 건 아니다 — 2026-09-07 엔 같은 One App 터미널에서 osascript 가 앱을 껐다. **tmux 서버가 어느
+세션에서 떴느냐**에 따라 갈리므로(10/19 에 뜬 서버는 Background, 왜 그렇게 떴는지는 미확인) 매번
+`launchctl managername` 으로 판별한다 — `Aqua` 일 때만 osascript 가 닿는다.
 ```bash
-if pgrep -f "electron-forge start" >/dev/null; then
-  # dev 보존 — 경로로 빌드 앱만. SIGTERM 이라 before-quit 은 안 돌지만 잃는 상태가 없다
+BIN="/Applications/One App.app/Contents/MacOS/One App"
+if pgrep -f "electron-forge start" >/dev/null || [ "$(launchctl managername)" != "Aqua" ]; then
+  # dev 보존(이름이 같아 osascript 는 dev 까지 끈다) · One App 터미널 안(osascript 가 앱을 못 본다)
+  # → 경로로 빌드 앱만. SIGTERM 이라 before-quit 은 안 돌지만 잃는 상태가 없다
   # (tmux 세션은 별개 서버, 팝아웃 배정은 레코드가 남아 재시작 때 복원된다)
-  pkill -f "/Applications/One App.app/Contents/MacOS/One App"
+  pkill -f "$BIN"
 else
-  osascript -e 'quit app "One App"'   # graceful — dev 가 없을 때만
+  osascript -e 'quit app "One App"'   # graceful — Aqua 세션 + dev 없음일 때만
 fi
+# 실제로 내려갔는지 확인 — 안 내려갔으면 경로 pkill 로 한 번 더, 그래도 남으면 중단
+for i in $(seq 1 20); do pgrep -f "$BIN" >/dev/null || break; sleep 0.5; done
+pgrep -f "$BIN" >/dev/null && pkill -f "$BIN"
+for i in $(seq 1 20); do pgrep -f "$BIN" >/dev/null || break; sleep 0.5; done
+pgrep -fl "$BIN" && echo "⛔ 빌드 앱이 안 내려갔다 — 교체 중단"
 ```
+⚠️ **내려간 것을 확인하기 전에는 5단계로 넘어가지 않는다.** 살아 있는 채로 교체하면 7단계의
+`open -a` 가 새로 띄우지 않고 **옛 프로세스를 앞으로 가져오기만** 해서, 빌드했는데 옛 코드가 계속 돈다
+(예전 스킬은 osascript 뒤 확인이 없어 One App 터미널에서 돌린 빌드가 이렇게 끝났을 수 있다).
 종료 뒤 `pgrep -f "electron-forge start"` 로 **dev 가 살아 있는지 반드시 확인**한다.
 - 터미널 세션은 tmux 가 들고 있어 앱을 껐다 켜도 살아남는다 — 잃는 상태가 없으므로 물을 이유가 없다.
 - ⚠️ `pkill -f "One App"` 처럼 넓은 패턴을 쓰지 말 것 — 개발 인스턴스나 무관한 프로세스까지 잡는다. 위처럼 **`/Applications/…/MacOS/One App` 전체 경로**여야 빌드 앱만 잡힌다.
