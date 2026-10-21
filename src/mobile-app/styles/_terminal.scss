@@ -20,7 +20,7 @@
   background: var(--bg);
   color: var(--text);
 
-  // ── 상단 (52 · 패널 면) — 작업 영역 · 검색 · 세션 메뉴 · 연결 점 ──
+  // ── 상단 (52 · 패널 면) — 작업 영역 · 검색 · 세션 메뉴 (연결 점은 뺐다 — 끊김은 __band 가 알린다) ──
   &__top {
     position: relative; // 끊김 띠(__band)의 기준
     display: flex;
@@ -146,20 +146,6 @@
     &:disabled {
       opacity: 0.35;
       cursor: default;
-    }
-  }
-
-  // 연결 점 7 — 연결 ok · 끊김 흐림
-  &__conn {
-    width: 7px;
-    height: 7px;
-    flex-shrink: 0;
-    margin: 0 6px 0 2px;
-    border-radius: var(--r-full);
-    background: var(--text-3);
-
-    &--on {
-      background: var(--ok);
     }
   }
 

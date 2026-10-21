@@ -268,11 +268,6 @@ export function MoTerminalTab({ active, onGoTab }: { active: boolean; onGoTab: (
         >
           <Icon name="more-horizontal" size={18} />
         </button>
-        <span
-          className={`moterm__conn${st.connected ? ' moterm__conn--on' : ''}`}
-          role="img"
-          aria-label={st.statusText}
-        />
         {/* 끊김 띠 — 유예(OFFLINE_GRACE_MS)가 지나도 못 붙었을 때만. 칩 줄 위에 겹쳐 띄워 터미널을 밀지 않는다
             (밀면 xterm 이 다시 맞춰지고, 붙어서 띠가 사라질 때 또 밀렸다) */}
         {st.offline && (
