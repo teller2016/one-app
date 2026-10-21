@@ -6,6 +6,9 @@ import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { dockLeftSlot } from '../../lib/macDock';
+import { CONTROL_ICON_PNG } from './controlIcon';
+import { focusWhenShown } from './focus';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
   type MirrorActionResult,
@@ -21,62 +24,78 @@ const CONTROL_WINDOW_SIZE = 100; // 타이틀바까지 **포함한** 창 한 변
 //    100x132 가 된다). 창 전체를 정사각형으로 만들려면 타이틀바 높이를 빼서 넘겨야 한다.
 const TITLEBAR_H = 32;
 
-// 모드별 scrcpy 인자 — 바탕화면 런처 앱들과 동일
-const MODE_ARGS: Record<MirrorMode, string[]> = {
-  mirror: ['-d', '--turn-screen-off'], // Mirror USB.app
-  control: [
-    // Control USB.app
+/**
+ * 모드별 scrcpy 인자 — 바탕화면 런처 앱들(Mirror USB.app·Control USB.app)과 동일.
+ * 제어 모드는 독이 아래에 있으면 **독 왼쪽 빈자리에 정사각(독 띠 높이, 41)**으로 붙인다(2026-10-21 사용자 요청 —
+ * 독 오른쪽 터미널 패널의 짝). 테두리 없음 + 항상 위라 마우스로 옮기거나 닫을 수 없으므로 닫기는 상태바 미러링
+ * 위젯이 한다. 실측: 지정한 프레임 그대로 앉았다(macOS 가 독 띠 밖으로 밀지 않음 — layer 3).
+ * ⚠️ 모서리는 네모다 — SDL 창이라 둥글게 못 한다. 둥근 앱 칩을 위에 덮어 봤지만 scrcpy 창의 OS 그림자가
+ *    칩 밖으로 삐져나와 걷어냈다(2026-10-21 사용자 확인). 독이 아래에 없으면(자동 숨김·좌우) 예전 100x100.
+ */
+function modeArgs(mode: MirrorMode): string[] {
+  if (mode === 'mirror') return ['-d', '--turn-screen-off'];
+  const base = [
     '-d',
     '--no-video',
     '--no-audio',
     '--keyboard=uhid',
     '--mouse=uhid',
+    // 제목 비우기 — 빈 값이 그대로 먹는다(2026-09-01 실측). Dock·⌘Tab 에 이름이 안 뜬다
+    '--window-title=',
+  ];
+  const r = dockLeftSlot();
+  if (r) {
+    return [
+      ...base,
+      '--window-borderless',
+      '--always-on-top',
+      `--window-x=${r.x}`,
+      `--window-y=${r.y}`,
+      `--window-width=${r.width}`,
+      `--window-height=${r.height}`,
+    ];
+  }
+  // 타이틀바를 남겨 창을 마우스로 옮기고 닫을 수 있게 둔다(--window-borderless 면 둘 다 막힌다)
+  return [
+    ...base,
     `--window-width=${CONTROL_WINDOW_SIZE}`,
     `--window-height=${CONTROL_WINDOW_SIZE - TITLEBAR_H}`,
-    // 제목 비우기 — 빈 값이 그대로 먹는다(2026-09-01 실측). 타이틀바 자체는 남겨
-    // 창을 마우스로 옮기고 닫을 수 있게 둔다(--window-borderless 를 쓰면 둘 다 막힌다).
-    '--window-title=',
-  ],
-};
+  ];
+}
 
 // scrcpy 는 화면이 없는 control 모드에서도 키·마우스 입력을 받으려고 창을 띄우고,
-// 그 한가운데에 자기 아이콘(초록 안드로이드)을 크게 그린다. 소스를 고쳐 다시 빌드할 것 없이
-// **SCRCPY_ICON_DIR 로 아이콘 디렉터리를 통째로 갈아끼울 수 있어서**(scrcpy 4.0 실측,
-// 2026-09-01) 투명 PNG 를 넘겨 빈 창으로 만든다.
-// ⚠️ **1x1 로 만들지 말 것** — 창은 비지만 같은 이미지가 Dock 아이콘으로도 쓰여서,
-//    Dock 이 1x1 을 확대할 때 파란 사각형이 됐다(2026-09-01 실측). 256x256 이면 Dock 도
-//    빈 자리로 남는다.
-const BLANK_ICON_PNG = Buffer.from(
-  // 256x256 전체가 알파 0 인 PNG (334 바이트 — 전부 0 이라 압축이 잘 된다)
-  'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR42u3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAAB2ClDBAAAAABJRU5ErkJggg==',
-  'base64',
-);
+// 그 한가운데에 자기 아이콘(초록 안드로이드)을 창 크기에 맞춰 크게 그린다. 소스를 고쳐 다시 빌드할 것 없이
+// **SCRCPY_ICON_DIR 로 아이콘 디렉터리를 통째로 갈아끼울 수 있어서**(scrcpy 4.0 실측, 2026-09-01)
+// 우리 그림을 넘긴다 — 처음엔 투명 PNG(빈 창)였고, 2026-10-21 제어 창을 독 왼쪽에 붙이며 폰 모양 그림으로
+// 바꿨다(사용자 선택 — 테두리 없는 SDL 창은 모서리를 둥글게 못 해 안쪽 그림으로만 꾸민다).
+// 같은 그림이 Dock 타일로도 쓰인다. 그림은 `npm run icon:mirror` 로 만든다(controlIcon.ts — 256x256).
+// ⚠️ **1x1 처럼 작게 만들지 말 것** — Dock 이 확대할 때 파란 사각형이 됐다(2026-09-01 실측).
 
-let blankIconDir: string | null | undefined; // undefined = 아직 안 만듦 / null = 실패
+let iconDir: string | null | undefined; // undefined = 아직 안 만듦 / null = 실패
 
 /**
- * 투명 아이콘 디렉터리를 userData 아래에 확보하고 경로를 돌려준다.
+ * 아이콘 디렉터리를 userData 아래에 확보하고 경로를 돌려준다.
  * ⚠️ scrcpy 는 이 디렉터리에서 `scrcpy.png` 와 `disconnected.png` 두 이름을 찾는다 —
  *    하나만 두면 기기가 빠질 때 원래 아이콘 폴백이 뜬다.
  * 실패해도 null 만 돌려준다: 아이콘은 곁가지라 미러링 자체를 막지 않는다.
  */
-function ensureBlankIconDir(): string | null {
-  if (blankIconDir !== undefined) return blankIconDir;
+function ensureIconDir(): string | null {
+  if (iconDir !== undefined) return iconDir;
   try {
     const dir = path.join(app.getPath('userData'), 'mirror-icons');
     fs.mkdirSync(dir, { recursive: true });
     for (const name of ['scrcpy.png', 'disconnected.png']) {
       const file = path.join(dir, name);
-      // 존재 여부가 아니라 크기로 비교한다 — 예전에 다른 아이콘을 심어 뒀어도 갱신된다
-      if (fs.statSync(file, { throwIfNoEntry: false })?.size !== BLANK_ICON_PNG.length) {
-        fs.writeFileSync(file, BLANK_ICON_PNG);
+      // 존재 여부가 아니라 크기로 비교한다 — 예전 그림(투명 PNG 334 바이트)을 심어 뒀어도 갱신된다
+      if (fs.statSync(file, { throwIfNoEntry: false })?.size !== CONTROL_ICON_PNG.length) {
+        fs.writeFileSync(file, CONTROL_ICON_PNG);
       }
     }
-    blankIconDir = dir;
+    iconDir = dir;
   } catch {
-    blankIconDir = null;
+    iconDir = null;
   }
-  return blankIconDir;
+  return iconDir;
 }
 
 // Homebrew 경로 우선 탐색 (Apple Silicon → Intel)
@@ -193,14 +212,14 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
 
     lastError = '';
     const stderrTail: string[] = []; // 비정상 종료 원인 표시용 — 마지막 몇 줄만 유지
-    const iconDir = ensureBlankIconDir();
-    const proc = spawn(scrcpy, MODE_ARGS[mode], {
+    const icons = ensureIconDir();
+    const proc = spawn(scrcpy, modeArgs(mode), {
       env: {
         ...process.env,
         // adb 등 부속 바이너리를 찾도록 Homebrew 경로 보강 (Mirror USB.app 과 동일)
         PATH: `/opt/homebrew/bin:${process.env.PATH ?? ''}`,
-        // 창 한가운데 안드로이드 아이콘을 지운다 (control 모드에서 보인다)
-        ...(iconDir ? { SCRCPY_ICON_DIR: iconDir } : {}),
+        // 창 한가운데 안드로이드 아이콘 대신 폰 모양 그림 (control 모드에서 보인다 · Dock 타일도)
+        ...(icons ? { SCRCPY_ICON_DIR: icons } : {}),
       },
       stdio: ['ignore', 'ignore', 'pipe'],
     });
@@ -225,6 +244,8 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
     });
     child = proc;
     runningMode = mode;
+    // 제어는 켜자마자 키보드가 폰으로 가게 — 창이 뜨면 앞으로 가져온다(접근성 권한이 있을 때만)
+    if (mode === 'control') focusWhenShown(proc.pid);
     emit();
     return { ok: true };
   } finally {

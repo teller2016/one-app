@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "icon": "node scripts/make-icon.mjs",
     "icon:dev": "node scripts/make-dev-icon.mjs",
+    "icon:mirror": "node scripts/make-mirror-icon.mjs",
     "postinstall": "node scripts/patch-node-pty.mjs; chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "keywords": [],

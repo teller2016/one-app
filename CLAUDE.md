@@ -18,6 +18,7 @@
 | `npm run make` | `.app` + 배포용 `.zip` (macOS 는 ZIP maker 만 있다 — DMG 아님) |
 | `npm run icon` | 앱 아이콘 원본(`assets/icon.png`) + 폰 홈 화면 아이콘(`src/mobile-app/public/icon-192·512`) 생성 — 도형 코드가 정본 (`scripts/make-icon.mjs`) |
 | `npm run icon:dev` | 개발용 DEV 아이콘 생성 (원본 아이콘을 바꿨을 때만) |
+| `npm run icon:mirror` | 폰 제어 창(scrcpy) 가운데·Dock 타일의 폰 그림 생성 → `src/main/features/mirror/controlIcon.ts` |
 
 ## 프로젝트 구조 (feature 중심 — Bulletproof React 스타일)
 ```

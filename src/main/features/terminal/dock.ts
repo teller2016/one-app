@@ -11,26 +11,23 @@
 import path from 'node:path';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { app, BrowserWindow, ipcMain, screen, systemPreferences } from 'electron';
-import type { Display, Rectangle } from 'electron';
+import type { Rectangle } from 'electron';
 import type { TerminalDockState } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import { IS_DEV_INSTANCE } from '../../lib/devInstance';
+import { DOCK_GAP as GAP, DOCK_INSET_Y as INSET_Y, findDockSpot } from '../../lib/macDock';
 import { readUserJson, writeUserJson } from '../../lib/store';
 
 // 화면 취향(경계 위치)이라 개발 인스턴스와 공유한다 — 세션 배정(runtimeFile)과 다르다
 const PREFS_FILE = 'terminal-dock.json';
 type DockPrefs = { leftRatio?: number; expandedHeight?: number };
 
-const GAP = 8; // 독 ↔ 패널, 패널 ↔ 화면 오른쪽 끝
-const INSET_Y = 3; // 독 띠 안의 위아래 여백
 /** 펼친 높이 기본값 — 펼친 상태에서 윗변을 끌어 바꾸면 expandedHeight 로 기억한다 */
 const EXPANDED_H = 320;
 const EXPANDED_MIN_H = 120;
 const MIN_W = 280;
 /** 독이 아래에 없을 때(자동 숨김·좌우 배치) 화면 오른쪽 아래에 띄울 크기 */
 const FLOATING = { width: 520, height: 44 };
-/** 이보다 얇은 아래 여백은 독이 아니다 — 자동 숨김 독도 visibleFrame 을 몇 pt 깎는다 */
-const DOCK_MIN_STRIP = 24;
 /** 수동 경계 기본값(독 띠 폭 대비) — 가운데 정렬된 독의 오른쪽 끝 언저리 */
 const DEFAULT_LEFT_RATIO = 0.66;
 
@@ -195,27 +192,7 @@ function applyAxLine(line: string): void {
   emitState();
 }
 
-// ── 독 자리 계산 ──
-
-type DockSpot =
-  | { kind: 'bottom'; display: Display; strip: Rectangle }
-  | { kind: 'floating'; display: Display };
-
-/** 독이 아래에 있는 화면과 그 띠 — 독은 그 화면의 workArea 아래쪽을 깎는다 */
-function findDockSpot(): DockSpot {
-  for (const display of screen.getAllDisplays()) {
-    const b = display.bounds;
-    const w = display.workArea;
-    const bottom = b.y + b.height - (w.y + w.height);
-    if (bottom >= DOCK_MIN_STRIP)
-      return {
-        kind: 'bottom',
-        display,
-        strip: { x: b.x, y: w.y + w.height, width: b.width, height: bottom },
-      };
-  }
-  return { kind: 'floating', display: screen.getPrimaryDisplay() };
-}
+// ── 독 자리 계산 — 독 띠 찾기는 lib/macDock(폰 제어 창과 공용) ──
 
 // 손잡이를 끄는 동안은 메모리 값만 바꾸고 놓을 때 한 번 쓴다 — pointermove 마다 파일을 쓰지 않게
 let prefsCache: DockPrefs | null = null;
