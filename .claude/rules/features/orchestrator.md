@@ -174,7 +174,7 @@ paths:
   `open_deploy_confirm` → ⌘P 팔레트와 같은 `requestDeployConfirm`(배포 섹션으로 가서 확인 모달). 프로젝트·대상은 id 또는 이름(대소문자 무시).
   PROD 는 모달의 대상 이름 입력 + main 재대조(deploy:trigger) — 루트가 건너뛸 길이 없다. 실측: DEV·PROD 모달이 그 대상으로 뜨고 [취소]로 닫힘(배포 안 누름).
 - **3b PR**(`prTools.ts`): `list_prs`(prs:fetch 보강본 + `mine` — 토큰 주인 `/api/v1/user` 를 주소·토큰별로 기억) · `open_pr_create`(레지스트리 저장소만 ·
-  head·base 가 원격에 있는지 prs:all-branches 로 먼저 확인 — 워커가 push 안 한 브랜치로 모달을 열지 않는다) · `open_pr_merge`(열린 PR 인지 확인 · method 미리 선택).
+  head·base 가 원격에 있는지 prs:all-branches 로 먼저 확인 — 워커가 push 안 한 브랜치로 모달을 열지 않는다) · `open_pr_merge`(열린 PR 인지 확인 · method 미리 선택 · **머지할 수 있으면 [머지] 확인 창까지** — 2026-10-22 사용자 결정, 충돌이면 패널만).
   저장소는 owner/repo · 프로젝트 이름 · **워크스페이스 이름**(FO-BBJ — 저장소 경로가 같은 레지스트리 프로젝트로 잇는다. 루트는 워크스페이스 이름으로 부른다).
   렌더러 `features/prs/lib/prRequest.ts`(배포의 deployRequest 와 같은 패턴) — PrSection 이 목록·레지스트리가 뜬 뒤 소비:
   그 저장소 탭으로 + 검색 비움 → create 면 `CreatePrModal initial`(루트가 채운 제목·본문은 dirty 로 쳐 커밋 초안이 덮지 않는다) ·

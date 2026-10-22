@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   isMergeCommit,
   type DeployCommit,
@@ -45,6 +45,8 @@ export function PrDetail({
   hasToken,
   conflictPending,
   initialMethod,
+  autoConfirm = false,
+  onAutoConfirmed,
   onMerged,
 }: {
   pr: PrItem;
@@ -60,6 +62,10 @@ export function PrDetail({
   /** 머지 성공 — 부모가 토스트·목록 갱신·Jira 해결 제안을 이어간다 */
   /** 루트 세션이 골라 둔 머지 방식(prRequest.ts) — 없으면 merge */
   initialMethod?: PrMergeMethod;
+  /** 루트 세션의 머지 요청 — 머지 가능이 확인되면 [머지] 확인 창을 바로 띄운다(머지는 확인 창에서 사용자가) */
+  autoConfirm?: boolean;
+  /** 확인 창을 띄웠다(또는 띄울 수 없었다) — 부모가 요청을 비워 다시 마운트돼도 또 뜨지 않게 */
+  onAutoConfirmed?: () => void;
   onMerged: (pr: PrItem) => void;
 }) {
   const [info, setInfo] = useState<PrMergeInfoResult | null>(null);
@@ -132,7 +138,8 @@ export function PrDetail({
     const mustType = await mustTypeBase();
     const ok = await confirmDialog({
       title: `${base ?? '대상 브랜치'} 로 머지할까요?`,
-      message: `#${pr.number} · ${pr.title}`,
+      // 방식도 적는다 — 루트 요청으로 바로 뜬 확인 창은 사용자가 방식을 고르기 전이다
+      message: `#${pr.number} · ${pr.title} · ${METHOD_OPTIONS.find((o) => o.value === method)?.label ?? method}`,
       confirmLabel: '머지',
       ...(mustType && {
         warn: true,
@@ -163,6 +170,21 @@ export function PrDetail({
     }
     onMerged(pr);
   };
+
+  // 루트 세션의 머지 요청 — merge-info(정본)가 온 뒤 머지할 수 있으면 [머지]를 누른 것과 같은 확인 창을 띄운다(한 번만).
+  // 충돌이면 띄우지 않고 패널만 남긴다(충돌 배너가 이유를 보인다). ⚠️ 토큰 여부(부모가 설정에서 늦게 읽는다)·머지 가능 여부
+  // (재검사 중이면 모름)가 정해질 때까지 기다린다 — 먼저 판정하면 토큰이 있는데도 확인 창을 건너뛴다
+  const mergeRef = useRef(merge);
+  useEffect(() => {
+    mergeRef.current = merge;
+  });
+  const autoFired = useRef(false);
+  useEffect(() => {
+    if (!autoConfirm || autoFired.current || info === null || merging || !hasToken || mergeable === undefined) return;
+    autoFired.current = true;
+    onAutoConfirmed?.();
+    if (mergeable === true) void mergeRef.current();
+  }, [autoConfirm, info, mergeable, hasToken, merging, onAutoConfirmed]);
 
   const off = !!base && !!defaultBranch && base !== defaultBranch;
   // 주요 브랜치(main 등)로 가는 PR 은 [머지]를 누르기 전부터 주황으로 — 배포 PROD 버튼과 같은 신호.

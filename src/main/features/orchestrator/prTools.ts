@@ -155,10 +155,10 @@ export function registerPrTools(server: McpServer): void {
   server.registerTool(
     'open_pr_merge',
     {
-      title: 'PR 머지 화면 띄우기',
+      title: 'PR 머지 확인 창 띄우기',
       description:
-        '원앱 PR 섹션에서 그 PR 을 골라 상세 패널(커밋·충돌·머지 방식)을 띄운다 — **머지하지는 않는다**(사용자가 [머지]. 주요 브랜치로 가면 이름 입력 확인도). ' +
-        'method 를 주면 머지 방식을 미리 골라 둔다.',
+        '원앱 PR 섹션에서 그 PR 을 골라 상세 패널(커밋·충돌·머지 방식)을 띄우고, 머지할 수 있으면 [머지] 확인 창까지 띄운다 — **머지하지는 않는다**' +
+        '(사용자가 확인 창의 [머지]. 주요 브랜치로 가면 이름 입력 확인도). 충돌이면 확인 창 없이 패널만. method 를 주면 머지 방식을 미리 골라 둔다.',
       inputSchema: {
         repo: z.string().min(1).describe('owner/repo · 프로젝트 이름 · 워크스페이스 이름(FO-BBJ)'),
         number: z.number().int().positive().describe('PR 번호'),
@@ -188,7 +188,9 @@ export function registerPrTools(server: McpServer): void {
         approvals: pr.approvals ?? null,
         note:
           (cfg.excludedOrgs.includes(org) ? `⚠️ PR 탭에서 '${org}' 조직을 숨겨 둬서 상세가 안 보일 수 있습니다. ` : '') +
-          '그 PR 의 상세 패널을 띄웠습니다 — 사용자가 [머지]를 눌러야 머지됩니다.',
+          (pr.mergeable === false
+            ? '충돌이 있어 상세 패널만 띄웠습니다(확인 창 없음) — 충돌을 먼저 풀어야 합니다.'
+            : '그 PR 의 머지 확인 창을 띄웠습니다 — 사용자가 확인 창의 [머지]를 눌러야 머지됩니다.'),
       });
     },
   );

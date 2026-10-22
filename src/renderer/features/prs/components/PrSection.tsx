@@ -67,15 +67,24 @@ export function PrSection() {
   // 방금 만든 PR — 목록 재조회가 끝나기 전에도 상세를 띄우기 위한 낙관적 항목
   const [justCreated, setJustCreated] = useState<PrItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  // 루트 세션이 채워 달라고 보낸 새 PR 초기값·머지 방식(prRequest.ts) — 열 때 한 번 쓴다.
-  // seq 는 모달·상세의 key 로 — 이미 떠 있을 때 같은 요청이 다시 와도 새 값으로 다시 그린다(초기값은 마운트 때만 읽힌다)
+  // 루트 세션이 채워 달라고 보낸 새 PR 초기값·머지 요청(prRequest.ts) — 열 때 한 번 쓴다.
+  // seq 는 모달·상세의 key 로 — 이미 떠 있을 때 같은 요청이 다시 와도 새 값으로 다시 그린다(초기값은 마운트 때만 읽힌다).
+  // confirm = 상세가 뜨면 [머지] 확인 창을 바로 띄운다(한 번만 — 띄운 뒤 false). 머지는 확인 창에서 사용자가 누른다
   const [createInitial, setCreateInitial] = useState<(CreatePrInitial & { seq: number }) | null>(null);
-  const [mergeMethodInit, setMergeMethodInit] = useState<{ key: string; method: PrMergeMethod; seq: number } | null>(null);
+  const [mergeInit, setMergeInit] = useState<{
+    key: string;
+    method?: PrMergeMethod;
+    seq: number;
+    confirm: boolean;
+  } | null>(null);
   const reqSeq = useRef(0);
-  // 다른 PR 로 옮기면 미리 고른 머지 방식을 버린다 — 돌아왔을 때 루트가 고른 값이 다시 살아나지 않게
+  // 다른 PR 로 옮기면 머지 요청을 버린다 — 돌아왔을 때 루트가 고른 방식·확인 창이 다시 살아나지 않게
   useEffect(() => {
-    if (mergeMethodInit && selectedKey !== mergeMethodInit.key) setMergeMethodInit(null);
-  }, [selectedKey, mergeMethodInit]);
+    if (mergeInit && selectedKey !== mergeInit.key) setMergeInit(null);
+  }, [selectedKey, mergeInit]);
+  const onAutoConfirmed = useCallback(() => {
+    setMergeInit((cur) => (cur ? { ...cur, confirm: false } : cur));
+  }, []);
   // 머지 직후 충돌 재검사 창 (`lib/conflictRecheck.ts` 주석 참고)
   const [recheck, setRecheck] = useState<{ repo: string; until: number } | null>(
     null,
@@ -268,6 +277,11 @@ export function PrSection() {
 
   // 루트 세션의 PR 요청 — 목록·레지스트리가 뜬 뒤 그 저장소 탭으로 옮겨 새 PR 모달을 채워 열거나 그 PR 을 골라 둔다.
   // 만들기·머지는 하지 않는다(사용자가 모달의 [PR 생성]·패널의 [머지]로). 섹션 밖 요청은 마운트 전에 와 있고, 떠 있으면 구독으로 받는다
+  // 요청을 받는 순간의 목록 — 방금 올라온 PR 이 아직 없으면 목록을 새로 받는다(상세는 목록에 있어야 뜬다)
+  const prsRef = useRef<PrItem[]>([]);
+  useEffect(() => {
+    prsRef.current = result?.prs ?? [];
+  });
   useEffect(() => {
     if (!projectsLoaded) return;
     const consume = () => {
@@ -289,11 +303,14 @@ export function PrSection() {
       const key = `${req.repo}#${req.number}`;
       setSelectedKey(key);
       reqSeq.current += 1;
-      setMergeMethodInit(req.method ? { key, method: req.method, seq: reqSeq.current } : null);
+      setMergeInit({ key, method: req.method, seq: reqSeq.current, confirm: true });
+      // ⚠️ 루트는 main 의 목록(force 조회 포함)으로 PR 을 확인하고 부른다 — 섹션이 들고 있던 목록이 그보다 낡았으면
+      // (방금 올린 PR) 상세가 안 떠서 아무 일도 없는 것처럼 보였다. 없으면 새로 받는다
+      if (!prsRef.current.some((pr) => keyOf(pr) === key)) void load(true);
     };
     consume();
     return onPrRequest(consume);
-  }, [projectsLoaded, createRepos, toast]);
+  }, [projectsLoaded, createRepos, toast, load]);
 
   // 재검사 창 안이면 이 저장소의 mergeable=false 는 '충돌'인지 아직 알 수 없다
   const conflictPending = !!recheck && recheck.repo === effectiveTab;
@@ -516,14 +533,16 @@ export function PrSection() {
               />
               {selected ? (
                 <PrDetail
-                  key={mergeMethodInit?.key === keyOf(selected) ? `${keyOf(selected)}:${mergeMethodInit.seq}` : keyOf(selected)}
+                  key={mergeInit?.key === keyOf(selected) ? `${keyOf(selected)}:${mergeInit.seq}` : keyOf(selected)}
                   pr={selected}
                   defaultBranch={defaultBranchOf(selected.repo)}
                   jiraUrl={jiraUrl}
                   issueStatuses={issueStatuses}
                   hasToken={hasToken}
                   conflictPending={conflictPending}
-                  initialMethod={mergeMethodInit?.key === keyOf(selected) ? mergeMethodInit.method : undefined}
+                  initialMethod={mergeInit?.key === keyOf(selected) ? mergeInit.method : undefined}
+                  autoConfirm={mergeInit?.key === keyOf(selected) && mergeInit.confirm}
+                  onAutoConfirmed={onAutoConfirmed}
                   onMerged={onMerged}
                 />
               ) : (
