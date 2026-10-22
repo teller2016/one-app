@@ -5,12 +5,13 @@ import type { TerminalPreset, WorktreeInfo } from '../../../../shared/types';
 import { agentIdFromCommand } from '../../../../shared/types';
 
 /**
- * LNB 선택 상태 — 워크트리 하나 또는 '기타 세션'(어느 워크트리에도 안 속한 세션 묶음).
- * 상단 탭바는 이 선택에 속한 세션들만 보여준다.
+ * LNB 선택 상태 — 워크트리 하나 · '기타 세션'(어느 워크트리에도 안 속한 세션 묶음) · '루트'(맨 위 고정 칸 —
+ * 다른 claude 세션을 지휘하는 루트 세션 하나, features/orchestrator). 상단 탭바는 이 선택에 속한 세션들만 보여준다.
  */
 export type WorkspaceSelection =
   | { kind: 'worktree'; wsId: string; path: string }
-  | { kind: 'other' };
+  | { kind: 'other' }
+  | { kind: 'root' };
 
 /**
  * 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션·방문 히스토리가 전부 이 키로 갈린다.
@@ -18,7 +19,7 @@ export type WorkspaceSelection =
  */
 export function selectionKey(sel: WorkspaceSelection | null): string {
   if (!sel) return '';
-  return sel.kind === 'other' ? 'other' : `${sel.wsId}:${sel.path}`;
+  return sel.kind === 'worktree' ? `${sel.wsId}:${sel.path}` : sel.kind;
 }
 
 /** 두 선택이 같은가 — 탭 목록·활성 표시 비교용 */
@@ -27,7 +28,7 @@ export function sameSelection(
   b: WorkspaceSelection | null
 ): boolean {
   if (!a || !b) return a === b;
-  if (a.kind === 'other' || b.kind === 'other') return a.kind === b.kind;
+  if (a.kind !== 'worktree' || b.kind !== 'worktree') return a.kind === b.kind;
   return a.wsId === b.wsId && a.path === b.path;
 }
 

@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
  */
 export type IconName =
   | "network"
+  | "root"
   | "calendar"
   | "bar-chart"
   | "rocket"
@@ -379,6 +380,21 @@ const PATHS: Record<IconName, ReactNode> = {
       <rect x="9" y="2" width="6" height="6" rx="1" />
       <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
       <path d="M12 12V8" />
+    </>
+  ),
+  // 루트 세션 — 땅 위 새싹 + 땅 아래 뿌리(터미널 LNB 고정 칸·⌘P 명령). Lucide 에 없는 모양이라 같은 규격(24 격자·선 1.7)으로 직접 그렸다
+  // (2026-10-22 사용자가 후보 4개 중 고름 — 아티팩트 '루트 아이콘 후보')
+  root: (
+    <>
+      <path d="M12 8.2C12 5.6 10 4 7.4 4c0 2.6 2 4.2 4.6 4.2Z" />
+      <path d="M12 8.2c0-2.9 2.1-4.7 5.1-4.7 0 2.9-2.1 4.7-5.1 4.7Z" />
+      <path d="M12 8.2V12" />
+      <path d="M4 12h16" />
+      <path d="M12 12v4.4" />
+      <path d="M12 13.8c-1.2.9-2.7 1.4-3.7 3.3" />
+      <path d="M12 13.8c1.2.9 2.7 1.4 3.7 3.3" />
+      <path d="M12 16.4c-.4 1.4-1 2.5-1.9 3.6" />
+      <path d="M12 16.4c.4 1.4 1 2.5 1.9 3.6" />
     </>
   ),
   // 시작(작업 착수) — Jira 행의 [작업] 버튼

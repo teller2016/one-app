@@ -1,5 +1,6 @@
 // 루트 세션 저장 — MCP 토큰(설정, 개발·설치본 공유)과 루트 세션 id(런타임, 인스턴스별).
 import crypto from 'node:crypto';
+import { broadcast } from '../../lib/broadcast';
 import { IS_DEV_INSTANCE, runtimeFile } from '../../lib/devInstance';
 import { decryptSecret, encryptSecret, readUserJson, writeUserJson } from '../../lib/store';
 
@@ -45,7 +46,9 @@ export function getRootSessionId(): string | null {
   return rootIdCache;
 }
 
+/** 루트 세션 id 기록 — 터미널 LNB 의 고정 '루트' 칸이 이 id 의 세션을 그린다(렌더러에 방송) */
 export function setRootSessionId(id: string): void {
   rootIdCache = id;
   writeUserJson(ROOT_FILE, { sessionId: id });
+  broadcast('orchestrator:root', id);
 }

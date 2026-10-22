@@ -3,6 +3,7 @@
 // 1a 는 손으로 연다(이미 떠 있으면 그 탭으로). 재부팅 복원은 하지 않는다 — 도구를 막고 띄운 claude 는
 // 그 제한 없이 되살아나므로 복원 기록 자체를 남기지 않는다(terminal/resumeCommand.ts isRevivable).
 import { app } from 'electron';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,11 +32,45 @@ const DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit', 'Bash', 'Agent'];
 
 const rootDir = () => path.join(app.getPath('userData'), ROOT_DIR_NAME);
 
-/** 루트 폴더 — 지침서는 없을 때만(사용자가 고친 것을 덮지 않는다), mcp.json 은 매번(포트·토큰을 따라간다) */
+const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
+
+/**
+ * 지침서(CLAUDE.md) — 없으면 기본본을 쓰고, 있으면 **우리가 마지막으로 쓴 기본본 그대로일 때만** 새 기본본으로 바꾼다.
+ * 사용자가 한 글자라도 고쳤으면(해시가 다르면) 그대로 둔다 — 기본본이 바뀌어도(도구 추가 등) 손대지 않은 폴더는 따라온다.
+ * 마지막으로 쓴 기본본의 해시는 그 폴더의 `.guide-default.sha256`(dev·설치본 폴더가 각자).
+ */
+function syncGuide(dir: string): void {
+  const guide = path.join(dir, 'CLAUDE.md');
+  const stamp = path.join(dir, '.guide-default.sha256');
+  const next = sha256(ROOT_GUIDE);
+  let current: string | null = null;
+  try {
+    current = fs.readFileSync(guide, 'utf8');
+  } catch {
+    // 아직 없다 — 아래에서 쓴다
+  }
+  if (current !== null) {
+    const cur = sha256(current);
+    let last: string | null = null;
+    try {
+      last = fs.readFileSync(stamp, 'utf8').trim();
+    } catch {
+      // 기록 전 — 해시를 모르면 사용자가 고친 것으로 본다
+    }
+    if (cur === next) {
+      if (last !== next) fs.writeFileSync(stamp, `${next}\n`);
+      return;
+    }
+    if (cur !== last) return; // 사용자가 고쳤다 — 그대로 둔다
+  }
+  fs.writeFileSync(guide, ROOT_GUIDE);
+  fs.writeFileSync(stamp, `${next}\n`);
+}
+
+/** 루트 폴더 — 지침서는 syncGuide(사용자가 고친 것은 덮지 않는다), mcp.json 은 매번(포트·토큰을 따라간다) */
 function prepareRootDir(dir: string, token: string): string {
   fs.mkdirSync(dir, { recursive: true });
-  const guide = path.join(dir, 'CLAUDE.md');
-  if (!fs.existsSync(guide)) fs.writeFileSync(guide, ROOT_GUIDE);
+  syncGuide(dir);
   const mcpFile = path.join(dir, 'mcp.json');
   const config = {
     mcpServers: {

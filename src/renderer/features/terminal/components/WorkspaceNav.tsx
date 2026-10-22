@@ -117,6 +117,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   expanded,
   otherCount,
   otherBusy,
+  rootSession,
+  onOpenRoot,
   onToggleExpand,
   onSelect,
   onNewWorktree,
@@ -138,6 +140,9 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   otherCount: number;
   /** 기타 세션에 작업중(에이전트) 세션이 있는가 — 행의 작업중 스피너 */
   otherBusy: boolean;
+  /** 루트 세션(맨 위 고정 칸) — 꺼져 있으면 null 이고 칸을 누르면 새로 띄운다(features/orchestrator) */
+  rootSession: TerminalSessionInfo | null;
+  onOpenRoot: () => void;
   onToggleExpand: (wsId: string) => void;
   onSelect: (sel: WorkspaceSelection) => void;
   onNewWorktree: (ws: TerminalWorkspace) => void;
@@ -272,6 +277,21 @@ export const WorkspaceNav = memo(function WorkspaceNav({
     [workspaces, selection]
   );
 
+  // ── 루트 고정 칸 — 다른 claude 세션을 지휘하는 루트 세션 하나. 목록 맨 위에 늘 있고, 꺼져 있으면 누를 때 띄운다 ──
+  const rootActive = selection?.kind === 'root';
+  const rootBusy = !!rootSession && isAgentBusy(rootSession);
+  const rootDot = rootSession ? sessionDot(rootSession) : null;
+  const rootState = !rootSession
+    ? '꺼짐 — 누르면 띄운다'
+    : rootBusy
+      ? '작업 중'
+      : rootDot === 'fresh' || rootDot === 'wait'
+        ? SESSION_DOT_LABEL[rootDot]
+        : '';
+  const rootTone = rootDot === 'fresh' ? ' terminal__root-meta--fresh' : rootDot === 'wait' ? ' terminal__root-meta--waiting' : '';
+  const selectRoot = () => (rootSession ? onSelect({ kind: 'root' }) : onOpenRoot());
+  const rootLabel = `루트 — 다른 claude 세션을 지휘하는 세션${rootState ? ` · ${rootState}` : ''}`;
+
   const contextMenu = menu && (
     <ContextMenu
       x={menu.x}
@@ -334,6 +354,22 @@ export const WorkspaceNav = memo(function WorkspaceNav({
   if (collapsed) {
     return (
       <div className="terminal__list" role="list">
+        <div className="terminal__sq-group">
+          <Tooltip side="right" label={rootLabel}>
+            <button
+              type="button"
+              className={'terminal__ws-sq' + (rootActive ? ' terminal__ws-sq--active' : '')}
+              aria-current={rootActive ? 'true' : undefined}
+              aria-label={rootLabel}
+              onClick={selectRoot}
+            >
+              <span className="terminal__ws-tile terminal__ws-tile--root" aria-hidden="true">
+                <Icon name="root" size={24} />
+              </span>
+              {rootBusy && <BusyArc size={28} />}
+            </button>
+          </Tooltip>
+        </div>
         {tiles.map((ws) => {
           const wsA = wsAgg(ws);
           const { count: wsCount, busy } = wsA;
@@ -479,6 +515,29 @@ export const WorkspaceNav = memo(function WorkspaceNav({
 
   return (
     <div className="terminal__list">
+      <div className="terminal__root-wrap">
+        <div
+          className={'terminal__ws-row terminal__root-row' + (rootActive ? ' terminal__root-row--active' : '')}
+        >
+          <button
+            type="button"
+            className="terminal__ws-hit"
+            aria-current={rootActive ? 'true' : undefined}
+            title={rootLabel}
+            onClick={selectRoot}
+          >
+            <span className="terminal__ws-tile terminal__ws-tile--root" aria-hidden="true">
+              <Icon name="root" size={22} />
+            </span>
+            <span className="terminal__ws-name">루트</span>
+            {rootBusy ? (
+              <span className="spinner spinner--xs terminal__lnb-spin" role="img" aria-label="작업 중" />
+            ) : (
+              rootState && <span className={'terminal__root-meta' + rootTone}>{rootSession ? rootState : '꺼짐'}</span>
+            )}
+          </button>
+        </div>
+      </div>
       {workspaces.map((ws) => {
         const isOpen = expanded.includes(ws.id);
         const wsA = wsAgg(ws);

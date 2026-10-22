@@ -375,6 +375,8 @@ declare global {
       };
       orchestrator: {
         openRoot: () => Promise<OrchestratorOpenRootResult>;
+        rootSessionId: () => Promise<string | null>;
+        onRootChanged: (cb: (sessionId: string) => void) => () => void;
       };
       terminal: {
         list: () => Promise<TerminalSessionInfo[]>;

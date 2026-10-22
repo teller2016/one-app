@@ -1,11 +1,10 @@
-// 루트 세션 MCP 도구(1a) — list_sessions · read_session · send_to_session.
+// 루트 세션 MCP 도구 — claude 워커: list_sessions · read_session · send_to_session (탭·프리셋은 terminalTools.ts).
 //
 // 세션 목록은 ⌘⇧P 와 같은 terminalOverview(claude 가 실제로 떠 있는 세션만), 지시 입력은 폰 채팅과 같은
 // sendChatText(붙여넣기 + Enter)다. 루트 자신과 독 패널의 개인 셸은 대상에서 뺀다.
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ChatPrompt } from '../../../shared/terminal-protocol';
-import type { TerminalSessionInfo } from '../../../shared/types';
 import {
   completeLines,
   dockShellId,
@@ -26,13 +25,7 @@ import {
 import { sleep } from '../../lib/util';
 import { checkSend, inputBoxText, MAX_INSTRUCTION_CHARS, sanitizeInstruction, STASH_KEY, ticketKeyOf } from './guard';
 import { getRootSessionId } from './store';
-
-type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
-
-const json = (value: unknown): ToolResult => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
-const fail = (message: string): ToolResult => ({ content: [{ type: 'text', text: message }], isError: true });
-
-const READ = { readOnlyHint: true, openWorldHint: false } as const;
+import { excludedIds, fail, json, NO_SESSION, READ, stateOf } from './toolKit';
 
 /** 마지막 답변을 찾는 꼬리 — 답변은 맨 끝에 있지만 그 앞 도구 결과 한 줄이 클 수 있다(waitCard.ts 와 같은 값) */
 const REPLY_TAIL_BYTES = 512 * 1024;
@@ -41,22 +34,6 @@ const REPLY_MAX_CHARS = 3_000;
 
 /** 보관(Ctrl+S) 뒤 붙여넣기까지 — claude 가 입력란을 비우고 다시 그릴 틈 */
 const STASH_SETTLE_MS = 150;
-
-type WorkerState = 'working' | 'waiting_input' | 'idle';
-
-/**
- * 워커 상태 — claude 가 직접 남긴 상태(sessions/<pid>.json)가 있으면 그것, 없으면 원앱 휴리스틱.
- * claude 의 idle(입력란 앞)은 다음 지시를 받을 수 있는 자리라 waiting_input 이다(overview.ts stateOf 와 같은 해석).
- */
-function stateOf(s: Pick<TerminalSessionInfo, 'status' | 'working'>, claudeStatus?: string): WorkerState {
-  if (claudeStatus === 'busy') return 'working';
-  if (claudeStatus === 'idle' || claudeStatus === 'waiting') return 'waiting_input';
-  if (s.working || s.status === 'busy') return 'working';
-  return s.status === 'waiting' ? 'waiting_input' : 'idle';
-}
-
-/** 지시 대상이 될 수 없는 세션 — 루트 자신·독 패널의 개인 셸 */
-const excludedIds = () => new Set([getRootSessionId(), dockShellId()].filter((v): v is string => !!v));
 
 /** 지금 떠 있는 질문·권한·플랜 창 — claude 가 'waiting' 일 때만 읽는다(답변 속 '1. …' 오인 방지, waitCard.ts 와 같은 게이트) */
 async function currentPrompt(id: string, claude: ClaudeProcess | null): Promise<ChatPrompt | null> {
@@ -86,7 +63,6 @@ function lastReply(file: string): string | null {
   return null;
 }
 
-const NO_SESSION = '그런 세션이 없습니다 — list_sessions 로 id 를 다시 확인하세요.';
 
 export function registerOrchestratorTools(server: McpServer): void {
   server.registerTool(

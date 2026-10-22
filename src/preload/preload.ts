@@ -462,6 +462,13 @@ contextBridge.exposeInMainWorld("oneApp", {
   orchestrator: {
     // 루트 탭 열기 — 떠 있으면 그 세션, 없으면 새로 띄운다
     openRoot: () => ipcRenderer.invoke("orchestrator:open-root"),
+    // 지금 루트 세션 id(없으면 null) + 바뀔 때 구독 — 터미널 LNB 의 고정 '루트' 칸
+    rootSessionId: () => ipcRenderer.invoke("orchestrator:root"),
+    onRootChanged: (cb: (sessionId: string) => void) => {
+      const listener = (_e: unknown, sessionId: string) => cb(sessionId);
+      ipcRenderer.on("orchestrator:root", listener);
+      return () => ipcRenderer.removeListener("orchestrator:root", listener);
+    },
   },
   terminal: {
     // 세션 목록 조회

@@ -2,8 +2,17 @@
 // 기능 내부 파일을 직접 import 하지 않는다(CLAUDE.md '기능 간 참조' 규칙).
 export { completeLines, fileSize, findClaude, readRange, type ClaudeProcess } from './claudeFiles';
 export { sendChatText } from './chat';
-export { terminalOverview } from './overview';
-export { createSession, listSessions, sessionScreen, sessionStyledScreen, writeSession } from './pty';
+export { placeOf, terminalOverview } from './overview';
+export { sessionCommands } from './processes';
+export {
+  createSession,
+  killSession,
+  listSessions,
+  sessionRootPid,
+  sessionScreen,
+  sessionStyledScreen,
+  writeSession,
+} from './pty';
 export { parseScreenPrompt, parseScreenStatus } from './screenPrompt';
 export { parseTranscript } from './transcript';
 export { dockShellId } from './windows';

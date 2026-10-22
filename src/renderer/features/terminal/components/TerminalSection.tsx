@@ -30,6 +30,7 @@ import { useWorkspaceActions } from '../lib/useWorkspaceActions';
 import { useMarkSeen } from '../lib/sessionState';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
+import { useOpenRoot, useRootSessionId } from '../../orchestrator';
 import type { DropSide } from '../lib/layout';
 import {
   buildTabView,
@@ -118,6 +119,7 @@ function savedSelection(): WorkspaceSelection | null {
   try {
     const v = JSON.parse(localStorage.getItem('terminal:wsSelection') ?? 'null');
     if (v?.kind === 'other') return { kind: 'other' };
+    if (v?.kind === 'root') return { kind: 'root' };
     if (v?.kind === 'worktree' && typeof v.wsId === 'string' && typeof v.path === 'string')
       return { kind: 'worktree', wsId: v.wsId, path: v.path };
     return null;
@@ -345,9 +347,17 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     return set;
   }, [worktrees]);
 
+  // 루트 세션 — LNB 맨 위 고정 칸('루트')에만 보인다. '기타'에서 뺀다(features/orchestrator)
+  const rootId = useRootSessionId();
+  const openRoot = useOpenRoot();
+  const rootSession = useMemo(
+    () => (rootId ? sessions.find((s) => s.id === rootId) ?? null : null),
+    [sessions, rootId]
+  );
+
   const otherSessions = useMemo(
-    () => sessions.filter((s) => !allPaths.has(s.cwd)),
-    [sessions, allPaths]
+    () => sessions.filter((s) => !allPaths.has(s.cwd) && s.id !== rootId),
+    [sessions, allPaths, rootId]
   );
 
   // 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션·방문 히스토리가 전부 이 키로 갈린다
@@ -360,9 +370,13 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
       ? []
       : selection.kind === 'other'
         ? otherSessions
-        : sessions.filter((s) => s.cwd === selection.path);
+        : selection.kind === 'root'
+          ? rootSession
+            ? [rootSession]
+            : []
+          : sessions.filter((s) => s.cwd === selection.path);
     return orderTabSessions(base, tabOrders[selKey]);
-  }, [selection, sessions, otherSessions, tabOrders, selKey]);
+  }, [selection, sessions, otherSessions, rootSession, tabOrders, selKey]);
 
   const selectedWt: WorktreeInfo | null =
     selection?.kind === 'worktree'
@@ -384,6 +398,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     const valid = (() => {
       if (!selection) return false;
       if (selection.kind === 'other') return otherSessions.length > 0;
+      if (selection.kind === 'root') return !!rootSession;
       const ws = workspaces.find((w) => w.id === selection.wsId);
       if (!ws) return false;
       const list = worktrees[selection.wsId];
@@ -405,7 +420,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     // 없으면 렌더마다 새 객체로 setSelection 이 돌아 무한 루프에 빠진다(2026-09-03 발견).
     if (sameSelection(next, selection)) return;
     selectAndSave(next);
-  }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, selection, selectAndSave]);
+  }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, rootSession, selection, selectAndSave]);
 
   // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로.
   // 기억은 localStorage 에도 미러 — 섹션을 떠났다 와도(재마운트) 보던 세션이 유지된다
@@ -763,7 +778,11 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         ws.repoPath === focusReq.cwd
     );
     selectAndSave(
-      hit ? { kind: 'worktree', wsId: hit.id, path: focusReq.cwd } : { kind: 'other' }
+      focusReq.sessionId === rootId
+        ? { kind: 'root' }
+        : hit
+          ? { kind: 'worktree', wsId: hit.id, path: focusReq.cwd }
+          : { kind: 'other' }
     );
     activateSession(focusReq.sessionId);
     setFocusReq(null);
@@ -776,6 +795,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     selectAndSave,
     activateSession,
     detachedIds,
+    rootId,
   ]);
 
   // ── pane 오케스트레이션 — 살아 있는 pane(LRU)·글자 크기·pane 핸들·포커스 안전망·
@@ -1215,6 +1235,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           otherBusy={otherSessions.some(
             (s) => s.working && !!s.agentId && s.agentId !== 'shell',
           )}
+          rootSession={rootSession}
+          onOpenRoot={openRoot}
           onToggleExpand={toggleExpand}
           onSelect={selectWorkspaceTab}
           onNewWorktree={setWorktreeFor}

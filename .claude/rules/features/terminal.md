@@ -126,6 +126,9 @@ paths:
 - ⚠️ **`renderer.tsx` 전역 Files 가드 지우지 말 것**(file:// 이동). `defaultPrevented` 는 건드리지 않는다.
 
 ## 세션 패널 (좌측)
+- **맨 위 '루트' 고정 칸**(2026-10-22 사용자 요청) — 선택 종류 `{ kind: 'root' }`(lib/workspace.ts), 루트 세션 id 는 `features/orchestrator` 의
+  `useRootSessionId()`(main `orchestrator:root` 방송). 루트 세션은 **'기타'에서 뺀다**. 꺼져 있으면 칸을 눌러 띄운다(`useOpenRoot` — ⌘P 명령과 같은 동작).
+  모양은 배경 없는 뿌리 아이콘(`root` — 다크는 흰색·라이트는 글자색, `terminal__ws-tile--root`)으로 이니셜 타일과 구분, 펼친 패널은 아래 구분선(`__root-wrap`). 상세: `features/orchestrator.md`.
 - **일반 폴더도 워크스페이스** — `parseWorktrees`(workspaces/git.ts)가 `plain: true` 합성, 표시는 `worktreeRef`/`worktreeLabel`(shared/types.ts)·`worktreeIcon`. 저장 안 하고 조회마다 판정. ⚠️ `.git` 이 있는데 실패하면 throw.
 - ⚠️ 선택 보정 effect 는 폴백 = 현재 선택이면 set 안 함(무한 루프).
 - 변경사항 드로어의 머리 띠는 `.terminal__changes::before`(left -8px ~ right, 높이 `--term-head-h`, 탭바와 같은 선반+바닥선)로 탭바 선을 창 끝까지 잇고, `::after` 가 xterm 과의 세로 경계다 — aside 의 margin/padding 규칙은 그대로, `.changes__head` 높이는 `--term-head-h`.

@@ -6,15 +6,20 @@ paths:
 
 # 루트 세션 (오케스트레이터)
 
-고정 루트 탭의 claude 가 **원앱 MCP 서버**로 다른 claude 세션(워커)을 찾고(`list_sessions`)·읽고(`read_session`)·지시를 넣는다
-(`send_to_session`). 보고는 워커 → 루트 **Claude Code 내장 SendMessage**. 결정·실측의 정본은 기획서 아티팩트
-'루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE). 지금은 **1a**(서버·도구 3개·손으로 여는 루트 탭).
+고정 루트 탭의 claude 가 **원앱 MCP 서버**로 다른 claude 세션(워커)을 찾고(`list_sessions`)·읽고(`read_session`)·지시를 넣고
+(`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
+보고는 워커 → 루트 **Claude Code 내장 SendMessage**. 결정·실측의 정본은 기획서 아티팩트
+'루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE). 지금은 **1a**(서버·도구 7개·손으로 여는 루트 탭).
 
 ## 구조
-- main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(도구) · `guard.ts`(순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
-  `rootGuide.ts`(지침서 기본본) · `store.ts`(토큰·루트 세션 id) · `ipc.ts`(`orchestrator:open-root`, 폰에는 안 연다).
-- 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`inputActivity`·`dockShellId` 등.
-- 렌더러 `features/orchestrator/RootCommand` — ⌘P '루트 세션 열기'만 등록(그리는 것 없음). 1a 의 루트 탭은 LNB '기타'에 들어간다.
+- main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 3개) · `terminalTools.ts`(터미널 도구 4개) · `toolKit.ts`(결과 포맷·상태 해석·제외 세션) ·
+  `guard.ts`(순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
+  `rootGuide.ts`(지침서 기본본) · `store.ts`(토큰·루트 세션 id) · `ipc.ts`(`orchestrator:open-root`·`orchestrator:root`, 폰에는 안 연다).
+- 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
+  `createSession`·`killSession`·`dockShellId` 등.
+- 렌더러 `features/orchestrator/` — `RootCommand`(⌘P '루트 세션 열기' 등록만) · `lib/rootSession.ts`(`useRootSessionId` 구독 · `useOpenRoot` 열기 —
+  ⌘P 와 LNB 가 같은 것을 쓴다). 터미널 LNB **맨 위 '루트' 고정 칸**(2026-10-22, 선택 종류 `root`)이 루트 세션만 보여 주고 '기타'에서는 뺀다 —
+  main 은 `setRootSessionId` 때 `orchestrator:root` 를 방송하고, 처음 그릴 때는 `orchestrator:root` 로 묻는다.
 
 ## 지시 입력 (`send_to_session`)
 - 길은 폰 채팅과 같은 `sendChatText`(bracketed paste + 250ms 뒤 Enter). ⚠️ 글은 **`sanitizeInstruction` 을 거친다** — 글 안의 `ESC[201~`
@@ -31,12 +36,26 @@ paths:
   `❯` + NBSP**, 제안 문구(`Try "…"`·다음 입력 제안)는 **SGR 2(흐림)**, 직접 친 글은 흐리지 않다, 지난 입력 줄은 배경색(`48;5;237`·
   트루컬러면 `48;2;55;55;55`) + 보통 공백. ⚠️ 색 지정 인자(`38;2;r;g;b`의 2)를 흐림으로 읽지 말 것(`solidText` 가 건너뛴다).
 
+## 터미널 도구 (`terminalTools.ts`, 2026-10-22)
+"다른 워크트리의 run dev 끄고 지금 워크트리에서 켜 줘" 같은 지시용. **실행·닫기 모두 승인 없이 바로** 한다(사용자 결정) — 대신
+토스트로 알린다(실행은 [보기]로 그 탭을 연다). 루트 자신·독 패널 셸은 목록에서 빠지고 닫기도 거부한다(`excludedIds`).
+- `list_terminals` 의 `commands` = 탭 안에서 지금 도는 명령 — `terminal/processes.ts` 가 `ps -A` **한 번**으로 탭 루트 pid 의 자손을 훑어
+  **셸이 아닌 첫 자손**의 인자를 준다(`sessionCommands`, 테스트 `processes.test.ts`). 셸만 있으면 빈 배열. ⚠️ 에이전트 프리셋이
+  계정 선택(셸 함수의 `read`)에 멈춰 있으면 자식이 없어 빈 배열이다 — 탭의 `agent` 로 구분한다.
+- `run_preset` 은 프리셋 바와 **같은 인자**로 세션을 만든다(`agentIdFromCommand`·명령·이름 — 렌더러 `TerminalSection` runPreset).
+  `cwd` 는 루트가 넘긴 경로를 믿지 않고 **git 에 직접 물어**(`listWorktreesBrief`, 캐시 아님) 등록된 워크트리인지 확인한다. 프리셋은 id 또는
+  이름(대소문자 무시), 그 워크스페이스에서 쓸 수 있는 것(전역 + 지정, 바에서 숨긴 것 포함)만. 에이전트 프리셋은 사용자의 계정 선택 화면을 거친다.
+- 실측(10-22 dev): 루트에 "sleep 도는 탭이랑 계정 선택에 멈춘 claude 탭 닫고 claude 프리셋 새로 실행해줘" → list_terminals → close ×2 →
+  run_preset 을 스스로 골라 26초에 끝내고 닫은 것·연 것을 보고했다.
+
 ## 루트 탭
 - 실행: `CLAUDE_CONFIG_DIR=~/.claude command claude --name root --mcp-config <폴더>/mcp.json --settings '{"crossSessionInbound":"accept"}'
   --allowedTools mcp__oneapp ListAgents SendMessage Read Grep Glob --disallowedTools Edit Write NotebookEdit Bash Agent`.
   ⚠️ `--disallowedTools`·`--allowedTools` 는 목록을 받는 플래그 — **막는 목록을 맨 뒤에** 둔다. ⚠️ mcp.json 의 `"type": "http"` 를 빼면 stdio 로 읽혀 조용히 빠진다.
 - `crossSessionInbound: accept` — 권한 확인을 건너뛰는 세션은 같은 종류의 메시지만 바로 받는다. 루트는 bypass 가 아니라서 이 설정이 없으면 워커 보고가 승인 대기로 간다.
-- 폴더 `userData/root`(dev `root-dev`) — `CLAUDE.md` 는 없을 때만 복사(사용자 수정 우선), `mcp.json` 은 열 때마다 0600 으로 다시 쓴다(토큰 평문).
+- 폴더 `userData/root`(dev `root-dev`) — `mcp.json` 은 열 때마다 0600 으로 다시 쓴다(토큰 평문). `CLAUDE.md` 는 `syncGuide`:
+  없으면 기본본을 쓰고, 있으면 **마지막으로 쓴 기본본 그대로일 때만**(해시 `.guide-default.sha256`) 새 기본본으로 바꾼다 — 사용자가 고쳤으면
+  그대로 둔다(사용자 수정 우선). 도구를 더해 `rootGuide.ts` 를 고치면 손대지 않은 폴더는 다음 열기에 따라온다. 떠 있는 루트는 다시 열어야 읽는다.
 - **폴더 신뢰**: 처음 여는 폴더는 `--dangerously-skip-permissions` 여도 신뢰 창이 뜬다(실측) → `ensureTrusted` 가 `~/.claude/.claude.json` 의
   `projects[<realpath>].hasTrustDialogAccepted` 를 쓴다(femc-wt.sh 와 같은 방식). ⚠️ 그 파일은 떠 있는 claude 들이 수시로 다시 쓴다 —
   이미 표시돼 있으면 안 건드리고, 읽은 뒤 mtime·크기가 바뀌었으면 덮지 않고 다시 읽는다(3번). 실패해도 신뢰 창이 한 번 뜰 뿐.
