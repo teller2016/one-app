@@ -44,6 +44,7 @@ export function PrDetail({
   issueStatuses,
   hasToken,
   conflictPending,
+  initialMethod,
   onMerged,
 }: {
   pr: PrItem;
@@ -57,6 +58,8 @@ export function PrDetail({
   /** 머지 직후 Gitea 재검사 창 — 이때의 mergeable=false 는 충돌로 단정하지 않는다 */
   conflictPending?: boolean;
   /** 머지 성공 — 부모가 토스트·목록 갱신·Jira 해결 제안을 이어간다 */
+  /** 루트 세션이 골라 둔 머지 방식(prRequest.ts) — 없으면 merge */
+  initialMethod?: PrMergeMethod;
   onMerged: (pr: PrItem) => void;
 }) {
   const [info, setInfo] = useState<PrMergeInfoResult | null>(null);
@@ -64,7 +67,7 @@ export function PrDetail({
   const [files, setFiles] = useState<PrChangedFile[]>([]);
   const [stats, setStats] = useState<{ additions: number; deletions: number } | null>(null);
   const [commitsError, setCommitsError] = useState('');
-  const [method, setMethod] = useState<PrMergeMethod>('merge');
+  const [method, setMethod] = useState<PrMergeMethod>(initialMethod ?? 'merge');
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState('');
   const confirmDialog = useConfirm();

@@ -1897,7 +1897,10 @@ export const isOpenTask = (t: Pick<OrchestratorTask, 'state'>): boolean =>
  * 루트 세션이 원앱 기능 화면을 채워 여는 요청 — main(orchestrator openRequest)이 메인 창에 보내고 앱 셸이 그 기능의 공개 요청 함수로 넘긴다.
  * ⚠️ 실행은 늘 사용자가 그 화면의 버튼으로 — 여기 실린 값은 화면을 채울 뿐이다.
  */
-export type AppOpenRequest = { kind: 'deploy'; projectId: string; targetId: string };
+export type AppOpenRequest =
+  | { kind: 'deploy'; projectId: string; targetId: string }
+  | { kind: 'pr-create'; repo: string; head?: string; base?: string; title?: string; body?: string }
+  | { kind: 'pr-merge'; repo: string; number: number; method?: PrMergeMethod };
 
 /** 승인 창의 한 줄 — 루트가 하려는 일을 사람이 읽을 말로 */
 export type OrchestratorConfirmField = { label: string; value: string };

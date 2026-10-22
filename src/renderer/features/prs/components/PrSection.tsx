@@ -3,6 +3,7 @@ import type {
   JiraIssueStatus,
   PrItem,
   PrListResult,
+  PrMergeMethod,
   PrsConfig,
   Project,
 } from '../../../../shared/types';
@@ -19,7 +20,8 @@ import { EmptyState } from '../../../components/EmptyState';
 import { usePolling, useTick } from '../../../lib/usePolling';
 import { RECHECK_MS, RECHECK_POLL_MS } from '../lib/conflictRecheck';
 import { primaryIssueKey, prIssueKeys } from '../lib/prIssueKeys';
-import { CreatePrModal, CreatedPr } from './CreatePrModal';
+import { CreatePrModal, CreatedPr, type CreatePrInitial } from './CreatePrModal';
+import { onPrRequest, takePrRequest } from '../lib/prRequest';
 import { PrList } from './PrList';
 import { PrDetail } from './PrDetail';
 import { errMsg } from '../../../lib/errMsg';
@@ -63,6 +65,9 @@ export function PrSection() {
   // 방금 만든 PR — 목록 재조회가 끝나기 전에도 상세를 띄우기 위한 낙관적 항목
   const [justCreated, setJustCreated] = useState<PrItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // 루트 세션이 채워 달라고 보낸 새 PR 초기값·머지 방식(prRequest.ts) — 열 때 한 번 쓴다
+  const [createInitial, setCreateInitial] = useState<CreatePrInitial | null>(null);
+  const [mergeMethodInit, setMergeMethodInit] = useState<{ key: string; method: PrMergeMethod } | null>(null);
   // 머지 직후 충돌 재검사 창 (`lib/conflictRecheck.ts` 주석 참고)
   const [recheck, setRecheck] = useState<{ repo: string; until: number } | null>(
     null,
@@ -249,6 +254,33 @@ export function PrSection() {
   };
   // 현재 탭이 레지스트리 저장소일 때만 새 PR 가능 (기본 브랜치·표시명이 있어야 한다)
   const currentRegistry = createRepos.find((r) => r.repo === effectiveTab);
+
+  // 루트 세션의 PR 요청 — 목록·레지스트리가 뜬 뒤 그 저장소 탭으로 옮겨 새 PR 모달을 채워 열거나 그 PR 을 골라 둔다.
+  // 만들기·머지는 하지 않는다(사용자가 모달의 [PR 생성]·패널의 [머지]로). 섹션 밖 요청은 마운트 전에 와 있고, 떠 있으면 구독으로 받는다
+  useEffect(() => {
+    if (loading || projects.length === 0) return;
+    const consume = () => {
+      const req = takePrRequest();
+      if (!req) return;
+      setRepoTab(req.repo);
+      localStorage.setItem('prs:repoTab', req.repo);
+      setQuery('');
+      if (req.kind === 'create') {
+        if (!createRepos.some((r) => r.repo === req.repo)) {
+          toast(`'${req.repo}' 은 프로젝트에 등록된 저장소가 아니라 여기서 PR 을 만들 수 없습니다`, 'fail');
+          return;
+        }
+        setCreateInitial({ head: req.head, base: req.base, title: req.title, body: req.body });
+        setCreateOpen(true);
+        return;
+      }
+      const key = `${req.repo}#${req.number}`;
+      setSelectedKey(key);
+      setMergeMethodInit(req.method ? { key, method: req.method } : null);
+    };
+    consume();
+    return onPrRequest(consume);
+  }, [loading, projects.length, createRepos, toast]);
 
   // 재검사 창 안이면 이 저장소의 mergeable=false 는 '충돌'인지 아직 알 수 없다
   const conflictPending = !!recheck && recheck.repo === effectiveTab;
@@ -478,6 +510,7 @@ export function PrSection() {
                   issueStatuses={issueStatuses}
                   hasToken={hasToken}
                   conflictPending={conflictPending}
+                  initialMethod={mergeMethodInit?.key === keyOf(selected) ? mergeMethodInit.method : undefined}
                   onMerged={onMerged}
                 />
               ) : (
@@ -501,8 +534,15 @@ export function PrSection() {
           repoName={currentRegistry.name}
           projectDefault={currentRegistry.projectDefault}
           recentBase={config.recentBases[currentRegistry.repo]}
-          onClose={() => setCreateOpen(false)}
-          onCreated={onCreated}
+          initial={createInitial ?? undefined}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreateInitial(null);
+          }}
+          onCreated={(created) => {
+            setCreateInitial(null);
+            onCreated(created);
+          }}
         />
       )}
     </div>

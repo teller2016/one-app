@@ -49,11 +49,15 @@ export type CreatedPr = {
  * 브랜치를 고르고 그 사이 커밋을 보여주고 제목/본문을 자동 채운 뒤 생성한다.
  * 브랜치 셀렉트는 둘 다 검색형(전체 브랜치 대상).
  */
+/** 밖(루트 세션)에서 채워 달라고 온 값 — 비운 칸은 평소 규칙(최근 push·MRU·커밋 초안)대로 */
+export type CreatePrInitial = { head?: string; base?: string; title?: string; body?: string };
+
 export function CreatePrModal({
   repo,
   repoName,
   projectDefault,
   recentBase,
+  initial,
   onClose,
   onCreated,
 }: {
@@ -65,6 +69,8 @@ export function CreatePrModal({
   projectDefault: string;
   /** 이 저장소에서 마지막으로 고른 base (MRU) — 초기 대상 선택값 */
   recentBase?: string;
+  /** 루트 세션이 채운 초기값(prRequest.ts) — 모달이 열려 있는 동안 불변 */
+  initial?: CreatePrInitial;
   onClose: () => void;
   onCreated: (created: CreatedPr) => void;
 }) {
@@ -74,17 +80,17 @@ export function CreatePrModal({
   const [base, setBase] = useState('');
   const [candidates, setCandidates] = useState<PrBaseBranch[] | null>(null);
   const [allNames, setAllNames] = useState<string[]>([]); // 검색용 전체 목록
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [body, setBody] = useState(initial?.body ?? '');
   const [commits, setCommits] = useState<DeployCommit[] | null>(null);
   const [files, setFiles] = useState<PrChangedFile[]>([]);
   const [stats, setStats] = useState<{ additions: number; deletions: number } | null>(null);
   const [loadError, setLoadError] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
-  // 사용자가 손댄 제목·본문은 브랜치를 바꿔도 덮어쓰지 않는다
-  const titleDirty = useRef(false);
-  const bodyDirty = useRef(false);
+  // 사용자가 손댄 제목·본문은 브랜치를 바꿔도 덮어쓰지 않는다 — 루트가 채운 제목·본문도 손댄 것으로 친다(커밋 초안이 덮지 않게)
+  const titleDirty = useRef(!!initial?.title);
+  const bodyDirty = useRef(!!initial?.body);
 
   const effectiveDefault = projectDefault || 'develop';
   const mruBase = recentBase || '';
@@ -98,14 +104,14 @@ export function CreatePrModal({
     setCandidates(null);
     setAllNames([]);
     setCommits(null);
-    setHead('');
-    setBase(mruBase || effectiveDefault);
+    setHead(initial?.head ?? '');
+    setBase(initial?.base || mruBase || effectiveDefault);
     void window.oneApp.prs.getBranches(repo).then((res) => {
       if (!alive) return;
       const list = res.ok ? res.branches ?? [] : [];
       setRecent(list);
       setBranchError(res.ok ? '' : res.error ?? '브랜치 조회 실패');
-      setHead(list[0]?.name ?? '');
+      setHead(initial?.head || (list[0]?.name ?? ''));
     });
     void window.oneApp.prs.getBaseBranches(repo).then((res) => {
       // 후보 조회가 실패해도 PR 생성은 막지 않는다 (초기 base 로 진행)

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { AppOpenRequest } from '../../../../shared/types';
 import { requestDeployConfirm } from '../../deploy';
+import { requestPr } from '../../prs';
 
 /** 요청 종류 → 그 기능의 공개 요청 함수(화면을 채워 열기까지만 — 실행은 사용자가 그 화면에서) */
 function dispatch(req: AppOpenRequest): void {
@@ -8,6 +9,14 @@ function dispatch(req: AppOpenRequest): void {
     case 'deploy':
       // ⌘P 팔레트와 같은 길 — 배포 섹션으로 가서 확인 모달(커밋 미리보기·PROD 이름 입력)을 연다
       requestDeployConfirm({ projectId: req.projectId, targetId: req.targetId });
+      break;
+    case 'pr-create':
+      // PR 섹션의 그 저장소 탭으로 가서 새 PR 모달을 채워 연다 — [PR 생성]은 사용자가
+      requestPr({ kind: 'create', repo: req.repo, head: req.head, base: req.base, title: req.title, body: req.body });
+      break;
+    case 'pr-merge':
+      // 그 PR 을 골라 상세 패널을 띄운다 — [머지](와 주요 브랜치 이름 입력 확인)는 사용자가
+      requestPr({ kind: 'merge', repo: req.repo, number: req.number, method: req.method });
       break;
   }
 }
