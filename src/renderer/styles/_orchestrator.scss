@@ -51,6 +51,69 @@
     }
   }
 
+  // 묶음 항목(여러 티켓) — 체크를 풀면 그 항목은 실행하지 않는다(흐리게)
+  &__items {
+    margin: 12px 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 12px;
+
+    & + & {
+      border-top: 1px solid var(--border);
+    }
+
+    &--off {
+      opacity: 0.5;
+    }
+  }
+
+  &__item-title {
+    @include type-body;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  &__item-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 24px; // 체크박스 칸만큼 들여 제목 글자와 맞춘다
+    @include type-small;
+    color: var(--text-2);
+    word-break: break-word;
+  }
+
+  // 고를 값(스택·계정) — [라벨 | 드롭다운]
+  &__choices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+  }
+
+  &__choice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    > span {
+      flex: 0 0 var(--form-label-w);
+      @include type-small;
+      color: var(--text-3);
+    }
+  }
+
   &__foot {
     display: flex;
     align-items: center;

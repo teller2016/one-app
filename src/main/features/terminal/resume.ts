@@ -8,6 +8,7 @@
 import { execFile } from 'node:child_process';
 import type { TerminalSessionStatus } from '../../../shared/types';
 import { findClaude } from './claudeFiles';
+import { rememberFemcStack } from './femcStack';
 import { listSessions, onSessionsChanged } from './pty';
 import { detectLauncher, isRevivable } from './resumeCommand';
 import { updatePersistedResume } from './sessions-store';
@@ -39,13 +40,16 @@ async function capture(id: string): Promise<void> {
       updatePersistedResume(id, undefined); // 도구를 막고 띄운 claude — 제한 없이 되살리지 않는다
       return;
     }
+    const launcher = detectLauncher(args);
     updatePersistedResume(id, {
-      ...detectLauncher(args),
+      ...launcher,
       sessionId: claude.sessionId,
       configDir: claude.configDir,
       cwd: claude.cwd,
       file: claude.file,
     });
+    // 새 femc 세션이 그 저장소의 스택을 물려받게(femcStack.ts) — 세션을 닫아도 남는다
+    if (launcher.launcher === 'femc' && launcher.stack) rememberFemcStack(claude.cwd, launcher.stack);
   } catch (e) {
     console.error(`[terminal] 재개 정보 기록 실패 (${id}):`, e);
   } finally {

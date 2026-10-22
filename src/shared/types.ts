@@ -432,6 +432,10 @@ export type JiraWorkPrepareInput = {
   skill: JiraWorkSkill;
   note?: string; // 모달의 '부가 설명' (선택)
   account?: JiraWorkAccount; // 기본 personal
+  /** 세션을 띄울 위치 — 주면 그 저장소에서 쓰던 femc 스택을 `--stack` 으로 넘긴다(워크트리에서 스택 선택 창이 뜨지 않게) */
+  cwd?: string;
+  /** 스택을 직접 지정(루트 세션 승인 창에서 고른 값) — cwd 판정보다 앞선다 */
+  stack?: string;
 };
 
 /**
@@ -446,6 +450,11 @@ export type JiraWorkPrepareResult = {
   title?: string; // 세션 표시명 (티켓 키)
   dir?: string; // 티켓 맥락 폴더 (안내·디버깅용)
   attachments?: number; // 내려받은 첨부 수
+  /** femc 에 넘긴 첫 메시지 — 루트 작업 원장이 대화 기록에서 이 지시가 읽혔는지 맞출 때 쓴다 */
+  prompt?: string;
+  summary?: string; // 티켓 제목
+  issueType?: string; // 이슈 유형(버그·작업…)
+  stack?: string | null; // 넘긴 --stack (모르면 null — femc 가 선택 창을 띄울 수 있다)
   error?: string;
 };
 
@@ -1887,11 +1896,34 @@ export const isOpenTask = (t: Pick<OrchestratorTask, 'state'>): boolean =>
 /** 승인 창의 한 줄 — 루트가 하려는 일을 사람이 읽을 말로 */
 export type OrchestratorConfirmField = { label: string; value: string };
 
-/** 무인 연쇄 가드의 승인 요청 — main 이 대기열에 넣고 렌더러 모달(RootConfirmHost)이 답한다 */
+/** 승인 창의 묶음 항목 — 여러 티켓을 한 창에서 승인할 때 항목별로 뺄 수 있다(체크 해제) */
+export type OrchestratorConfirmItem = {
+  id: string;
+  title: string; // 예: SSB-137 — 쿠폰 상세 조건
+  lines: string[]; // 위치·브랜치·스킬 등 한 줄씩
+  checked: boolean;
+};
+
+/** 승인 창에서 고르는 값 — 스택·계정. itemId 가 있으면 그 항목이 체크돼 있을 때만 필요하다 */
+export type OrchestratorConfirmChoice = {
+  id: string;
+  label: string;
+  options: { value: string; label: string }[];
+  /** 미리 고른 값 — null 이면 사용자가 골라야 [실행]이 눌린다 */
+  value: string | null;
+  itemId?: string;
+};
+
+/** 승인하며 고른 것 — 남긴 항목 id 와 선택 값 */
+export type OrchestratorConfirmPicks = { items: string[]; choices: Record<string, string> };
+
+/** 루트 승인 요청(무인 연쇄 가드·세션/워크트리 만들기) — main 이 대기열에 넣고 렌더러 모달(RootConfirmHost)이 답한다 */
 export type OrchestratorConfirmRequest = {
   id: string;
   title: string; // 예: 워커에 지시
   fields: OrchestratorConfirmField[];
+  items?: OrchestratorConfirmItem[];
+  choices?: OrchestratorConfirmChoice[];
   note?: string;
   /** 되돌리기 어려운 동작(탭 닫기) — 모달이 danger 버튼으로 표시한다 */
   danger?: boolean;

@@ -9,7 +9,8 @@ import { app } from 'electron';
 import { broadcast } from '../../lib/broadcast';
 import { completeLines, fileSize, findClaude, readRange } from '../terminal';
 import { getNotifyWindow } from '../notify/notify';
-import { createConfirmQueue, type ConfirmInput } from './confirm';
+import type { OrchestratorConfirmPicks } from '../../../shared/types';
+import { createConfirmQueue, type ConfirmInput, type ConfirmOutcome } from './confirm';
 import { getRootSessionId } from './store';
 import { lastInputKind } from './taskScan';
 
@@ -35,7 +36,8 @@ const queue = createConfirmQueue({
   onRequest: () => bringMainWindowToFront(),
 });
 
-export const answerConfirm = (id: string, approved: boolean): boolean => queue.answer(id, approved);
+export const answerConfirm = (id: string, approved: boolean, picks?: OrchestratorConfirmPicks): boolean =>
+  queue.answer(id, approved, picks);
 export const listConfirms = () => queue.list();
 export const clearConfirms = (): void => queue.clear();
 
@@ -55,7 +57,7 @@ export async function rootInputKind(): Promise<string | null> {
   }
 }
 
-const DECLINED: Record<'rejected' | 'timeout' | 'cancelled', string> = {
+export const DECLINED: Record<'rejected' | 'timeout' | 'cancelled', string> = {
   rejected: '사용자가 승인하지 않았습니다 — 다시 시도하지 말고 사용자에게 어떻게 할지 물어보세요.',
   timeout: `${CONFIRM_TIMEOUT_MS / 60_000}분 안에 승인이 없어 취소했습니다 — 다시 시도하지 말고 사용자에게 알리세요.`,
   cancelled: '승인 요청이 취소됐습니다.',
@@ -79,4 +81,17 @@ export async function gateIfChained(input: ConfirmInput, signal?: AbortSignal): 
     signal,
   );
   return decision === 'approved' ? null : DECLINED[decision];
+}
+
+const CHAINED_NOTE = '워커의 보고를 받은 루트가 스스로 하려는 일입니다(사람이 시킨 턴이 아님).';
+
+/**
+ * 세션·워크트리 만들기 승인 — 무인 연쇄 여부와 관계없이 **늘** 묻는다(기획 결정: 생성만 승인).
+ * 사람이 시킨 턴이 아니면 그 사실을 맨 위에 덧붙인다. 항목·선택지가 있으면 고른 값이 함께 온다.
+ */
+export async function askApproval(input: ConfirmInput, signal?: AbortSignal): Promise<ConfirmOutcome> {
+  const kind = await rootInputKind();
+  const chained = kind !== null && kind !== 'human';
+  const note = [chained ? CHAINED_NOTE : null, input.note].filter(Boolean).join('\n') || undefined;
+  return queue.ask({ ...input, note }, signal);
 }

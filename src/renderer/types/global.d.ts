@@ -114,6 +114,7 @@ import type {
   PortKillResult,
   PortProcess,
   PowerState,
+  OrchestratorConfirmPicks,
   OrchestratorConfirmRequest,
   OrchestratorOpenRootResult,
   OrchestratorTask,
@@ -383,7 +384,7 @@ declare global {
         onTasksChanged: (cb: (tasks: OrchestratorTask[]) => void) => () => void;
         listConfirms: () => Promise<OrchestratorConfirmRequest[]>;
         onConfirmsChanged: (cb: (pending: OrchestratorConfirmRequest[]) => void) => () => void;
-        answerConfirm: (id: string, approved: boolean) => Promise<boolean>;
+        answerConfirm: (id: string, approved: boolean, picks?: OrchestratorConfirmPicks) => Promise<boolean>;
         reportTabOrders: (orders: Record<string, string[]>) => void;
       };
       terminal: {

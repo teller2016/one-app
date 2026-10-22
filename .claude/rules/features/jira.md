@@ -84,6 +84,11 @@ paths:
 3. **업데이트 확인** — 그 메뉴 경로에서만 도는 `maybeUpdate()`. → 2번으로 이미 안 타지만 `FEMC_SKIP_UPDATE_CHECK=1` 로 한 번 더 막는다.
 
 - `--dangerously-skip-permissions` 는 femc 가 `buildClaudeArgs()` 에서 자체적으로 붙이므로 권한 창·신뢰 확인도 없다.
+- **④ 스택 선택 창**(2026-10-22) — femc 는 등록 경로(`~/.femc/config.local.json` scopes) 밖이면 스택을 못 정해 실행할 때마다 'Which stack?' 을 띄운다
+  (`~/projects/worktrees/…` 워크트리가 그렇다). → 모달이 위치(`cwd`)를 넘기면 `work.ts` 가 `terminal femcStackFor(cwd)` 로 스택을 정해
+  **`--stack <s>`** 를 붙인다: 그 저장소에서 마지막으로 쓴 스택(재부팅 복원 기록이 femc 실행 인자에서 읽어 `femc-stacks.json` 에 위치별로 남긴다)
+  → femc 등록 선언(`lib/femc.ts` — femc CLI 의 registeredStackOf 와 같은 파일) → 모르면 붙이지 않는다(femc 가 묻는다). femc 는 `--stack` 을 인자 어디서든 떼어 쓴다.
+  명령 조립은 `femcCommand()` 한 곳 — 루트 세션의 새 세션(orchestrator open_session)도 같은 것을 쓴다.
 - 실측 확인법: 개발 인스턴스는 **tmux 소켓이 갈린다**(`-L oneapp-dev`, sidecar 도 `terminal-sessions-dev.json`) — 빌드 앱 세션(`-L oneapp`)과 헷갈리지 말 것. ⚠️ `capture-pane` 은 pane 타깃이라 `=이름` 이 안 먹는다(`-t oneapp-<id>` 로 줄 것). attach replay 로는 TUI 화면을 볼 수 없다(대체 화면이면 replay 를 생략하는 설계).
 - 이 회피는 **Jira [작업] 경로에만** 적용했다(2026-08-12 사용자 선택). 터미널 `[+]` 새 세션·프리셋은 그대로라 거기선 계정 선택이 뜬다.
 - ⚠️ **셸 명령 조립은 main 에서만** — 티켓 제목·본문이 섞인 프롬프트라 인용이 곧 사고다. `lib/util.ts` 의 `shQuote`(pty.ts 에서 이관, 두 곳이 공유)를 쓴다. 실측 검증: 공백 경로·개행·`'`·`"` 가 모두 온전히 한 인자로 전달됨.

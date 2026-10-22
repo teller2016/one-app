@@ -61,7 +61,12 @@ type Stored = OrchestratorTask & {
   workerPid?: number;
   reportRequestedAt?: number;
   reportTries?: number;
+  /** 새로 띄운 세션 — 이 시각까지는 claude 가 안 보여도 끝난 것으로 치지 않는다(femc 기동·업데이트 확인) */
+  graceUntil?: number;
 };
+
+/** 새로 띄운 세션의 claude 가 뜨기까지 기다려 주는 시간 */
+const START_GRACE_MS = 2 * 60_000;
 
 let tasks: Stored[] | null = null;
 /** 틱 사이에만 필요한 값 — 저장하지 않는다 */
@@ -124,11 +129,16 @@ function update(t: Stored, patch: Partial<Stored>): void {
  */
 export function addTask(input: {
   sessionId: string;
-  item: TerminalOverviewItem | undefined;
+  /** 떠 있는 세션에 넣었으면 그 세션 개요(티켓 키·저장소·브랜치를 여기서) — 새 세션이면 아래 값을 직접 */
+  item?: TerminalOverviewItem;
+  ticketKey?: string | null;
+  repo?: string | null;
+  branch?: string | null;
   tab: string;
   instruction: string;
   report: boolean;
-  claude: ClaudeProcess;
+  /** 지시를 넣은 claude — 새로 띄운 세션은 아직 없다(null) */
+  claude: ClaudeProcess | null;
 }): OrchestratorTask {
   const list = load();
   for (const t of list) {
@@ -140,19 +150,21 @@ export function addTask(input: {
   const t: Stored = {
     id: crypto.randomUUID().slice(0, 8),
     sessionId: input.sessionId,
-    ticketKey: input.item ? ticketKeyOf(input.item) : null,
-    repo: input.item?.workspace?.name ?? null,
-    branch: input.item?.branch ?? null,
+    ticketKey: input.item ? ticketKeyOf(input.item) : (input.ticketKey ?? null),
+    repo: input.item ? (input.item.workspace?.name ?? null) : (input.repo ?? null),
+    branch: input.item ? input.item.branch : (input.branch ?? null),
     tab: input.tab,
     instruction: input.instruction.slice(0, INSTRUCTION_KEEP),
     report: input.report,
     state: 'dispatched',
     createdAt: now,
     updatedAt: now,
-    file: input.claude.file,
-    // 지시를 넣기 직전의 크기 — 붙여넣기 + Enter 가 250ms 뒤라 그 전의 기록은 이전 일이다
-    offset: safeSize(input.claude.file),
+    // 지시를 넣기 직전의 크기 — 붙여넣기 + Enter 가 250ms 뒤라 그 전의 기록은 이전 일이다.
+    // 새 세션은 대화 파일이 아직 없다 — 처음 찾을 때(watchWork) 그 파일의 처음부터 읽는다
+    file: input.claude?.file,
+    offset: input.claude ? safeSize(input.claude.file) : 0,
     scan: WORKER_SCAN_START,
+    graceUntil: input.claude ? undefined : now + START_GRACE_MS,
   };
   list.push(t);
   save();
@@ -306,6 +318,7 @@ async function tick(): Promise<void> {
       continue;
     }
     const claude = claudes.get(t.sessionId);
+    if (!claude && Date.now() < (t.graceUntil ?? 0)) continue; // 새 세션 — claude 가 아직 뜨는 중
     if (!claude) {
       const miss = (missStreak.get(t.id) ?? 0) + 1;
       missStreak.set(t.id, miss);

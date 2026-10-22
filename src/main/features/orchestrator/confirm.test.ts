@@ -76,6 +76,17 @@ describe('승인 대기열', () => {
     expect(queue.list()).toEqual([]);
   });
 
+  it('승인하면 남긴 항목·고른 값을 함께 돌려주고, 취소면 버린다', async () => {
+    const { queue } = setup();
+    const picks = { items: ['SSB-1'], choices: { 'stack:SSB-1': 'vue' } };
+    const a = queue.ask(INPUT);
+    queue.answer('id1', true, picks);
+    await expect(a).resolves.toEqual({ decision: 'approved', picks });
+    const b = queue.ask(INPUT);
+    queue.answer('id2', false, picks);
+    await expect(b).resolves.toEqual({ decision: 'rejected' });
+  });
+
   it('한 번 정해진 결정은 바뀌지 않는다 (응답 뒤 만료 타이머 무시)', async () => {
     const { queue } = setup(1000);
     const p = queue.request(INPUT);

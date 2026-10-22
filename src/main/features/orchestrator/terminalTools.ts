@@ -21,6 +21,7 @@ import {
 import { listWorktreesBrief } from '../workspaces/git';
 import { listPresets, listWorkspaces } from '../workspaces/store';
 import { gateIfChained } from './approve';
+import { isCompanyWorkspace, jiraKeysOf } from './createTools';
 import { excludedIds, fail, json, NO_SESSION, READ, stateOf } from './toolKit';
 import { getRootSessionId } from './store';
 
@@ -90,12 +91,15 @@ export function registerTerminalTools(server: McpServer): void {
     {
       title: '워크스페이스·워크트리·프리셋',
       description:
-        'One App 에 등록된 워크스페이스(저장소)와 워크트리(path·branch), 그 워크스페이스에서 쓸 수 있는 터미널 프리셋' +
-        '(id·name·command). run_preset 의 cwd 는 여기 나온 worktrees[].path 여야 한다.',
+        'One App 에 등록된 워크스페이스(저장소)와 워크트리(path·branch·sessions = 거기 떠 있는 탭 수), 그 워크스페이스에서 쓸 수 있는 터미널 프리셋' +
+        '(id·name·command), jira_keys(걸린 Jira 프로젝트 키), company(회사 FEMC 저장소 — 새 세션은 여기서만). ' +
+        'run_preset·open_session 의 cwd 는 여기 나온 worktrees[].path 여야 한다.',
       inputSchema: {},
       annotations: READ,
     },
     async () => {
+      const excluded = excludedIds();
+      const sessions = listSessions().filter((s) => !excluded.has(s.id));
       const workspaces = [];
       for (const ws of listWorkspaces()) {
         const list = await listWorktreesBrief(ws.repoPath, { cached: true }).catch(() => [] as WorktreeInfo[]);
@@ -104,9 +108,16 @@ export function registerTerminalTools(server: McpServer): void {
           name: ws.name,
           repo_path: ws.repoPath,
           hidden: ws.hidden === true,
+          jira_keys: jiraKeysOf(ws),
+          company: isCompanyWorkspace(ws),
           worktrees: list
             .filter((w) => !w.missing)
-            .map((w) => ({ path: w.path, branch: w.branch ?? null, main: w.isMain })),
+            .map((w) => ({
+              path: w.path,
+              branch: w.branch ?? null,
+              main: w.isMain,
+              sessions: sessions.filter((s) => s.cwd === w.path).length,
+            })),
           presets: presetsOf(ws.id).map((p) => ({ id: p.id, name: p.name, command: p.command })),
         });
       }

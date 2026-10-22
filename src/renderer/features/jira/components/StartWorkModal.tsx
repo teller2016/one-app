@@ -234,6 +234,7 @@ export function StartWorkModal({
         skill,
         note: note.trim() || undefined,
         account,
+        cwd: spot.path, // 그 저장소에서 쓰던 femc 스택을 넘겨 스택 선택 창을 건너뛴다
       });
       if (!prep.ok || !prep.command || !prep.paste) {
         toast(prep.error ?? '티켓을 준비하지 못했습니다', 'fail');

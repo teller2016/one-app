@@ -23,6 +23,7 @@ import type {
 } from '../../../shared/types';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { mapLimit, shQuote } from '../../lib/util';
+import { femcStackFor } from '../terminal';
 import { leadingIssueKey } from '../../../shared/jira-url';
 import { jiraAuth } from './jira';
 import { listSessions } from '../terminal/pty';
@@ -88,6 +89,26 @@ const ACCOUNT_DIRS: Record<JiraWorkAccount, string> = {
 
 const accountDir = (account: JiraWorkAccount) =>
   path.join(os.homedir(), ACCOUNT_DIRS[account]);
+
+/**
+ * femc 실행 명령 — 뜨자마자 입력 가능한 상태로 띄운다(prepareJiraWork 의 '실행 명령' 주석 ①~④).
+ * 루트 세션이 티켓이 아닌 지시로 새 femc 세션을 열 때도 같은 것을 쓴다(orchestrator open_session).
+ */
+export function femcCommand(o: {
+  prompt: string;
+  account?: JiraWorkAccount;
+  addDir?: string;
+  stack?: string | null;
+}): string {
+  return [
+    `CLAUDE_CONFIG_DIR=${shQuote(accountDir(o.account ?? 'personal'))}`,
+    'FEMC_SKIP_UPDATE_CHECK=1',
+    'command femc',
+    shQuote(o.prompt), // ② 프롬프트가 첫 인자 — 첫 인자가 플래그면 메뉴로 빠진다
+    ...(o.addDir ? ['--add-dir', shQuote(o.addDir)] : []),
+    ...(o.stack ? ['--stack', shQuote(o.stack)] : []),
+  ].join(' ');
+}
 
 /**
  * 고를 수 있는 Claude 계정 — 프로필 폴더가 있는 것만. 어느 계정인지 헷갈리지 않게
@@ -304,7 +325,7 @@ async function downloadAttachments(
 }
 
 /** 실행할 femc 스킬 — 'auto' 는 이슈 타입으로 판정 */
-function resolveSkill(skill: JiraWorkSkill, issueType: string): string | null {
+export function resolveSkill(skill: JiraWorkSkill, issueType: string): string | null {
   if (skill === 'none') return null;
   if (skill !== 'auto') return `/${skill}`;
   return /버그|bug|결함|장애|defect/i.test(issueType) ? '/bugfix' : '/dev';
@@ -532,15 +553,10 @@ export async function prepareJiraWork(
   //     맨 앞에 두면 곧장 claude 로 간다.
   //  ③ 그 메뉴 경로에서만 도는 업데이트 확인 → FEMC_SKIP_UPDATE_CHECK=1 로 한 번 더 막는다.
   // (`--dangerously-skip-permissions` 는 femc 가 자체적으로 붙이므로 권한 창도 없다)
-  const configDir = accountDir(input.account ?? 'personal');
-  const command = [
-    `CLAUDE_CONFIG_DIR=${shQuote(configDir)}`,
-    'FEMC_SKIP_UPDATE_CHECK=1',
-    'command femc',
-    shQuote(prompt),
-    '--add-dir',
-    shQuote(dir),
-  ].join(' ');
+  //  ④ 등록 경로 밖(워크트리)에서는 femc 가 스택을 못 정해 **스택 선택 창**을 띄웠다(2026-10-21 실측) → 아는 스택을
+  //     `--stack` 으로 넘긴다(femc 는 이 플래그를 인자 어디서든 떼어 쓴다 — 프롬프트를 맨 앞에 두는 ②는 그대로).
+  const stack = input.stack ?? (input.cwd ? await femcStackFor(input.cwd) : null);
+  const command = femcCommand({ prompt, account: input.account, addDir: dir, stack });
 
   return {
     ok: true,
@@ -549,5 +565,9 @@ export async function prepareJiraWork(
     title: key,
     dir,
     attachments: savedById.size,
+    prompt,
+    summary,
+    issueType: issue.fields.issuetype?.name ?? '',
+    stack,
   };
 }

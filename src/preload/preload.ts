@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
   AuthCodeServiceId,
+  OrchestratorConfirmPicks,
   OrchestratorConfirmRequest,
   OrchestratorTask,
   AppToastPayload,
@@ -485,8 +486,8 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.on("orchestrator:confirm:changed", listener);
       return () => ipcRenderer.removeListener("orchestrator:confirm:changed", listener);
     },
-    answerConfirm: (id: string, approved: boolean) =>
-      ipcRenderer.invoke("orchestrator:confirm:answer", id, approved),
+    answerConfirm: (id: string, approved: boolean, picks?: OrchestratorConfirmPicks) =>
+      ipcRenderer.invoke("orchestrator:confirm:answer", id, approved, picks),
     // 탭 순서(워크트리 경로 → 세션 id) — 루트의 list_sessions 가 "두 번째 세션"을 풀 때 쓴다
     reportTabOrders: (orders: Record<string, string[]>) =>
       ipcRenderer.send("orchestrator:tab-orders", orders),

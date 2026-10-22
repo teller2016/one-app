@@ -2,6 +2,7 @@
 // 기능 내부 파일을 직접 import 하지 않는다(CLAUDE.md '기능 간 참조' 규칙).
 export { completeLines, fileSize, findClaude, findClaudeMany, readRange, type ClaudeProcess } from './claudeFiles';
 export { sendChatText } from './chat';
+export { femcStackFor } from './femcStack';
 export { placeOf, terminalOverview } from './overview';
 export { sessionCommands } from './processes';
 export {

@@ -10,12 +10,13 @@ paths:
 (`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
 맡긴 일은 작업 원장에 남고(`list_tasks`), 워커가 끝나면 원앱이 4줄 보고를 요청해 워커 → 루트 **Claude Code 내장 SendMessage** 로 돌아온다.
 결정·실측의 정본은 기획서 아티팩트 '루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE).
-지금은 **1a + 1b**(서버·도구 9개·고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드). 다음은 2단계(세션·워크트리 만들기).
+지금은 **1a + 1b + 2단계**(서버·도구 12개·고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드 · 세션·워크트리 만들기). 다음은 3단계(원앱 기능 도구).
 
 ## 구조
 - main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 5개) · `terminalTools.ts`(터미널 도구 4개) ·
   `toolKit.ts`(결과 포맷·상태 해석·제외 세션·탭 순서) · `deliver.ts`(워커에 글 넣기 — 지시와 보고 요청 공용) ·
   `tasks.ts`(작업 원장 + 감시) · `taskScan.ts`(대화 기록 순수 판정 + 테스트) · `approve.ts`(무인 연쇄 가드) · `confirm.ts`(승인 대기열 + 테스트) ·
+  `createTools.ts`(만들기 도구 3개) · `ticketPlan.ts`(위치 판정 순수 + 테스트) · `worktreeSetup.ts`(femc-wt.sh 실행) ·
   `guard.ts`(입력 가드 순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
   `rootGuide.ts`(지침서 기본본) · `rootLife.ts`(자동 시작·종료 판정·재시작 상한·대화 id·⌘0) · `store.ts`(토큰·루트 런타임 기록) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
 - 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
@@ -117,3 +118,25 @@ paths:
   `preventDefault` 하면 페이지 keydown 과 메뉴 단축키가 함께 막힌다(공식 문서 web-contents). ⚠️ puppeteer(CDP) 키 입력은 이 이벤트에 안 온다 — 실제 키로 확인한다.
 - 실측(10-22 dev): 탭 닫기 → off · /exit(보는 중) → 꺼진 화면 · `kill -9` 4번 → 3번 2초 만에 같은 대화 · 4번째 멈춤 토스트 · 자동 시작 → 4초에 `--resume` ·
   앱이 꺼진 사이 /exit → 다음 시작에 off. 테스트용 `devAutoStart: true`(같은 기록 파일)는 끝나면 지운다 — dev 가 떠 있는 동안 고치면 메모리 값이 덮는다.
+
+## 세션·워크트리 만들기 (`createTools.ts`, 2단계 — 2026-10-22)
+- 사용자 결정: 만들기는 **늘 승인 창**(무인 연쇄와 무관) · 여러 티켓은 한 창의 항목(체크를 풀면 뺀다) · 고를 수 있는 것은 **스택·계정만**(위치·브랜치·스킬은
+  보여 주기만 — 틀리면 취소하고 루트에게 다시 말한다) · 워크트리 준비까지 **기다렸다** 결과를 준다 · 새 세션은 회사(FEMC) 저장소만, femc 로.
+  승인 창은 `askApproval`(approve.ts) — 대기열이 `{decision, picks}` 를 돌려주게 확장(`confirm.ts ask`, 렌더러 `RootConfirmHost` 항목 Checkbox·선택 Select).
+- `start_ticket`(티켓 1~5개): 티켓마다 계획 → 거부(이유·후보)와 함께 승인 창 하나 → 남긴 항목만 차례로 워크트리 준비 → `prepareJiraWork`(Jira [작업]과 같은 명령,
+  `--stack` 포함) → `createSession(agentId 'femc', 제목 = 키)` → 작업 원장(`addTask`, claude 는 아직 없음 → 2분 기동 유예) → 토스트.
+  - 이미 그 티켓의 세션이 있으면 거부(→ `send_to_session`). ⚠️ **같은 인스턴스의 세션만 보인다**(dev 는 설치본 탭을 모른다).
+  - 저장소: 프로젝트 레지스트리의 Jira 키 → 없으면 **그 키 접두어(`SSB-`) 브랜치가 워크트리로 올라간 회사 저장소**. ⚠️ 레지스트리 키가 실제 티켓 키와 다를 수 있다
+    (실측: 레지스트리 `BBJ` · 티켓 `SSB-…` — 키만 보면 후보 0). 여럿이면 거부 + candidates(루트가 사용자에게 묻고 workspace_id 로 다시).
+  - 위치(`ticketPlan.pickPlace` + 테스트): 그 티켓 브랜치의 워크트리(`branchTicketKey` — 마지막 조각 앞머리, `feature/SSB-137-v2` 도 SSB-137) →
+    브랜치만 있으면 그 브랜치로 새 워크트리 → 주 체크아웃이 비면(기본 브랜치 main·master·develop·dev + 변경 없음 + 탭 없음) 거기 → 아니면 새 워크트리 `fix/키`·`feature/키`.
+  - 스택을 모르면(`femcStackFor` null) 그 항목에 스택 선택지를 단다 — 고르기 전엔 [실행]이 잠긴다.
+- `open_session`: 티켓 아닌 지시 → `femcCommand({prompt: 지시, stack})`. 위치 = cwd(기존 워크트리) · new_branch(없으면 만든다) · 없으면 주 체크아웃.
+- `create_worktree`: 승인 → `femc-wt.sh setup`. 그 브랜치의 워크트리가 이미 있으면 만들지 않고 경로만.
+- **워크트리 = femc-worktree 스킬의 `femc-wt.sh setup`**(`worktreeSetup.ts`) — 원앱 addWorktree 는 `git worktree add` 뿐이라 FEMC 저장소에선 일을 못 한다
+  (.env·.claude 산출물·swagger 캐시·node_modules APFS 복제·claude 계정 3곳의 신뢰·MCP 항목). 로그인 셸(`zsh -lc`)로 · 8분 상한 · `--path` 를 명시해
+  원앱 계산(`worktreePathFor` = `${FEMC_WT_ROOT:-~/projects/worktrees}/<**워크스페이스 이름**>/<브랜치 / → ->`)대로 만든다 — 스크립트 기본(저장소 폴더 이름) 대신
+  사용자의 기존 배치(`~/projects/worktrees/FO-BBJ/…`)에 모이게(사용자 결정). 출력의 `[WARN]` 줄을 돌려준다.
+- 실측(10-22 dev): 저장소 후보 2개(BO·FO-BBJ) 거부 · 묶음 승인 창(없는 티켓은 '제외') · 하나 빼면 'N건 실행' · 취소 → 거부 문장 ·
+  `create_worktree` 13초(node_modules 복제)·`femc-wt.sh remove` 로 정리 · SSB-137 기존 워크트리로 femc 세션 → 스택 선택 창 없이 기동 → 19초에 보고받음(파일 변화 없음).
+  시험 뒤 정리: 세션 kill · 그 워크트리 프로젝트 폴더의 새 대화 기록(첫 입력 확인 뒤) · 워크트리·브랜치·빈 상위 폴더.
