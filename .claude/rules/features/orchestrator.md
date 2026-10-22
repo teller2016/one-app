@@ -10,13 +10,13 @@ paths:
 (`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
 맡긴 일은 작업 원장에 남고(`list_tasks`), 워커가 끝나면 원앱이 4줄 보고를 요청해 워커 → 루트 **Claude Code 내장 SendMessage** 로 돌아온다.
 결정·실측의 정본은 기획서 아티팩트 '루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE).
-지금은 **1a + 1b + 2단계**(서버·도구 12개·고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드 · 세션·워크트리 만들기). 다음은 3단계(원앱 기능 도구).
+지금은 **1a + 1b + 2단계 + 3a**(고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드 · 세션·워크트리 만들기 · 배포 확인 창). 3단계(원앱 기능 도구)를 배포 → PR → 결재·일정 순으로 붙이는 중.
 
 ## 구조
 - main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 5개) · `terminalTools.ts`(터미널 도구 4개) ·
   `toolKit.ts`(결과 포맷·상태 해석·제외 세션·탭 순서) · `deliver.ts`(워커에 글 넣기 — 지시와 보고 요청 공용) ·
   `tasks.ts`(작업 원장 + 감시) · `taskScan.ts`(대화 기록 순수 판정 + 테스트) · `approve.ts`(무인 연쇄 가드) · `confirm.ts`(승인 대기열 + 테스트) ·
-  `createTools.ts`(만들기 도구 3개) · `ticketPlan.ts`(위치 판정 순수 + 테스트) · `worktreeSetup.ts`(femc-wt.sh 실행) ·
+  `createTools.ts`(만들기 도구 3개) · `deployTools.ts`(배포 도구 3개) · `openRequest.ts`(기능 화면 열기 요청 — `app:open-request`) · `ticketPlan.ts`(위치 판정 순수 + 테스트) · `worktreeSetup.ts`(femc-wt.sh 실행) ·
   `guard.ts`(입력 가드 순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
   `rootGuide.ts`(지침서 기본본) · `rootLife.ts`(자동 시작·종료 판정·재시작 상한·대화 id·⌘0) · `store.ts`(토큰·루트 런타임 기록) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
 - 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
@@ -140,3 +140,13 @@ paths:
 - 실측(10-22 dev): 저장소 후보 2개(BO·FO-BBJ) 거부 · 묶음 승인 창(없는 티켓은 '제외') · 하나 빼면 'N건 실행' · 취소 → 거부 문장 ·
   `create_worktree` 13초(node_modules 복제)·`femc-wt.sh remove` 로 정리 · SSB-137 기존 워크트리로 femc 세션 → 스택 선택 창 없이 기동 → 19초에 보고받음(파일 변화 없음).
   시험 뒤 정리: 세션 kill · 그 워크트리 프로젝트 폴더의 새 대화 기록(첫 입력 확인 뒤) · 워크트리·브랜치·빈 상위 폴더.
+
+## 원앱 기능 도구 (3단계 — 2026-10-22, 배포 → PR → 결재·일정 순으로 하나씩)
+- 기획 결정: **실행은 각 기능의 기존 확인 화면에서 사용자가** — 루트 도구는 조회 + 그 화면을 값으로 채워 띄우기까지. 승인 창을 새로 만들지 않는다
+  (사용자가 보는 화면·실행 경로·확인 절차가 지금과 같다). 루트 지침서: "띄웠다"고만 말하고 "실행했다"고 말하지 않는다.
+- **화면 열기 = `app:open-request`**(`openRequest.ts sendOpenRequest`) — 메인 창에만(`getNotifyWindow().webContents.send` — ⚠️ `broadcast` 는 폰까지 가서
+  폰에도 모달이 뜬다) + 창 앞으로. 렌더러 `RootOpenRequests`(App 셸에 한 번)가 종류별로 그 기능의 공개 요청 함수로 넘긴다. 요청 타입 `AppOpenRequest`(shared).
+- 조회는 그 기능의 공유 채널을 그대로(`lib/moIpc callShared` — 폰과 같은 함수, 결과 캐시도 같다).
+- **3a 배포**(`deployTools.ts`): `list_deploy_targets`(projects:get + status:fetch, refresh=캐시 무시) · `preview_deploy`(deploy:preview, 20개) ·
+  `open_deploy_confirm` → ⌘P 팔레트와 같은 `requestDeployConfirm`(배포 섹션으로 가서 확인 모달). 프로젝트·대상은 id 또는 이름(대소문자 무시).
+  PROD 는 모달의 대상 이름 입력 + main 재대조(deploy:trigger) — 루트가 건너뛸 길이 없다. 실측: DEV·PROD 모달이 그 대상으로 뜨고 [취소]로 닫힘(배포 안 누름).

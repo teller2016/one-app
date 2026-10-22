@@ -5,11 +5,10 @@
 // 승인 창은 메인 창의 모달(렌더러 RootConfirmHost)이다. 요청이 오면 메인 창을 앞으로 가져온다.
 // ⚠️ 승인을 기다리는 동안 MCP 호출이 열려 있다 — Claude Code 는 HTTP MCP 호출에 '첫 바이트 60초'를 건다(공식 문서 mcp.md).
 //    SDK 가 SSE 헤더를 바로 보내고 15초마다 keepalive 를 쓰며, mcp.json 에 서버별 timeout 도 늘려 둔다(root.ts).
-import { app } from 'electron';
 import { broadcast } from '../../lib/broadcast';
 import { completeLines, fileSize, findClaude, readRange } from '../terminal';
-import { getNotifyWindow } from '../notify/notify';
 import type { OrchestratorConfirmPicks } from '../../../shared/types';
+import { bringMainWindowToFront } from './openRequest';
 import { createConfirmQueue, type ConfirmInput, type ConfirmOutcome } from './confirm';
 import { getRootSessionId } from './store';
 import { lastInputKind } from './taskScan';
@@ -19,16 +18,6 @@ export const CONFIRM_TIMEOUT_MS = 3 * 60_000;
 
 /** 마지막 입력을 찾는 꼬리 — 입력 뒤 도구 결과 몇 줄이 클 수 있다 */
 const ROOT_TAIL_BYTES = 256 * 1024;
-
-/** 메인 창을 앞으로 — 다른 앱 뒤에 있어도 승인 창이 보이게 (notify 알럿과 같은 방식) */
-function bringMainWindowToFront(): void {
-  const win = getNotifyWindow();
-  if (!win || win.isDestroyed()) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
-  app.focus({ steal: true });
-}
 
 const queue = createConfirmQueue({
   timeoutMs: CONFIRM_TIMEOUT_MS,

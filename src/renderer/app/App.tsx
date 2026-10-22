@@ -25,7 +25,7 @@ import {
   WaitingToast,
 } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
-import { RootCommand, RootConfirmHost } from "../features/orchestrator";
+import { RootCommand, RootConfirmHost, RootOpenRequests } from "../features/orchestrator";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
   isSessionOnScreen,
@@ -568,9 +568,10 @@ export function App() {
             />
           )}
           {switcherOpen && <SessionSwitcher onClose={closeSwitcher} />}
-          {/* ⌘P '루트 세션 열기' 명령 등록(그리는 것 없음) + 무인 연쇄 가드 승인 창(요청이 있을 때만 모달) */}
+          {/* 루트 세션 — ⌘P 명령 등록 · 승인 창(요청이 있을 때만 모달) · 기능 화면 열기 요청 받기(그리는 것 없음) */}
           <RootCommand />
           <RootConfirmHost />
+          <RootOpenRequests />
 
           {/* 하단 상태바 — 상주 위젯. 위젯은 각자 격리한다(하나가 죽어도 나머지·셸은 산다) */}
           <StatusBar

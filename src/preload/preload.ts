@@ -1,6 +1,7 @@
 // preload: 렌더러에 안전하게 노출할 API를 contextBridge 로 등록한다.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
+  AppOpenRequest,
   AuthCodeServiceId,
   OrchestratorConfirmPicks,
   OrchestratorConfirmRequest,
@@ -488,6 +489,12 @@ contextBridge.exposeInMainWorld("oneApp", {
     },
     answerConfirm: (id: string, approved: boolean, picks?: OrchestratorConfirmPicks) =>
       ipcRenderer.invoke("orchestrator:confirm:answer", id, approved, picks),
+    // 루트가 기능 화면(배포 확인 등)을 채워 열어 달라는 요청 — 실행은 사용자가 그 화면에서
+    onOpenRequest: (cb: (req: AppOpenRequest) => void) => {
+      const listener = (_e: unknown, req: AppOpenRequest) => cb(req);
+      ipcRenderer.on("app:open-request", listener);
+      return () => ipcRenderer.removeListener("app:open-request", listener);
+    },
     // 탭 순서(워크트리 경로 → 세션 id) — 루트의 list_sessions 가 "두 번째 세션"을 풀 때 쓴다
     reportTabOrders: (orders: Record<string, string[]>) =>
       ipcRenderer.send("orchestrator:tab-orders", orders),
