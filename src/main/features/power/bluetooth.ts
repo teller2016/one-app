@@ -43,6 +43,11 @@ export const bluetoothSwitch = createRadioSwitch({
       writeArgs: (on) => ['-p', on ? '1' : '0'],
     };
   },
-  missingLog: 'blueutil 이 없어 블루투스를 끄지 못했습니다 (brew install blueutil)',
+  missingLog: 'blueutil 이 없어 블루투스를 끄지 않습니다 (brew install blueutil)',
   missingToast: 'blueutil 을 찾을 수 없습니다. 제어센터에서 직접 켜 주세요.',
+  // ⚠️ blueutil 은 One App 이 띄우므로 블루투스 권한(TCC)은 **One App 의 코드 서명**에 묶인다. 서명 주체가 바뀌면
+  // (2026-10-21 자가서명 → Apple Development) 옛 허용이 맞지 않아 권한 창이 다시 뜨고, 잠들기 직전엔 화면이 꺼져
+  // 아무도 답하지 못한 채 타임아웃 난다(tccd `Failed to match existing code requirement … kTCCServiceBluetoothAlways`)
+  offFailHint:
+    '시스템 설정 → 개인정보 보호 및 보안 → 블루투스에서 One App 이 허용돼 있는지 확인하세요(앱 서명이 바뀌면 다시 허용해야 합니다).',
 });

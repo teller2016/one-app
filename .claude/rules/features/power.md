@@ -37,6 +37,10 @@ paths:
   다크웨이크마다 돌리지 말 것(그 자체가 부하).
 - 폭주 판정: 발열 비상이면 무조건, 아니면 **다크웨이크 20회 이상이면서 시간당 15회 이상**. 실측 기준값 —
   폭주 09-16 248회/57분·09-14 98회/3h·09-15 112회/5.4h, 정상 밤새는 한 자릿수.
+- **배터리 소모 기준(2026-10-22 추가, reason `drain`)**: 충전 없이 **3시간 이상** 잠들었는데 **시간당 1% 이상** 닳으면
+  알린다. 정상 밤새는 0.2~0.28%/h. 빈도 기준이 놓친 두 사례 때문이다 — 10-18 USB-C 허브(깨어남 정상·1.79%/h),
+  10-22 블루투스 끄기 실패(203회지만 14시간 47분에 퍼져 13.7회/h · 1.42%/h). 짧은 구간은 정수 % 오차가 커서 보지 않는다.
+  소모로만 걸리면 제목이 "배터리가 많이 닳았습니다" 이고, 주로 유지관리가 깼으면 USB 허브·외장 기기를 의심하게 한다.
 - 알림은 `sendToast`(sticky, `dedupeKey: 'power-wake-storm'`) — 복귀한 사용자가 One App 을 볼 때 그대로
   있으면 된다. 알럿(`notify`)으로 바꾸지 말 것(포커스를 뺏을 이유가 없다).
 - ⚠️ **토스트 힌트로 `pmset tcpkeepalive` 를 가리키지 말 것**(2026-09-23 수정) — 그 설정은 이미 적용돼
@@ -164,6 +168,21 @@ zsh 에는 내장 `log` 명령이 있어 `log show …` 가 **조용히 빈 결�
   **`Stack user controller stopped` → 16시간 무로그 → 복귀 시각에 활동 재개**. 복구도 정상
   (`power.json` 비워짐 · BT `1` · 실패 토스트 없음).
 - ⚠️ `blueutil -p 0` 을 **개발 중에 그냥 돌리지 말 것** — 사용자의 키보드·마우스가 그 자리에서 끊긴다.
+
+### 끄기 실패 알림 · 앱 시작 사전 확인 (2026-10-22)
+- ⚠️ **블루투스 권한(TCC)은 One App 의 코드 서명에 묶인다** — blueutil 을 One App 이 띄우므로 tccd 가 One App 을
+  책임 프로세스로 본다. 2026-10-21 서명을 자가서명 → Apple Development 로 바꾼 첫 빌드에서 옛 허용이 맞지 않아
+  (`Failed to match existing code requirement … kTCCServiceBluetoothAlways` → `AUTHREQ_PROMPTING`) 잠들기 직전
+  `blueutil -p` 가 **화면 꺼진 권한 창**에 막혀 3초 타임아웃 → "못 읽음이면 건드리지 않는다" 로 끄기를 **조용히** 건너뛰었다.
+  14시간 47분 203번 깸 · 배터리 80→59%. Wi-Fi(`networksetup`)는 권한이 필요 없어 정상이었다.
+  확인: `/usr/bin/log show --predicate 'process == "tccd" AND eventMessage CONTAINS "kTCCServiceBluetoothAlways"'`.
+- 그래서 조건이 맞는데 못 끈 경우(도구 없음·상태 못 읽음·끄기 실패·기록 실패)를 `radioSwitch` 가 기억했다가
+  **완전 복귀 때** sticky 토스트로 알린다(`reportOffFailure`, 키 `power-<kind>-off`). 드라이버의 `offFailHint` 가
+  조치 안내(블루투스: 시스템 설정 → 개인정보 보호 및 보안 → 블루투스)를 붙인다. 폭주 토스트 힌트도 그 알림을 가리킨다.
+- **앱 시작 사전 확인**(`checkAccess`, 설치본만 · 시작 10초 뒤 · 토글 켜진 장치만): 상태를 비동기로 한 번 **읽기만** 한다.
+  권한이 풀렸으면 권한 창이 **사람이 화면 앞에 있을 때** 뜬다. 2분 안에 못 읽으면 같은 자리에 토스트.
+  개발 인스턴스는 건너뛴다 — Electron 기본 바이너리라 권한 창이 엉뚱한 앱 이름으로 뜬다.
+- `suspend` 는 사이클의 **첫 잠들기에만** 온다(10-22 실측: 밤새 다크웨이크 203회에 blueutil 실행 1회) — 실패 기록이 다크웨이크마다 덮이지 않는다.
 
 ### lite 에 딸려 보내지 않기
 `blueutil` 조회는 `features/power/ipc.ts`(`power:blueutil:check`)에 두고 `registerPowerIpc()` 로 등록한다.

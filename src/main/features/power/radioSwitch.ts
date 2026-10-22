@@ -19,6 +19,23 @@ export const EXEC_TIMEOUT_MS = 3_000;
  */
 const RESTORE_RETRY_MS = [0, 1_000, 3_000, 7_000];
 
+/**
+ * 앱 시작 사전 확인(`checkAccess`)의 대기 한도 — 권한 창이 뜨면 명령이 사람의 답을 기다린다.
+ * 잠들기 직전과 달리 서두를 이유가 없어 넉넉히 둔다.
+ */
+const ACCESS_CHECK_TIMEOUT_MS = 120_000;
+
+/**
+ * 명령 실패를 토스트에 쓸 문장으로 — 타임아웃은 권한 창에 막힌 경우가 대표적이라 따로 말한다.
+ * 동기(`execFileSync`)는 `code: 'ETIMEDOUT'`, 비동기(`execFile`)는 `killed: true` 로 온다(Node 22 실측).
+ */
+function describeExecError(err: unknown, timeoutMs: number): string {
+  const e = err as { code?: unknown; killed?: unknown } | null;
+  return e?.code === 'ETIMEDOUT' || e?.killed === true
+    ? `${Math.round(timeoutMs / 1000)}초 안에 응답이 없었습니다.`
+    : '명령이 실패했습니다.';
+}
+
 /** 무선 전원을 읽고 쓰는 명령 — 드라이버가 그때그때 찾아 돌려준다 */
 export interface RadioCommand {
   bin: string;
@@ -43,9 +60,12 @@ export interface RadioDriver {
   missingLog: string;
   /** 되돌리려는데 명령이 없을 때 토스트 본문 */
   missingToast: string;
+  /** 읽기·끄기가 실패했을 때 실패 알림 끝에 붙일 조치 안내 — 권한(TCC)이 필요한 장치용 */
+  offFailHint?: string;
 }
 
 export interface RadioSwitch {
+  kind: RadioKind;
   /**
    * 잠들기 직전 — 조건이 맞고 켜져 있을 때만 끈다.
    * 판정(`judgeUnattended` — ioreg 동기 실행)은 호출부가 한 번 해서 장치마다 나눠 준다.
@@ -61,6 +81,10 @@ export interface RadioSwitch {
   restoreAfterWake(why: string): void;
   /** 깨어남 직후 — 덮개가 열렸을 때만 되돌린다 */
   restoreIfLidOpened(): void;
+  /** 완전 복귀 — 잠들 때 끄지 못했으면 알린다. 알렸으면 true(폭주 보고 힌트가 이 알림을 가리킨다) */
+  reportOffFailure(): boolean;
+  /** 앱 시작 사전 확인 — 상태를 한 번 읽어 보고, 못 읽으면 잠들 때도 못 끈다는 뜻이라 미리 알린다 */
+  checkAccess(): void;
 }
 
 export function createRadioSwitch(d: RadioDriver): RadioSwitch {
@@ -73,6 +97,15 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
   let inflight: ChildProcess | null = null;
   /** 복구 실패 토스트는 장치마다 한 장만 — 다음 시도 결과가 같은 자리를 교체한다 */
   const toastKey = `power-${d.kind}-restore`;
+  /** 끄기 실패(잠들 때·앱 시작 사전 확인) 토스트 자리 — 둘이 같은 문제라 한 장으로 */
+  const offToastKey = `power-${d.kind}-off`;
+  /**
+   * 잠들 때 조건은 맞았는데 끄지 못한 이유 — 완전 복귀 때 알리고 비운다.
+   * 메모리에만 둔다: 알림일 뿐이라 강제 종료로 잃어도 장치 상태에는 영향이 없다.
+   */
+  let offFailure: string | null = null;
+  /** 마지막 명령 실패를 사람이 읽을 문장으로 — readPower·writePower 가 남긴다 */
+  let lastError = '';
 
   /** 전원 상태 — 켜짐 true / 꺼짐 false / 못 읽음 null */
   function readPower(cmd: RadioCommand): boolean | null {
@@ -81,9 +114,12 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
         timeout: EXEC_TIMEOUT_MS,
         encoding: 'utf8',
       });
-      return cmd.parse(out);
+      const on = cmd.parse(out);
+      if (on === null) lastError = '알아볼 수 없는 응답이 왔습니다.';
+      return on;
     } catch (err) {
       console.warn(`[power] ${d.label} 상태를 읽지 못했습니다:`, err);
+      lastError = describeExecError(err, EXEC_TIMEOUT_MS);
       return null;
     }
   }
@@ -94,11 +130,18 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
       execFileSync(cmd.bin, cmd.writeArgs(on), { timeout: EXEC_TIMEOUT_MS });
     } catch (err) {
       console.warn(`[power] ${d.label}를 ${on ? '켜지' : '끄지'} 못했습니다:`, err);
+      lastError = describeExecError(err, EXEC_TIMEOUT_MS);
       return false;
     }
     if (!cmd.verifyWrite || readPower(cmd) === on) return true;
     console.warn(`[power] ${d.label}를 ${on ? '켜는' : '끄는'} 명령은 성공했지만 상태가 바뀌지 않았습니다`);
+    lastError = '명령은 성공했지만 상태가 바뀌지 않았습니다.';
     return false;
+  }
+
+  /** 끄기 실패 문구 — 이유 + (권한이 필요한 장치면) 조치 안내 */
+  function offFailureMessage(reason: string): string {
+    return d.offFailHint ? `${reason} ${d.offFailHint}` : reason;
   }
 
   /** 켜기(비동기) — 복구 경로 전용. 잠들기 직전이 아니라 main 을 멈출 이유가 없다 */
@@ -135,9 +178,18 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
     const cmd = d.locate();
     if (!cmd) {
       console.warn(`[power] ${d.missingLog}`);
+      offFailure = `${d.missingLog}.`;
       return;
     }
-    if (readPower(cmd) !== true) return; // 이미 꺼져 있거나 못 읽음 → 건드리지 않는다
+    const on = readPower(cmd);
+    if (on === false) return; // 이미 꺼져 있다 → 건드리지 않는다(깨어날 때 멋대로 켜지 않기 위해)
+    if (on === null) {
+      // 못 읽으면 건드리지 않는다 — 다만 조용히 넘어가면 안 된다. 2026-10-22: 서명을 바꾼 빌드에서
+      // 블루투스 권한(TCC)이 옛 서명에 묶여 남아, blueutil 이 화면 꺼진 권한 창에 막혀 여기서 3초 타임아웃 →
+      // 끄기를 건너뛰었고 아무 알림이 없었다(14시간 47분 203번 깸 · 배터리 80→59%). 복귀 때 알린다
+      offFailure = offFailureMessage(`상태를 읽지 못했습니다 — ${lastError}`);
+      return;
+    }
     // ⚠️ 기록을 **먼저** 남긴다. 끄고 나서 기록하면, 끄기 명령이 타임아웃으로 강제 종료됐는데
     // 전원 변경은 이미 들어간 경우 "꺼짐 + 기록 없음"이 되어 복구 경로가 영영 켜지 않는다
     // (BT 키보드·마우스 먹통 · Wi-Fi 끊김). 기록 저장이 실패하면 끄지 않는다 — 켜진 채가 안전한 쪽이다.
@@ -145,14 +197,61 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
       markRadioOff(d.kind);
     } catch (err) {
       console.warn(`[power] ${d.label} 기록을 남기지 못해 끄지 않습니다:`, err);
+      offFailure = '복구용 기록을 남기지 못해 끄지 않았습니다.';
       return;
     }
     if (!writePower(cmd, false)) {
+      const reason = lastError;
       // 실패로 보고됐어도 실제로 꺼졌을 수 있다 — 다시 읽어 확실히 켜져 있을 때만 기록을 지운다
-      if (readPower(cmd) === true) clearRadioOff(d.kind);
+      if (readPower(cmd) === true) {
+        clearRadioOff(d.kind);
+        offFailure = offFailureMessage(`끄기 명령이 실패했습니다 — ${reason}`);
+      }
       return;
     }
+    offFailure = null;
     console.log(`[power] ${d.label}를 껐습니다 — ${verdict.reason}`);
+  }
+
+  function reportOffFailure(): boolean {
+    if (!offFailure) return false;
+    sendToast({
+      title: `잠들 때 ${d.label}를 끄지 못했습니다`,
+      message: offFailure,
+      variant: 'fail',
+      sticky: true,
+      dedupeKey: offToastKey,
+    });
+    offFailure = null;
+    return true;
+  }
+
+  /**
+   * 앱 시작 사전 확인 — 상태를 한 번 **읽기만** 한다. 권한(TCC)이 풀렸으면 macOS 권한 창이 **사람이
+   * 화면 앞에 있을 때** 떠서 그 자리에서 허용할 수 있다(잠들기 직전엔 화면이 꺼져 아무도 못 본다).
+   * 잠들기 직전과 달리 비동기로, 사람의 답을 기다릴 만큼 넉넉히 기다린다.
+   */
+  function checkAccess(): void {
+    const cmd = d.locate();
+    const warn = (message: string) =>
+      sendToast({
+        title: `잠잘 때 ${d.label} 끄기가 동작하지 않습니다`,
+        message,
+        variant: 'fail',
+        sticky: true,
+        dedupeKey: offToastKey,
+      });
+    if (!cmd) {
+      console.warn(`[power] ${d.missingLog}`);
+      warn(`${d.missingLog}.`);
+      return;
+    }
+    execFile(cmd.bin, cmd.readArgs, { timeout: ACCESS_CHECK_TIMEOUT_MS, encoding: 'utf8' }, (err, stdout) => {
+      if (!err && cmd.parse(stdout) !== null) return;
+      console.warn(`[power] ${d.label} 사전 확인 실패:`, err ?? stdout);
+      const reason = err ? describeExecError(err, ACCESS_CHECK_TIMEOUT_MS) : '알아볼 수 없는 응답이 왔습니다.';
+      warn(offFailureMessage(`${d.label} 상태를 읽지 못했습니다 — ${reason}`));
+    });
   }
 
   /**
@@ -245,5 +344,13 @@ export function createRadioSwitch(d: RadioDriver): RadioSwitch {
     restoreAfterWake('덮개 열림');
   }
 
-  return { powerOffForSleep, cancelRestore, restoreAfterWake, restoreIfLidOpened };
+  return {
+    kind: d.kind,
+    powerOffForSleep,
+    cancelRestore,
+    restoreAfterWake,
+    restoreIfLidOpened,
+    reportOffFailure,
+    checkAccess,
+  };
 }

@@ -30,6 +30,8 @@ function restoreRadios(why: string): void {
 
 /** 복귀 뒤 입력 감지 주기 — 다크웨이크는 몇 초 만에 다시 잠들어 `suspend` 가 이 타이머를 걷어낸다 */
 const ACTIVITY_PROBE_MS = 5_000;
+/** 앱 시작 뒤 무선 권한 사전 확인까지 — 창이 뜨고 첫 화면이 그려질 시간 */
+const ACCESS_CHECK_DELAY_MS = 10_000;
 
 let asleep = false;
 let sleptAt: number | null = null; // 이번 사이클이 시작된(처음 잠든) 시각 — 보고 구간의 시작
@@ -111,7 +113,9 @@ function fullWake(): void {
   sleptAt = null;
   setAsleep(false);
   restoreRadios('완전 복귀');
-  if (since !== null) void reportSleepCycle(since, Date.now());
+  // 잠들 때 끄지 못한 무선 — 따로 알리고, 폭주 보고의 힌트가 그 알림을 가리키게 넘긴다
+  const offFailed = RADIOS.filter((r) => r.sw.reportOffFailure()).map((r) => r.sw.kind);
+  if (since !== null) void reportSleepCycle(since, Date.now(), offFailed);
 }
 
 /**
@@ -123,6 +127,14 @@ export function startPowerWatch(): void {
     // 비정상 종료(발열 강제 종료 등)로 무선이 꺼진 채 남았으면 여기서 되돌린다.
     // 앱이 뜬다는 건 사람이 맥을 쓰고 있다는 뜻이라 켜는 것이 맞다
     restoreRadios('앱 시작');
+    // 끄기에 필요한 권한·도구를 사람이 화면 앞에 있을 때 미리 확인한다(무선 끄기 토글이 켜진 것만).
+    // 설치본만 — 개발 인스턴스는 Electron 기본 바이너리라 권한 창이 엉뚱한 앱 이름으로 뜬다.
+    // 기동 경로를 붙잡지 않게 창이 뜬 뒤로 미룬다
+    if (app.isPackaged) {
+      setTimeout(() => {
+        for (const r of RADIOS) if (r.enabled()) r.sw.checkAccess();
+      }, ACCESS_CHECK_DELAY_MS);
+    }
     powerMonitor.on('suspend', onSuspend);
     powerMonitor.on('resume', onResume);
     powerMonitor.on('unlock-screen', () => {

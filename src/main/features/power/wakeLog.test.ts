@@ -149,6 +149,32 @@ describe('judgeWakeStorm', () => {
   it('아주 짧은 구간에서 0 나눗셈으로 터지지 않는다', () => {
     expect(() => judgeWakeStorm(base({ durationMs: 0, darkWakes: 30 }))).not.toThrow();
   });
+
+  // 2026-10-22: 블루투스 권한이 풀려 자동 끄기가 실패 — 203회였지만 긴 시간에 퍼져 빈도 기준(15회/h)을 비껴갔다
+  it('빈도 기준에 못 미쳐도 긴 잠자기에서 배터리가 많이 닳았으면 알린다 (10-22 실측 14시간 47분 · 80→59%)', () => {
+    const s = base({ durationMs: (14 * 60 + 47) * 60_000, darkWakes: 203, batteryStart: 80, batteryEnd: 59 });
+    expect(judgeWakeStorm(s)).toEqual({ storm: true, reason: 'drain' });
+  });
+
+  it('깨어남이 정상이어도 배터리가 많이 닳았으면 알린다 (10-18 USB-C 허브 34.7시간 · 80→18%)', () => {
+    const s = base({ durationMs: 34.7 * 3_600_000, darkWakes: 35, batteryStart: 80, batteryEnd: 18 });
+    expect(judgeWakeStorm(s)).toEqual({ storm: true, reason: 'drain' });
+  });
+
+  it('정상 밤새 소모는 알리지 않는다 (10-16 실측 14시간 20분 · 80→76%)', () => {
+    const s = base({ durationMs: (14 * 60 + 20) * 60_000, darkWakes: 15, batteryStart: 80, batteryEnd: 76 });
+    expect(judgeWakeStorm(s)).toEqual({ storm: false });
+  });
+
+  it('충전이 낀 구간은 소모로 판정하지 않는다', () => {
+    const s = base({ durationMs: 10 * 3_600_000, charging: true, batteryStart: 80, batteryEnd: 50 });
+    expect(judgeWakeStorm(s)).toEqual({ storm: false });
+  });
+
+  it('짧은 구간은 정수 % 오차가 커서 소모로 판정하지 않는다', () => {
+    const s = base({ durationMs: 2 * 3_600_000, batteryStart: 80, batteryEnd: 76 });
+    expect(judgeWakeStorm(s)).toEqual({ storm: false });
+  });
 });
 
 describe('formatDuration', () => {
@@ -216,6 +242,46 @@ describe('formatWakeStormToast', () => {
     const s = summarizeSleepCycle(wifi, T('18:34:30'), T('19:31:40'));
     const t = formatWakeStormToast(s, { wifiOff: true });
     expect(t.message).toContain('외부 모니터');
+    expect(t.message).not.toContain('블루투스');
+  });
+
+  // 2026-10-22: 토글은 켜져 있었는데 권한 문제로 끄기가 실패했다 — 조건(외부 모니터) 탓을 하면 엉뚱한 곳을 보게 된다
+  it('배터리 소모로 걸리면 제목이 배터리이고, 끄기가 실패했으면 그 알림을 가리킨다', () => {
+    const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(
+      {
+        ...s,
+        durationMs: (14 * 60 + 47) * 60_000,
+        darkWakes: 203,
+        causes: { bluetooth: 189, wifi: 0, maintenance: 14, other: 0 },
+        batteryStart: 80,
+        batteryEnd: 59,
+      },
+      { bluetoothOff: true, bluetoothOffFailed: true },
+    );
+    expect(t.title).toBe('덮개를 닫은 동안 배터리가 많이 닳았습니다');
+    expect(t.message).toContain('203번 깨어남');
+    expect(t.message).toContain('배터리 80%→59%(시간당 1.4%)');
+    expect(t.message).toContain('블루투스를 끄지 못했습니다');
+    expect(t.message).not.toContain('외부 모니터');
+  });
+
+  // 2026-10-18: 깨어남은 시간당 1회 유지관리뿐인데 80→18% — 유선랜 USB-C 허브가 꽂힌 채 잠들었다
+  it('유지관리 정도만 깼는데 닳았으면 블루투스가 아니라 잠든 상태(USB 허브)를 의심하게 한다', () => {
+    const s = summarizeSleepCycle(storm(30), T('18:34:30'), T('19:31:40'));
+    const t = formatWakeStormToast(
+      {
+        ...s,
+        durationMs: 34.7 * 3_600_000,
+        darkWakes: 35,
+        causes: { bluetooth: 0, wifi: 0, maintenance: 35, other: 0 },
+        batteryStart: 80,
+        batteryEnd: 18,
+      },
+      { bluetoothOff: true, wifiOff: true },
+    );
+    expect(t.title).toContain('배터리가 많이 닳았습니다');
+    expect(t.message).toContain('USB 허브');
     expect(t.message).not.toContain('블루투스');
   });
 });

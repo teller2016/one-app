@@ -11,6 +11,15 @@ export const MIN_REPORT_CYCLE_MS = 10 * 60_000;
 /** 폭주 판정 — 다크웨이크가 이 횟수 이상이면서 시간당 빈도도 아래를 넘을 때 */
 export const WAKE_STORM_MIN_COUNT = 20;
 export const WAKE_STORM_MIN_PER_HOUR = 15;
+/**
+ * 배터리 과소모 판정 — 깨어남 횟수와 따로, 이 시간 이상 잠들었는데 시간당 이 % 이상 닳으면 알린다.
+ * 실측 기준값: 정상 밤새 0.2~0.28%/h(09-23·10-16·10-20) / 이상 10-02 Wi-Fi 연쇄 1.67 · 10-18 USB-C 허브 1.79 ·
+ * 10-22 블루투스 권한 실패 1.42. ⚠️ 뒤의 둘은 횟수 기준에 안 걸렸다 — 허브는 깨어남이 정상이었고, 10-22 는
+ * 203회였지만 14시간 47분에 퍼져 시간당 13.7회로 임계(15회) 아래였다.
+ * 최소 시간을 두는 이유: pmset 의 배터리는 정수 % 라 짧은 구간은 1~2% 오차로도 빈도가 크게 튄다.
+ */
+export const DRAIN_MIN_HOURS = 3;
+export const DRAIN_MIN_PCT_PER_HOUR = 1;
 
 export type SleepCycleSummary = {
   sinceMs: number;
@@ -57,7 +66,7 @@ export function classifyWakeCause(rest: string): WakeCause {
 
 export type WakeStormVerdict =
   | { storm: false }
-  | { storm: true; reason: 'thermal' | 'count' };
+  | { storm: true; reason: 'thermal' | 'count' | 'drain' };
 
 // `2026-09-16 18:34:35 +0900 DarkWake            	DarkWake from Deep Idle …` — 날짜·시각·시간대·종류·나머지
 const LINE_RE = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([+-]\d{4}) (\S+)\s+(.*)$/;
@@ -121,13 +130,36 @@ export function summarizeSleepCycle(
   return summary;
 }
 
-/** 폭주인가 — 발열 비상은 횟수와 무관하게 알리고, 그 외엔 횟수·시간당 빈도 둘 다 넘어야 한다 */
+/** 다크웨이크가 너무 잦았나 — 횟수·시간당 빈도 둘 다 넘어야 한다 */
+function isWakeCountStorm(s: SleepCycleSummary): boolean {
+  if (s.darkWakes < WAKE_STORM_MIN_COUNT) return false;
+  const hours = Math.max(s.durationMs / 3_600_000, 1 / 60); // 1분 미만은 1분으로 — 0 나눗셈 방지
+  return s.darkWakes / hours >= WAKE_STORM_MIN_PER_HOUR;
+}
+
+/** 시간당 배터리 소모(%) — 충전이 끼었거나 배터리 값·구간 길이가 없으면 null */
+export function batteryDrainPerHour(s: SleepCycleSummary): number | null {
+  if (s.charging || s.batteryStart === null || s.batteryEnd === null || s.durationMs <= 0) return null;
+  return (s.batteryStart - s.batteryEnd) / (s.durationMs / 3_600_000);
+}
+
+/** 배터리가 너무 닳았나 — 오차가 큰 짧은 구간은 보지 않는다 */
+function isBatteryDrainStorm(s: SleepCycleSummary): boolean {
+  if (s.durationMs < DRAIN_MIN_HOURS * 3_600_000) return false;
+  const drain = batteryDrainPerHour(s);
+  return drain !== null && drain >= DRAIN_MIN_PCT_PER_HOUR;
+}
+
+/**
+ * 폭주인가 — 발열 비상은 횟수와 무관하게 알리고, 그다음 다크웨이크 빈도, 마지막으로 배터리 소모를 본다.
+ * 소모 기준은 깨어남이 정상인데 잠든 상태 자체가 전력을 먹은 경우(USB-C 허브)와, 깨어남이 긴 시간에 퍼져
+ * 빈도 기준을 비껴간 경우를 잡는다(`DRAIN_MIN_HOURS` 주석).
+ */
 export function judgeWakeStorm(s: SleepCycleSummary): WakeStormVerdict {
   if (s.thermal) return { storm: true, reason: 'thermal' };
-  if (s.darkWakes < WAKE_STORM_MIN_COUNT) return { storm: false };
-  const hours = Math.max(s.durationMs / 3_600_000, 1 / 60); // 1분 미만은 1분으로 — 0 나눗셈 방지
-  if (s.darkWakes / hours < WAKE_STORM_MIN_PER_HOUR) return { storm: false };
-  return { storm: true, reason: 'count' };
+  if (isWakeCountStorm(s)) return { storm: true, reason: 'count' };
+  if (isBatteryDrainStorm(s)) return { storm: true, reason: 'drain' };
+  return { storm: false };
 }
 
 /** "57분" · "3시간 12분" · "2일 1시간" — 토스트·로그용 길이 표기 */
@@ -156,26 +188,52 @@ export function dominantWakeCause(s: SleepCycleSummary): WakeCause {
  * 껐으면 켜라고 하고, 켰는데도 폭주했다면 조건(외부 모니터·전원)에 걸려 안 꺼진 것이다.
  * 단, **Wi-Fi 가 주로 깨웠다면 블루투스 얘기를 하지 않는다**(2026-10-01, `WakeCause` 주석 참고) —
  * 그때는 같은 갈래를 Wi-Fi 끄기 토글로 안내한다(2026-10-02 추가).
+ * 토글이 켜져 있었는데 **잠들 때 끄기가 실패**했으면(`…OffFailed` — 원인은 그 알림이 따로 말한다) 조건 탓을
+ * 하지 않고 그 알림을 가리킨다(2026-10-22 — 블루투스 권한이 풀려 못 껐는데 "외부 모니터를 확인하라" 고 할 뻔했다).
+ * 깨어남 빈도가 아니라 **배터리 소모**로 걸린 경우는 제목을 바꾸고, 주로 유지관리가 깨웠으면(= 깨어남은 정상)
+ * 잠든 상태 자체를 의심하게 한다(2026-10-18 USB-C 허브).
  */
 export function formatWakeStormToast(
   s: SleepCycleSummary,
-  enabled: { bluetoothOff?: boolean; wifiOff?: boolean } = {},
+  enabled: {
+    bluetoothOff?: boolean;
+    wifiOff?: boolean;
+    bluetoothOffFailed?: boolean;
+    wifiOffFailed?: boolean;
+  } = {},
 ): { title: string; message: string } {
-  const title = s.lidClosed
-    ? '덮개를 닫은 동안 맥이 계속 깨어났습니다'
-    : '잠자기 중 맥이 계속 깨어났습니다';
+  const manyWakes = s.thermal || isWakeCountStorm(s);
+  const what = manyWakes ? '맥이 계속 깨어났습니다' : '배터리가 많이 닳았습니다';
+  const title = s.lidClosed ? `덮개를 닫은 동안 ${what}` : `잠자기 중 ${what}`;
   const parts = [`${formatDuration(s.durationMs)} 동안 ${s.darkWakes}번 깨어남`];
   if (!s.charging && s.batteryStart !== null && s.batteryEnd !== null && s.batteryStart !== s.batteryEnd) {
-    parts.push(`배터리 ${s.batteryStart}%→${s.batteryEnd}%`);
+    const drain = batteryDrainPerHour(s);
+    // 시간당 빈도는 정수 % 오차가 작아지는 긴 구간에서만 쓴다
+    const rate =
+      drain !== null && s.durationMs >= DRAIN_MIN_HOURS * 3_600_000 ? `(시간당 ${drain.toFixed(1)}%)` : '';
+    parts.push(`배터리 ${s.batteryStart}%→${s.batteryEnd}%${rate}`);
   }
   if (s.thermal) parts.push('발열 비상 잠자기 발생');
-  const hint =
-    dominantWakeCause(s) === 'wifi'
-      ? enabled.wifiOff
+  const failedHint = (label: string) =>
+    `잠들 때 ${label}를 끄지 못했습니다 — 함께 뜬 '${label}를 끄지 못했습니다' 알림의 안내를 따라 주세요.`;
+  // 한 번도 안 깼으면 사유가 없다 — dominantWakeCause 는 전부 0 이면 블루투스를 돌려준다
+  const cause = s.darkWakes > 0 ? dominantWakeCause(s) : null;
+  let hint: string;
+  if (cause === 'wifi') {
+    hint = enabled.wifiOffFailed
+      ? failedHint('Wi-Fi')
+      : enabled.wifiOff
         ? 'Wi-Fi 수신 패킷이 주로 깨웠습니다 — 외부 모니터나 전원이 연결돼 있으면 Wi-Fi를 끄지 않습니다. 연결을 확인하세요.'
-        : "Wi-Fi 수신 패킷이 주로 깨웠습니다(DB 연결·로컬 서버의 재접속 등) — 환경설정 → 전원에서 '잠잘 때 Wi-Fi 끄기'를 켜 보세요."
+        : "Wi-Fi 수신 패킷이 주로 깨웠습니다(DB 연결·로컬 서버의 재접속 등) — 환경설정 → 전원에서 '잠잘 때 Wi-Fi 끄기'를 켜 보세요.";
+  } else if (!manyWakes && cause !== 'bluetooth') {
+    // 주로 유지관리가 깼거나 거의 안 깼는데 닳았다 — 깨어남이 아니라 잠든 상태 자체가 전력을 먹었다
+    hint = '깨어남은 정상 범위입니다 — USB 허브·외장 기기를 꽂은 채 덮개를 닫으면 잠든 동안에도 전력을 씁니다.';
+  } else {
+    hint = enabled.bluetoothOffFailed
+      ? failedHint('블루투스')
       : enabled.bluetoothOff
         ? '외부 모니터나 전원이 연결돼 있으면 블루투스를 끄지 않습니다 — 연결을 확인하세요.'
         : "환경설정 → 전원에서 '잠잘 때 블루투스 끄기'를 켜 보세요.";
+  }
   return { title, message: `${parts.join(' · ')}. ${hint}` };
 }

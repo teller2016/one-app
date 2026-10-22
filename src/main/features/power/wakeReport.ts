@@ -1,9 +1,11 @@
 // 잠자기 사이클 보고 — 완전 복귀 때 한 번 `pmset -g log` 를 읽어 직전 사이클을 집계하고,
-// 폭주(다크웨이크 과다·발열 비상)면 sticky 토스트로 알린다. 규칙은 wakeLog.ts.
+// 폭주(다크웨이크 과다·발열 비상·배터리 과소모)면 sticky 토스트로 알린다. 규칙은 wakeLog.ts.
 import { execFile } from 'node:child_process';
 import { sendToast } from '../notify/notify';
 import { isSleepBluetoothOffEnabled, isSleepWifiOffEnabled } from '../settings/store';
+import type { RadioKind } from './store';
 import {
+  batteryDrainPerHour,
   MIN_REPORT_CYCLE_MS,
   formatDuration,
   formatWakeStormToast,
@@ -32,8 +34,13 @@ function readPmsetLog(): Promise<string> {
 /**
  * [sinceMs, untilMs] 잠자기 사이클을 집계해 폭주면 알린다. 짧은 잠자기는 건너뛴다.
  * 실패(pmset 없음·타임아웃)는 경고 로그만 — 곁가지라 기능을 막지 않는다.
+ * `offFailed` 는 잠들 때 끄지 못해 이미 따로 알린 무선 — 힌트가 그 알림을 가리킨다.
  */
-export async function reportSleepCycle(sinceMs: number, untilMs: number): Promise<void> {
+export async function reportSleepCycle(
+  sinceMs: number,
+  untilMs: number,
+  offFailed: readonly RadioKind[] = [],
+): Promise<void> {
   if (untilMs - sinceMs < MIN_REPORT_CYCLE_MS) return;
   let text: string;
   try {
@@ -44,10 +51,12 @@ export async function reportSleepCycle(sinceMs: number, untilMs: number): Promis
   }
   const summary = summarizeSleepCycle(text, sinceMs, untilMs);
   const verdict = judgeWakeStorm(summary);
+  const drain = batteryDrainPerHour(summary);
   console.log(
     `[power] 잠자기 ${formatDuration(summary.durationMs)}: 다크웨이크 ${summary.darkWakes}회` +
       `${summary.lidClosed ? ' · 덮개 닫힘' : ''}${summary.thermal ? ' · 발열 비상' : ''}` +
       ` · 배터리 ${summary.batteryStart ?? '?'}%→${summary.batteryEnd ?? '?'}%` +
+      `${drain !== null ? `(시간당 ${drain.toFixed(2)}%)` : ''}` +
       ` · 사유 BT ${summary.causes.bluetooth}/Wi-Fi ${summary.causes.wifi}` +
       `/유지관리 ${summary.causes.maintenance}/기타 ${summary.causes.other}` +
       ` → ${verdict.storm ? `폭주(${verdict.reason})` : '정상'}`,
@@ -57,6 +66,8 @@ export async function reportSleepCycle(sinceMs: number, untilMs: number): Promis
     ...formatWakeStormToast(summary, {
       bluetoothOff: isSleepBluetoothOffEnabled(),
       wifiOff: isSleepWifiOffEnabled(),
+      bluetoothOffFailed: offFailed.includes('bluetooth'),
+      wifiOffFailed: offFailed.includes('wifi'),
     }),
     variant: 'fail',
     sticky: true,
