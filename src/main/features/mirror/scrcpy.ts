@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dockLeftSlot } from '../../lib/macDock';
 import { CONTROL_ICON_PNG } from './controlIcon';
-import { focusControlWindow, focusWhenShown } from './focus';
+import { focusControlWindow, focusWhenShown, watchActivation } from './focus';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
   MIRROR_FOCUS_SHORTCUT,
@@ -147,6 +147,15 @@ function unbindFocusShortcut(): void {
   shortcutTaken = false;
 }
 
+let stopWatch: (() => void) | null = null; // Dock 타일 마우스 캡처 감시기(focus.ts) — 제어 중에만
+
+/** 제어가 끝날 때 곁에 띄운 것들을 거둔다 — 포커스 단축키·감시기 */
+function endControlExtras(): void {
+  unbindFocusShortcut();
+  stopWatch?.();
+  stopWatch = null;
+}
+
 // 상태 변화 구독 (ipc 가 렌더러로 push)
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((cb) => cb());
@@ -258,14 +267,14 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
       }
       child = null;
       runningMode = null;
-      unbindFocusShortcut();
+      endControlExtras();
       emit();
     });
     proc.on('error', (err) => {
       lastError = err.message;
       child = null;
       runningMode = null;
-      unbindFocusShortcut();
+      endControlExtras();
       emit();
     });
     child = proc;
@@ -273,6 +282,7 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
     // 제어는 켜자마자 키보드가 폰으로 가게 — 창이 뜨면 앞으로 가져온다(접근성 권한이 있을 때만)
     if (mode === 'control') {
       focusWhenShown(proc.pid);
+      if (proc.pid) stopWatch = watchActivation(proc.pid);
       bindFocusShortcut();
     }
     emit();
@@ -311,5 +321,5 @@ export function disposeMirror(): void {
   child?.kill('SIGTERM');
   child = null;
   runningMode = null;
-  unbindFocusShortcut();
+  endControlExtras();
 }
