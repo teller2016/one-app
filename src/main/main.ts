@@ -10,6 +10,8 @@ import { registerMailIpc } from "./features/mail/ipc";
 import { registerMirrorIpc } from "./features/mirror/ipc";
 import { disposeMirror } from "./features/mirror/scrcpy";
 import { registerNightwatchIpc } from "./features/nightwatch/ipc";
+import { registerOrchestratorIpc } from "./features/orchestrator/ipc";
+import { stopOrchestratorServer } from "./features/orchestrator/server";
 import { registerPowerIpc, startPowerWatch } from "./features/power";
 import {
   getNotifyWindow,
@@ -91,6 +93,7 @@ runIsolated("Nightwatch", registerNightwatchIpc);
 runIsolated("결재", registerApprovalIpc);
 runIsolated("프로젝트", registerProjectsIpc);
 runIsolated("터미널", registerTerminalIpc);
+runIsolated("루트 세션", registerOrchestratorIpc);
 runIsolated("변경사항", registerChangesIpc);
 runIsolated("워크스페이스", registerWorkspacesIpc);
 runIsolated("잠자기 감시", registerPowerIpc);
@@ -292,6 +295,7 @@ app.on("ready", () => {
 app.on("before-quit", () => {
   disposeTerminals();
   void stopTerminalServer();
+  stopOrchestratorServer();
   disposeMirror();
   disposeScheduleBrowser();
   // 결재 작성용으로 사용자에게 남겨둔 자동화 창도 함께 정리

@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import type { TerminalSessionStatus } from '../../../shared/types';
 import { findClaude } from './claudeFiles';
 import { listSessions, onSessionsChanged } from './pty';
-import { detectLauncher } from './resumeCommand';
+import { detectLauncher, isRevivable } from './resumeCommand';
 import { updatePersistedResume } from './sessions-store';
 
 /** 프로세스 실행 인자 — 못 읽으면(그 사이 끝남) null */
@@ -35,6 +35,10 @@ async function capture(id: string): Promise<void> {
     }
     const args = await processArgs(claude.pid);
     if (args === null) return; // 그 사이 끝났다 — 다음 대기 때 다시 본다
+    if (!isRevivable(args)) {
+      updatePersistedResume(id, undefined); // 도구를 막고 띄운 claude — 제한 없이 되살리지 않는다
+      return;
+    }
     updatePersistedResume(id, {
       ...detectLauncher(args),
       sessionId: claude.sessionId,

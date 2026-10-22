@@ -10,6 +10,15 @@ import type { PersistedResume } from './sessions-store';
 const FEMC_FLAG_RE = /--(?:plugin-dir|settings)[ =]\S*\/\.femc\//;
 const FEMC_STACK_RE = /\/\.femc\/generations\/[^/\s]+\/stacks\/([^/\s]+)\//;
 const SKIP_PERMISSIONS_RE = /(?:^|\s)--dangerously-skip-permissions(?:\s|$)/;
+// 도구를 막는 플래그 — resumeCommand 는 이걸 되살리지 않으므로 그대로 이어 띄우면 권한이 넓어진다
+const RESTRICTED_TOOLS_RE = /(?:^|\s)--(?:disallowedTools|disallowed-tools)(?:[\s=]|$)/;
+
+/**
+ * 재부팅 뒤 되살려도 되는 claude 인가 — **도구를 막고 띄운 claude**(`--disallowedTools`)는 아니다.
+ * 다시 띄우는 명령(resumeCommand)은 계정·권한 생략만 잇고 그 제한은 잇지 못해, 막아 둔 편집·셸이 풀린 채
+ * 살아난다. 지휘만 하는 루트 세션(features/orchestrator)이 그렇게 뜬다 — 루트는 직접 다시 연다.
+ */
+export const isRevivable = (args: string): boolean => !RESTRICTED_TOOLS_RE.test(args);
 
 /**
  * 실행 중인 claude 의 인자(`ps -o args=`)로 무엇이 띄웠는지 가린다.

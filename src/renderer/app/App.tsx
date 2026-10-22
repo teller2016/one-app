@@ -25,6 +25,7 @@ import {
   WaitingToast,
 } from "../features/terminal";
 import { VpnWidget } from "../features/vpn";
+import { RootCommand } from "../features/orchestrator";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import {
   isSessionOnScreen,
@@ -567,6 +568,8 @@ export function App() {
             />
           )}
           {switcherOpen && <SessionSwitcher onClose={closeSwitcher} />}
+          {/* ⌘P '루트 세션 열기' 명령만 등록한다(그리는 것 없음) */}
+          <RootCommand />
 
           {/* 하단 상태바 — 상주 위젯. 위젯은 각자 격리한다(하나가 죽어도 나머지·셸은 산다) */}
           <StatusBar

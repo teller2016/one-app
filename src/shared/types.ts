@@ -1839,3 +1839,10 @@ export type PowerState = {
   /** true = 잠자기 중(덮개 닫힘 뒤의 다크웨이크 포함). 사용자가 깨운 완전 복귀에만 false 로 돌아온다 */
   asleep: boolean;
 };
+
+// ── 루트 세션 — 고정 루트 탭의 claude 가 원앱 MCP 로 다른 claude 세션(워커)을 지휘한다 (main features/orchestrator) ──
+
+/** ⌘P '루트 세션 열기' 결과 — 이미 떠 있으면 그 세션(created=false) */
+export type OrchestratorOpenRootResult =
+  | { ok: true; sessionId: string; cwd: string; created: boolean }
+  | { ok: false; error: string };

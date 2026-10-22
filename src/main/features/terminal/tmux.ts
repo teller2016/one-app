@@ -202,9 +202,15 @@ export async function tmuxPanePid(name: string): Promise<number | null> {
   return ok && pid > 0 ? pid : null;
 }
 
-/** pane 의 지금 화면 글자 — 채팅 보기가 claude 의 번호 선택 화면을 읽는다(screenPrompt.ts). `-J` 감긴 줄 잇기 */
-export async function tmuxCapturePane(paneId: string): Promise<string | null> {
-  const { ok, stdout } = await run(['capture-pane', '-p', '-J', '-t', paneId]);
+/**
+ * pane 의 지금 화면 글자 — 채팅 보기가 claude 의 번호 선택 화면을 읽는다(screenPrompt.ts). `-J` 감긴 줄 잇기.
+ * `styled` 면 SGR(색·흐림)까지 싣는다(`-e`) — 루트 세션이 입력 상자의 흐린 제안 문구를 빈 칸으로 가려낸다.
+ */
+export async function tmuxCapturePane(
+  paneId: string,
+  opts: { styled?: boolean } = {},
+): Promise<string | null> {
+  const { ok, stdout } = await run(['capture-pane', '-p', '-J', ...(opts.styled ? ['-e'] : []), '-t', paneId]);
   return ok ? stdout : null;
 }
 

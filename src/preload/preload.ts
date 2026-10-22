@@ -458,6 +458,11 @@ contextBridge.exposeInMainWorld("oneApp", {
       return () => ipcRenderer.removeListener("workspaces:changed", listener);
     },
   },
+  // 루트 세션 — 다른 claude 세션을 지휘하는 루트 claude 탭 (main features/orchestrator)
+  orchestrator: {
+    // 루트 탭 열기 — 떠 있으면 그 세션, 없으면 새로 띄운다
+    openRoot: () => ipcRenderer.invoke("orchestrator:open-root"),
+  },
   terminal: {
     // 세션 목록 조회
     list: () => ipcRenderer.invoke("terminal:list"),

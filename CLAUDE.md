@@ -46,7 +46,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 **기능 목록**
 - **섹션**(`App.tsx` 의 `SECTIONS` 순 — **첫 항목이 앱을 열었을 때의 화면**): 터미널 · Jira · Nightwatch · PR · 배포 · 포트 · 프로젝트 · 딥링크 · 결재 · 일정 등록 · 주간보고 · 환경설정
 - **상태바 위젯**(창 하단 — `components/StatusBar`): VPN · 메일 · 폰 미러링 · MO(모바일 접속) · 독 터미널 · 출퇴근(오른쪽 — 야근 결재 모달 진입점 포함)
-- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용) · 메일 리더·MO 접속 모달(상태바 항목) · ⌘P 명령 팔레트 · ⌘⇧P Claude 세션 전환(어느 섹션에서든) · 독 패널(독 오른쪽 빈자리의 작은 터미널 창 — 상태바 항목)
+- **섹션이 아닌 화면**: 변경사항(터미널 드로어 + MO '변경' 탭) · 야근 결재 모달(출퇴근 위젯 — 본문은 결재 섹션의 폼 재사용) · 메일 리더·MO 접속 모달(상태바 항목) · ⌘P 명령 팔레트 · ⌘⇧P Claude 세션 전환(어느 섹션에서든) · 독 패널(독 오른쪽 빈자리의 작은 터미널 창 — 상태바 항목) · 루트 세션(⌘P '루트 세션 열기' — 원앱 MCP 로 다른 claude 세션을 찾아 지시하는 루트 claude 탭, `feat/root-session` 진행 중)
 - **공통 인프라**: `groupware`(로그인 세션) · `notify`(알림) · `projects`(프로젝트 레지스트리)
 
 ## ⚠️ 반드시 지킬 것
@@ -115,6 +115,7 @@ standalone/lite/              # 📦 동료 배포용 단독 앱 "One App Lite" 
 | `features/power.md` | power · `renderer/lib/powerState.ts` | 잠자기 상태 감시(다크웨이크 구분)·깨어남 폭주 경고·잠자기 중 폴링 중단 |
 | `features/ports.md` | ports | 리스닝 포트 확인·종료 — lsof 함정(20개 제한·이름 잘림)·cwd 프로젝트 매칭 |
 | `features/changes.md` | changes | git 상태·diff·푸시, 경로 탈출 방어 |
+| `features/orchestrator.md` | orchestrator | 루트 세션 — MCP 서버·지시 입력 가드·루트 실행 명령·폴더 신뢰·재부팅 복원 제외 |
 
 **스킬**: `/review`(방금 한 작업 검토) · `/test`(개발 인스턴스 띄워 실제 구동 테스트 — 메인 대화에서 직접, 서브에이전트 금지) · `/commit`(커밋) · `/new-section`(새 기능 추가) · `/build`(빌드→`/Applications` 반영) · `/release`(단독판 One App Lite 를 팀원에게 배포)
 **로드맵**: `ROADMAP.md`

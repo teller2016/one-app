@@ -1085,6 +1085,15 @@ export async function sessionScreen(id: string): Promise<string | null> {
   return s.paneId ? tmuxCapturePane(s.paneId) : null;
 }
 
+/** 지금 화면 글자 + SGR — 루트 세션이 입력 상자의 흐린 제안 문구를 가려낸다(orchestrator/guard.ts) */
+export async function sessionStyledScreen(id: string): Promise<string | null> {
+  const s = sessions.get(id);
+  if (!s?.tmuxName) return null;
+  if (!s.paneId) s.paneId = (await tmuxPaneId(s.tmuxName)) ?? undefined;
+  return s.paneId ? tmuxCapturePane(s.paneId, { styled: true }) : null;
+}
+
+
 /** 상단 바 [맨 아래로] — copy-mode 를 끝내면 tmux 가 현재 화면으로 돌아온다 */
 export async function scrollSessionToBottom(id: string): Promise<void> {
   const s = sessions.get(id);

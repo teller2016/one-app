@@ -320,6 +320,11 @@ function moveSession(sessionId: string, to: string): { ok: boolean; error?: stri
 
 // ── 독 패널 — 배정은 일반 팝아웃과 같은 popouts 맵(id `dock`), 창은 dock.ts ──
 
+/** 독 전용 셸 세션 id(없으면 null) — 루트 세션이 사용자의 개인 셸로 보고 지시 대상에서 뺀다 */
+export function dockShellId(): string | null {
+  return popouts.get(TERMINAL_DOCK_ID)?.dock?.shellId ?? null;
+}
+
 /** 독 항목 — 없으면 만든다(배정만, 창은 아직) */
 function dockEntry(): PopoutEntry {
   let entry = popouts.get(TERMINAL_DOCK_ID);

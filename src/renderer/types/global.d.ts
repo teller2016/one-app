@@ -114,6 +114,7 @@ import type {
   PortKillResult,
   PortProcess,
   PowerState,
+  OrchestratorOpenRootResult,
 } from '../../shared/types';
 
 declare global {
@@ -371,6 +372,9 @@ declare global {
           onChanged: (cb: (presets: TerminalPreset[]) => void) => () => void;
         };
         onChanged: (cb: (workspaces: TerminalWorkspace[]) => void) => () => void;
+      };
+      orchestrator: {
+        openRoot: () => Promise<OrchestratorOpenRootResult>;
       };
       terminal: {
         list: () => Promise<TerminalSessionInfo[]>;

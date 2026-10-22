@@ -3,7 +3,6 @@
 // (쿼리스트링 1회 → HttpOnly 쿠키 승격). 데스크톱과 모바일은 같은 PTY 세션을 공유한다.
 import { WebSocketServer } from 'ws';
 import type WebSocket from 'ws';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
@@ -37,6 +36,7 @@ import {
 import { chatCommandsFor, chatFilesFor, sendChatText, subscribeChat } from './chat';
 import { addPushSubscription, getPushPublicKey } from './push';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
+import { timingEqual } from '../../lib/util';
 import { getOrCreateToken, getPort, getServerEnabled } from './store';
 import { ensureTls } from './tls';
 
@@ -149,13 +149,7 @@ export function onServerChanged(cb: () => void) {
   return () => listeners.delete(cb);
 }
 
-// ── 인증 ──
-
-function timingEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
-}
+// ── 인증 ── (토큰 대조는 lib/util 의 timingEqual)
 
 // 홈 화면 추가 시 브라우저는 manifest·아이콘을 쿠키 없이 받아갈 수 있다(스펙상 credentials
 // 모드가 다름) — 비밀이 없는 이 파일들만 인증에서 제외한다. 앱 화면(index.html)은 그대로 보호.

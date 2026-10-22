@@ -2,7 +2,7 @@
 // 실행 인자 예시는 2026-10-06 실측(`ps -o args=`) 그대로다.
 import { describe, expect, it } from 'vitest';
 import type { PersistedResume } from './sessions-store';
-import { detectLauncher, resumeCommand } from './resumeCommand';
+import { detectLauncher, isRevivable, resumeCommand } from './resumeCommand';
 
 const FEMC_ARGS =
   '/Users/me/.local/bin/claude --agent metacommerce-orchestrator' +
@@ -84,5 +84,24 @@ describe('resumeCommand', () => {
   it('경로의 작은따옴표·공백이 셸에서 깨지지 않는다', () => {
     const cmd = resumeCommand({ ...base, cwd: "/Users/me/My App's" }, { ...same, sessionCwd: '/Users/me' });
     expect(cmd.startsWith("cd '/Users/me/My App'\\''s' && ")).toBe(true);
+  });
+});
+
+describe('isRevivable', () => {
+  it('보통 claude·femc 는 되살린다', () => {
+    expect(isRevivable('claude --dangerously-skip-permissions')).toBe(true);
+    expect(isRevivable(FEMC_ARGS)).toBe(true);
+  });
+
+  it('도구를 막고 띄운 claude(루트 세션)는 되살리지 않는다 — 막은 편집·셸이 풀린 채 살아난다', () => {
+    const root =
+      "/Users/me/.local/bin/claude --name root --mcp-config /Users/me/Library/Application Support/One App/root/mcp.json" +
+      ' --allowedTools mcp__oneapp ListAgents --disallowedTools Edit Write NotebookEdit Bash Agent';
+    expect(isRevivable(root)).toBe(false);
+    expect(isRevivable('claude --disallowed-tools=Bash')).toBe(false);
+  });
+
+  it('--allowedTools 만 있으면 막은 것이 아니다', () => {
+    expect(isRevivable('claude --allowedTools Read')).toBe(true);
   });
 });

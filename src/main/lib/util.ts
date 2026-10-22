@@ -1,6 +1,18 @@
 // 마이크로 헬퍼 — 여러 기능 모듈이 각자 정의하던 것을 단일화
+import crypto from 'node:crypto';
+
 export const sleep = (ms: number) =>
   new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * 토큰 비교 — 길이가 다르면 바로 false, 같으면 상수 시간 비교(timingSafeEqual).
+ * MO 터미널 서버와 루트 세션 MCP 서버가 Bearer·쿠키 토큰을 이걸로 대조한다.
+ */
+export function timingEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
 
 /**
  * 로컬 기준 날짜 키 (예: "2026-7-23") — 근태 리마인더의 하루 단위 상태 초기화 판정용.
