@@ -193,11 +193,14 @@ function readNew(file: string, offset: number): { lines: string[]; next: number 
  *    워커가 4줄을 채워 달라고 사용자에게 되물었다(10-22 haiku 실측 2회). 한 줄은 감싸지 않는다.
  * ⚠️ 티켓 키만 쓰지 말 것 — 워커가 실제로 받은 지시 글과 이어지지 않아 "다른 세션의 일"로 읽었다. 지시 앞머리를 함께 준다.
  */
+/** 보고 요청 첫머리 — read_session 이 그 턴('보고함')을 건너뛰고 일의 결과를 찾을 때도 쓴다 */
+export const REPORT_REQUEST_PREFIX = '[One App 루트 세션의 자동 요청]';
+
 export function reportRequest(t: Pick<OrchestratorTask, 'ticketKey' | 'instruction'>): string {
   const head = t.instruction.replace(/\s+/g, ' ').trim();
   const what = `"${head.length > 40 ? `${head.slice(0, 40)}…` : head}"${t.ticketKey ? `(${t.ticketKey})` : ''}`;
   return (
-    `[One App 루트 세션의 자동 요청] 방금 네가 끝낸 일 ${what}의 결과를, 사용자에게 묻지 말고 네가 직접 정리해서 ` +
+    `${REPORT_REQUEST_PREFIX} 방금 네가 끝낸 일 ${what}의 결과를, 사용자에게 묻지 말고 네가 직접 정리해서 ` +
     `SendMessage 도구로 to="${ROOT_NAME}"(ListAgents 에 보이는 루트 세션)에게 바로 보내라 — 내용은 4줄: ` +
     '"상태: 끝남/막힘/사용자 답 대기 중 하나" · "바뀐 파일: 이번 일에서 바꾼 경로(없으면 없음)" · ' +
     '"검증 결과: 돌린 확인과 결과(안 했으면 안 함)" · "남은 질문: 사용자에게 물을 것(없으면 없음)". 보낸 뒤엔 "보고함" 한 줄만 답한다.'

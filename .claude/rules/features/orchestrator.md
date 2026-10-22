@@ -92,6 +92,11 @@ paths:
 - **보고받음** = 루트 대화 기록에 그 워커 claude 의 세션 간 메시지(`origin.verifiedPeerPid` = 워커 claude pid). 실측 모양: `type: 'user'` +
   **`isMeta: true`** + `origin: {kind:'peer', from, verifiedPeerPid, name, fromMode, body}` — ⚠️ isMeta 라고 주입물로 버리면 못 잡는다.
   루트가 바쁘면 먼저 `queue-operation` enqueue(content `<cross-session-message from="uds:/tmp/cc-socks/<pid>.sock" …>`)만 남는다 — 그것도 센다.
+- ⚠️ **4줄 보고엔 일의 결과(요약·답)가 없다** — 워커가 보고 요청 턴에 '보고함'으로 답해 `read_session` 의 마지막 답이 그것으로 덮였다(2026-10-22 실측:
+  "scripts 3줄로 요약해" 결과를 루트가 못 가져옴). → `read_session` 은 마지막 사람 입력이 보고 요청(`REPORT_REQUEST_PREFIX`)이면 **그 앞의 답**을 준다 ·
+  지침서 규칙 10 "결과를 구한 일이면 last_reply 를 함께 전한다".
+- 실측(10-22, 티켓 없이): 루트에 "FO-BBJ 에 test/… 브랜치로 새 워크트리 만들어 세션 열고 ~ 시켜줘" → 루트가 `open_session`+new_branch 를 스스로 골라 승인 창 →
+  워크트리(`FO-BBJ/test-root-session-check`) → femc 세션 → 보고받음까지 한 바퀴. 정리: 세션·`femc-wt.sh remove`·브랜치·그 워크트리의 대화 기록 폴더·`femc-stacks.json` 항목.
 - 보고 요청 턴이 보고 없이 끝나면(쉬는 상태 10틱) `done` + 이유. 같은 세션에 보고 요청 전의 일이 있는데 새 지시가 오면 앞 일은 닫고 합친다.
 - 감시 시작은 **`whenSessionsRestored()` 뒤** — 복원 전 `listSessions()` 가 비어 열린 일을 전부 `gone` 으로 닫는다.
 - 지시 토스트("루트가 SSB-137 에 지시했습니다" [보기])는 그 탭을 보고 있으면 생략된다(터미널 세션 토스트의 기존 규칙).
