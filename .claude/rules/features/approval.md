@@ -301,3 +301,9 @@ E2E 방법은 `one-app-e2e-verify` 메모 참고 — `--remote-debugging-port` +
 
 **앱이 [상신] 을 누르지 않으므로** 이제 전 구간을 실행해도 결재 문서가 올라가지는 않는다.
 단 휴가의 [결재상신] 은 근태신청을 저장하니 검증 후 정리가 필요하다(위 참고).
+
+## 루트 세션 진입점 (2026-10-22)
+`lib/approvalRequest.ts`(배포의 deployRequest 와 같은 패턴) — 루트 세션이 `requestApprovalForm(fill)` 로 그 종류의 폼을 채워 연다(세 폼의 `initial` prop).
+⚠️ 작성은 하지 않는다 — [작성 시작]·[상신]은 사용자가(휴가 [작성 시작]이 근태신청을 서버에 저장하므로 특히). 근태구분·사유 목록은 루트 도구의 입력 검증도 쓰므로
+`shared/approval-format.ts` 로 옮겼다(`calc.ts` 가 다시 내보낸다). 단독판에는 루트가 없어 요청이 오지 않는다. 상세는 `features/orchestrator.md` 3c.
+

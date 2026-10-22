@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { DatePicker } from '../../../components/DatePicker';
@@ -29,6 +29,7 @@ import type {
   VacationHandover,
   VacationResult,
   VacationStatus,
+  ApprovalFormFill,
 } from '../../../../shared/types';
 
 const KIND_OPTIONS = ATT_DIV_NAMES.map((n) => ({ value: n, label: n }));
@@ -49,19 +50,27 @@ const newHandover = (): HandoverRow => ({
  * 제목은 그룹웨어에서 읽은 신청자 이름이 있어야 완성되므로, 사용자가 손대지 않으면
  * 비운 채로 보내 main 이 채우게 한다(입력하면 그 값을 그대로 쓴다).
  */
-export function VacationForm() {
+export function VacationForm({
+  initial,
+}: {
+  /** 루트 세션이 채운 값(approvalRequest.ts) — 비운 칸은 평소 기본값(오늘·지난 비상연락망·인수인계) */
+  initial?: Extract<ApprovalFormFill, { kind: 'vacation' }>;
+} = {}) {
   const toast = useToast();
-  const [attDivName, setAttDivName] = useState(ATT_DIV_NAMES[0]);
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
-  const [useStartTime, setUseStartTime] = useState('09:00');
-  const [useEndTime, setUseEndTime] = useState('10:00');
-  const [holidayWorkDate, setHolidayWorkDate] = useState('');
-  const [remark, setRemark] = useState('');
+  const [attDivName, setAttDivName] = useState(initial?.attDivName ?? ATT_DIV_NAMES[0]);
+  const [fromDate, setFromDate] = useState(initial?.fromDate ?? today);
+  const [toDate, setToDate] = useState(initial?.toDate ?? initial?.fromDate ?? today);
+  const [useStartTime, setUseStartTime] = useState(initial?.useStartTime ?? '09:00');
+  const [useEndTime, setUseEndTime] = useState(initial?.useEndTime ?? '10:00');
+  const [holidayWorkDate, setHolidayWorkDate] = useState(initial?.holidayWorkDate ?? '');
+  const [remark, setRemark] = useState(initial?.remark ?? '');
   const [titleEdited, setTitleEdited] = useState(false);
   const [title, setTitle] = useState('');
-  const [reason, setReason] = useState(DOC_REASONS[0]);
-  const [reasonEtc, setReasonEtc] = useState('');
+  const [reason, setReason] = useState(initial?.reason ?? DOC_REASONS[0]);
+  const [reasonEtc, setReasonEtc] = useState(initial?.reasonEtc ?? '');
+  // 채운 값은 마운트 때 한 번 — 기본값 불러오기·근태구분별 시간대 리셋이 그 위를 덮지 않게
+  const initialRef = useRef(initial);
+  const keepTimesRef = useRef(!!(initial?.useStartTime || initial?.useEndTime));
   const [emergencyContact, setEmergencyContact] = useState('');
   const [handovers, setHandovers] = useState<HandoverRow[]>(() => [
     newHandover(),
@@ -84,9 +93,11 @@ export function VacationForm() {
   // 지난 입력(비상연락망·인수인계) 불러오기 + 진행 단계 구독
   useEffect(() => {
     void window.oneApp.approval.getVacationDefaults().then((d) => {
-      setEmergencyContact(d.emergencyContact);
-      if (d.handovers.length) {
-        setHandovers(d.handovers.map((h) => ({ ...h, key: rowSeq++ })));
+      const fill = initialRef.current;
+      setEmergencyContact(fill?.emergencyContact ?? d.emergencyContact);
+      const rows = fill?.handovers?.length ? fill.handovers : d.handovers;
+      if (rows.length) {
+        setHandovers(rows.map((h) => ({ ...h, key: rowSeq++ })));
       }
     });
     return window.oneApp.approval.onProgress((p) => setStep(p.step));
@@ -102,6 +113,11 @@ export function VacationForm() {
   // 시차·반차 사용 시간대 — 근태구분을 바꾸면 그 종류의 기본 시간대로 리셋한다
   useEffect(() => {
     if (!timed) return;
+    // 루트가 시간대를 채워 열었으면 첫 리셋은 건너뛴다(그 뒤 근태구분을 바꾸면 평소처럼 리셋)
+    if (keepTimesRef.current) {
+      keepTimesRef.current = false;
+      return;
+    }
     const [s, e] = defaultTimeRange(attDivName);
     setUseStartTime(s);
     setUseEndTime(e);

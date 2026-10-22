@@ -22,6 +22,7 @@ import { timingEqual } from '../../lib/util';
 import { clearConfirms } from './approve';
 import { registerCreateTools } from './createTools';
 import { registerDeployTools } from './deployTools';
+import { registerOfficeTools } from './officeTools';
 import { registerPrTools } from './prTools';
 import { getOrCreateToken, ORCH_PORT } from './store';
 import { stopTaskWatcher } from './tasks';
@@ -39,7 +40,7 @@ const INSTRUCTIONS = [
   'send_to_session 으로 맡긴 일은 원장에 남는다(list_tasks) — 워커가 끝나면 원앱이 4줄 보고를 요청하고, 보고는 SendMessage 로 루트에 온다.',
   '워커 보고로 시작된 턴에서 상태를 바꾸는 도구를 부르면 원앱 승인 창을 거친다 — 거부·시간 초과면 다시 시도하지 말고 사용자에게 알린다.',
   '맞는 세션이 없으면 start_ticket(티켓)·open_session(티켓 아님)으로 새 femc 세션을, create_worktree 로 워크트리를 만든다 — 모두 승인 창을 거친다.',
-  '원앱 기능(배포·PR 등)은 확인 화면을 채워 여는 데까지만 한다(open_deploy_confirm·open_pr_create·open_pr_merge) — 실행은 사용자가 그 화면에서 누른다. 실행했다고 말하지 말 것.',
+  '원앱 기능(배포·PR·결재·일정)은 확인 화면·폼을 채워 여는 데까지만 한다(open_*) — 실행은 사용자가 그 화면에서 누른다. 실행했다고 말하지 말 것.',
 ].join('\n');
 
 /** 진행 중인 요청 id → 그 요청을 처리 중인 서버 인스턴스 — 취소 알림이 오면 닫는다 */
@@ -118,6 +119,7 @@ async function handleMcp(req: http.IncomingMessage, res: http.ServerResponse): P
   registerCreateTools(mcp);
   registerDeployTools(mcp);
   registerPrTools(mcp);
+  registerOfficeTools(mcp);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   const ids = messages.filter((m) => m.id !== undefined && typeof m.method === 'string').map((m) => String(m.id));
   for (const id of ids) inflight.set(id, mcp);

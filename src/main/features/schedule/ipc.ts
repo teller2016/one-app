@@ -70,6 +70,9 @@ function normalizeStartConfig(raw: unknown): ScheduleStartConfig {
 }
 
 /** 저장본 정규화 — 항목만 담던 예전 배열 형식도 읽어 객체로 승격한다 */
+/** 저장된 작업 기록(정규화) — IPC 와 루트 세션 도구(get_worklog)가 같은 것을 읽는다 */
+export const readWorklog = (): ScheduleWorklog => normalizeWorklog(readUserJson<unknown>(WORKLOG_FILE, null));
+
 function normalizeWorklog(raw: unknown): ScheduleWorklog {
   const source: Partial<ScheduleWorklog> = Array.isArray(raw)
     ? { items: raw as ScheduleWorkItem[] }
@@ -100,7 +103,7 @@ export function disposeScheduleBrowser(): void {
   running = false;
 }
 
-const readStartConfig = () =>
+export const readStartConfig = () =>
   normalizeStartConfig(readUserJson<unknown>(START_CONFIG_FILE, null));
 
 /** 일정 등록 누락 알림 시작 — 앱 준비(ready) 뒤 main.ts 에서 호출 */
@@ -218,9 +221,7 @@ export function registerScheduleIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('schedule:worklog:get', () =>
-    normalizeWorklog(readUserJson<unknown>(WORKLOG_FILE, null)),
-  );
+  ipcMain.handle('schedule:worklog:get', readWorklog);
 
   ipcMain.handle('schedule:worklog:set', (_event, worklog: ScheduleWorklog) => {
     writeUserJson(WORKLOG_FILE, normalizeWorklog(worklog));

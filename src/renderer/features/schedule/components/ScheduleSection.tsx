@@ -11,6 +11,7 @@ import { useConfirm } from '../../../components/ConfirmDialog';
 import { useToast } from '../../../components/Toast';
 import { useCopy } from '../../../lib/useCopy';
 import { errMsg } from '../../../lib/errMsg';
+import { onScheduleRequest, takeScheduleRequest } from '../lib/scheduleRequest';
 import { pad2, toMinutes } from '../../../../shared/date';
 import {
   SCHEDULE_DEFAULT_START_TIME,
@@ -157,6 +158,34 @@ export function ScheduleSection() {
       setWorklogLoaded(true);
     });
   }, []);
+
+  // 루트 세션의 일정 채우기(scheduleRequest.ts) — 작업 기록을 불러온 뒤 **뒤에 덧붙인다**(같은 종료 시각·제목은 건너뜀 —
+  // 2026-10-22 사용자 결정, 써 둔 기록을 지우지 않는다). 날짜·시작 시각도 맞춘다. 등록은 하지 않는다([일정 등록]은 사용자가)
+  useEffect(() => {
+    if (!worklogLoaded) return;
+    const consume = () => {
+      const req = takeScheduleRequest();
+      if (!req) return;
+      const add = req.items ?? [];
+      if (add.length) {
+        setItems((cur) => {
+          const have = new Set(cur.map((i) => `${i.end}|${i.title.trim()}`));
+          const fresh = add
+            .filter((i) => i.title.trim() && !have.has(`${i.end}|${i.title.trim()}`))
+            .map((i) => ({ id: crypto.randomUUID(), end: i.end, title: i.title.trim() }));
+          return [...cur, ...fresh].sort((a, b) => timeToMinutes(a.end) - timeToMinutes(b.end));
+        });
+      }
+      if (req.startTime) setStartTime(req.startTime);
+      if (req.date === 'today' || req.date === 'yesterday') setDateType(req.date);
+      else if (req.date) {
+        setDateType('date');
+        setCustomDate(req.date);
+      }
+    };
+    consume();
+    return onScheduleRequest(consume);
+  }, [worklogLoaded]);
 
   // 변경 시 저장 — 타이핑 부하를 피해 300ms 디바운스, 언마운트 시 미저장분 flush
   useEffect(() => {

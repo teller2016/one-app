@@ -76,16 +76,8 @@ export const dinnerNote = (date: string) => {
 
 // ── 휴가신청서 ──
 
-/** 근태구분 목록 — 그룹웨어 콤보의 attDivName 과 같은 문구여야 한다 */
-export const ATT_DIV_NAMES = [
-  '연차',
-  '오전반차',
-  '오후반차',
-  '시차_1시간',
-  '시차_2시간',
-  '공가',
-  '대체휴가',
-];
+/** 근태구분·사유 목록은 루트 세션 도구도 쓰므로 shared 에 있다 — 폼은 여기서 그대로 가져다 쓴다 */
+export { ATT_DIV_NAMES, DOC_REASONS } from '../../../../shared/approval-format';
 
 /** 근태구분별 사용 시간대 기본값 [시작, 종료] — 시차는 출근(09:00) 기준, 반차는 점심 포함 */
 export const defaultTimeRange = (attDivName: string): [string, string] => {
@@ -121,12 +113,3 @@ export const expectedDayCount = (
   return days;
 };
 
-/** 전자결재 본문 '사유' 체크 항목 — 문구는 그룹웨어 화면과 같아야 한다 */
-export const DOC_REASONS = [
-  '휴식',
-  '여행',
-  '가정대소사 또는 가족모임',
-  '가족건강문제',
-  '개인건강문제(병원, 약국)',
-  '기타',
-];

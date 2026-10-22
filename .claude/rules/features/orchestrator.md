@@ -10,13 +10,13 @@ paths:
 (`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
 맡긴 일은 작업 원장에 남고(`list_tasks`), 워커가 끝나면 원앱이 4줄 보고를 요청해 워커 → 루트 **Claude Code 내장 SendMessage** 로 돌아온다.
 결정·실측의 정본은 기획서 아티팩트 '루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE).
-지금은 **1a + 1b + 2단계 + 3a·3b**(고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드 · 세션·워크트리 만들기 · 배포 확인 창 · PR 화면). 3단계(원앱 기능 도구)를 배포 → PR → 결재·일정 순으로 붙이는 중.
+지금은 **1a · 1b · 2단계 · 3단계 전부**(고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드 · 세션·워크트리 만들기 · 배포·PR·결재·일정 화면 열기).
 
 ## 구조
 - main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 5개) · `terminalTools.ts`(터미널 도구 4개) ·
   `toolKit.ts`(결과 포맷·상태 해석·제외 세션·탭 순서) · `deliver.ts`(워커에 글 넣기 — 지시와 보고 요청 공용) ·
   `tasks.ts`(작업 원장 + 감시) · `taskScan.ts`(대화 기록 순수 판정 + 테스트) · `approve.ts`(무인 연쇄 가드) · `confirm.ts`(승인 대기열 + 테스트) ·
-  `createTools.ts`(만들기 도구 3개) · `deployTools.ts`(배포 도구 3개) · `prTools.ts`(PR 도구 3개) · `openRequest.ts`(기능 화면 열기 요청 — `app:open-request`) · `ticketPlan.ts`(위치 판정 순수 + 테스트) · `worktreeSetup.ts`(femc-wt.sh 실행) ·
+  `createTools.ts`(만들기 도구 3개) · `deployTools.ts`(배포 도구 3개) · `prTools.ts`(PR 도구 3개) · `officeTools.ts`(결재·일정 도구 5개) · `openRequest.ts`(기능 화면 열기 요청 — `app:open-request`) · `ticketPlan.ts`(위치 판정 순수 + 테스트) · `worktreeSetup.ts`(femc-wt.sh 실행) ·
   `guard.ts`(입력 가드 순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
   `rootGuide.ts`(지침서 기본본) · `rootLife.ts`(자동 시작·종료 판정·재시작 상한·대화 id·⌘0) · `store.ts`(토큰·루트 런타임 기록) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
 - 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
@@ -156,3 +156,13 @@ paths:
   렌더러 `features/prs/lib/prRequest.ts`(배포의 deployRequest 와 같은 패턴) — PrSection 이 목록·레지스트리가 뜬 뒤 소비:
   그 저장소 탭으로 + 검색 비움 → create 면 `CreatePrModal initial`(루트가 채운 제목·본문은 dirty 로 쳐 커밋 초안이 덮지 않는다) ·
   merge 면 그 PR 선택 + `PrDetail initialMethod`. 실측: 없는 브랜치 거부 · 모달이 head·base·제목으로 뜸 · #1420 상세 + Squash 선택(생성·머지 안 누름).
+- **3c 결재·일정**(`officeTools.ts`): 조회 `get_approval_defaults`(지난 작성 내용·결재 소속·진행 중 잠금) · `get_worklog`(작업 기록·요일별 기준 시각) —
+  둘 다 그룹웨어 로그인 없음 · `get_vacation_status` 만 그룹웨어 로그인(사용자가 물을 때만 — 동시 로그인 거부·연속 실패 잠금).
+  화면 `open_approval_form`(kind + 그 종류 객체 하나, 날짜·시각·근태구분·사유 검증 — 목록은 `shared/approval-format` 의 ATT_DIV_NAMES·DOC_REASONS) ·
+  `open_schedule`(항목 = 종료 시각·일정명, **뒤에 덧붙임** + 같은 시각·제목 건너뜀 — 사용자 결정). ⚠️ 휴가는 [작성 시작]이 근태신청을 서버에 저장한다 —
+  그래서 루트는 폼을 채우기까지만(작성 함수 run*Draft 는 공개 API 에 싣지 않았다).
+  렌더러 `approvalRequest.ts`·`scheduleRequest.ts`(같은 요청 패턴): 결재 섹션이 그 종류로 들어가 폼에 `initial`(key = 요청 순번으로 다시 그려 확실히),
+  일정 섹션은 작업 기록을 불러온 뒤 자기 상태에 더한다(main 이 worklog.json 만 고치면 떠 있는 섹션이 디바운스 저장으로 덮는다).
+  ⚠️ **채움 값을 지우는 효과는 '폼 → 목록' 전환일 때만** — '종류가 비었다'로 지우면 첫 마운트에 그 효과가 빈 종류로 돌아 같은 틱에 넣은 값을 지웠다(실측 — 야근 폼만 기본값으로 떴다).
+  폼은 기본값 불러오기가 채움 값을 덮지 않게 ref 로 막는다(휴가는 근태구분별 시간대 첫 리셋도 건너뛴다).
+  실측: 세 폼이 채운 값으로 뜸(작성 안 누름) · 일정 2건 덧붙이고 같은 것 다시 보내도 6건 그대로 · 작업 기록은 백업으로 되돌림(dev 와 설치본이 같은 파일).

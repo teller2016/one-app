@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Icon, type IconName } from '../../../components/Icon';
 import { Tooltip } from '../../../components/Tooltip';
 import { TopbarSlot, useHasTopbar } from '../../../components/TopbarSlot';
 import { setSectionBack } from '../../../lib/sectionBack';
+import { onApprovalRequest, takeApprovalRequest } from '../lib/approvalRequest';
 import { useEaBox } from '../lib/useEaBox';
 import { ExpendForm } from './ExpendForm';
 import { OvertimeForm } from './OvertimeForm';
 import { VacationForm } from './VacationForm';
-import type { ApprovalKind } from '../../../../shared/types';
+import type { ApprovalFormFill, ApprovalKind } from '../../../../shared/types';
 
 const KINDS: {
   kind: ApprovalKind;
@@ -43,6 +44,25 @@ const KINDS: {
  */
 export function ApprovalSection() {
   const [kind, setKind] = useState<ApprovalKind | null>(null);
+  // 루트 세션이 채워 달라고 보낸 값(approvalRequest.ts) — seq 를 폼 key 로 써서 요청마다 새로 그려 초기값이 확실히 들어가게 한다
+  const [fill, setFill] = useState<{ value: ApprovalFormFill; seq: number } | null>(null);
+  useEffect(() => {
+    const consume = () => {
+      const req = takeApprovalRequest();
+      if (!req) return;
+      setKind(req.kind);
+      setFill((cur) => ({ value: req, seq: (cur?.seq ?? 0) + 1 }));
+    };
+    consume();
+    return onApprovalRequest(consume);
+  }, []);
+  // 폼에서 목록으로 **돌아가면** 채움 값을 버린다 — 다음에 손으로 연 폼에 옛 값이 다시 들어가지 않게.
+  // ⚠️ '종류가 비었다'만 보면 안 된다 — 첫 마운트 때 이 효과가 첫 렌더의 빈 종류로 돌아, 같은 틱에 요청이 넣은 값을 지웠다(2026-10-22 실측)
+  const prevKind = useRef(kind);
+  useEffect(() => {
+    if (prevKind.current && !kind) setFill(null);
+    prevKind.current = kind;
+  }, [kind]);
   // 완료 화면(DoneCard)과 같은 상신함 열기 — 작성 없이 진행 상태만 볼 때도 필요하다
   const { opening, openEaBox } = useEaBox();
 
@@ -138,9 +158,15 @@ export function ApprovalSection() {
             <span className="approval__head-desc">{active.desc}</span>
           </div>
         )}
-        {kind === 'overtime' && <OvertimeForm />}
-        {kind === 'vacation' && <VacationForm />}
-        {kind === 'expend' && <ExpendForm />}
+        {kind === 'overtime' && (
+          <OvertimeForm key={fill?.seq ?? 0} initial={fill?.value.kind === 'overtime' ? fill.value : undefined} />
+        )}
+        {kind === 'vacation' && (
+          <VacationForm key={fill?.seq ?? 0} initial={fill?.value.kind === 'vacation' ? fill.value : undefined} />
+        )}
+        {kind === 'expend' && (
+          <ExpendForm key={fill?.seq ?? 0} initial={fill?.value.kind === 'expend' ? fill.value : undefined} />
+        )}
       </div>
     </div>
   );

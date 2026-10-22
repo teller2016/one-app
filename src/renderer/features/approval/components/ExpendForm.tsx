@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { Checkbox } from '../../../components/Checkbox';
@@ -19,7 +19,7 @@ import {
   thisMonth,
   today,
 } from '../lib/calc';
-import type { ExpendResult } from '../../../../shared/types';
+import type { ApprovalFormFill, ExpendResult } from '../../../../shared/types';
 
 type DinnerRow = { key: number; date: string; amount: string };
 
@@ -34,13 +34,24 @@ const newRow = (date: string): DinnerRow => ({
  * 지출결의서(개인) — 주차요금·석식대 항목을 채워 넣는다.
  * 작성만 하고 화면을 남기므로 첨부파일 등록·결재상신은 사용자가 그 창에서 직접 한다.
  */
-export function ExpendForm() {
-  const [month, setMonth] = useState(thisMonth);
-  const [parkingOn, setParkingOn] = useState(true);
-  const [manCount, setManCount] = useState('0');
-  const [halfCount, setHalfCount] = useState('0');
-  const [dinnerOn, setDinnerOn] = useState(true);
-  const [dinners, setDinners] = useState<DinnerRow[]>(() => [newRow(today())]);
+export function ExpendForm({
+  initial,
+}: {
+  /** 루트 세션이 채운 값(approvalRequest.ts) — parking null = 주차 없음 · dinners [] = 석식 없음 · 비우면 평소 기본값 */
+  initial?: Extract<ApprovalFormFill, { kind: 'expend' }>;
+} = {}) {
+  const [month, setMonth] = useState(initial?.month ?? thisMonth);
+  const [parkingOn, setParkingOn] = useState(initial?.parking !== null);
+  const [manCount, setManCount] = useState(String(initial?.parking?.manCount ?? 0));
+  const [halfCount, setHalfCount] = useState(String(initial?.parking?.halfCount ?? 0));
+  const [dinnerOn, setDinnerOn] = useState(initial?.dinners ? initial.dinners.length > 0 : true);
+  const [dinners, setDinners] = useState<DinnerRow[]>(() =>
+    initial?.dinners?.length
+      ? initial.dinners.map((d) => ({ ...newRow(d.date), amount: String(d.amount) }))
+      : [newRow(today())],
+  );
+  // 주차권 매수를 채워 열었으면 지난 매수로 덮지 않는다
+  const keepParkingRef = useRef(!!initial?.parking);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState('');
   const [error, setError] = useState('');
@@ -49,6 +60,7 @@ export function ExpendForm() {
   // 마지막 주차권 매수 불러오기 + 진행 단계 구독
   useEffect(() => {
     void window.oneApp.approval.getExpendDefaults().then((d) => {
+      if (keepParkingRef.current) return;
       setManCount(String(d.manCount));
       setHalfCount(String(d.halfCount));
     });

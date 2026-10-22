@@ -1897,8 +1897,37 @@ export const isOpenTask = (t: Pick<OrchestratorTask, 'state'>): boolean =>
  * 루트 세션이 원앱 기능 화면을 채워 여는 요청 — main(orchestrator openRequest)이 메인 창에 보내고 앱 셸이 그 기능의 공개 요청 함수로 넘긴다.
  * ⚠️ 실행은 늘 사용자가 그 화면의 버튼으로 — 여기 실린 값은 화면을 채울 뿐이다.
  */
+/** 루트가 결재 폼에 채울 값 — 비운 칸은 폼의 평소 기본값(지난 작성 내용·오늘 날짜)대로 */
+export type ApprovalFormFill =
+  | { kind: 'overtime'; date?: string; startTime?: string; endTime?: string; target?: string; content?: string; reason?: string }
+  | {
+      kind: 'vacation';
+      attDivName?: string;
+      fromDate?: string;
+      toDate?: string;
+      useStartTime?: string;
+      useEndTime?: string;
+      holidayWorkDate?: string;
+      remark?: string;
+      reason?: string;
+      reasonEtc?: string;
+      emergencyContact?: string;
+      handovers?: VacationHandover[];
+    }
+  | { kind: 'expend'; month?: string; parking?: { manCount: number; halfCount: number } | null; dinners?: ExpendDinner[] };
+
+/** 루트가 일정 등록 화면에 더할 값 — 항목은 **뒤에 덧붙인다**(같은 시각·제목은 건너뜀 — 2026-10-22 사용자 결정) */
+export type ScheduleFill = {
+  items?: { end: string; title: string }[];
+  startTime?: string;
+  /** 'today' · 'yesterday' · "YYYY-MM-DD" */
+  date?: string;
+};
+
 export type AppOpenRequest =
   | { kind: 'deploy'; projectId: string; targetId: string }
+  | { kind: 'approval'; fill: ApprovalFormFill }
+  | { kind: 'schedule'; fill: ScheduleFill }
   | { kind: 'pr-create'; repo: string; head?: string; base?: string; title?: string; body?: string }
   | { kind: 'pr-merge'; repo: string; number: number; method?: PrMergeMethod };
 

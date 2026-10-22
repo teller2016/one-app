@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { DatePicker } from '../../../components/DatePicker';
@@ -12,7 +12,7 @@ import { DoneCard } from './DoneCard';
 import { ProgressLine } from './ProgressLine';
 import { defaultEndTime, hoursTotal, today } from '../lib/calc';
 import { NO_DEPT_HINT, useApprovalDept } from '../lib/useApprovalDept';
-import type { OvertimeSubmitResult } from '../../../../shared/types';
+import type { ApprovalFormFill, OvertimeSubmitResult } from '../../../../shared/types';
 
 /**
  * 야근 결재 — 연장근무내역서를 작성해 그룹웨어에 상신한다.
@@ -22,16 +22,21 @@ import type { OvertimeSubmitResult } from '../../../../shared/types';
 export function OvertimeForm({
   onBusyChange,
   layout = 'page',
+  initial,
 }: {
   onBusyChange?: (busy: boolean) => void;
+  /** 루트 세션이 채운 값(approvalRequest.ts) — 비운 칸은 평소 기본값(지난 작성 내용·오늘) */
+  initial?: Extract<ApprovalFormFill, { kind: 'overtime' }>;
   /** 'page' = 결재 섹션(라벨 열 + 패널), 'modal' = 출퇴근 위젯의 야근 모달(라벨 위 · 하단 바) — 목업 두 판 */
   layout?: 'page' | 'modal';
 }) {
   const toast = useToast();
-  const [date, setDate] = useState(today);
+  const [date, setDate] = useState(initial?.date ?? today);
   // 시작은 정규 퇴근(18:00), 종료는 지금 시각의 30분 올림
-  const [startTime, setStartTime] = useState('18:00');
-  const [endTime, setEndTime] = useState(defaultEndTime);
+  const [startTime, setStartTime] = useState(initial?.startTime ?? '18:00');
+  const [endTime, setEndTime] = useState(initial?.endTime ?? defaultEndTime);
+  // 채운 값은 마운트 때 한 번 — 기본값 불러오기가 그 위를 덮지 않게
+  const initialRef = useRef(initial);
   const [target, setTarget] = useState('');
   const [content, setContent] = useState('');
   const [reason, setReason] = useState('');
@@ -45,9 +50,10 @@ export function OvertimeForm({
   // 마지막 작성 내용 불러오기 + 진행 단계 구독
   useEffect(() => {
     void window.oneApp.approval.getOvertimeDefaults().then((d) => {
-      setTarget(d.target);
-      setContent(d.content);
-      setReason(d.reason);
+      const fill = initialRef.current;
+      setTarget(fill?.target ?? d.target);
+      setContent(fill?.content ?? d.content);
+      setReason(fill?.reason ?? d.reason);
     });
     return window.oneApp.approval.onProgress((p) => setStep(p.step));
   }, []);
