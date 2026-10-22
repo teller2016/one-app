@@ -10,7 +10,10 @@
 // 나중에(manual — 버튼·단축키) — **창 한가운데 클릭을 합성**한다. ⚠️ 같은 AX 요청은 이때 거절된다(2026-10-22 실측,
 // WindowServer: `CPS: Denying scrcpy the right to be in front because it is not in the list of permittedFrontASNs`).
 // 클릭은 WindowServer 가 직접 앞으로 가져오므로 막히지 않고, scrcpy 는 클릭을 받으면 마우스까지 잡는다(v4.0 `mouse_capture.c` —
-// 캡처 전 클릭은 폰에 보내지 않고 버튼을 뗄 때 캡처만 켠다). 커서는 클릭 뒤 원래 자리로 되돌린다(캡처를 풀면 그 자리에 나타난다).
+// 캡처 전 클릭은 폰에 보내지 않고 버튼을 뗄 때 캡처만 켠다).
+// - ⚠️ **커서를 원래 자리로 되돌리지 말 것** — SDL3 은 캡처할 때 커서를 창 한가운데로 옮겨 고정하고(`SDL_cocoamouse.m`
+//   `Cocoa_SetRelativeMouseMode` — `CGAssociateMouseAndMouseCursorPosition(NO)`), 클릭은 그 고정된 자리로 간다. 되돌렸더니
+//   다음 클릭이 커서 아래 다른 창으로 가 포커스를 잃고 캡처가 풀렸다(2026-10-22 사용자 신고 "클릭하면 PC 로 나온다").
 // - ⚠️ 이미 맨 앞(쓰는 중)이면 아무것도 안 한다 — 캡처된 창에 클릭하면 그대로 **폰 터치**가 된다(단축키 재입력 = 무동작, 사용자 결정).
 // - ⚠️ 단축키 수정키(⌃⌥⌘)에서 손을 뗄 때까지 기다린 뒤 클릭한다 — ⌘-클릭은 뒤 창을 앞으로 가져오지 않고, 수정키가 클릭에 실린다.
 // - 켠 뒤 한 번도 포커스를 못 받은 창(launch 포커스 실패)은 scrcpy 가 캡처 상태로 여겨 이 클릭이 폰 터치로 갈 수 있다(드묾).
@@ -19,9 +22,13 @@
 // **상주 감시기**가 0.25초마다 scrcpy 가 앞으로 왔는지 보고, 창 클릭이 아닌 경로(커서가 창 밖)로 왔으면 main 이
 // **왼쪽 ⌘ 를 한 번 합성**한다(capture — scrcpy 의 캡처 토글 키). 실측: 감시기 CPU ≈ 코어 0.4% · 메모리 35MB(JXA), scrcpy 증가분은 오차 수준.
 // - 창을 직접 눌러 앞에 온 건 scrcpy 가 이미 잡았다 — ⌘ 는 토글이라 건너뛴다(감시기가 커서 위치로 가린다).
+// - **이미 앞인데 ⌘ 로 마우스만 풀어 둔 상태**에서 Dock 타일을 누르면 '앞으로 옴'이 없어 반응이 없었다(사용자 신고) → 왼쪽 클릭
+//   누적 카운터(`CGEventSourceCounterForEventType`)가 늘었고 커서 아래 Dock 항목(AX 히트테스트)이 scrcpy 타일이면 같은 신호를 낸다.
+//   잡혀 있는 동안엔 커서가 폰 창에 고정돼 Dock 에 닿지 못하므로, 이 클릭은 늘 풀린 상태에서 난다 — ⌘ 토글이 거꾸로 가지 않는다.
+// - ⌘ 는 마우스 버튼을 뗀 뒤 친다 — Dock 타일을 누른 채 SDL 이 커서를 옮기면 Dock 이 드래그로 볼 수 있다.
 // - 켤 때·버튼·단축키로 가져오는 중엔 감시기 신호를 무시한다(`focusing`) — 그 경로가 이미 잡았는데 ⌘ 를 더하면 풀린다.
 // - ⌘ 는 클릭과 달리 잘못 쳐도 캡처가 풀릴 뿐 폰에 터치가 가지 않아 감시기 쪽엔 이걸 쓴다.
-import { execFile, spawn } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 
 // 두 스크립트 공용 조각
 const JXA_COMMON = `
@@ -46,6 +53,7 @@ function windowBounds(pid) {
 // ⇧ ⌃ ⌥ ⌘ (Caps Lock 제외)
 const MODS = 0x1e0000;
 const modsHeld = () => $.CGEventSourceFlagsState($.kCGEventSourceStateHIDSystemState) & MODS;
+const buttonHeld = () => $.CGEventSourceButtonState($.kCGEventSourceStateHIDSystemState, $.kCGMouseButtonLeft);
 `;
 
 // argv = [pid, 'launch' | 'manual' | 'capture']. launch 는 창이 뜰 때까지(서버 푸시·연결) 0.2초 간격 최대 8초, manual 은 2초 기다린다
@@ -83,7 +91,6 @@ function manual(app, pid) {
   if (!b) return 'timeout';
   for (let i = 0; i < 40 && modsHeld(); i++) delay(0.05);
   if (modsHeld()) return 'timeout';
-  const back = $.CGEventGetLocation($.CGEventCreate(null));
   const at = { x: b.X + b.Width / 2, y: b.Y + b.Height / 2 };
   for (const type of [$.kCGEventLeftMouseDown, $.kCGEventLeftMouseUp]) {
     const ev = $.CGEventCreateMouseEvent(null, type, at, $.kCGMouseButtonLeft);
@@ -93,14 +100,12 @@ function manual(app, pid) {
   }
   let front = false;
   for (let i = 0; i < 20 && !(front = isFront(app)); i++) delay(0.05);
-  delay(0.1);
-  $.CGWarpMouseCursorPosition(back);
   return front ? 'focused' : 'timeout';
 }
 // 이미 앞에 온 창의 마우스만 잡는다 — 그사이 다른 앱으로 넘어갔으면 치지 않는다(⌘ 가 그 앱으로 간다)
 function capture(app) {
-  for (let i = 0; i < 40 && modsHeld(); i++) delay(0.05);
-  if (modsHeld() || !isFront(app)) return 'timeout';
+  for (let i = 0; i < 40 && (modsHeld() || buttonHeld()); i++) delay(0.05);
+  if (modsHeld() || buttonHeld() || !isFront(app)) return 'timeout';
   tapLeftCommand();
   return 'focused';
 }
@@ -114,12 +119,32 @@ function run(argv) {
 }
 `;
 
-// 상주 감시기 — scrcpy 가 앞으로 온 순간 커서가 창 밖이면 'front' 를 쓴다.
+// 상주 감시기 — argv = [scrcpy pid, Dock pid]. 마우스를 잡아야 할 때 'front' 를 쓴다:
+//   ① scrcpy 가 막 앞으로 왔고 커서가 창 밖(Dock 타일·⌘Tab — 창을 눌러 왔으면 scrcpy 가 이미 잡았다)
+//   ② 이미 앞인데 그새 왼쪽 클릭이 있었고 커서 아래 Dock 항목이 scrcpy 타일(⌘ 로 마우스만 풀어 둔 상태)
 // 읽는 쪽(main)이 사라지면 다음 출력에서 SIGPIPE 로 죽도록 2초마다 '.' 을 쓴다(dock.ts 와 같은 방식).
 // ⚠️ 시작 때의 권한을 붙든다 — 권한이 없으면 'untrusted' 를 쓰고 끝난다(다음에 제어를 켤 때 다시 본다).
 const WATCH_SCRIPT = `${JXA_COMMON}
 function out(s) {
   $.NSFileHandle.fileHandleWithStandardOutput.writeData($(s + '\\n').dataUsingEncoding($.NSUTF8StringEncoding));
+}
+function text(v) {
+  return v ? ObjC.unwrap(ObjC.castRefToObject(v)) : '';
+}
+const clicks = () => $.CGEventSourceCounterForEventType($.kCGEventSourceStateHIDSystemState, $.kCGEventLeftMouseDown);
+function cursor() {
+  return $.CGEventGetLocation($.CGEventCreate(null));
+}
+function inWindow(pid, p) {
+  const b = windowBounds(pid);
+  return !!b && p.x >= b.X && p.x < b.X + b.Width && p.y >= b.Y && p.y < b.Y + b.Height;
+}
+// 커서 아래 Dock 항목이 이 앱의 타일인가 — Dock 프로세스 안에서 히트테스트(타일이 없는 자리는 -25212)
+function onOwnTile(dock, title, p) {
+  if (!dock || !title) return false;
+  const ref = Ref();
+  if ($.AXUIElementCopyElementAtPosition(dock, p.x, p.y, ref) !== 0) return false;
+  return text(attr(ref[0], 'AXSubrole')) === 'AXApplicationDockItem' && text(attr(ref[0], 'AXTitle')) === title;
 }
 function run(argv) {
   if (!$.AXIsProcessTrusted()) {
@@ -128,16 +153,22 @@ function run(argv) {
   }
   const pid = Number(argv[0]);
   const app = $.AXUIElementCreateApplication(pid);
+  const dock = Number(argv[1]) > 0 ? $.AXUIElementCreateApplication(Number(argv[1])) : null;
+  let title = '';
   let prev = isFront(app);
+  let downs = clicks();
   for (let tick = 1; ; tick++) {
     const now = isFront(app);
+    const d = clicks();
     if (now && !prev) {
-      const p = $.CGEventGetLocation($.CGEventCreate(null));
-      const b = windowBounds(pid);
-      const inWin = b && p.x >= b.X && p.x < b.X + b.Width && p.y >= b.Y && p.y < b.Y + b.Height;
-      if (!inWin) out('front');
+      if (!inWindow(pid, cursor())) out('front');
+    } else if (now && d !== downs) {
+      // 앱 이름은 처음 필요할 때 읽는다 — 감시기를 띄우는 순간엔 scrcpy 가 아직 AX 에 안 올라와 있을 수 있다
+      if (!title) title = text(attr(app, 'AXTitle'));
+      if (onOwnTile(dock, title, cursor())) out('front');
     } else if (tick % 8 === 0) out('.');
     prev = now;
+    downs = d;
     delay(0.25);
   }
 }
@@ -195,27 +226,36 @@ export function focusControlWindow(pid: number): Promise<FocusOutcome> {
 }
 
 /**
- * 제어 중 상주 감시 — Dock 타일·⌘Tab 으로 scrcpy 가 앞에 오면 마우스까지 잡게 한다. 돌려준 함수로 내린다.
+ * 제어 중 상주 감시 — Dock 타일·⌘Tab 으로 scrcpy 가 앞에 오면(이미 앞이면 Dock 타일을 누르면) 마우스까지 잡게 한다. 돌려준 함수로 내린다.
  * 제어를 켤 때 띄우고 scrcpy 가 끝나면(exit·error·앱 종료) 내린다.
  */
 export function watchActivation(pid: number): () => void {
-  const p = spawn('/usr/bin/osascript', ['-l', 'JavaScript', '-e', WATCH_SCRIPT, String(pid)], {
-    stdio: ['ignore', 'pipe', 'ignore'],
+  let stopped = false;
+  let p: ChildProcess | null = null;
+  // Dock pid — 이미 앞일 때 타일 클릭을 가리는 데만 쓴다(못 찾으면 그 경우만 빠진다)
+  execFile('/usr/bin/pgrep', ['-x', 'Dock'], (_err, stdout) => {
+    if (stopped) return;
+    const dockPid = Number(String(stdout).trim().split('\n')[0]) || 0;
+    const proc = spawn('/usr/bin/osascript', ['-l', 'JavaScript', '-e', WATCH_SCRIPT, String(pid), String(dockPid)], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    p = proc;
+    let buf = '';
+    proc.stdout?.setEncoding('utf8');
+    proc.stdout?.on('data', (chunk: string) => {
+      buf += chunk;
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line === 'untrusted') console.warn('[mirror] 접근성 권한이 없어 Dock 클릭 마우스 캡처를 건너뜀');
+        else if (line === 'front' && !focusing && Date.now() >= quietUntil) void runFocusScript(pid, 'capture');
+      }
+    });
+    proc.on('error', (err) => console.warn('[mirror] 포커스 감시를 띄우지 못함:', err.message));
   });
-  let buf = '';
-  p.stdout?.setEncoding('utf8');
-  p.stdout?.on('data', (chunk: string) => {
-    buf += chunk;
-    let nl: number;
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (line === 'untrusted') console.warn('[mirror] 접근성 권한이 없어 Dock 클릭 마우스 캡처를 건너뜀');
-      else if (line === 'front' && !focusing && Date.now() >= quietUntil) void runFocusScript(pid, 'capture');
-    }
-  });
-  p.on('error', (err) => console.warn('[mirror] 포커스 감시를 띄우지 못함:', err.message));
   return () => {
-    if (p.exitCode === null) p.kill();
+    stopped = true;
+    if (p && p.exitCode === null) p.kill();
   };
 }
