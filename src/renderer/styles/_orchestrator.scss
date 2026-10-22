@@ -1,0 +1,66 @@
+// 루트 세션(오케스트레이터) — 무인 연쇄 가드 승인 모달 (features/orchestrator/components/RootConfirmHost.tsx).
+// 보류 중인 비서 브랜치의 승인 모달(.assistant-confirm)과 같은 틀이다.
+@use './base' as *;
+
+.root-confirm {
+  &__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+
+    svg {
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+  }
+
+  // 루트가 하려는 일 — [라벨 | 값] 두 칸 표. 값(지시 글)은 여러 줄을 그대로 보인다
+  &__fields {
+    margin: 12px 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+
+  &__row {
+    display: flex;
+    gap: 12px;
+    padding: 8px 12px;
+
+    & + & {
+      border-top: 1px solid var(--border);
+    }
+
+    dt {
+      flex: 0 0 var(--form-label-w);
+      @include type-small;
+      color: var(--text-3);
+    }
+
+    dd {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      @include type-body;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  &__foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+
+    .hint {
+      margin-right: auto;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+}

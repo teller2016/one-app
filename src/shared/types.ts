@@ -1846,3 +1846,55 @@ export type PowerState = {
 export type OrchestratorOpenRootResult =
   | { ok: true; sessionId: string; cwd: string; created: boolean }
   | { ok: false; error: string };
+
+/**
+ * 루트가 맡긴 일의 상태 — 지시함 → 작업 중 → (질문 대기) → 보고 요청함 → 보고받음.
+ * done = 보고 없이 끝남(보고 생략·요청 실패·보고 안 옴·다음 지시와 합침), gone = 세션이 닫히거나 claude 가 끝났다.
+ */
+export type OrchestratorTaskState =
+  | 'dispatched'
+  | 'working'
+  | 'waiting_prompt'
+  | 'report_requested'
+  | 'reported'
+  | 'done'
+  | 'gone';
+
+/** 루트 작업 원장 한 줄 — `orchestrator:tasks` 방송·`list_tasks` 가 같은 모양을 쓴다(감시용 내부 값은 main 에만) */
+export type OrchestratorTask = {
+  id: string;
+  sessionId: string;
+  ticketKey: string | null;
+  repo: string | null;
+  branch: string | null;
+  /** 지시할 때의 탭 이름 */
+  tab: string;
+  /** 넣은 지시 — 앞 300자 */
+  instruction: string;
+  /** 끝나면 4줄 보고를 요청하는가 (사용자가 '보고 필요 없어'라고 하면 false) */
+  report: boolean;
+  state: OrchestratorTaskState;
+  createdAt: number; // epoch ms
+  updatedAt: number;
+  /** 상태 이유 — 보고 요청 실패·합침 등 */
+  note?: string;
+};
+
+/** 아직 닫히지 않은 일 — 워커 탭의 '루트' 표시가 이 동안 붙는다 */
+export const isOpenTask = (t: Pick<OrchestratorTask, 'state'>): boolean =>
+  t.state === 'dispatched' || t.state === 'working' || t.state === 'waiting_prompt' || t.state === 'report_requested';
+
+/** 승인 창의 한 줄 — 루트가 하려는 일을 사람이 읽을 말로 */
+export type OrchestratorConfirmField = { label: string; value: string };
+
+/** 무인 연쇄 가드의 승인 요청 — main 이 대기열에 넣고 렌더러 모달(RootConfirmHost)이 답한다 */
+export type OrchestratorConfirmRequest = {
+  id: string;
+  title: string; // 예: 워커에 지시
+  fields: OrchestratorConfirmField[];
+  note?: string;
+  /** 되돌리기 어려운 동작(탭 닫기) — 모달이 danger 버튼으로 표시한다 */
+  danger?: boolean;
+  createdAt: number; // epoch ms
+  expiresAt: number; // 이 시각까지 답이 없으면 취소
+};

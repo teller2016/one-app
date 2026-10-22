@@ -275,6 +275,29 @@ function focusPopout(id: string): boolean {
   return true;
 }
 
+/** 메인 창에서 그 세션을 연다 — 렌더러가 그 워크트리 화면으로 가서 탭을 고른다(App.tsx onReveal) + 창을 앞으로 */
+function revealInMain(sessionId: string): boolean {
+  const win = getNotifyWindow();
+  const s = listSessions().find((x) => x.id === sessionId);
+  if (!win || !s) return false;
+  win.webContents.send('terminal:reveal', { sessionId, cwd: s.cwd });
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  app.focus({ steal: true });
+  return true;
+}
+
+/**
+ * 그 세션을 화면 앞으로 — 팝아웃·독에 있으면 그 창, 아니면 메인 창의 그 탭(토스트 [이동]과 같은 판단을 main 에서).
+ * 루트 세션의 focus_session 도구가 쓴다.
+ */
+export function revealSession(sessionId: string): boolean {
+  const id = popoutIdOfSession(sessionId);
+  if (id && focusPopout(id)) return true;
+  return revealInMain(sessionId);
+}
+
 /** 세션이 어느 팝아웃에 배정돼 있는가 — 없으면 null (= 메인 창 소속) */
 export function popoutIdOfSession(sessionId: string): string | null {
   for (const [id, entry] of popouts)
@@ -552,17 +575,9 @@ export function registerTerminalWindowsIpc(): void {
   // 팝아웃 → 메인 창 '이 세션을 거기서 열어라' — 되돌리기(↩)가 세션을 메인 창의
   // **다른 워크트리 화면**에 떨궈 눈에 안 보이는 것을 막는다(탭바 드롭 adoptSession 이
   // 렌더러 안에서 하는 focusReq 와 같은 의미 — 창이 다르니 main 을 거친다).
-  ipcMain.handle('terminal:windows:reveal-in-main', (_e, sessionId: string) => {
-    const win = getNotifyWindow();
-    const s = listSessions().find((x) => x.id === sessionId);
-    if (!win || !s) return { handled: false };
-    win.webContents.send('terminal:reveal', { sessionId, cwd: s.cwd });
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    app.focus({ steal: true });
-    return { handled: true };
-  });
+  ipcMain.handle('terminal:windows:reveal-in-main', (_e, sessionId: string) => ({
+    handled: revealInMain(sessionId),
+  }));
 
   // 팝아웃 창 레포 라벨 — 렌더러 헤더 표시용 (알림 제목과 같은 sessionLocationLabel)
   ipcMain.handle('terminal:location-label', async (_e, sessionId: string) => {

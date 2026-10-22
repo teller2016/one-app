@@ -73,6 +73,7 @@ export const SessionTabs = memo(function SessionTabs({
   onReorder,
   rightActions,
   tools,
+  rootTaskIds,
 }: {
   /** 표시 항목(순서 = 표시 순서) — 그룹은 멤버 칩들을 tab-pack 박스로 감싼다 */
   items: TabItem[];
@@ -122,6 +123,8 @@ export const SessionTabs = memo(function SessionTabs({
   /** 탭 줄 오른쪽(우측 액션 앞)의 공용 툴바 — 메인 창의 프리셋·검색·글자 크기·Finder.
    *  ⚠️ 이 컴포넌트는 memo 라 호출부가 useMemo 로 고정해 넘겨야 한다 */
   tools?: ReactNode;
+  /** 루트가 맡긴 일이 아직 열려 있는 세션 — 제목 뒤에 '루트' 표시(features/orchestrator useRootTaskSessionIds) */
+  rootTaskIds?: ReadonlySet<string>;
 }) {
   const toast = useToast();
   // 이름 인라인 편집 — 우클릭 메뉴 [이름 변경] 이 제목을 입력창으로 바꾼다.
@@ -305,6 +308,15 @@ export const SessionTabs = memo(function SessionTabs({
    *  드래그 = 분할 드롭 소스 (WorkspaceNav 의 dragSource 와 같은 규칙)
    *  `item` 은 **단일 탭일 때만** 온다 — 그 경우 칩 자신이 아이템이라 순서 변경 드롭까지
    *  받는다(그룹 멤버는 감싸는 tab-pack 이 아이템이라 그쪽이 받는다). */
+  // '루트' 표시 — 루트가 맡긴 일이 보고받기 전까지. 설명은 탭 버튼의 title 에 붙는다(아이콘은 장식)
+  const rootMark = (s: TerminalSessionInfo) =>
+    rootTaskIds?.has(s.id) ? (
+      <span className="terminal__tab-root" aria-hidden="true">
+        <Icon name="root" size={12} />
+      </span>
+    ) : null;
+  const rootHint = (s: TerminalSessionInfo) => (rootTaskIds?.has(s.id) ? ' · 루트가 맡긴 일 진행 중' : '');
+
   const renderTab = (s: TerminalSessionInfo, item?: { index: number }) => {
     if (editingId === s.id)
       return (
@@ -397,7 +409,7 @@ export const SessionTabs = memo(function SessionTabs({
           aria-selected={s.id === activeId}
           title={`${s.title} — ${TERMINAL_AGENT_NAMES[s.agentId]} · ${
             SESSION_DOT_LABEL[sessionDot(s)]
-          }${i < 9 ? ` (⌘${i + 1})` : ''}\n우클릭: 메뉴(별도 창 분리·이름 변경·종료) · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
+          }${rootHint(s)}${i < 9 ? ` (⌘${i + 1})` : ''}\n우클릭: 메뉴(별도 창 분리·이름 변경·종료) · 가운데 클릭: 종료\n드래그: 탭 좌우 끝에 놓으면 순서 변경 · 화면에 놓으면 분할`}
           onClick={() => onSelect(s.id)}
         >
           {/* 상태점은 제목 앞 — 작업 중(초록 펄스)·확인 전(연두)·입력 대기(주황)만 (lib/sessionState) */}
@@ -407,6 +419,7 @@ export const SessionTabs = memo(function SessionTabs({
             </span>
           )}
           <span className="terminal__tab-title">{s.title}</span>
+          {rootMark(s)}
         </button>
         {/* 보기 토글(터미널 ↔ 채팅) — 에이전트 세션만. 평소엔 숨고 hover·활성·채팅 중일 때 보인다 */}
         {s.agentId !== 'shell' && <TabViewToggle id={s.id} title={s.title} />}
@@ -587,7 +600,7 @@ export const SessionTabs = memo(function SessionTabs({
           role="tab"
           className="terminal__tab-hit"
           aria-selected={false}
-          title={`${s.title} — 별도 창에서 열림${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 되돌리기 · 우클릭: 메뉴`}
+          title={`${s.title} — 별도 창에서 열림${rootHint(s)}${i < 9 ? ` (⌘${i + 1}: 창 포커스)` : ''}\n클릭: 그 창으로 이동 · 앞 아이콘: 되돌리기 · 우클릭: 메뉴`}
           onClick={() => onFocusWindow?.(windowId)}
         >
           {s.status !== 'idle' && (
@@ -596,6 +609,7 @@ export const SessionTabs = memo(function SessionTabs({
             </span>
           )}
           <span className="terminal__tab-title">{s.title}</span>
+          {rootMark(s)}
         </button>
         {/* 우측 — 일반 탭과 완전히 같은 구조(× 늘 표시)라 × 자리가 정확히 맞는다 */}
         <Tooltip label="세션 종료">

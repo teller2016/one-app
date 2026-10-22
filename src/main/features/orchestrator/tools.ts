@@ -1,46 +1,36 @@
-// 루트 세션 MCP 도구 — claude 워커: list_sessions · read_session · send_to_session (탭·프리셋은 terminalTools.ts).
+// 루트 세션 MCP 도구 — claude 워커: list_sessions · read_session · send_to_session · list_tasks · focus_session
+// (탭·프리셋은 terminalTools.ts).
 //
 // 세션 목록은 ⌘⇧P 와 같은 terminalOverview(claude 가 실제로 떠 있는 세션만), 지시 입력은 폰 채팅과 같은
-// sendChatText(붙여넣기 + Enter)다. 루트 자신과 독 패널의 개인 셸은 대상에서 뺀다.
+// sendChatText(붙여넣기 + Enter — deliver.ts)다. 루트 자신과 독 패널의 개인 셸은 대상에서 뺀다.
+// 넣은 지시는 작업 원장(tasks.ts)에 남고, 워커가 끝나면 원앱이 4줄 보고를 요청한다.
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import type { ChatPrompt } from '../../../shared/terminal-protocol';
 import {
   completeLines,
-  dockShellId,
   fileSize,
   findClaude,
   listSessions,
-  parseScreenPrompt,
   parseScreenStatus,
   parseTranscript,
   readRange,
-  sendChatText,
+  revealSession,
   sessionScreen,
-  sessionStyledScreen,
   terminalOverview,
-  writeSession,
-  type ClaudeProcess,
 } from '../terminal';
-import { sleep } from '../../lib/util';
-import { checkSend, inputBoxText, MAX_INSTRUCTION_CHARS, sanitizeInstruction, STASH_KEY, ticketKeyOf } from './guard';
-import { getRootSessionId } from './store';
-import { excludedIds, fail, json, NO_SESSION, READ, stateOf } from './toolKit';
+import { sendToast } from '../notify/notify';
+import { gateIfChained } from './approve';
+import { currentPrompt, deliver } from './deliver';
+import { MAX_INSTRUCTION_CHARS, ticketKeyOf } from './guard';
+import { addTask, listTasks } from './tasks';
+import { excludedIds, fail, json, NO_SESSION, READ, stateOf, tabIndexOf } from './toolKit';
 
 /** 마지막 답변을 찾는 꼬리 — 답변은 맨 끝에 있지만 그 앞 도구 결과 한 줄이 클 수 있다(waitCard.ts 와 같은 값) */
 const REPLY_TAIL_BYTES = 512 * 1024;
 /** 마지막 답변은 끝에서 이만큼 — 결론은 뒤쪽에 있다 */
 const REPLY_MAX_CHARS = 3_000;
-
-/** 보관(Ctrl+S) 뒤 붙여넣기까지 — claude 가 입력란을 비우고 다시 그릴 틈 */
-const STASH_SETTLE_MS = 150;
-
-/** 지금 떠 있는 질문·권한·플랜 창 — claude 가 'waiting' 일 때만 읽는다(답변 속 '1. …' 오인 방지, waitCard.ts 와 같은 게이트) */
-async function currentPrompt(id: string, claude: ClaudeProcess | null): Promise<ChatPrompt | null> {
-  if (claude?.status !== 'waiting') return null;
-  const screen = await sessionScreen(id);
-  return screen ? parseScreenPrompt(screen) : null;
-}
+/** list_tasks 가 돌려주는 최근 일 수 */
+const TASKS_SHOWN = 30;
 
 /** claude 의 마지막 답변(마크다운 그대로, 끝에서 REPLY_MAX_CHARS) — 못 읽으면 null */
 function lastReply(file: string): string | null {
@@ -63,6 +53,7 @@ function lastReply(file: string): string | null {
   return null;
 }
 
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 export function registerOrchestratorTools(server: McpServer): void {
   server.registerTool(
@@ -71,13 +62,15 @@ export function registerOrchestratorTools(server: McpServer): void {
       title: '워커 세션 목록',
       description:
         'One App 터미널에 떠 있는 claude 세션(워커) 목록. 세션마다 id·ticket_key(탭 제목·브랜치·첫 요청에서 찾은 Jira 키)·' +
-        'repo·branch·cwd·state(working=작업 중, waiting_input=다음 지시를 받을 수 있음, idle=쉬는 중)·unseen(끝났는데 사용자가 아직 안 봄)·' +
+        'repo·branch·cwd·tab_index(그 워크트리 탭바에서 몇 번째 탭인지, 1부터 — 셸 탭도 센다)·' +
+        'state(working=작업 중, waiting_input=다음 지시를 받을 수 있음, idle=쉬는 중)·unseen(끝났는데 사용자가 아직 안 봄)·' +
         'title(작업 제목)·last_prompt(마지막 요청). 루트 자신과 독 패널의 개인 셸은 빠진다.',
       inputSchema: {},
       annotations: READ,
     },
     async () => {
       const excluded = excludedIds();
+      const all = listSessions();
       const items = (await terminalOverview()).filter((it) => !excluded.has(it.id));
       return json({
         count: items.length,
@@ -85,6 +78,7 @@ export function registerOrchestratorTools(server: McpServer): void {
           id: it.id,
           ticket_key: ticketKeyOf(it),
           tab: it.tabTitle,
+          tab_index: tabIndexOf(it.id, all),
           repo: it.workspace?.name ?? null,
           branch: it.branch,
           cwd: it.cwd,
@@ -145,45 +139,114 @@ export function registerOrchestratorTools(server: McpServer): void {
         '워커 터미널에 지시를 입력한다 — 사용자가 그 터미널에 친 것과 같아서 `/run-ticket SSB-137` 같은 슬래시 명령도 그대로 실행된다. ' +
         '작업 중이면 claude 대기열에 들어가 지금 일이 끝난 뒤 실행된다(delivered=queued). ' +
         '사용자가 그 탭 입력란에 쓰던 글이 있으면 claude 의 입력 보관(Ctrl+S)으로 치웠다가 지시를 넣고, 그 글은 claude 가 다음 제출 뒤 되돌린다(stashed_draft=true). ' +
+        '넣은 지시는 작업 원장(list_tasks)에 남고, 워커가 끝나면 원앱이 4줄 보고(SendMessage 로 루트에)를 요청한다 — 사용자가 보고가 필요 없다고 하면 report=false. ' +
         '질문·권한 창이 떠 있거나 입력 상자를 못 찾으면 거부한다 — 거부되면 다시 시도하지 말고 이유를 사용자에게 전할 것.',
       inputSchema: {
         session_id: z.string().min(1).describe('list_sessions 의 id'),
         text: z.string().min(1).max(MAX_INSTRUCTION_CHARS).describe('넣을 지시 — 사용자가 말한 그대로'),
+        report: z.boolean().optional().describe('끝나면 4줄 보고를 요청할지 (기본 true)'),
       },
     },
-    async ({ session_id, text }) => {
+    async ({ session_id, text, report }, extra) => {
       const s = listSessions().find((x) => x.id === session_id);
       if (!s) return fail(NO_SESSION);
-      const instruction = sanitizeInstruction(text);
-      if (!instruction.trim()) return fail('넣을 글이 비었습니다.');
-      const claude = await findClaude(session_id);
-      const [prompt, styled] = await Promise.all([currentPrompt(session_id, claude), sessionStyledScreen(session_id)]);
-      const check = checkSend({
-        isRoot: session_id === getRootSessionId(),
-        isDockShell: session_id === dockShellId(),
-        hasClaude: !!claude,
-        prompt,
-        inputText: styled === null ? null : inputBoxText(styled),
+      const item = (await terminalOverview()).find((it) => it.id === session_id);
+      const key = item ? ticketKeyOf(item) : null;
+      const where = [key, item?.workspace?.name, item?.branch].filter(Boolean).join(' · ') || s.title;
+      const blocked = await gateIfChained(
+        {
+          title: '워커에 지시',
+          fields: [
+            { label: '대상', value: `${s.title} — ${where}` },
+            { label: '지시', value: text },
+          ],
+        },
+        extra.signal,
+      );
+      if (blocked) return fail(blocked);
+      const res = await deliver(session_id, text);
+      if (!res.ok) return fail(res.reason);
+      const task = addTask({
+        sessionId: session_id,
+        item,
+        tab: s.title,
+        instruction: text,
+        report: report !== false,
+        claude: res.claude,
       });
-      if (!check.ok) return fail(check.reason);
-      const queued = stateOf(s, claude?.status) === 'working';
-      // 쓰던 글이 있으면 먼저 보관 — 안 하면 그 글 뒤에 지시가 붙어 한꺼번에 제출된다
-      if (check.stashDraft) {
-        writeSession(session_id, STASH_KEY);
-        await sleep(STASH_SETTLE_MS);
-      }
-      sendChatText(session_id, instruction);
+      sendToast({
+        title: `루트가 ${key ?? s.title} 에 지시했습니다`,
+        message: clip(text.replace(/\s+/g, ' ').trim(), 80),
+        variant: 'info',
+        terminalSession: { sessionId: session_id, cwd: s.cwd },
+        actionLabel: '보기',
+        dedupeKey: `root-send:${task.id}`,
+      });
       const notes = [
-        queued && '작업 중이라 claude 대기열에 들어갔습니다 — 지금 일이 끝나면 이어서 실행됩니다.',
-        check.stashDraft && '사용자가 입력란에 쓰던 글은 보관했고, 지시가 제출된 뒤 claude 가 입력란에 되돌려 놓습니다.',
+        res.queued && '작업 중이라 claude 대기열에 들어갔습니다 — 지금 일이 끝나면 이어서 실행됩니다.',
+        res.stashed && '사용자가 입력란에 쓰던 글은 보관했고, 지시가 제출된 뒤 claude 가 입력란에 되돌려 놓습니다.',
+        task.report && '끝나면 원앱이 이 워커에 4줄 보고를 요청합니다 — 보고는 SendMessage 로 이 세션에 옵니다.',
       ].filter(Boolean);
       return json({
         ok: true,
         session_id,
-        delivered: queued ? 'queued' : 'now',
-        stashed_draft: check.stashDraft,
-        note: notes.length ? notes.join(' ') : undefined,
+        task_id: task.id,
+        delivered: res.queued ? 'queued' : 'now',
+        stashed_draft: res.stashed,
+        note: notes.join(' '),
       });
+    },
+  );
+
+  server.registerTool(
+    'list_tasks',
+    {
+      title: '맡긴 일 목록',
+      description:
+        '루트가 send_to_session 으로 맡긴 일(최근 30개, 최근 것부터) — task_id·session_id·ticket_key·repo·branch·tab·instruction·' +
+        'state(dispatched=넣음·차례 전, working=작업 중, waiting_prompt=워커에 질문 창 — 사용자가 답할 차례, report_requested=끝나서 보고 요청함, ' +
+        'reported=보고받음, done=보고 없이 닫힘(note 에 이유), gone=탭이 닫히거나 claude 가 끝남)·note·시각. /clear 뒤에도 남는다.',
+      inputSchema: {},
+      annotations: READ,
+    },
+    async () => {
+      const alive = new Set(listSessions().map((x) => x.id));
+      const tasks = listTasks().slice(0, TASKS_SHOWN);
+      return json({
+        count: tasks.length,
+        tasks: tasks.map((t) => ({
+          task_id: t.id,
+          session_id: t.sessionId,
+          session_alive: alive.has(t.sessionId),
+          ticket_key: t.ticketKey,
+          repo: t.repo,
+          branch: t.branch,
+          tab: t.tab,
+          instruction: t.instruction,
+          report: t.report,
+          state: t.state,
+          note: t.note,
+          dispatched_at: new Date(t.createdAt).toISOString(),
+          updated_at: new Date(t.updatedAt).toISOString(),
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    'focus_session',
+    {
+      title: '탭을 화면 앞으로',
+      description:
+        '그 세션의 탭을 화면 앞으로 가져온다 — 토스트 [이동]과 같다(별도 창·독에 있으면 그 창). 사용자가 "그 탭 보여 줘"라고 할 때.',
+      inputSchema: { session_id: z.string().min(1).describe('list_sessions·list_terminals 의 id') },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ session_id }) => {
+      const s = listSessions().find((x) => x.id === session_id);
+      if (!s) return fail(NO_SESSION);
+      if (!revealSession(session_id)) return fail('앱 창이 없어 탭을 앞으로 가져오지 못했습니다.');
+      return json({ ok: true, session_id, tab: s.title });
     },
   );
 }

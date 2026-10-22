@@ -114,7 +114,9 @@ import type {
   PortKillResult,
   PortProcess,
   PowerState,
+  OrchestratorConfirmRequest,
   OrchestratorOpenRootResult,
+  OrchestratorTask,
 } from '../../shared/types';
 
 declare global {
@@ -377,6 +379,12 @@ declare global {
         openRoot: () => Promise<OrchestratorOpenRootResult>;
         rootSessionId: () => Promise<string | null>;
         onRootChanged: (cb: (sessionId: string) => void) => () => void;
+        tasks: () => Promise<OrchestratorTask[]>;
+        onTasksChanged: (cb: (tasks: OrchestratorTask[]) => void) => () => void;
+        listConfirms: () => Promise<OrchestratorConfirmRequest[]>;
+        onConfirmsChanged: (cb: (pending: OrchestratorConfirmRequest[]) => void) => () => void;
+        answerConfirm: (id: string, approved: boolean) => Promise<boolean>;
+        reportTabOrders: (orders: Record<string, string[]>) => void;
       };
       terminal: {
         list: () => Promise<TerminalSessionInfo[]>;

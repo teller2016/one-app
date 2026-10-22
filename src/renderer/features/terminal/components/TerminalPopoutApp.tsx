@@ -27,6 +27,7 @@ import {
   savedTabOrders,
   useLastActive,
 } from '../lib/tabs';
+import { useRootTaskSessionIds } from '../../orchestrator';
 import { usePaneOrchestration } from '../lib/usePaneOrchestration';
 import { useSplitGroups } from '../lib/useSplitGroups';
 import { useTerminalShortcuts } from '../lib/useTerminalShortcuts';
@@ -266,6 +267,8 @@ function PopoutBody({
   }, [mySessions, applyDropAt, rememberActive]);
 
   const tabView = useMemo(() => buildTabView(tabSessions, groups), [tabSessions, groups]);
+  // 루트가 맡긴 일이 아직 열려 있는 워커 탭 — 메인 창과 같은 '루트' 표시
+  const rootTaskIds = useRootTaskSessionIds();
 
   /** 탭 클릭·⌘1..9·⌃Tab — 팝아웃엔 세션 히스토리가 없어 화면 전환만 한다 */
   const selectTab = useCallback(
@@ -617,6 +620,7 @@ function PopoutBody({
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
+          rootTaskIds={rootTaskIds}
           onReturnSession={returnSession}
           onRevealCwd={revealSessionCwd}
           onOpenEditorFor={openEditorFor}

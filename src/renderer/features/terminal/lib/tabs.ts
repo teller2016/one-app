@@ -29,6 +29,22 @@ export function savedTabOrders(): Record<string, string[]> {
 }
 
 /**
+ * 화면 키별 탭 순서 → 워크트리 경로별 — 메인 창 워크트리 화면(`'{wsId}:{path}'`)만 남긴다(팝아웃 `win:<id>`·'기타'·'루트'는 뺀다).
+ * 루트 세션의 list_sessions 가 "두 번째 세션"을 풀 때 쓴다(features/orchestrator reportTabOrders).
+ */
+export function tabOrdersByPath(orders: Record<string, string[]>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [key, ids] of Object.entries(orders)) {
+    if (key.startsWith('win:')) continue;
+    const at = key.indexOf(':/'); // 경로는 절대 경로라 '/' 로 시작한다
+    if (at < 0) continue;
+    const path = key.slice(at + 1);
+    if (!out[path]) out[path] = ids;
+  }
+  return out;
+}
+
+/**
  * 탭 순서 저장 — ⚠️ 통째 쓰기가 아니라 **그 화면(selKey) 키만** 갈아끼운다.
  * localStorage 는 메인 창·팝아웃 창이 공유하는데, 각 창의 state 는 자기 마운트 시점
  * 스냅숏이라 통째로 쓰면 다른 창이 그 사이 저장한 화면의 순서를 옛값으로 되돌린다.

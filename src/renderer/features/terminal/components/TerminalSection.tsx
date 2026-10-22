@@ -30,7 +30,7 @@ import { useWorkspaceActions } from '../lib/useWorkspaceActions';
 import { useMarkSeen } from '../lib/sessionState';
 import { usePolling } from '../../../lib/usePolling';
 import { ChangesOverlay, ChangesView } from '../../changes';
-import { useOpenRoot, useRootSessionId } from '../../orchestrator';
+import { reportTabOrders, useOpenRoot, useRootSessionId, useRootTaskSessionIds } from '../../orchestrator';
 import type { DropSide } from '../lib/layout';
 import {
   buildTabView,
@@ -38,6 +38,7 @@ import {
   persistTabOrder,
   pruneWindowScreenState,
   savedTabOrders,
+  tabOrdersByPath,
   useLastActive,
 } from '../lib/tabs';
 import {
@@ -144,6 +145,10 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
   // 탭 순서 — 사용자가 탭을 끌어 정한 표시 순서(화면별). 없는 화면·새 세션은 생성 순서.
   // 저장은 reorderTabs 가 그 화면 키만 갈아끼운다(persistTabOrder — 팝아웃 창과 공유 저장소)
   const [tabOrders, setTabOrders] = useState<Record<string, string[]>>(savedTabOrders);
+  // 탭 순서를 main 에 알린다 — 루트 세션이 "두 번째 세션"을 풀 수 있게(features/orchestrator)
+  useEffect(() => {
+    reportTabOrders(tabOrdersByPath(tabOrders));
+  }, [tabOrders]);
 
   const [newWsOpen, setNewWsOpen] = useState(false);
   const [worktreeFor, setWorktreeFor] = useState<TerminalWorkspace | null>(null);
@@ -359,6 +364,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     () => sessions.filter((s) => !allPaths.has(s.cwd) && s.id !== rootId),
     [sessions, allPaths, rootId]
   );
+  // 루트가 맡긴 일이 아직 열려 있는 워커 탭 — 제목 뒤 '루트' 표시
+  const rootTaskIds = useRootTaskSessionIds();
 
   // 화면 키 — 탭 순서·분할 레이아웃·마지막 활성 세션·방문 히스토리가 전부 이 키로 갈린다
   const selKey = selectionKey(selection);
@@ -1279,6 +1286,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onDragEndSession={onDragEndSession}
           onDetachSession={detachSession}
           onDetachToWindow={detachToWindow}
+          rootTaskIds={rootTaskIds}
           onSendToDock={sendToDock}
           onRevealCwd={revealSessionCwd}
           onOpenEditorFor={openEditorFor}

@@ -2,6 +2,8 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import type {
   AuthCodeServiceId,
+  OrchestratorConfirmRequest,
+  OrchestratorTask,
   AppToastPayload,
   ScheduleNotionRecordPayload,
   ScheduleRunPayload,
@@ -469,6 +471,25 @@ contextBridge.exposeInMainWorld("oneApp", {
       ipcRenderer.on("orchestrator:root", listener);
       return () => ipcRenderer.removeListener("orchestrator:root", listener);
     },
+    // 작업 원장(루트가 맡긴 일) + 바뀔 때 구독 — 워커 탭의 '루트' 표시
+    tasks: () => ipcRenderer.invoke("orchestrator:tasks"),
+    onTasksChanged: (cb: (tasks: OrchestratorTask[]) => void) => {
+      const listener = (_e: unknown, tasks: OrchestratorTask[]) => cb(tasks);
+      ipcRenderer.on("orchestrator:tasks", listener);
+      return () => ipcRenderer.removeListener("orchestrator:tasks", listener);
+    },
+    // 무인 연쇄 가드의 승인 창 — 기다리는 요청 목록·바뀔 때 구독·[실행]/[취소] 응답
+    listConfirms: () => ipcRenderer.invoke("orchestrator:confirm:list"),
+    onConfirmsChanged: (cb: (pending: OrchestratorConfirmRequest[]) => void) => {
+      const listener = (_e: unknown, pending: OrchestratorConfirmRequest[]) => cb(pending);
+      ipcRenderer.on("orchestrator:confirm:changed", listener);
+      return () => ipcRenderer.removeListener("orchestrator:confirm:changed", listener);
+    },
+    answerConfirm: (id: string, approved: boolean) =>
+      ipcRenderer.invoke("orchestrator:confirm:answer", id, approved),
+    // 탭 순서(워크트리 경로 → 세션 id) — 루트의 list_sessions 가 "두 번째 세션"을 풀 때 쓴다
+    reportTabOrders: (orders: Record<string, string[]>) =>
+      ipcRenderer.send("orchestrator:tab-orders", orders),
   },
   terminal: {
     // 세션 목록 조회

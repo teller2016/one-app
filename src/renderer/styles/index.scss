@@ -17,6 +17,7 @@
 @use './terminal';
 @use './terminal-chat';
 @use './terminal-dock';
+@use './orchestrator';
 @use './wait-toast';
 @use './changes';
 @use './ports';

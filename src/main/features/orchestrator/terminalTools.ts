@@ -3,6 +3,7 @@
 // "다른 워크트리의 run dev 를 끄고 지금 워크트리에서 run dev 켜 줘" 같은 지시용(2026-10-22 사용자 요청).
 // 프리셋 실행은 프리셋 바와 **같은 인자**로 세션을 만든다(renderer TerminalSection runPreset — agentIdFromCommand·명령·이름).
 // 실행·닫기 모두 승인 없이 바로 한다(사용자 결정 10-22) — 대신 토스트로 무엇을 했는지 알린다.
+// 단 루트의 이번 턴이 워커 보고로 시작됐으면 승인 창을 거친다(approve.ts gateIfChained — 무인 연쇄 가드).
 // 루트 자신·독 패널 셸은 닫지 않는다.
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -19,6 +20,7 @@ import {
 } from '../terminal';
 import { listWorktreesBrief } from '../workspaces/git';
 import { listPresets, listWorkspaces } from '../workspaces/store';
+import { gateIfChained } from './approve';
 import { excludedIds, fail, json, NO_SESSION, READ, stateOf } from './toolKit';
 import { getRootSessionId } from './store';
 
@@ -124,7 +126,7 @@ export function registerTerminalTools(server: McpServer): void {
         cwd: z.string().min(1).describe('실행할 워크트리 경로 — list_workspaces 의 worktrees[].path'),
       },
     },
-    async ({ preset, cwd }) => {
+    async ({ preset, cwd }, extra) => {
       const target = await resolveWorktree(cwd);
       if (!target) return fail('등록된 워크트리 경로가 아닙니다 — list_workspaces 의 worktrees[].path 를 쓰세요.');
       const candidates = presetsOf(target.ws.id);
@@ -134,6 +136,17 @@ export function registerTerminalTools(server: McpServer): void {
         const names = candidates.map((x) => x.name).join(', ') || '없음';
         return fail(`'${target.ws.name}' 에 '${preset}' 프리셋이 없습니다 — 쓸 수 있는 것: ${names}`);
       }
+      const blocked = await gateIfChained(
+        {
+          title: '프리셋 실행',
+          fields: [
+            { label: '프리셋', value: `${p.name} — ${p.command}` },
+            { label: '위치', value: placeLabel(target.ws.name, target.wt.branch, target.wt.path) },
+          ],
+        },
+        extra.signal,
+      );
+      if (blocked) return fail(blocked);
       const agentId = agentIdFromCommand(p.command);
       const info = createSession({ cwd: target.wt.path, agentId, command: p.command, title: p.name });
       sendToast({
@@ -166,12 +179,23 @@ export function registerTerminalTools(server: McpServer): void {
       inputSchema: { session_id: z.string().min(1).describe('list_terminals·list_sessions 의 id') },
       annotations: { destructiveHint: true, openWorldHint: false },
     },
-    async ({ session_id }) => {
+    async ({ session_id }, extra) => {
       const s = listSessions().find((x) => x.id === session_id);
       if (!s) return fail(NO_SESSION);
       if (session_id === getRootSessionId()) return fail('루트 세션 자신은 닫을 수 없습니다.');
       if (excludedIds().has(session_id)) return fail('독 패널의 개인 셸은 닫지 않습니다.');
       const place = await placeOf(s.cwd, new Map());
+      const blocked = await gateIfChained(
+        {
+          title: '탭 닫기',
+          fields: [{ label: '탭', value: `${s.title} — ${placeLabel(place.workspace?.name, place.branch, s.cwd)}` }],
+          danger: true,
+        },
+        extra.signal,
+      );
+      if (blocked) return fail(blocked);
+      // 승인을 기다리는 사이 사용자가 직접 닫았을 수 있다
+      if (!listSessions().some((x) => x.id === session_id)) return fail(NO_SESSION);
       killSession(session_id);
       sendToast({
         title: '루트가 탭을 닫았습니다',

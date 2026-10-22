@@ -705,6 +705,15 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
   return toInfo(session);
 }
 
+let markRestored: () => void = () => undefined;
+const restored = new Promise<void>((resolve) => (markRestored = resolve));
+
+/**
+ * 앱 시작 때의 세션 복원이 끝났다(성공·실패·tmux 없음 모두) — 세션이 살아 있는지 판정하는 쪽(루트 작업 감시)은
+ * 이걸 기다린다. 복원 전 listSessions() 는 비어 있어 모든 세션이 닫힌 것처럼 보인다.
+ */
+export const whenSessionsRestored = (): Promise<void> => restored;
+
 /**
  * 앱 시작 시 영속 세션 복원 — tmux 생존 세션(oneapp-*)과 sidecar 를 대조한다.
  * sidecar 만 남은 항목 = 앱이 꺼져 있는 동안 tmux 서버째 사라진 세션(재부팅·크래시)이다 — 그 안에서
@@ -712,6 +721,14 @@ export function createSession(opts: TerminalCreateInput = {}): TerminalSessionIn
  * 순수 셸이면 정리한다. sidecar 없는 고아 tmux 세션도 셸로 복원한다(사용자가 잃는 것보단 낫다).
  */
 export async function restoreSessions(): Promise<void> {
+  try {
+    await restoreSessionsOnce();
+  } finally {
+    markRestored();
+  }
+}
+
+async function restoreSessionsOnce(): Promise<void> {
   const bin = await initTmux();
   if (!bin) return;
   const live = await listTmuxSessions();

@@ -8,18 +8,22 @@ paths:
 
 고정 루트 탭의 claude 가 **원앱 MCP 서버**로 다른 claude 세션(워커)을 찾고(`list_sessions`)·읽고(`read_session`)·지시를 넣고
 (`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
-보고는 워커 → 루트 **Claude Code 내장 SendMessage**. 결정·실측의 정본은 기획서 아티팩트
-'루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE). 지금은 **1a**(서버·도구 7개·손으로 여는 루트 탭).
+맡긴 일은 작업 원장에 남고(`list_tasks`), 워커가 끝나면 원앱이 4줄 보고를 요청해 워커 → 루트 **Claude Code 내장 SendMessage** 로 돌아온다.
+결정·실측의 정본은 기획서 아티팩트 '루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE).
+지금은 **1a + 1b-1**(서버·도구 9개·손으로 여는 루트 탭·보고 한 바퀴·무인 연쇄 가드).
 
 ## 구조
-- main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 3개) · `terminalTools.ts`(터미널 도구 4개) · `toolKit.ts`(결과 포맷·상태 해석·제외 세션) ·
-  `guard.ts`(순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
-  `rootGuide.ts`(지침서 기본본) · `store.ts`(토큰·루트 세션 id) · `ipc.ts`(`orchestrator:open-root`·`orchestrator:root`, 폰에는 안 연다).
+- main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 5개) · `terminalTools.ts`(터미널 도구 4개) ·
+  `toolKit.ts`(결과 포맷·상태 해석·제외 세션·탭 순서) · `deliver.ts`(워커에 글 넣기 — 지시와 보고 요청 공용) ·
+  `tasks.ts`(작업 원장 + 감시) · `taskScan.ts`(대화 기록 순수 판정 + 테스트) · `approve.ts`(무인 연쇄 가드) · `confirm.ts`(승인 대기열 + 테스트) ·
+  `guard.ts`(입력 가드 순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
+  `rootGuide.ts`(지침서 기본본) · `store.ts`(토큰·루트 세션 id) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
 - 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
-  `createSession`·`killSession`·`dockShellId` 등.
+  `createSession`·`killSession`·`dockShellId`·`revealSession`(팝아웃·독이면 그 창, 아니면 메인 창 탭)·`whenSessionsRestored` 등.
 - 렌더러 `features/orchestrator/` — `RootCommand`(⌘P '루트 세션 열기' 등록만) · `lib/rootSession.ts`(`useRootSessionId` 구독 · `useOpenRoot` 열기 —
   ⌘P 와 LNB 가 같은 것을 쓴다). 터미널 LNB **맨 위 '루트' 고정 칸**(2026-10-22, 선택 종류 `root`)이 루트 세션만 보여 주고 '기타'에서는 뺀다 —
   main 은 `setRootSessionId` 때 `orchestrator:root` 를 방송하고, 처음 그릴 때는 `orchestrator:root` 로 묻는다.
+  `lib/rootTasks.ts`(`useRootTaskSessionIds` — 워커 탭의 '루트' 표시 · `reportTabOrders`) · `RootConfirmHost`(승인 모달, App 셸에 한 번).
 
 ## 지시 입력 (`send_to_session`)
 - 길은 폰 채팅과 같은 `sendChatText`(bracketed paste + 250ms 뒤 Enter). ⚠️ 글은 **`sanitizeInstruction` 을 거친다** — 글 안의 `ESC[201~`
@@ -73,5 +77,31 @@ paths:
 - '작업 중' 상태는 도구 없이 **긴 답변**을 쓰게 해서 만든다 — probe claude 도 foreground `sleep` 을 막고 백그라운드로 돌려 턴이 곧바로 끝난다.
 - 테스트 대화 기록(`~/.claude/projects/*probe*`)과 FEMC 저장소에 남은 기록은 내용(사람 입력)을 확인한 뒤 지운다.
 
-## 1b 에서 할 일
-작업 원장·`list_tasks`·완료 뒤 보고 요청 · 지시 알림(탭 표시·토스트) · `focus_session` · 고정 탭(세션 패널 맨 위·자동 시작·재시작 제한·재부팅 복원) · 무인 연쇄 가드(대화 기록 `origin.kind` 가 `peer` 면 승인 창).
+## 작업 원장·보고 한 바퀴 (`tasks.ts`, 1b-1 — 2026-10-22)
+- 상태: `dispatched`(넣음) → `working` → [`waiting_prompt` — 워커에 질문 창, 사용자가 답한다] → `report_requested` → `reported`.
+  닫힘: `done`(보고 생략·요청 실패·보고 없이 턴 끝·다음 지시와 합침·지시가 안 읽힘 10분 — `note` 에 이유) · `gone`(탭 닫힘·claude 끝).
+  원장은 `runtimeFile('orchestrator-tasks.json')`(인스턴스별) · 7일·50개 보존. 열린 일이 있을 때만 3초마다 감시한다.
+- **끝남 판정** = 우리 지시가 대화 기록에 읽혔고(`taskScan.scanWorker`) 그 뒤 답이 나왔고 claude 상태 파일 `status` 가 idle 로 **두 번 연속**.
+  대기열에 들어간 지시는 그 차례가 끝나야 끝이다. 화면 휴리스틱(pty status)은 쓰지 않는다.
+- ⚠️ **여러 줄 붙여넣기는 대화 기록에 `\n\n<pasted_content id="…">\n본문\n</pasted_content>` 로 감싸 남는다**(한 줄은 그대로) — 앞머리 비교 전에 벗긴다.
+- **보고 요청은 지시 꼬리가 아니라 끝난 뒤 따로, 한 줄로** 넣는다(`reportRequest`). 실측(haiku)에서 두 번 되물었다:
+  여러 줄이면 claude 가 `<pasted_content>`(=사용자가 안 썼을 수 있는 글)로 다뤄 "4줄을 채워 주세요"라고 되묻고,
+  티켓 키만 쓰면 워커가 실제로 받은 지시와 잇지 못해 "다른 세션의 일"로 읽었다 → **지시 앞머리 + 키 · "사용자에게 묻지 말고 직접 정리해 보내라"**.
+- **보고받음** = 루트 대화 기록에 그 워커 claude 의 세션 간 메시지(`origin.verifiedPeerPid` = 워커 claude pid). 실측 모양: `type: 'user'` +
+  **`isMeta: true`** + `origin: {kind:'peer', from, verifiedPeerPid, name, fromMode, body}` — ⚠️ isMeta 라고 주입물로 버리면 못 잡는다.
+  루트가 바쁘면 먼저 `queue-operation` enqueue(content `<cross-session-message from="uds:/tmp/cc-socks/<pid>.sock" …>`)만 남는다 — 그것도 센다.
+- 보고 요청 턴이 보고 없이 끝나면(쉬는 상태 10틱) `done` + 이유. 같은 세션에 보고 요청 전의 일이 있는데 새 지시가 오면 앞 일은 닫고 합친다.
+- 감시 시작은 **`whenSessionsRestored()` 뒤** — 복원 전 `listSessions()` 가 비어 열린 일을 전부 `gone` 으로 닫는다.
+- 지시 토스트("루트가 SSB-137 에 지시했습니다" [보기])는 그 탭을 보고 있으면 생략된다(터미널 세션 토스트의 기존 규칙).
+
+## 무인 연쇄 가드 (`approve.ts`)
+- 루트의 **마지막 입력 줄의 `origin.kind`**(`taskScan.lastInputKind`)가 사람이 아니면 상태를 바꾸는 도구(send_to_session·run_preset·close_session)를
+  승인 모달(`RootConfirmHost`)에 올린다 — 3분 무응답이면 취소, 막히면 루트에 이유 문장을 돌려준다(지침서: 재시도 금지). 대화 기록을 못 읽으면 통과.
+  ⚠️ 보고가 온 뒤엔 사용자가 루트에 무언가 칠 때까지 계속 peer 다 — 그 사이의 도구 호출은 전부 승인 창을 거친다(의도).
+- ⚠️ **HTTP MCP 호출은 기본 '첫 바이트 60초'**(공식 문서 mcp.md) — SDK 가 SSE 헤더를 바로 보내고 15초마다 keepalive, mcp.json 에
+  `timeout: 600000`(root.ts). 실측: 실제 Claude Code 가 승인 창에서 75초 기다린 뒤 결과를 받았다.
+- ⚠️ **Esc 로 멈춰도 HTTP 연결은 안 끊긴다** — `notifications/cancelled` 가 별도 POST 로 온다. stateless 라 원래 호출에 안 닿아 승인 창이 남았다 →
+  `server.ts` 가 본문을 먼저 읽어 요청 id → 서버 인스턴스를 기억하고, 취소가 오면 그 인스턴스를 닫는다(핸들러 signal 이 끊겨 `cancelled`). 실측 0.5초에 모달이 거둬진다.
+
+## 1b-2 에서 할 일
+고정 탭(자동 시작·재시작 제한·재부팅 복원 — 플래그를 잇는 복원) · ⌘0 단축키(기본 메뉴 '실제 크기'와 겹침) · 입력 대기 토스트의 위치 표기가 루트면 '기타'로 나온다.

@@ -32,6 +32,9 @@ const DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit', 'Bash', 'Agent'];
 
 const rootDir = () => path.join(app.getPath('userData'), ROOT_DIR_NAME);
 
+/** mcp.json 의 서버별 도구 호출 상한 — 승인 창 대기(3분)보다 길게 */
+const MCP_CALL_TIMEOUT_MS = 10 * 60_000;
+
 const sha256 = (text: string) => crypto.createHash('sha256').update(text).digest('hex');
 
 /**
@@ -77,6 +80,9 @@ function prepareRootDir(dir: string, token: string): string {
       [ORCH_SERVER_NAME]: {
         type: 'http', // ⚠️ 없으면 stdio 로 읽혀 조용히 빠진다(공식 문서)
         url: `http://127.0.0.1:${ORCH_PORT}${MCP_PATH}`,
+        // 도구 호출 하나의 상한(ms) — 기본으론 HTTP 호출이 60초 안에 첫 바이트를 받아야 한다(공식 문서 mcp.md).
+        // 무인 연쇄 가드의 승인 창이 최대 3분 기다리므로 넉넉히 올린다(approve.ts CONFIRM_TIMEOUT_MS)
+        timeout: MCP_CALL_TIMEOUT_MS,
         headers: { Authorization: `Bearer ${token}` },
       },
     },
