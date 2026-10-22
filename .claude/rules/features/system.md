@@ -113,6 +113,9 @@ scrcpy 창을 닫으면 exit 이벤트로 위젯 상태 자동 갱신(`mirror:ch
 - **adb 데몬은 콜드 시작이 3초를 넘는다** — 폰 감지(`mirror/scrcpy.ts`)의 타임아웃을 3초로 두면 데몬이 식어 있을 때 매번 실패한다(실측 콜드 3.03초 / 웜 0.01초). 10초 + 조회 전 `adb start-server` 로 해결. 감지 실패 시 `adb devices -l` 을 직접 돌려 데몬 상태부터 확인할 것.
 - **"연결했는데 기기 인식 안 됨" 의 실제 원인 1위는 `unauthorized`** — 폰 화면이 잠긴 채 케이블을 꽂으면 "USB 디버깅 허용" 팝업이 잠금화면 뒤에 가려지고, 승인 없이 방치되면 `adb devices` 가 `unauthorized` 로 남는다(2026-08-05 실측). "이 컴퓨터에서 항상 허용" 을 체크하지 않으면 재연결마다 반복된다. 해결은 폰 잠금 해제 → 재연결 → 항상 허용 체크(팝업이 안 뜨면 개발자 옵션 → **USB 디버깅 승인 취소** 후 재연결).
 - ⚠️ **파싱에서 이 상태를 버리지 말 것** — 예전 코드가 `unauthorized|offline` 행을 필터로 제외해 `device: null` 로만 만들었고, 위젯이 '기기 없음' 만 띄워 케이블·포트를 의심하게 했다.
+- **"케이블 다시 꽂고 제어 → 처음 잠금 해제할 때만 끊김" 은 앱 버그가 아니라 갤럭시의 '잠긴 상태에서 USB 연결 차단'**(One UI 7+ 기본 켜짐 · 설정 → 보안 및 개인정보 보호 → 추가 보안 설정, 설정 키 `secure block_usb_lock`) 탓이다(2026-10-22 실측, SM-S948N · Android 16). 잠긴 동안 새로 맺은 USB 연결은 차단 모드로 묶이고, 잠금을 푸는 순간 시스템 서비스 `UsbHostRestrictor` 가 `enterRelease … Write ScrLck Block FILE` 을 쓰면서 **7ms 뒤 USB 를 한 번 리셋**한다(adbd `UsbFfs: connection terminated` → `USB_STATE=DISCONNECTED` → scrcpy 종료). 다시 붙인 연결은 잠금 해제 상태에서 맺은 것이라 그 뒤로는 잠갔다 풀어도 안 끊긴다. 해결은 **폰에서 그 설정을 끄는 것**(사용자 선택 — 끈 뒤 같은 순서로 재현해 끊김 없음 확인). 앱에서 자동 재연결하는 안은 만들지 않았다.
+  - 판정: `adb logcat -d | grep -E "UsbHostRestrictor|USB_STATE=DISCONNECTED|MSG_UPDATE_SCREEN_LOCK"` — 잠금 해제(`mScreenLocked=false`) 직후 DISCONNECTED 가 붙어 나오면 이것이다. 설정 상태는 `adb shell dumpsys usb` 머리의 `SettingBlockUsbLock`(1 = 켜짐).
+  - ⚠️ 이 설정이 켜져 있으면 연결을 유지한 채 **1시간 넘게 잠가 둬도** 막힐 수 있다(삼성 안내 — 잠그기 전 연결된 PC 는 1시간까지만 허용, 미실측).
 
 ## 자동 시작
 
