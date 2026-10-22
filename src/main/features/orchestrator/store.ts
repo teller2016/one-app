@@ -39,16 +39,35 @@ export function getOrCreateToken(): string | null {
   return token;
 }
 
-let rootIdCache: string | null | undefined;
+/**
+ * 루트 런타임 기록(인스턴스별) — 탭 세션 id · 루트 claude 의 대화 id(다시 띄울 때 --resume) · 사용자가 껐는가.
+ * devAutoStart 는 테스트 손잡이 — dev 는 자동 시작하지 않지만(기획 결정) 이 값이 true 면 한다. 화면에는 없다.
+ */
+type RootRecord = { sessionId?: string; conversationId?: string; off?: boolean; devAutoStart?: boolean };
 
-export function getRootSessionId(): string | null {
-  if (rootIdCache === undefined) rootIdCache = readUserJson<{ sessionId?: string }>(ROOT_FILE, {}).sessionId ?? null;
-  return rootIdCache;
+let rootCache: RootRecord | undefined;
+
+const rootRecord = (): RootRecord => (rootCache ??= readUserJson<RootRecord>(ROOT_FILE, {}));
+
+function patchRoot(patch: Partial<RootRecord>): void {
+  rootCache = { ...rootRecord(), ...patch };
+  writeUserJson(ROOT_FILE, rootCache);
 }
+
+export const getRootSessionId = (): string | null => rootRecord().sessionId ?? null;
 
 /** 루트 세션 id 기록 — 터미널 LNB 의 고정 '루트' 칸이 이 id 의 세션을 그린다(렌더러에 방송) */
 export function setRootSessionId(id: string): void {
-  rootIdCache = id;
-  writeUserJson(ROOT_FILE, { sessionId: id });
+  patchRoot({ sessionId: id });
   broadcast('orchestrator:root', id);
 }
+
+/** 루트 claude 의 대화 id — /clear 하면 바뀌므로 수명 감시(rootLife.ts)가 주기적으로 맞춘다 */
+export const getRootConversation = (): string | null => rootRecord().conversationId ?? null;
+export const setRootConversation = (id: string): void => patchRoot({ conversationId: id });
+
+/** 사용자가 루트를 껐는가(/exit·탭 닫기) — 켜져 있으면 앱 시작 때 자동으로 띄운다. 다시 열면 풀린다 */
+export const isRootOff = (): boolean => rootRecord().off === true;
+export const setRootOff = (off: boolean): void => patchRoot({ off });
+
+export const devAutoStart = (): boolean => rootRecord().devAutoStart === true;

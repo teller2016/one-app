@@ -2,9 +2,10 @@ import { useRegisterCommands } from '../../../lib/commands';
 import { useOpenRoot } from '../lib/rootSession';
 
 /**
- * ⌘P '루트 세션 열기' — 다른 claude 세션을 지휘하는 루트 claude 탭을 연다(이미 떠 있으면 그 탭으로).
+ * ⌘P '루트 세션 열기' — 다른 claude 세션을 지휘하는 루트 claude 탭을 연다(이미 떠 있으면 그 탭으로, 꺼져 있으면 지난 대화를 이어 띄운다).
  * 탭을 만드는 것은 main(`features/orchestrator/root.ts`)이고, 여기는 명령 등록만 한다(동작은 useOpenRoot —
  * 터미널 LNB 의 고정 '루트' 칸과 같다). 화면에는 아무것도 그리지 않는다.
+ * ⌘0 은 main 이 잡는다(rootLife.ts registerRootShortcut — 기본 메뉴 '실제 크기'가 렌더러보다 먼저 키를 가져간다).
  */
 export function RootCommand() {
   const open = useOpenRoot();
@@ -16,7 +17,7 @@ export function RootCommand() {
             id: 'root-session-open',
             group: '명령',
             label: '루트 세션 열기',
-            hint: '다른 claude 세션을 찾아 일을 맡기는 루트 claude',
+            hint: '다른 claude 세션을 찾아 일을 맡기는 루트 claude · ⌘0',
             keywords: 'root orchestrator 루트 지휘 오케스트레이터',
             icon: 'root',
             run: open,

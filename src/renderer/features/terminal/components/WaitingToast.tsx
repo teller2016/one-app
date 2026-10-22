@@ -13,6 +13,7 @@ import { promptKey, type TerminalWaitCard } from '../../../../shared/types';
 import { Badge } from '../../../components/Badge';
 import { Button } from '../../../components/Button';
 import { Icon } from '../../../components/Icon';
+import { useRootSessionId } from '../../orchestrator';
 import { initials, tileColor } from '../lib/workspace';
 
 /** 이미 답한 질문을 눌렀을 때 안내를 보여 준 뒤 닫기까지 */
@@ -41,6 +42,8 @@ export function WaitingToast({
   onClose: () => void;
 }) {
   const [prompt, setPrompt] = useState<ChatPrompt | null>(card.prompt);
+  // 루트 세션은 워크스페이스 밖(userData)이라 '기타'로 보였다 — 루트로 표기한다
+  const isRoot = sessionId === useRootSessionId();
   const [sending, setSending] = useState(false);
   /** 버튼으로 더 답할 수 없을 때의 안내 — 있으면 버튼을 잠근다 */
   const [note, setNote] = useState<string | null>(null);
@@ -91,11 +94,11 @@ export function WaitingToast({
           </span>
         ) : (
           <span className="terminal__ws-tile" aria-hidden="true">
-            <Icon name="folder" size={11} />
+            <Icon name={isRoot ? 'root' : 'folder'} size={11} />
           </span>
         )}
         <span className="wait-toast__where">
-          {ws?.name ?? '기타'} · {card.title}
+          {ws?.name ?? (isRoot ? '루트' : '기타')} · {card.title}
         </span>
         <Badge variant={badge.variant} dot={false}>
           {badge.label}

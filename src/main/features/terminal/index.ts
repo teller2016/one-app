@@ -8,6 +8,7 @@ export {
   createSession,
   killSession,
   listSessions,
+  onTerminalExit,
   sessionRootPid,
   sessionScreen,
   sessionStyledScreen,

@@ -405,7 +405,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     const valid = (() => {
       if (!selection) return false;
       if (selection.kind === 'other') return otherSessions.length > 0;
-      if (selection.kind === 'root') return !!rootSession;
+      // 루트 칸은 세션이 없어도 유효하다 — 보는 중에 루트가 꺼지면(/exit) 다른 화면으로 튀지 않고 [루트 시작] 화면을 보인다
+      if (selection.kind === 'root') return true;
       const ws = workspaces.find((w) => w.id === selection.wsId);
       if (!ws) return false;
       const list = worktrees[selection.wsId];
@@ -427,7 +428,7 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
     // 없으면 렌더마다 새 객체로 setSelection 이 돌아 무한 루프에 빠진다(2026-09-03 발견).
     if (sameSelection(next, selection)) return;
     selectAndSave(next);
-  }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, rootSession, selection, selectAndSave]);
+  }, [wsReady, sessionsReady, workspaces, worktrees, otherSessions, selection, selectAndSave]);
 
   // ── 활성 세션 보정 — 탭 목록이 바뀌면(전환·종료) 기억해 둔 탭 → 첫 탭 순으로.
   // 기억은 localStorage 에도 미러 — 섹션을 떠났다 와도(재마운트) 보던 세션이 유지된다
@@ -1321,7 +1322,19 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
         >
           {!activeSession && (
             <div className="terminal__empty">
-              {workspaces.length === 0 && otherSessions.length === 0 ? (
+              {selection?.kind === 'root' ? (
+                // 루트가 꺼져 있다(/exit·탭 닫기) — 켜면 지난 대화를 이어 간다(features/orchestrator rootLife)
+                <div className="terminal__empty-body">
+                  <EmptyState
+                    icon="root"
+                    message="루트 세션이 꺼져 있습니다"
+                    hint="다른 claude 세션을 찾아 일을 맡기는 세션입니다. 끄면 다시 켤 때까지 꺼진 채이고, 켜면 지난 대화를 이어 갑니다 (⌘0)."
+                  />
+                  <Button size="sm" onClick={openRoot}>
+                    루트 시작
+                  </Button>
+                </div>
+              ) : workspaces.length === 0 && otherSessions.length === 0 ? (
                 <div className="terminal__empty-body">
                   <EmptyState
                     icon="terminal"

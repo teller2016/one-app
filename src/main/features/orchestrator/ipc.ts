@@ -5,6 +5,7 @@ import { whenSecretsReady } from '../../lib/store';
 import { whenSessionsRestored } from '../terminal';
 import { answerConfirm, listConfirms } from './approve';
 import { openRootSession } from './root';
+import { registerRootShortcut, startRootLife } from './rootLife';
 import { startOrchestratorServer } from './server';
 import { getRootSessionId } from './store';
 import { listTasks, startTaskWatcher } from './tasks';
@@ -23,14 +24,19 @@ export function registerOrchestratorIpc(): void {
   );
   // 탭 순서(워크트리 경로 → 세션 id) — list_sessions 의 tab_index 용. 렌더러가 바뀔 때마다 보낸다
   ipcMain.on('orchestrator:tab-orders', (_e, orders: unknown) => setTabOrders(orders));
+  // ⌘0 — 창이 생기기 전에 건다(browser-window-created)
+  registerRootShortcut();
 
   // 서버는 키체인 첫 접근(warmUpSecrets)이 끝난 뒤에 — 기동 경로에서 토큰을 읽으면 프롬프트가 main 을 멈춘다.
   // 루트 claude 는 tmux 안에서 앱 재시작을 넘어 살아 있으니 앱이 켜지면 곧바로 받을 수 있어야 한다.
-  void whenSecretsReady()
+  const serverReady = whenSecretsReady()
     .then(() => startOrchestratorServer())
     .then((st) => {
       if (st.error) console.warn('[orchestrator] 서버 시작 실패:', st.error);
     });
-  // 남은 열린 일의 감시 — 세션 복원 뒤에(복원 전엔 모든 세션이 닫힌 것처럼 보여 'gone' 으로 잘못 닫는다)
-  void whenSessionsRestored().then(() => startTaskWatcher());
+  // 세션 복원 뒤에(복원 전엔 모든 세션이 닫힌 것처럼 보인다) — 남은 열린 일의 감시, 그리고 서버까지 뜨면 루트 자동 시작
+  void whenSessionsRestored().then(() => {
+    startTaskWatcher();
+    return serverReady.then(() => startRootLife());
+  });
 }

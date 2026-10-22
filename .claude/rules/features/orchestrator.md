@@ -10,14 +10,14 @@ paths:
 (`send_to_session`), 셸 탭까지 포함한 터미널을 다룬다(`list_terminals`·`list_workspaces`·`run_preset`·`close_session`).
 맡긴 일은 작업 원장에 남고(`list_tasks`), 워커가 끝나면 원앱이 4줄 보고를 요청해 워커 → 루트 **Claude Code 내장 SendMessage** 로 돌아온다.
 결정·실측의 정본은 기획서 아티팩트 '루트 세션'(https://claude.ai/artifact/NeN3YoiWgy1E5TiP7zkvxE).
-지금은 **1a + 1b-1**(서버·도구 9개·손으로 여는 루트 탭·보고 한 바퀴·무인 연쇄 가드).
+지금은 **1a + 1b**(서버·도구 9개·고정 루트 탭 — 자동 시작·이어 띄우기·⌘0 · 보고 한 바퀴·무인 연쇄 가드). 다음은 2단계(세션·워크트리 만들기).
 
 ## 구조
 - main `features/orchestrator/`: `server.ts`(MCP) · `tools.ts`(세션 도구 5개) · `terminalTools.ts`(터미널 도구 4개) ·
   `toolKit.ts`(결과 포맷·상태 해석·제외 세션·탭 순서) · `deliver.ts`(워커에 글 넣기 — 지시와 보고 요청 공용) ·
   `tasks.ts`(작업 원장 + 감시) · `taskScan.ts`(대화 기록 순수 판정 + 테스트) · `approve.ts`(무인 연쇄 가드) · `confirm.ts`(승인 대기열 + 테스트) ·
   `guard.ts`(입력 가드 순수 판정 + `guard.test.ts`) · `root.ts`(루트 폴더·신뢰·실행 명령·열기) ·
-  `rootGuide.ts`(지침서 기본본) · `store.ts`(토큰·루트 세션 id) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
+  `rootGuide.ts`(지침서 기본본) · `rootLife.ts`(자동 시작·종료 판정·재시작 상한·대화 id·⌘0) · `store.ts`(토큰·루트 런타임 기록) · `ipc.ts`(open-root·root·tasks·confirm:list/answer·tab-orders, 폰에는 안 연다).
 - 터미널 쪽은 **`features/terminal/index.ts`(공개 API)로만** 쓴다 — `terminalOverview`·`sendChatText`·`sessionStyledScreen`·`sessionCommands`·
   `createSession`·`killSession`·`dockShellId`·`revealSession`(팝아웃·독이면 그 창, 아니면 메인 창 탭)·`whenSessionsRestored` 등.
 - 렌더러 `features/orchestrator/` — `RootCommand`(⌘P '루트 세션 열기' 등록만) · `lib/rootSession.ts`(`useRootSessionId` 구독 · `useOpenRoot` 열기 —
@@ -63,8 +63,9 @@ paths:
 - **폴더 신뢰**: 처음 여는 폴더는 `--dangerously-skip-permissions` 여도 신뢰 창이 뜬다(실측) → `ensureTrusted` 가 `~/.claude/.claude.json` 의
   `projects[<realpath>].hasTrustDialogAccepted` 를 쓴다(femc-wt.sh 와 같은 방식). ⚠️ 그 파일은 떠 있는 claude 들이 수시로 다시 쓴다 —
   이미 표시돼 있으면 안 건드리고, 읽은 뒤 mtime·크기가 바뀌었으면 덮지 않고 다시 읽는다(3번). 실패해도 신뢰 창이 한 번 뜰 뿐.
-- ⚠️ **재부팅 복원 안 함** — 복원 명령(`resumeCommand`)은 `--disallowedTools` 를 잇지 못해 루트가 제한 없는 claude 로 살아난다.
-  `terminal/resumeCommand.ts` 의 `isRevivable` 이 도구를 막고 띄운 claude 의 복원 기록을 남기지 않는다(루트 전용 예외 아님 — 일반 규칙). 1b 에서 제대로 복원한다.
+- ⚠️ **일반 재부팅 복원(terminal/resume.ts)에서는 빠진다** — 그 복원 명령(`resumeCommand`)은 `--disallowedTools` 를 잇지 못해 루트가 제한 없는 claude 로
+  살아난다. `isRevivable` 이 도구를 막고 띄운 claude 의 복원 기록을 남기지 않고(루트 전용 예외 아님 — 일반 규칙), 대신 `rootLife.ts` 가 앱 시작 때
+  `openRootSession` 으로 **같은 플래그 + `--resume <대화 id>`** 로 다시 띄운다(아래 '고정 탭 수명').
 
 ## MCP 서버
 - 127.0.0.1:18430(dev 18431) · **stateless**(요청마다 McpServer + 트랜스포트) — 앱을 다시 켜도 tmux 안의 루트가 재연결 없이 다음 호출을 성공한다(실측).
@@ -103,5 +104,16 @@ paths:
 - ⚠️ **Esc 로 멈춰도 HTTP 연결은 안 끊긴다** — `notifications/cancelled` 가 별도 POST 로 온다. stateless 라 원래 호출에 안 닿아 승인 창이 남았다 →
   `server.ts` 가 본문을 먼저 읽어 요청 id → 서버 인스턴스를 기억하고, 취소가 오면 그 인스턴스를 닫는다(핸들러 signal 이 끊겨 `cancelled`). 실측 0.5초에 모달이 거둬진다.
 
-## 1b-2 에서 할 일
-고정 탭(자동 시작·재시작 제한·재부팅 복원 — 플래그를 잇는 복원) · ⌘0 단축키(기본 메뉴 '실제 크기'와 겹침) · 입력 대기 토스트의 위치 표기가 루트면 '기타'로 나온다.
+## 고정 탭 수명 (`rootLife.ts`, 1b-2 — 2026-10-22)
+- 사용자 결정: **끄면 꺼진 채**(앱을 다시 켜도) · **켜면 지난 대화를 이어서**(⌘0·LNB '루트' 칸·⌘P·[루트 시작]) · 토글 없음 · dev 는 자동 시작 안 함.
+- 루트 명령 끝 = `; echo $? > <루트 폴더>/.exit; exit` — claude 가 끝나면 셸을 남기지 않고 탭이 닫히고(`onTerminalExit`), 코드로 가른다:
+  `0`(/exit·Ctrl+C 두 번) · 코드 없음(탭 ✕ — 셸째 끝나 못 적는다) = **사용자가 끔** → `off: true` / 그 밖(`kill -9` = 137 등) = **비정상 종료** →
+  1.5초 뒤 같은 대화로 다시 띄우고 토스트, **1분에 3번** 넘으면 멈추고 sticky 토스트(off 는 남기지 않는다 — 다음 앱 시작엔 다시 시도). `.exit` 는 띄우기 직전에 지운다.
+- 앱 시작(세션 복원 + 서버 뒤): 루트가 tmux 에 살아 있으면 그대로 · `.exit` 가 `0` 이면(앱이 꺼진 사이 /exit) off · off 가 아니면 띄운다.
+- 대화 id 는 20초마다 루트 claude 의 `sessions/<pid>.json` 에서 맞춘다(/clear 하면 바뀐다) — `runtimeFile('orchestrator-root.json')` 의 `conversationId`.
+  띄울 때 그 jsonl 이 `~/.claude/projects/*/` 에 없으면 새 대화로(없는 id 로 `--resume` 하면 곧바로 비정상 종료 → 재시작 고리).
+- 보는 중에 루트가 꺼지면 다른 화면으로 튀지 않고 '루트 세션이 꺼져 있습니다' + [루트 시작](루트 선택은 세션이 없어도 유효 — TerminalSection 선택 보정).
+- **⌘0 = main `before-input-event`**(모든 창) — ⚠️ 렌더러 keydown 으로는 못 잡는다(기본 메뉴 '실제 크기'(⌘0)가 먼저 가져간다 — `⌘W`·`⌘+/-` 와 같은 메뉴 선점).
+  `preventDefault` 하면 페이지 keydown 과 메뉴 단축키가 함께 막힌다(공식 문서 web-contents). ⚠️ puppeteer(CDP) 키 입력은 이 이벤트에 안 온다 — 실제 키로 확인한다.
+- 실측(10-22 dev): 탭 닫기 → off · /exit(보는 중) → 꺼진 화면 · `kill -9` 4번 → 3번 2초 만에 같은 대화 · 4번째 멈춤 토스트 · 자동 시작 → 4초에 `--resume` ·
+  앱이 꺼진 사이 /exit → 다음 시작에 off. 테스트용 `devAutoStart: true`(같은 기록 파일)는 끝나면 지운다 — dev 가 떠 있는 동안 고치면 메모리 값이 덮는다.

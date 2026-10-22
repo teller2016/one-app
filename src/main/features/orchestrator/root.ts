@@ -1,7 +1,9 @@
-// 루트 탭 — 루트 폴더(지침서·mcp.json) 준비, 폴더 신뢰 처리, 루트 claude 실행 명령, ⌘P '루트 세션 열기'.
+// 루트 탭 — 루트 폴더(지침서·mcp.json) 준비, 폴더 신뢰 처리, 루트 claude 실행 명령, 열기(⌘P·⌘0·LNB·자동 시작).
 //
-// 1a 는 손으로 연다(이미 떠 있으면 그 탭으로). 재부팅 복원은 하지 않는다 — 도구를 막고 띄운 claude 는
-// 그 제한 없이 되살아나므로 복원 기록 자체를 남기지 않는다(terminal/resumeCommand.ts isRevivable).
+// 열 때마다 **지난 대화를 이어서**(`--resume <대화 id>`, 같은 도구 제한·MCP 플래그) 띄운다(1b-2 사용자 결정).
+// 일반 재부팅 복원(terminal/resume.ts)은 플래그를 잇지 못해 도구 제한이 풀린 claude 로 살아나므로 루트는 거기서 빠지고
+// (resumeCommand.ts isRevivable), 대신 rootLife.ts 가 앱 시작 때 이 함수로 다시 띄운다.
+// claude 가 끝나면 종료 코드를 루트 폴더의 `.exit` 에 적고 탭을 닫는다 — 0 이면 사용자가 끈 것, 아니면 비정상 종료(rootLife.ts).
 import { app } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -14,11 +16,13 @@ import { ROOT_GUIDE } from './rootGuide';
 import { MCP_PATH, startOrchestratorServer } from './server';
 import {
   getOrCreateToken,
+  getRootConversation,
   getRootSessionId,
   ORCH_PORT,
   ORCH_SERVER_NAME,
   ROOT_DIR_NAME,
   ROOT_NAME,
+  setRootOff,
   setRootSessionId,
 } from './store';
 
@@ -31,6 +35,28 @@ const ALLOWED_TOOLS = [`mcp__${ORCH_SERVER_NAME}`, 'ListAgents', 'SendMessage', 
 const DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit', 'Bash', 'Agent'];
 
 const rootDir = () => path.join(app.getPath('userData'), ROOT_DIR_NAME);
+
+/** claude 가 끝날 때 종료 코드를 적는 파일 — 띄우기 직전에 지운다 */
+export const rootExitFile = () => path.join(rootDir(), '.exit');
+
+/** 지난번 루트 claude 의 종료 코드 — 없으면(아직 안 끝남·탭을 닫음·재부팅) null */
+export function readRootExit(): string | null {
+  try {
+    return fs.readFileSync(rootExitFile(), 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 이어 띄울 대화가 아직 있는가 — 없는 id 로 --resume 하면 claude 가 곧바로 비정상 종료해 재시작 고리에 빠진다 */
+function conversationExists(id: string): boolean {
+  const projects = path.join(ROOT_CONFIG_DIR, 'projects');
+  try {
+    return fs.readdirSync(projects).some((d) => fs.existsSync(path.join(projects, d, `${id}.jsonl`)));
+  } catch {
+    return false;
+  }
+}
 
 /** mcp.json 의 서버별 도구 호출 상한 — 승인 창 대기(3분)보다 길게 */
 const MCP_CALL_TIMEOUT_MS = 10 * 60_000;
@@ -128,13 +154,17 @@ function ensureTrusted(dir: string): void {
   }
 }
 
-/** 루트 claude 실행 명령 — 계정 선택 셸 함수를 건너뛰고(`command claude`) 계정을 직접 지정한다 */
-function rootCommand(mcpFile: string): string {
-  return [
+/**
+ * 루트 claude 실행 명령 — 계정 선택 셸 함수를 건너뛰고(`command claude`) 계정을 직접 지정한다.
+ * 끝나면 종료 코드를 `.exit` 에 적고 셸을 남기지 않는다(`exit` — 래퍼의 `exec <셸>` 까지 가지 않는다).
+ */
+function rootCommand(mcpFile: string, resumeId: string | null): string {
+  const claude = [
     `CLAUDE_CONFIG_DIR=${shQuote(ROOT_CONFIG_DIR)}`,
     'command claude',
     '--name',
     shQuote(ROOT_NAME),
+    ...(resumeId ? ['--resume', shQuote(resumeId)] : []),
     '--mcp-config',
     shQuote(mcpFile),
     // 워커가 SendMessage 로 보내는 보고를 승인 대기 없이 받는다(권한 확인을 건너뛰는 워커의 메시지도)
@@ -146,9 +176,10 @@ function rootCommand(mcpFile: string): string {
     '--disallowedTools',
     ...DISALLOWED_TOOLS.map(shQuote),
   ].join(' ');
+  return `${claude}; echo $? > ${shQuote(rootExitFile())}; exit`;
 }
 
-/** ⌘P '루트 세션 열기' — 떠 있으면 그 세션, 없으면 새로 띄운다 */
+/** 루트 열기(⌘P·⌘0·LNB·자동 시작·비정상 종료 뒤) — 떠 있으면 그 세션, 없으면 지난 대화를 이어 띄운다 */
 export async function openRootSession(): Promise<OrchestratorOpenRootResult> {
   const liveId = getRootSessionId();
   const live = liveId ? listSessions().find((s) => s.id === liveId) : undefined;
@@ -176,7 +207,11 @@ export async function openRootSession(): Promise<OrchestratorOpenRootResult> {
   } catch (err) {
     console.warn('[orchestrator] 폴더 신뢰 표시 실패 — 신뢰 창이 한 번 뜬다:', err);
   }
-  const info = createSession({ cwd: dir, agentId: 'claude', command: rootCommand(mcpFile), title: '루트' });
+  const last = getRootConversation();
+  const resumeId = last && conversationExists(last) ? last : null;
+  fs.rmSync(rootExitFile(), { force: true }); // 지난 종료 코드 — 이번 실행의 것과 섞이지 않게
+  const info = createSession({ cwd: dir, agentId: 'claude', command: rootCommand(mcpFile, resumeId), title: '루트' });
   setRootSessionId(info.id);
+  setRootOff(false); // 다시 켰다 — 앱 시작 때 자동으로 띄우는 상태로
   return { ok: true, sessionId: info.id, cwd: info.cwd, created: true };
 }
