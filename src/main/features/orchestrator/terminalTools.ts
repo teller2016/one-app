@@ -17,6 +17,7 @@ import {
   placeOf,
   sessionCommands,
   sessionRootPid,
+  withLaunchAccount,
 } from '../terminal';
 import { listWorktreesBrief } from '../workspaces/git';
 import { listPresets, listWorkspaces } from '../workspaces/store';
@@ -91,7 +92,7 @@ export function registerTerminalTools(server: McpServer): void {
       title: '워크스페이스·워크트리·프리셋',
       description:
         'One App 에 등록된 워크스페이스(저장소)와 워크트리(path·branch·sessions = 거기 떠 있는 탭 수), 그 워크스페이스에서 쓸 수 있는 터미널 프리셋' +
-        '(id·name·command), jira_keys(걸린 Jira 프로젝트 키), company(회사 FEMC 저장소 — 새 세션은 여기서만). ' +
+        '(id·name·command), jira_keys(걸린 Jira 프로젝트 키), company(회사 FEMC 저장소 — 티켓 세션·새 세션의 femc 는 여기서만, 아니면 open_session 이 claude 로 연다). ' +
         'run_preset·open_session 의 cwd 는 여기 나온 worktrees[].path 여야 한다.',
       inputSchema: {},
       annotations: READ,
@@ -158,7 +159,8 @@ export function registerTerminalTools(server: McpServer): void {
       );
       if (blocked) return fail(blocked);
       const agentId = agentIdFromCommand(p.command);
-      const info = createSession({ cwd: target.wt.path, agentId, command: p.command, title: p.name });
+      // 프리셋 바와 같은 길 — 맨 claude·femc 프리셋은 기본 계정으로 바로 뜬다(계정 선택 화면에서 멈추지 않는다)
+      const info = createSession(await withLaunchAccount({ cwd: target.wt.path, agentId, command: p.command, title: p.name }));
       sendToast({
         title: '루트가 프리셋을 실행했습니다',
         message: `${p.name} · ${placeLabel(target.ws.name, target.wt.branch, target.wt.path)}`,
@@ -173,8 +175,11 @@ export function registerTerminalTools(server: McpServer): void {
         tab: info.title,
         cwd: info.cwd,
         command: p.command,
-        // 에이전트 프리셋은 사용자의 계정 선택 셸 함수를 거친다 — 프리셋 바와 같다(뜨면 사용자가 고른다)
-        note: agentId !== 'shell' ? '에이전트 프리셋이라 계정 선택 화면이 먼저 뜰 수 있습니다.' : undefined,
+        // 맨 claude·femc 프리셋은 환경설정의 기본 계정으로 바로 뜬다(launch.ts) — 일을 맡기려면 open_session 이 낫다(지시가 첫 메시지로 들어간다)
+        note:
+          agentId !== 'shell'
+            ? 'claude 가 뜨는 데 몇 초 걸립니다 — 일을 맡길 거면 run_preset 대신 open_session 을 쓰세요(지시가 첫 메시지로 들어가고 보고가 온다).'
+            : undefined,
       });
     },
   );

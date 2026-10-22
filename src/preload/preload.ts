@@ -35,6 +35,7 @@ import type {
   TerminalDockState,
   TerminalDragState,
   TerminalNotifyLevel,
+  JiraWorkAccount,
   TerminalPopoutOpenInput,
   TerminalPreset,
   TerminalSessionInfo,
@@ -539,6 +540,12 @@ contextBridge.exposeInMainWorld("oneApp", {
       get: () => ipcRenderer.invoke("terminal:notify-level:get"),
       set: (level: TerminalNotifyLevel) =>
         ipcRenderer.invoke("terminal:notify-level:set", level),
+    },
+    // 새 세션의 claude·femc 를 띄울 기본 계정 (셸 함수의 계정 선택을 건너뛴다)
+    claudeAccount: {
+      get: () => ipcRenderer.invoke("terminal:claude-account:get"),
+      set: (account: JiraWorkAccount) =>
+        ipcRenderer.invoke("terminal:claude-account:set", account),
     },
     // 키 입력·리사이즈 — fire-and-forget (invoke 왕복 비용 제거)
     write: (id: string, data: string) =>

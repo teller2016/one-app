@@ -93,7 +93,7 @@ paths:
   되묻고 끝난다(femc.mjs `COMMANDS`·`nearestCommands`). 여러 낱말(Jira [작업]의 `/dev SSB-1 …`)은 예전 명령 그대로.
   명령 조립은 `femcCommand()` 한 곳 — 루트 세션의 새 세션(orchestrator open_session)도 같은 것을 쓴다.
 - 실측 확인법: 개발 인스턴스는 **tmux 소켓이 갈린다**(`-L oneapp-dev`, sidecar 도 `terminal-sessions-dev.json`) — 빌드 앱 세션(`-L oneapp`)과 헷갈리지 말 것. ⚠️ `capture-pane` 은 pane 타깃이라 `=이름` 이 안 먹는다(`-t oneapp-<id>` 로 줄 것). attach replay 로는 TUI 화면을 볼 수 없다(대체 화면이면 replay 를 생략하는 설계).
-- 이 회피는 **Jira [작업] 경로에만** 적용했다(2026-08-12 사용자 선택). 터미널 `[+]` 새 세션·프리셋은 그대로라 거기선 계정 선택이 뜬다.
+- 처음엔 이 회피를 **Jira [작업] 경로에만** 적용했다(2026-08-12 사용자 선택). 2026-10-22 부터 터미널 `[+]` 새 세션·프리셋·폰·루트 세션도 환경설정의 '새 세션 계정'으로 같은 우회를 한다(`features/terminal.md` '새 세션 계정'). 계정 폴더 규칙·목록은 `main/lib/claudeAccount.ts`(`claudeAccountDir`·`listClaudeAccounts`) 한 곳 — Jira 모달의 계정 선택은 여전히 모달에서 고른 값을 쓴다.
 - ⚠️ **셸 명령 조립은 main 에서만** — 티켓 제목·본문이 섞인 프롬프트라 인용이 곧 사고다. `lib/util.ts` 의 `shQuote`(pty.ts 에서 이관, 두 곳이 공유)를 쓴다. 실측 검증: 공백 경로·개행·`'`·`"` 가 모두 온전히 한 인자로 전달됨.
 - ⚠️ **시각은 `renderedFields` 가 아니라 원본 ISO** 를 쓴다 — 렌더된 값은 "오늘 9:44 오전" 같은 상대 표기라 나중에 읽는 에이전트에겐 기준이 없다.
 - 시작 스킬은 모달에서 고른다(기본 `자동` = 버그 계열 → `/bugfix`, 그 외 → `/dev`. 선택은 localStorage `jira:workSkill`). `/run-ticket` 은 femc 하네스가 아니라 **개인 계정 스킬**(`~/.claude/skills`, 2026-10-20 추가)이라 Team 계정으로 시작하면 못 찾는다.

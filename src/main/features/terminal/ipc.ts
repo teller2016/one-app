@@ -1,11 +1,13 @@
 import { app, ipcMain, shell } from 'electron';
 import type {
+  JiraWorkAccount,
   TerminalCreateInput,
   TerminalNotifyLevel,
   TerminalSessionInfo,
 } from '../../../shared/types';
 import { TERMINAL_AGENT_NAMES, termWaitToastKey } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
+import { listClaudeAccounts } from '../../lib/claudeAccount';
 import { setWaitingBadge } from '../../lib/dockBadge';
 import { playSound } from '../../lib/sound';
 import { whenSecretsReady } from '../../lib/store';
@@ -54,12 +56,15 @@ import {
   stopServer,
 } from './server';
 import {
+  getClaudeAccount,
   getNotifyLevel,
   getServerEnabled,
   regenerateToken,
+  setClaudeAccount,
   setNotifyLevel,
   setServerEnabled,
 } from './store';
+import { withLaunchAccount } from './launch';
 
 // 독(Dock) 뱃지 — 입력대기 세션 수. 0 이면 반드시 비워 잔존을 막는다.
 // 실제 setBadge 는 lib/dockBadge.ts 가 전담한다(뱃지는 앱 전역에 하나뿐인 자원)
@@ -78,8 +83,9 @@ export function registerTerminalIpc() {
   const attachedBySender = new Map<Electron.WebContents, Set<string>>();
 
   ipcMain.handle('terminal:list', () => listSessions());
-  ipcMain.handle('terminal:create', (_e, opts: TerminalCreateInput) =>
-    createSession(opts ?? {})
+  // 맨 claude·femc 명령은 기본 계정(·femc 스택)을 실어 띄운다 — 셸 함수의 계정 선택에서 멈추지 않게(launch.ts)
+  ipcMain.handle('terminal:create', async (_e, opts: TerminalCreateInput) =>
+    createSession(await withLaunchAccount(opts ?? {}))
   );
   ipcMain.handle('terminal:attach', (e, id: string, cols: number, rows: number) => {
     // 죽은 sender 엔트리 청소 — 아래 'destroyed' 가 정본이지만 Map 은 강한 참조라
@@ -183,6 +189,12 @@ export function registerTerminalIpc() {
   // 백엔드 정보 — tmux(영속) 가용 여부. 렌더러가 미설치 힌트 표시에 쓴다
   ipcMain.handle('terminal:backend', async () => ({ tmux: !!(await initTmux()) }));
   ipcMain.handle('terminal:notify-level:get', () => getNotifyLevel());
+  // 새 세션의 claude·femc 계정 — 고를 수 있는 계정(프로필 폴더가 있는 것)과 함께
+  ipcMain.handle('terminal:claude-account:get', () => ({ account: getClaudeAccount(), accounts: listClaudeAccounts() }));
+  ipcMain.handle('terminal:claude-account:set', (_e, account: JiraWorkAccount) => {
+    setClaudeAccount(account === 'team' ? 'team' : 'personal');
+    return { account: getClaudeAccount(), accounts: listClaudeAccounts() };
+  });
   ipcMain.handle('terminal:notify-level:set', (_e, level: TerminalNotifyLevel) => {
     setNotifyLevel(level);
     return getNotifyLevel();

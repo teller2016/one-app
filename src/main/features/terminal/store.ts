@@ -1,7 +1,8 @@
-// 터미널 설정 — userData/terminal.json (MO 접속 서버 + 입력대기 알림 강도).
+// 터미널 설정 — userData/terminal.json (MO 접속 서버 + 입력대기 알림 강도 + 새 세션의 Claude 계정).
 // 토큰은 접속 자격증명이므로 safeStorage 로 암호화해 저장한다.
 import crypto from 'node:crypto';
-import type { TerminalNotifyLevel } from '../../../shared/types';
+import type { JiraWorkAccount, TerminalNotifyLevel } from '../../../shared/types';
+import { listClaudeAccounts } from '../../lib/claudeAccount';
 import { IS_DEV_INSTANCE } from '../../lib/devInstance';
 import {
   decryptSecret,
@@ -19,6 +20,7 @@ type TerminalStore = {
   tokenEnc?: string; // safeStorage 암호화 토큰
   serverEnabled: boolean; // 켜져 있으면 앱 시작 시 서버 자동 시작
   notifyLevel?: TerminalNotifyLevel; // 입력대기 알림 강도 (기본 sound — 뱃지+알림음)
+  claudeAccount?: JiraWorkAccount; // 새 세션의 claude·femc 를 띄울 계정 (기본 personal — 셸 함수의 계정 선택을 건너뛴다)
 };
 
 const read = (): TerminalStore =>
@@ -46,6 +48,20 @@ export function setServerEnabled(enabled: boolean): void {
 export function getNotifyLevel(): TerminalNotifyLevel {
   const level = read().notifyLevel;
   return level && NOTIFY_LEVELS.includes(level) ? level : 'sound';
+}
+
+/**
+ * 새 세션의 claude·femc 를 띄울 계정 — 고른 계정의 프로필 폴더가 없으면(지웠다) 있는 계정으로 떨어진다.
+ * 둘 다 없으면 personal(claude 가 처음 뜨며 만든다).
+ */
+export function getClaudeAccount(): JiraWorkAccount {
+  const want = read().claudeAccount === 'team' ? 'team' : 'personal';
+  const have = listClaudeAccounts().map((a) => a.id);
+  return have.includes(want) ? want : (have[0] ?? 'personal');
+}
+
+export function setClaudeAccount(account: JiraWorkAccount): void {
+  writeUserJson(FILE, { ...read(), claudeAccount: account === 'team' ? 'team' : 'personal' });
 }
 
 export function setNotifyLevel(level: TerminalNotifyLevel): void {

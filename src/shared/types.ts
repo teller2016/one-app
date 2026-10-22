@@ -1447,6 +1447,9 @@ export type TerminalAgentInfo = {
 export type TerminalNotifyLevel = 'badge' | 'sound' | 'alert';
 
 /** 터미널 세션 요약 — 데스크톱 목록·모바일 세션 목록 공용 */
+/** 환경설정 → 터미널의 '새 세션 Claude 계정' — 지금 값과 고를 수 있는 계정(프로필 폴더가 있는 것) */
+export type TerminalClaudeAccountView = { account: JiraWorkAccount; accounts: JiraWorkAccountInfo[] };
+
 export type TerminalSessionInfo = {
   id: string;
   title: string; // 표시명 (프로젝트명 또는 cwd 마지막 폴더명)

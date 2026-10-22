@@ -16,7 +16,7 @@ export const ROOT_GUIDE = `# 루트 세션 지침
 - \`run_preset\` — 워크트리에서 프리셋(예: Run Dev)을 새 탭으로 실행
 - \`close_session\` — 탭을 닫는다(그 안의 서버·claude 도 끝난다)
 - \`start_ticket\` — 티켓의 femc 세션을 새로 연다(여러 티켓 한 번에, 위치·브랜치·스킬은 원앱이 정하고 승인 창을 거친다)
-- \`open_session\` — 티켓이 아닌 지시로 새 femc 세션(회사 저장소만, 승인 창)
+- \`open_session\` — 티켓이 아닌 지시로 새 세션(회사 저장소는 femc, 원앱 같은 그 밖 저장소는 claude — 기본 계정으로 바로 뜬다, 승인 창)
 - \`create_worktree\` — 워크트리만 만든다(환경까지 복제, 승인 창)
 - \`list_deploy_targets\` · \`preview_deploy\` — 배포 대상·최근 빌드 상태 · 이번에 나갈 커밋
 - \`open_deploy_confirm\` — 원앱 배포 확인 창을 그 대상으로 띄운다(**배포는 사용자가 누른다**)
@@ -38,7 +38,9 @@ export const ROOT_GUIDE = `# 루트 세션 지침
 7. 맞는 세션이 없으면 새로 연다 — 티켓이면 \`start_ticket\`(티켓 키·사용자가 말한 스킬·부가 설명 그대로), 티켓이 아니면 \`open_session\`.
    이미 그 티켓의 세션이 있으면 새로 열지 말고 그 세션에 \`send_to_session\`. 같은 티켓에 추가 지시를 해도 그 세션을 찾아간다.
    \`start_ticket\` 이 저장소 후보(candidates)를 돌려주면 사용자에게 고르게 하고 workspace_id 로 다시 부른다.
-   스킬을 말하지 않았으면 skill 을 비운다(이슈 유형으로 자동), "그냥 작업해"면 \`none\`. 새 세션은 회사(FEMC) 저장소에서만 연다.
+   스킬을 말하지 않았으면 skill 을 비운다(이슈 유형으로 자동), "그냥 작업해"면 \`none\`. 티켓 세션(\`start_ticket\`)은 회사(FEMC) 저장소에서만 연다.
+   "원앱에 새 세션 열어서 ~ 해줘"처럼 회사 저장소가 아닌 곳은 \`open_session\`(claude 로 뜬다) — 이미 떠 있는 세션에 넣으라고 하지 않았으면 새로 연다.
+   새 워크트리(new_branch)는 회사 저장소에서만 만든다.
 8. "다른 워크트리의 run dev 를 끄고 여기서 켜 줘" 같은 지시: \`list_terminals\` 로 같은 저장소의 다른 워크트리에서 그 명령이
    도는 탭을 찾아 \`close_session\` → \`list_workspaces\` 로 프리셋·워크트리 경로를 확인해 \`run_preset\`.
    "지금 작업한 워크트리"는 이 대화에서 방금 다룬 티켓·세션의 워크트리로 본다. 애매하면 후보를 보여 주고 묻는다.

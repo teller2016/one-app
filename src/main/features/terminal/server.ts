@@ -34,6 +34,7 @@ import {
   writeSession,
 } from './pty';
 import { chatCommandsFor, chatFilesFor, sendChatText, subscribeChat } from './chat';
+import { withLaunchAccount } from './launch';
 import { addPushSubscription, getPushPublicKey } from './push';
 import { attachRpcSocket, startRpcBridge, stopRpcBridge } from './rpc';
 import { timingEqual } from '../../lib/util';
@@ -534,7 +535,8 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
       break;
     }
     case 'create': {
-      const info = createSession({
+      // 맨 claude·femc 명령은 데스크톱과 같이 기본 계정(·femc 스택)을 실어 띄운다(launch.ts) — 폰에서 계정 선택에 멈추지 않게
+      void withLaunchAccount({
         cwd: msg.cwd,
         agentId: msg.agentId,
         command: msg.command, // 프리셋 실행 — 있으면 에이전트 기본 명령 대신 이걸 보낸다
@@ -543,8 +545,10 @@ function handleMessage(ws: WebSocket, msg: TermClientMsg) {
         // 않아야 자동 실행 명령이 SIGWINCH 재출력과 겹치지 않는다
         cols: msg.cols,
         rows: msg.rows,
+      }).then((opts) => {
+        const info = createSession(opts);
+        send(ws, { type: 'created', id: info.id });
       });
-      send(ws, { type: 'created', id: info.id });
       break;
     }
     case 'kill':

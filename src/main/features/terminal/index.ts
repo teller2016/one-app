@@ -3,6 +3,9 @@
 export { completeLines, fileSize, findClaude, findClaudeMany, readRange, type ClaudeProcess } from './claudeFiles';
 export { CHAT_SUBMIT_DELAY_MS, sendChatText } from './chat';
 export { femcStackFor } from './femcStack';
+export { withLaunchAccount } from './launch';
+export { withClaudeAccount } from './launchCommand';
+export { getClaudeAccount } from './store';
 export { placeOf, terminalOverview } from './overview';
 export { sessionCommands } from './processes';
 export {

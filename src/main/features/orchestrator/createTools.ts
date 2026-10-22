@@ -10,12 +10,20 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { branchIssueKey, leadingIssueKey } from '../../../shared/jira-url';
 import { isOpenTask, type JiraWorkAccount, type JiraWorkSkill, type TerminalWorkspace } from '../../../shared/types';
+import { claudeAccountDir, listClaudeAccounts } from '../../lib/claudeAccount';
 import { femcStacks } from '../../lib/femc';
-import { isInsidePath } from '../../lib/util';
+import { isInsidePath, shQuote } from '../../lib/util';
 import { sendToast } from '../notify/notify';
-import { femcCommand, listWorkAccounts, prepareJiraWork, resolveSkill, validateAddedTicket } from '../jira';
+import { femcCommand, prepareJiraWork, resolveSkill, validateAddedTicket } from '../jira';
 import { findProjectsByJiraKey } from '../projects/store';
-import { createSession, femcStackFor, listSessions, terminalOverview } from '../terminal';
+import {
+  createSession,
+  femcStackFor,
+  getClaudeAccount,
+  listSessions,
+  terminalOverview,
+  withClaudeAccount,
+} from '../terminal';
 import { listBranches, listWorktrees, listWorktreesBrief } from '../workspaces/git';
 import { listWorkspaces } from '../workspaces/store';
 import { askApproval, DECLINED } from './approve';
@@ -99,15 +107,22 @@ const skillText = (skill: JiraWorkSkill, issueType: string): string => {
   return skill === 'auto' ? `${cmd} (자동 — 유형 ${issueType || '?'})` : `${cmd}`;
 };
 
-/** 계정 선택지 — 프로필이 둘 이상일 때만 묻는다 */
+/**
+ * 일반 저장소(회사 저장소가 아님)의 새 세션 — claude 에 지시를 첫 메시지로. 계정·권한 생략은 터미널 새 세션과 같은 규칙
+ * (terminal launchCommand — 셸 함수의 계정 선택을 건너뛴다). `-` 로 시작하는 지시는 `--` 뒤에 둬 플래그로 읽히지 않게.
+ */
+const claudeCommand = (prompt: string, account: JiraWorkAccount) =>
+  withClaudeAccount(`claude ${prompt.startsWith('-') ? '-- ' : ''}${shQuote(prompt)}`, { configDir: claudeAccountDir(account) });
+
+/** 계정 선택지 — 프로필이 둘 이상일 때만 묻는다. 기본은 환경설정 → 터미널의 '새 세션 계정' */
 function accountChoice(preset: JiraWorkAccount | undefined) {
-  const accounts = listWorkAccounts();
+  const accounts = listClaudeAccounts();
   if (accounts.length < 2) return null;
   return {
     id: 'account',
     label: 'claude 계정',
     options: accounts.map((a) => ({ value: a.id, label: `${a.label}${a.email ? ` · ${a.email}` : ''}` })),
-    value: preset ?? 'personal',
+    value: preset ?? getClaudeAccount(),
   };
 }
 
@@ -281,7 +296,7 @@ export function registerCreateTools(server: McpServer): void {
       );
       if (outcome.decision !== 'approved') return fail(DECLINED[outcome.decision]);
       const kept = new Set(outcome.picks?.items ?? plans.map((p) => p.key));
-      const chosenAccount = (outcome.picks?.choices.account as JiraWorkAccount | undefined) ?? account ?? 'personal';
+      const chosenAccount = (outcome.picks?.choices.account as JiraWorkAccount | undefined) ?? account ?? getClaudeAccount();
 
       const started = [];
       for (const p of plans) {
@@ -345,9 +360,10 @@ export function registerCreateTools(server: McpServer): void {
     {
       title: '새 세션 열기(티켓 아님)',
       description:
-        '티켓이 아닌 지시로 새 femc 세션을 연다 — 회사(FEMC) 저장소만. 위치: cwd(그 워크스페이스의 기존 워크트리 경로) · ' +
-        'new_branch(그 브랜치의 워크트리 — 없으면 femc-wt.sh 로 만든다) · 둘 다 없으면 주 체크아웃. 승인 창을 거친다. ' +
-        'instruction 이 femc 의 첫 메시지가 된다(스킬을 말했으면 `/스킬 …` 형태로). 끝나면 4줄 보고가 온다(report=false 면 생략).',
+        '티켓이 아닌 지시로 새 세션을 연다 — 회사(FEMC) 저장소는 femc, 그 밖(원앱 등 — list_workspaces 의 company=false)은 claude. ' +
+        '계정은 환경설정의 기본 계정(account 로 바꿀 수 있다) — 계정 선택 화면 없이 바로 뜬다. 위치: cwd(그 워크스페이스의 기존 워크트리 경로) · ' +
+        'new_branch(그 브랜치의 워크트리 — 없으면 femc-wt.sh 로 만든다, 회사 저장소만) · 둘 다 없으면 주 체크아웃. 승인 창을 거친다. ' +
+        'instruction 이 첫 메시지가 된다(스킬을 말했으면 `/스킬 …` 형태로). 끝나면 4줄 보고가 온다(report=false 면 생략).',
       inputSchema: {
         workspace_id: z.string().min(1).describe('list_workspaces 의 id'),
         instruction: z.string().min(1).max(MAX_INSTRUCTION_CHARS).describe('첫 지시 — 사용자가 말한 그대로'),
@@ -362,13 +378,18 @@ export function registerCreateTools(server: McpServer): void {
     async (args, extra) => {
       const ws = listWorkspaces().find((w) => w.id === args.workspace_id);
       if (!ws) return fail('그런 워크스페이스가 없습니다 — list_workspaces 의 id 를 쓰세요.');
-      if (!isCompanyWorkspace(ws)) return fail(`'${ws.name}' 은 회사(FEMC) 저장소가 아닙니다 — 루트는 FEMC 저장소에서만 새 세션을 엽니다.`);
+      // 회사 저장소는 femc(하네스·스택), 그 밖은 claude — 2026-10-22 사용자 결정(처음엔 회사 저장소만 열었다)
+      const company = isCompanyWorkspace(ws);
+      if (!company && args.new_branch) {
+        return fail(`'${ws.name}' 은 회사(FEMC) 저장소가 아니라 새 워크트리는 만들지 않습니다 — 기존 워크트리(cwd)나 주 체크아웃에서 엽니다.`);
+      }
       const instruction = sanitizeInstruction(args.instruction).trim();
       if (!instruction) return fail('지시가 비었습니다.');
       if (args.new_branch && !isSafeBranchName(args.new_branch)) return fail('브랜치 이름이 올바르지 않습니다.');
       if (args.base && !isSafeBranchName(args.base)) return fail('분기점 브랜치 이름이 올바르지 않습니다.');
 
-      const worktrees = (await listWorktrees(ws.repoPath).catch(() => [])).filter((w) => !w.missing && !w.plain);
+      // 일반 저장소는 git 이 아닌 폴더(plain)도 연다 — 그 폴더 자체가 '주 체크아웃'이다
+      const worktrees = (await listWorktrees(ws.repoPath).catch(() => [])).filter((w) => !w.missing && (!company || !w.plain));
       let place: TicketPlace;
       if (args.cwd) {
         const wt = worktrees.find((w) => samePath(w.path, args.cwd as string));
@@ -385,7 +406,7 @@ export function registerCreateTools(server: McpServer): void {
         place = { kind: 'existing', path: main.path, branch: main.branch ?? 'detached', main: true };
       }
       const where = place.kind === 'new' ? ws.repoPath : place.path;
-      const known = await femcStackFor(where);
+      const known = company ? await femcStackFor(where) : null;
       const acct = accountChoice(args.account);
       const head = instruction.replace(/\s+/g, ' ');
       const title = args.title?.trim() || (head.length > 20 ? `${head.slice(0, 20)}…` : head);
@@ -395,10 +416,14 @@ export function registerCreateTools(server: McpServer): void {
           fields: [
             { label: '저장소', value: ws.name },
             { label: '위치', value: placeText(ws, place) + baseText(place, args.base) },
+            { label: '실행', value: company ? 'femc' : 'claude' },
             { label: '지시', value: instruction },
             ...(known ? [{ label: '스택', value: known }] : []),
           ],
-          choices: [...(acct ? [acct] : []), ...(known ? [] : [{ id: 'stack', label: '스택', options: stackOptions(), value: null }])],
+          choices: [
+            ...(acct ? [acct] : []),
+            ...(!company || known ? [] : [{ id: 'stack', label: '스택', options: stackOptions(), value: null }]),
+          ],
         },
         extra.signal,
       );
@@ -416,9 +441,14 @@ export function registerCreateTools(server: McpServer): void {
       } else {
         cwd = place.path;
       }
-      const stack = outcome.picks?.choices.stack ?? known;
-      const account = (outcome.picks?.choices.account as JiraWorkAccount | undefined) ?? args.account ?? 'personal';
-      const info = createSession({ cwd, agentId: 'femc', command: femcCommand({ prompt: instruction, account, stack }), title });
+      const stack = company ? (outcome.picks?.choices.stack ?? known) : null;
+      const account = (outcome.picks?.choices.account as JiraWorkAccount | undefined) ?? args.account ?? getClaudeAccount();
+      const info = createSession({
+        cwd,
+        agentId: company ? 'femc' : 'claude',
+        command: company ? femcCommand({ prompt: instruction, account, stack }) : claudeCommand(instruction, account),
+        title,
+      });
       const task = addTask({
         sessionId: info.id,
         repo: ws.name,
@@ -436,7 +466,18 @@ export function registerCreateTools(server: McpServer): void {
         actionLabel: '보기',
         dedupeKey: `root-open:${info.id}`,
       });
-      return json({ ok: true, session_id: info.id, task_id: task.id, cwd, branch: place.branch, worktree: created ? 'created' : 'existing', stack: stack ?? null, warnings: warnings.length ? warnings : undefined });
+      return json({
+        ok: true,
+        session_id: info.id,
+        task_id: task.id,
+        agent: company ? 'femc' : 'claude',
+        account,
+        cwd,
+        branch: place.branch,
+        worktree: created ? 'created' : 'existing',
+        stack: stack ?? null,
+        warnings: warnings.length ? warnings : undefined,
+      });
     },
   );
 

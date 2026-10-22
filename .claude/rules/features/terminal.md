@@ -307,6 +307,15 @@ claude 세션을 폰에서 **말풍선으로** 본다(세션별 [채팅|터미�
 - 🔲 **권한 확인 창에선 입력 대기 알림 자체가 안 나간다**(이번 변경 전부터) — 창이 떠 있는 동안 claude 가 도구 줄 `⏺` 를 **깜빡이며 계속 다시 그려**(초당 ~100B, 2026-10-06 `pipe-pane` 실측) '2.5초 완전 침묵' 판정이 오지 않아 busy·working 으로 남는다. bypass 모드(사용자 기본)에선 권한 창이 드물다. 고친다면 claude 의 `sessions/<pid>.json` `status: 'waiting'`(waitingFor 'permission prompt')을 대기 신호로 함께 보는 쪽 — `status.ts` 규칙 변경이라 사용자 확인 후.
 - dev 검증: 질문 = claude 에게 'AskUserQuestion 하나로 물어보라' · 권한/플랜 창 = `command: 'CLAUDE_CONFIG_DIR="$HOME/.claude" command claude --permission-mode default|plan'`(사용자 claude 함수는 bypass 를 붙인다). 알림은 생성 20초 유예 뒤 + 그 세션을 보고 있지 않을 때만 뜬다(다른 섹션으로 옮겨 둘 것).
 
+## 새 세션 계정 (2026-10-22 — `launch.ts` + 순수 규칙 `launchCommand.ts`·테스트)
+- 사용자의 `claude`·`femc` 는 **계정을 묻는 셸 함수**(~/.zshrc `_claude_pick_account`)라 앱이 띄운 탭이 그 질문에 멈췄다(사용자 신고). 명령 **첫 낱말이 맨 `claude`·`femc`** 이면
+  함수가 하던 일을 앱이 한다: `CLAUDE_CONFIG_DIR=<계정> command claude --dangerously-skip-permissions …`(함수가 늘 붙이던 플래그, 이미 있으면 한 번) ·
+  `… command femc run … [--stack <s>]`(인자 없음·플래그 시작이면 `run` — femc 메뉴로 빠지지 않게, 스택은 `femcStackFor`. 하위 명령·프롬프트 시작은 그대로).
+  이미 `command …`·`CLAUDE_CONFIG_DIR=…` 로 시작하는 명령(Jira [작업]·루트·재부팅 복원)은 건드리지 않는다.
+- 계정 = 환경설정 → 터미널 **'새 세션 계정'**(`terminal.json` `claudeAccount`, 기본 personal — 프로필 폴더가 없으면 있는 계정으로). 폴더 규칙은 `main/lib/claudeAccount.ts`.
+- 적용 경로: `terminal:create`(데스크톱 [+]·프리셋) · 폰 `create` · 루트 `run_preset` — 셋 다 `createSession` 앞에서 `withLaunchAccount` 를 거친다(`createSession` 은 동기라 독 셸·루트처럼 바로 id 가 필요한 호출이 있다). 준비가 실패하면 원래 명령으로 띄운다.
+- 실측(dev): [+] claude → `claude --dangerously-skip-permissions` 바로 입력 화면 · FEMC 프리셋(FO-BBJ-2) → `femc run --stack vue` 메뉴·스택 질문 없이 기동.
+
 ## 에이전트 추가
 - `shared/types.ts` 의 `TerminalAgentId`·`TERMINAL_AGENT_NAMES` + `agents.ts` 의 `AGENTS` **두 곳만**. 감지는 `zsh -lc "whence -p"` 1회 캐시, 미설치는 조용히 제외.
 - `presetsForWorkspace`·`agentIdFromCommand` 는 **`shared/types.ts`** — 데스크톱·MO 판정이 갈라지면 안 된다.

@@ -53,7 +53,7 @@ paths:
   계정 선택(셸 함수의 `read`)에 멈춰 있으면 자식이 없어 빈 배열이다 — 탭의 `agent` 로 구분한다.
 - `run_preset` 은 프리셋 바와 **같은 인자**로 세션을 만든다(`agentIdFromCommand`·명령·이름 — 렌더러 `TerminalSection` runPreset).
   `cwd` 는 루트가 넘긴 경로를 믿지 않고 **git 에 직접 물어**(`listWorktreesBrief`, 캐시 아님) 등록된 워크트리인지 확인한다. 프리셋은 id 또는
-  이름(대소문자 무시), 그 워크스페이스에서 쓸 수 있는 것(전역 + 지정, 바에서 숨긴 것 포함)만. 에이전트 프리셋은 사용자의 계정 선택 화면을 거친다.
+  이름(대소문자 무시), 그 워크스페이스에서 쓸 수 있는 것(전역 + 지정, 바에서 숨긴 것 포함)만. 맨 `claude`·`femc` 프리셋은 환경설정의 '새 세션 계정'으로 바로 뜬다(`terminal withLaunchAccount` — 2026-10-22, 그 전엔 계정 선택 화면에 멈췄다).
 - 실측(10-22 dev): 루트에 "sleep 도는 탭이랑 계정 선택에 멈춘 claude 탭 닫고 claude 프리셋 새로 실행해줘" → list_terminals → close ×2 →
   run_preset 을 스스로 골라 26초에 끝내고 닫은 것·연 것을 보고했다.
 
@@ -137,7 +137,7 @@ paths:
 
 ## 세션·워크트리 만들기 (`createTools.ts`, 2단계 — 2026-10-22)
 - 사용자 결정: 만들기는 **늘 승인 창**(무인 연쇄와 무관) · 여러 티켓은 한 창의 항목(체크를 풀면 뺀다) · 고를 수 있는 것은 **스택·계정만**(위치·브랜치·스킬은
-  보여 주기만 — 틀리면 취소하고 루트에게 다시 말한다) · 워크트리 준비까지 **기다렸다** 결과를 준다 · 새 세션은 회사(FEMC) 저장소만, femc 로.
+  보여 주기만 — 틀리면 취소하고 루트에게 다시 말한다) · 워크트리 준비까지 **기다렸다** 결과를 준다 · 새 세션은 회사(FEMC) 저장소만, femc 로(→ 2026-10-22 `open_session` 은 일반 저장소도 claude 로 — 아래).
   승인 창은 `askApproval`(approve.ts) — 대기열이 `{decision, picks}` 를 돌려주게 확장(`confirm.ts ask`, 렌더러 `RootConfirmHost` 항목 Checkbox·선택 Select).
 - `start_ticket`(티켓 1~5개): 티켓마다 계획 → 거부(이유·후보)와 함께 승인 창 하나 → 남긴 항목만 차례로 워크트리 준비 → `prepareJiraWork`(Jira [작업]과 같은 명령,
   `--stack` 포함) → `createSession(agentId 'femc', 제목 = 키)` → 작업 원장(`addTask`, claude 는 아직 없음 → 2분 기동 유예) → 토스트.
@@ -151,7 +151,9 @@ paths:
   - 위치(`ticketPlan.pickPlace` + 테스트): 그 티켓 브랜치의 워크트리(shared `branchIssueKey` — 마지막 조각 앞머리, `feature/SSB-137-v2` 도 SSB-137) →
     브랜치만 있으면 그 브랜치로 새 워크트리 → 주 체크아웃이 비면(기본 브랜치 main·master·develop·dev + 변경 없음 + 탭 없음) 거기 → 아니면 새 워크트리 `fix/키`·`feature/키`.
   - 스택을 모르면(`femcStackFor` null) 그 항목에 스택 선택지를 단다 — 고르기 전엔 [실행]이 잠긴다.
-- `open_session`: 티켓 아닌 지시 → `femcCommand({prompt: 지시, stack})`. 위치 = cwd(기존 워크트리) · new_branch(없으면 만든다) · 없으면 주 체크아웃.
+- `open_session`: 티켓 아닌 지시 → 회사 저장소는 `femcCommand({prompt: 지시, stack})`, **그 밖(원앱 등)은 claude**(`claudeCommand` — 지시가 첫 메시지, 계정·권한 생략은 터미널 새 세션과 같은 `withClaudeAccount`).
+  2026-10-22 사용자 결정 — 루트에 "원앱에 새 세션 열어서 작업해"를 시켰더니 '회사 저장소만' 규칙 탓에 루트가 되묻고 멈췄다. 일반 저장소는 새 워크트리(new_branch)를 만들지 않는다(femc-wt.sh 는 FEMC 전용) ·
+  git 이 아닌 폴더(plain)도 연다. 계정 기본값은 환경설정 '새 세션 계정'(`getClaudeAccount` — start_ticket 의 계정 선택지 기본값도). 위치 = cwd(기존 워크트리) · new_branch(없으면 만든다) · 없으면 주 체크아웃.
 - `create_worktree`: 승인 → `femc-wt.sh setup`. 그 브랜치의 워크트리가 이미 있으면 만들지 않고 경로만. 승인 창은 그 브랜치가 로컬·원격에 있으면
   '기존 브랜치 …(기존 브랜치라 분기점 X 는 쓰지 않음)', 없으면 '새 브랜치 …(분기점 X)'(open_session 의 new_branch 도 같은 판정 — 예전엔 늘 '새 브랜치').
 - ⚠️ **브랜치 이름은 `ticketPlan.isSafeBranchName`**(+ 테스트) — 조각 첫 글자 `.`·`-` · `..`·`//` · 끝 `/`·`.`·`.lock` 거부. 실측 거부: `.`·`-rf`·`src/.x`·`a//b`·`x.lock`.

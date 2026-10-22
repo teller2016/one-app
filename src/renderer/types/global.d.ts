@@ -26,6 +26,7 @@ import type {
   JiraAddedResult,
   JiraAddedTicket,
   JiraValidateResult,
+  JiraWorkAccount,
   JiraWorkAccountInfo,
   JiraWorkPrepareInput,
   JiraWorkPrepareResult,
@@ -106,6 +107,7 @@ import type {
   TerminalAttachResult,
   TerminalServerStatus,
   TerminalAgentInfo,
+  TerminalClaudeAccountView,
   TerminalNotifyLevel,
   TerminalDockState,
   TerminalDragState,
@@ -420,6 +422,11 @@ declare global {
         notifyLevel: {
           get: () => Promise<TerminalNotifyLevel>;
           set: (level: TerminalNotifyLevel) => Promise<TerminalNotifyLevel>;
+        };
+        // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비
+        claudeAccount?: {
+          get: () => Promise<TerminalClaudeAccountView>;
+          set: (account: JiraWorkAccount) => Promise<TerminalClaudeAccountView>;
         };
         write: (id: string, data: string) => void;
         // ?. 옵셔널 — 구 preload(재시작 전)와의 개발 중 어긋남 대비

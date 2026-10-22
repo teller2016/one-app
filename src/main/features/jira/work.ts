@@ -12,15 +12,14 @@
 // `command` 를 가공하지 않고 그대로 `terminal:create` 에 넘긴다.
 import { app } from 'electron';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type {
   JiraWorkAccount,
-  JiraWorkAccountInfo,
   JiraWorkPrepareInput,
   JiraWorkPrepareResult,
   JiraWorkSkill,
 } from '../../../shared/types';
+import { claudeAccountDir } from '../../lib/claudeAccount';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { mapLimit, shQuote } from '../../lib/util';
 import { femcStackFor, listSessions } from '../terminal';
@@ -80,15 +79,6 @@ type RawWorkIssue = {
 
 const workRoot = () => path.join(app.getPath('userData'), 'jira-work');
 
-/** Claude 프로필 디렉터리 — `~/.zshrc` 의 계정 선택이 쓰던 것과 같은 경로 */
-const ACCOUNT_DIRS: Record<JiraWorkAccount, string> = {
-  personal: '.claude',
-  team: '.claude-team',
-};
-
-const accountDir = (account: JiraWorkAccount) =>
-  path.join(os.homedir(), ACCOUNT_DIRS[account]);
-
 /**
  * femc 실행 명령 — 뜨자마자 입력 가능한 상태로 띄운다(prepareJiraWork 의 '실행 명령' 주석 ①~④).
  * 루트 세션이 티켓이 아닌 지시로 새 femc 세션을 열 때도 같은 것을 쓴다(orchestrator open_session).
@@ -105,7 +95,7 @@ export function femcCommand(o: {
   const prompt = o.prompt.trim();
   const asRun = !/\s/.test(prompt) || prompt.startsWith('-');
   return [
-    `CLAUDE_CONFIG_DIR=${shQuote(accountDir(o.account ?? 'personal'))}`,
+    `CLAUDE_CONFIG_DIR=${shQuote(claudeAccountDir(o.account ?? 'personal'))}`,
     'FEMC_SKIP_UPDATE_CHECK=1',
     'command femc',
     ...(asRun ? ['run'] : []),
@@ -113,29 +103,6 @@ export function femcCommand(o: {
     ...(o.addDir ? ['--add-dir', shQuote(o.addDir)] : []),
     ...(o.stack ? ['--stack', shQuote(o.stack)] : []),
   ].join(' ');
-}
-
-/**
- * 고를 수 있는 Claude 계정 — 프로필 폴더가 있는 것만. 어느 계정인지 헷갈리지 않게
- * 그 안의 `.claude.json` 에서 로그인 이메일을 읽어 함께 준다(없으면 미로그인).
- */
-export function listWorkAccounts(): JiraWorkAccountInfo[] {
-  const labels: Record<JiraWorkAccount, string> = { personal: 'Personal', team: 'Team' };
-  const out: JiraWorkAccountInfo[] = [];
-  for (const id of ['personal', 'team'] as JiraWorkAccount[]) {
-    const dir = accountDir(id);
-    if (!fs.existsSync(dir)) continue;
-    let email: string | undefined;
-    try {
-      const raw = fs.readFileSync(path.join(dir, '.claude.json'), 'utf8');
-      const parsed = JSON.parse(raw) as { oauthAccount?: { emailAddress?: string } };
-      email = parsed.oauthAccount?.emailAddress;
-    } catch {
-      /* 미로그인·손상 — 라벨만 보여준다 */
-    }
-    out.push({ id, label: labels[id], dir, email });
-  }
-  return out;
 }
 
 /**

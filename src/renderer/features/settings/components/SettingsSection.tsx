@@ -19,6 +19,8 @@ import {
   type ReminderConfig,
   type DayReminderConfig,
   type ScheduleStartConfig,
+  type JiraWorkAccount,
+  type TerminalClaudeAccountView,
   type TerminalNotifyLevel,
   type ThemePref,
 } from '../../../../shared/types';
@@ -129,6 +131,8 @@ export function SettingsSection() {
     SCHEDULE_START_CONFIG_DEFAULT,
   );
   const [termNotify, setTermNotify] = useState<TerminalNotifyLevel>('sound');
+  // 새 세션의 claude·femc 계정 — 셸 함수의 계정 선택 대신 이 값으로 바로 띄운다(main terminal/launch.ts)
+  const [claudeAccount, setClaudeAccount] = useState<TerminalClaudeAccountView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -199,6 +203,10 @@ export function SettingsSection() {
       .catch(warn('자동 시작'));
     // 터미널 알림 강도는 [저장] 이 아니라 Segment 변경 즉시 저장이라 "저장 전에 확인"
     // 안내가 어긋난다 — 사용자가 건드리기 전엔 덮어쓸 일도 없으니 문구를 달리 한다
+    window.oneApp?.terminal?.claudeAccount
+      ?.get()
+      .then(setClaudeAccount)
+      .catch(() => setClaudeAccount(null));
     window.oneApp?.terminal?.notifyLevel
       .get()
       .then(setTermNotify)
@@ -286,6 +294,15 @@ export function SettingsSection() {
     window.oneApp?.terminal?.notifyLevel.set(next).catch(() => {
       toast('알림 설정 저장에 실패했습니다', 'fail');
     });
+  };
+
+  // 새 세션 Claude 계정 — 알림 강도처럼 즉시 저장
+  const changeClaudeAccount = (next: JiraWorkAccount) => {
+    setClaudeAccount((cur) => (cur ? { ...cur, account: next } : cur));
+    window.oneApp?.terminal?.claudeAccount
+      ?.set(next)
+      .then(setClaudeAccount)
+      .catch(() => toast('계정 설정 저장에 실패했습니다', 'fail'));
   };
 
   const setGroupOpen = (id: GroupId, open: boolean) => {
@@ -590,12 +607,34 @@ export function SettingsSection() {
                   aria-label="터미널 입력대기 알림음"
                 />
               </div>
+              {claudeAccount && claudeAccount.accounts.length > 0 && (
+                <>
+                  <span className="settings__label">새 세션 계정</span>
+                  <div>
+                    <Segment<JiraWorkAccount>
+                      options={claudeAccount.accounts.map((a) => ({ value: a.id, label: a.label }))}
+                      value={claudeAccount.account}
+                      onChange={changeClaudeAccount}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <p className="hint">
               에이전트(claude 등)가 작업을 마치고 입력을 기다리면
               사이드바·독(Dock) 뱃지로 표시됩니다 — 소리나 알럿을 더할지
               선택하세요. (즉시 저장)
             </p>
+            {claudeAccount && claudeAccount.accounts.length > 0 && (
+              <p className="hint">
+                [+] 새 세션·프리셋·폰·루트 세션이 띄우는 claude·femc 는 계정을 묻지 않고 이 계정
+                {(() => {
+                  const email = claudeAccount.accounts.find((a) => a.id === claudeAccount.account)?.email;
+                  return email ? `(${email})` : '';
+                })()}
+                으로 바로 뜹니다. Jira [작업]은 모달에서 고른 계정을 씁니다. (즉시 저장)
+              </p>
+            )}
           </SettingsPanel>
 
           <SettingsPanel {...panel('power')}>

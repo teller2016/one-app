@@ -2,4 +2,4 @@
 // ⚠️ main.ts 의 `registerJiraIpc`(./ipc) 와 단독 배포판의 `registerJiraReportIpc`(./report) 는
 // 진입점이 직접 가져가는 파일이라 여기 싣지 않는다.
 export { fetchMyIssues, jiraAuth, validateAddedTicket } from './jira';
-export { femcCommand, listWorkAccounts, prepareJiraWork, resolveSkill } from './work';
+export { femcCommand, prepareJiraWork, resolveSkill } from './work';

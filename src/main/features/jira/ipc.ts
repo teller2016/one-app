@@ -16,7 +16,8 @@ import {
   validateAddedTicket,
 } from './jira';
 import { registerJiraReportIpc } from './report';
-import { listWorkAccounts, prepareJiraWork } from './work';
+import { listClaudeAccounts } from '../../lib/claudeAccount';
+import { prepareJiraWork } from './work';
 
 /**
  * Jira(내 이슈) 관련 IPC 핸들러 등록.
@@ -68,5 +69,5 @@ export function registerJiraIpc() {
     prepareJiraWork(input),
   );
   // 세션을 띄울 Claude 계정 후보 (셸이 묻던 Personal/Team 선택을 모달이 대신한다)
-  ipcMain.handle('jira:work-accounts', () => listWorkAccounts());
+  ipcMain.handle('jira:work-accounts', () => listClaudeAccounts());
 }
