@@ -57,11 +57,14 @@ export function VacationForm({
   initial?: Extract<ApprovalFormFill, { kind: 'vacation' }>;
 } = {}) {
   const toast = useToast();
-  const [attDivName, setAttDivName] = useState(initial?.attDivName ?? ATT_DIV_NAMES[0]);
+  const initKind = initial?.attDivName ?? ATT_DIV_NAMES[0];
+  // 루트가 시간대를 한쪽만 줬으면 나머지는 그 근태구분의 기본값으로
+  const [initStart, initEnd] = isTimedKind(initKind) ? defaultTimeRange(initKind) : ['09:00', '10:00'];
+  const [attDivName, setAttDivName] = useState(initKind);
   const [fromDate, setFromDate] = useState(initial?.fromDate ?? today);
   const [toDate, setToDate] = useState(initial?.toDate ?? initial?.fromDate ?? today);
-  const [useStartTime, setUseStartTime] = useState(initial?.useStartTime ?? '09:00');
-  const [useEndTime, setUseEndTime] = useState(initial?.useEndTime ?? '10:00');
+  const [useStartTime, setUseStartTime] = useState(initial?.useStartTime ?? initStart);
+  const [useEndTime, setUseEndTime] = useState(initial?.useEndTime ?? initEnd);
   const [holidayWorkDate, setHolidayWorkDate] = useState(initial?.holidayWorkDate ?? '');
   const [remark, setRemark] = useState(initial?.remark ?? '');
   const [titleEdited, setTitleEdited] = useState(false);
@@ -70,7 +73,9 @@ export function VacationForm({
   const [reasonEtc, setReasonEtc] = useState(initial?.reasonEtc ?? '');
   // 채운 값은 마운트 때 한 번 — 기본값 불러오기·근태구분별 시간대 리셋이 그 위를 덮지 않게
   const initialRef = useRef(initial);
-  const keepTimesRef = useRef(!!(initial?.useStartTime || initial?.useEndTime));
+  // 첫 리셋을 건너뛸지 — 채운 근태구분이 시간대를 쓰는 종류일 때만. ⚠️ 연차에 시간을 실어 보낸 요청이면 이 표시가 남아,
+  // 나중에 사용자가 반차로 바꿀 때 그 종류의 기본 시간대로 리셋되지 않았다(2026-10-22 검토)
+  const keepTimesRef = useRef(isTimedKind(initKind) && !!(initial?.useStartTime || initial?.useEndTime));
   const [emergencyContact, setEmergencyContact] = useState('');
   const [handovers, setHandovers] = useState<HandoverRow[]>(() => [
     newHandover(),

@@ -1,5 +1,6 @@
 // 마이크로 헬퍼 — 여러 기능 모듈이 각자 정의하던 것을 단일화
 import crypto from 'node:crypto';
+import path from 'node:path';
 
 export const sleep = (ms: number) =>
   new Promise<void>((r) => setTimeout(r, ms));
@@ -31,6 +32,15 @@ export const localDateKey = (d: Date) =>
  * 유일한 경로다. ⚠️ 셸 명령 문자열 조립은 항상 main 에서 이 함수를 거칠 것.
  */
 export const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/**
+ * child 가 parent 자신이거나 그 아래 경로인가(문자열 판정 — 심볼릭 링크는 풀지 않는다).
+ * ⚠️ `rel.startsWith('..')` 로 보면 `..cache` 같은 폴더 이름을 밖으로 잘못 본다 — `..` 조각인지로 판정한다.
+ */
+export function isInsidePath(parent: string, child: string): boolean {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
 
 /**
  * 양의 정수인가 — `handleShared` 채널의 번호 인자(PR 번호·빌드 번호) 검증용.

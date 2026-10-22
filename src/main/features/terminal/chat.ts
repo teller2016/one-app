@@ -305,8 +305,8 @@ function unsubscribe(termId: string, listener: Listener) {
   watches.delete(termId);
 }
 
-/** 채팅 입력의 Enter 지연 — 붙여넣기 끝을 claude 가 처리한 뒤에 Enter 가 오도록 */
-const CHAT_SUBMIT_DELAY_MS = 250;
+/** 채팅 입력의 Enter 지연 — 붙여넣기 끝을 claude 가 처리한 뒤에 Enter 가 오도록(루트 세션 deliver 가 이만큼 기다린 뒤 다음 글을 넣는다) */
+export const CHAT_SUBMIT_DELAY_MS = 250;
 
 const paste = (s: string) => `\x1b[200~${s}\x1b[201~`;
 

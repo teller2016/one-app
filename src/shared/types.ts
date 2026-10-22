@@ -1851,7 +1851,7 @@ export type PowerState = {
 
 // ── 루트 세션 — 고정 루트 탭의 claude 가 원앱 MCP 로 다른 claude 세션(워커)을 지휘한다 (main features/orchestrator) ──
 
-/** ⌘P '루트 세션 열기' 결과 — 이미 떠 있으면 그 세션(created=false) */
+/** 루트 세션 열기(⌘P·⌘0·LNB '루트' 칸·자동 시작) 결과 — 이미 떠 있으면 그 세션(created=false) */
 export type OrchestratorOpenRootResult =
   | { ok: true; sessionId: string; cwd: string; created: boolean }
   | { ok: false; error: string };

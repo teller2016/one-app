@@ -5,6 +5,8 @@
 // 그 동작의 정본은 스크립트(`~/.claude/skills/femc-worktree/scripts/femc-wt.sh`)라 따로 구현하지 않고 부른다.
 // 브랜치 판정(로컬 → origin 추적 → base 에서 새로)·base(FEMC resolve_base_branch)도 스크립트가 한다. 멱등 — 이미 있으면 빠진 것만 채운다.
 // ⚠️ GUI 앱의 PATH 는 빈약하다 — node·npm·python3·rsync 를 찾게 로그인 셸(`zsh -lc`)로 띄운다(agents.ts 와 같은 방식).
+// ⚠️ 스크립트는 인자가 **작업 폴더 기준으로 있는 폴더면** 그 폴더를 워크트리로 보고 채운다(`[ -d "$TARGET" ]`) — 저장소에서 띄우면
+//    `src` 같은 브랜치 이름이 저장소 안 폴더로 읽힌다. 그래서 **빈 임시 폴더**에서 띄운다(저장소는 `--repo` 로 넘긴다).
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,7 +36,14 @@ export type SetupResult =
   | { ok: false; error: string; output: string };
 
 /** 워크트리를 만들고(또는 채우고) 메인 체크아웃과 같은 상태로 — 경로를 명시해 스크립트와 원앱의 계산이 어긋나지 않게 한다 */
-export function setupWorktree(input: { repoPath: string; workspaceName: string; branch: string; base?: string }): Promise<SetupResult> {
+export function setupWorktree(input: {
+  repoPath: string;
+  workspaceName: string;
+  branch: string;
+  base?: string;
+  /** 루트가 호출을 멈추면(Esc) 스크립트도 멈춘다 */
+  signal?: AbortSignal;
+}): Promise<SetupResult> {
   if (!fs.existsSync(WT_SCRIPT)) {
     return Promise.resolve({
       ok: false,
@@ -54,12 +63,14 @@ export function setupWorktree(input: { repoPath: string; workspaceName: string; 
     shQuote(target),
     ...(input.base ? ['--base', shQuote(input.base)] : []),
   ].join(' ');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'oneapp-wt-'));
   return new Promise((resolve) => {
     execFile(
       '/bin/zsh',
       ['-lc', cmd],
-      { timeout: SETUP_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, cwd: input.repoPath },
+      { timeout: SETUP_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, cwd, signal: input.signal },
       (err, stdout, stderr) => {
+        fs.rm(cwd, { recursive: true, force: true }, () => undefined);
         const out = `${String(stdout)}${String(stderr)}`;
         const tail = out.length > OUTPUT_TAIL_CHARS ? `…${out.slice(-OUTPUT_TAIL_CHARS)}` : out;
         if (err) {
@@ -67,7 +78,13 @@ export function setupWorktree(input: { repoPath: string; workspaceName: string; 
           const killed = (err as NodeJS.ErrnoException & { killed?: boolean }).killed;
           resolve({
             ok: false,
-            error: fail ?? (killed ? `${SETUP_TIMEOUT_MS / 60_000}분 안에 끝나지 않아 멈췄습니다.` : err.message),
+            error:
+              fail ??
+              (input.signal?.aborted
+                ? '루트가 호출을 멈춰 중단했습니다 — 반쯤 만든 워크트리가 남았을 수 있습니다(다시 부르면 빠진 것만 채운다).'
+                : killed
+                  ? `${SETUP_TIMEOUT_MS / 60_000}분 안에 끝나지 않아 멈췄습니다.`
+                  : err.message),
             output: tail,
           });
           return;

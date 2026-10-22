@@ -93,8 +93,35 @@ function ConfirmModal({ req, waiting }: { req: OrchestratorConfirmRequest; waiti
         </span>
       }
       onClose={reject}
+      footer={
+        <>
+          <span className="hint root-confirm__remain">
+            {remain} 뒤 자동 취소
+            {waiting > 0 && ` · 대기 ${waiting}건`}
+            {missing.length > 0 && ' · 고를 값이 남았습니다'}
+          </span>
+          <Button onClick={reject} disabled={busy}>
+            취소
+          </Button>
+          <Button
+            variant={req.danger ? 'danger' : 'primary'}
+            loading={busy}
+            disabled={missing.length > 0 || nothingKept}
+            onClick={() => void answer(true)}
+          >
+            {items.length > 1 ? `${kept.size}건 실행` : '실행'}
+          </Button>
+        </>
+      }
     >
-      {req.note && <Banner variant="warning">{req.note}</Banner>}
+      {req.note && (
+        <Banner variant="warning">
+          {/* 안내가 여럿이면 main 이 줄바꿈으로 잇는다(무인 연쇄 표시 · 제외 목록) — 한 줄로 붙지 않게 줄마다 */}
+          {req.note.split('\n').map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </Banner>
+      )}
 
       {req.fields.length > 0 && (
         <dl className="root-confirm__fields">
@@ -143,25 +170,6 @@ function ConfirmModal({ req, waiting }: { req: OrchestratorConfirmRequest; waiti
           ))}
         </div>
       )}
-
-      <div className="root-confirm__foot">
-        <span className="hint">
-          {remain} 뒤 자동 취소
-          {waiting > 0 && ` · 대기 ${waiting}건`}
-          {missing.length > 0 && ' · 고를 값이 남았습니다'}
-        </span>
-        <Button onClick={reject} disabled={busy}>
-          취소
-        </Button>
-        <Button
-          variant={req.danger ? 'danger' : 'primary'}
-          loading={busy}
-          disabled={missing.length > 0 || nothingKept}
-          onClick={() => void answer(true)}
-        >
-          {items.length > 1 ? `${kept.size}건 실행` : '실행'}
-        </Button>
-      </div>
     </Modal>
   );
 }

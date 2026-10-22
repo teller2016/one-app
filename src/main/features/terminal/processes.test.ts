@@ -1,6 +1,6 @@
 // 세션 안 명령 읽기 테스트 — processes.ts 의 순수 함수만 다룬다.
 import { describe, expect, it } from 'vitest';
-import { foregroundCommands, parsePs } from './processes';
+import { foregroundCommands, isShellProcess, parsePs } from './processes';
 
 // pane 셸 100 아래: 프리셋(zsh -ic → npm → node) / 다른 pane 200: 셸만 / 300: claude
 const PS = `
@@ -34,8 +34,26 @@ describe('foregroundCommands', () => {
     expect(foregroundCommands(rows, 400)).toEqual(['pnpm dev']);
   });
 
+  it('스크립트를 돌리는 셸은 그 명령으로 — 안의 자식으로 내려가지 않는다', () => {
+    const script = parsePs(`  1 0 -zsh\n  2 1 bash ./deploy.sh dev\n  3 2 sleep 30`);
+    expect(foregroundCommands(script, 1)).toEqual(['bash ./deploy.sh dev']);
+  });
+
   it('긴 인자는 자른다', () => {
     const long = parsePs(`  1 0 -zsh\n  2 1 node ${'x'.repeat(300)}`);
     expect(foregroundCommands(long, 1)[0].length).toBeLessThanOrEqual(161);
+  });
+});
+
+describe('isShellProcess', () => {
+  it('대화형·로그인·-c 래퍼는 셸', () => {
+    for (const a of ['-zsh', '/bin/zsh -il', "/bin/zsh -ic trap 'true' INT; npm run dev", 'bash', 'sh -c echo hi', 'zsh --login']) {
+      expect(isShellProcess(a)).toBe(true);
+    }
+  });
+  it('스크립트 파일을 돌리는 셸·다른 명령은 셸이 아니다', () => {
+    for (const a of ['bash ./deploy.sh', 'sh -x run.sh', 'npm run dev', 'zshdb', 'node server.js']) {
+      expect(isShellProcess(a)).toBe(false);
+    }
   });
 });

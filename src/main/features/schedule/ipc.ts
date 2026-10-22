@@ -70,9 +70,6 @@ function normalizeStartConfig(raw: unknown): ScheduleStartConfig {
 }
 
 /** 저장본 정규화 — 항목만 담던 예전 배열 형식도 읽어 객체로 승격한다 */
-/** 저장된 작업 기록(정규화) — IPC 와 루트 세션 도구(get_worklog)가 같은 것을 읽는다 */
-export const readWorklog = (): ScheduleWorklog => normalizeWorklog(readUserJson<unknown>(WORKLOG_FILE, null));
-
 function normalizeWorklog(raw: unknown): ScheduleWorklog {
   const source: Partial<ScheduleWorklog> = Array.isArray(raw)
     ? { items: raw as ScheduleWorkItem[] }
@@ -90,6 +87,9 @@ function normalizeWorklog(raw: unknown): ScheduleWorklog {
       : SCHEDULE_DEFAULT_START_TIME,
   };
 }
+
+/** 저장된 작업 기록(정규화) — IPC 와 루트 세션 도구(get_worklog)가 같은 것을 읽는다 */
+export const readWorklog = (): ScheduleWorklog => normalizeWorklog(readUserJson<unknown>(WORKLOG_FILE, null));
 
 /**
  * 앱 종료 시 남은 자동화 창 정리 — 완료 후 확인용으로 열어 두는 창

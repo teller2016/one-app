@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  branchIssueKey,
   isIssueKey,
   issueKeysIn,
   jiraIssueUrl,
@@ -86,6 +87,18 @@ describe('isIssueKey', () => {
     expect(isIssueKey(123)).toBe(false);
     expect(isIssueKey(null)).toBe(false);
     expect(isIssueKey(['SSB-1'])).toBe(false);
+  });
+});
+
+describe('branchIssueKey', () => {
+  it('마지막 조각의 앞머리 키', () => {
+    expect(branchIssueKey('feature/SSB-137')).toBe('SSB-137');
+    expect(branchIssueKey('fix/SSB-137-coupon')).toBe('SSB-137');
+    expect(branchIssueKey('bugfix/bbj-1125')).toBe('BBJ-1125');
+    expect(branchIssueKey('main')).toBeUndefined();
+    expect(branchIssueKey('SSB-1/wip')).toBeUndefined();
+    expect(branchIssueKey(undefined)).toBeUndefined();
+    expect(branchIssueKey(null)).toBeUndefined();
   });
 });
 

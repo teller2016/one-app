@@ -6,7 +6,7 @@
 //   으로 치운 뒤 넣는다. claude 가 다음 제출 뒤 그 글을 입력란에 되돌려 놓는다(쉬는 중·작업 중 모두, 10-22 실측).
 //   안 치우면 쓰던 글 뒤에 지시가 붙어 둘이 한꺼번에 제출된다.
 // - 질문·권한·플랜 창이 떠 있거나 입력 상자를 못 찾으면(신뢰 확인 창 등) 넣지 않는다 — Enter 가 선택지를 고른다.
-import { issueKeysIn, leadingIssueKey } from '../../../shared/jira-url';
+import { branchIssueKey, issueKeysIn, leadingIssueKey } from '../../../shared/jira-url';
 import type { ChatPrompt } from '../../../shared/terminal-protocol';
 
 /** 지시 길이 상한 — 길면 claude 가 `[Pasted text]` 로 접을 뿐이지만, 실수로 거대한 글을 붓지 않게 */
@@ -31,7 +31,8 @@ export type SendCheckInput = {
 export type SendCheck = { ok: true; stashDraft: boolean } | { ok: false; reason: string };
 
 const no = (reason: string): SendCheck => ({ ok: false, reason });
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+/** 앞에서 n 자 + 말줄임 */
+export const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 function promptReason(p: ChatPrompt): string {
   if (p.kind === 'permission') return '권한 확인 창이 떠 있어 넣지 않았습니다 — 사용자가 직접 답해야 합니다.';
@@ -138,8 +139,7 @@ export function ticketKeyOf(s: {
 }): string | null {
   const fromTab = leadingIssueKey(s.tabTitle);
   if (fromTab) return fromTab;
-  const seg = s.branch?.split('/').pop();
-  const fromBranch = seg ? leadingIssueKey(seg) : undefined;
+  const fromBranch = branchIssueKey(s.branch);
   if (fromBranch) return fromBranch;
   for (const text of [s.title, s.firstPrompt]) {
     const key = text ? issueKeysIn(text)[0] : undefined;

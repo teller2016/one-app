@@ -303,7 +303,10 @@ E2E 방법은 `one-app-e2e-verify` 메모 참고 — `--remote-debugging-port` +
 단 휴가의 [결재상신] 은 근태신청을 저장하니 검증 후 정리가 필요하다(위 참고).
 
 ## 루트 세션 진입점 (2026-10-22)
-`lib/approvalRequest.ts`(배포의 deployRequest 와 같은 패턴) — 루트 세션이 `requestApprovalForm(fill)` 로 그 종류의 폼을 채워 연다(세 폼의 `initial` prop).
+`lib/approvalRequest.ts`(`lib/sectionRequest.ts` 틀) — 루트 세션이 `requestApprovalForm(fill)` 로 그 종류의 폼을 채워 연다(세 폼의 `initial` prop).
+앱 셸(`RootOpenRequests`)은 이 함수를 **동적 import** 로 부른다 — 결재는 lazy 청크라 정적으로 import 하면 결재 섹션 전체가 첫 번들에 실린다.
+휴가 폼은 채운 근태구분이 **시간대를 쓰는 종류(반차·시차)일 때만** 첫 시간대 리셋을 건너뛴다 — 연차에 시간을 실어 연 뒤 반차로 바꾸면 그 종류 기본값으로 리셋돼야 한다(2026-10-22 검토 실측: 오전반차 → 09:00~14:00).
+작성이 진행 중이면(`approvalLockOwner`) main 이 폼 열기를 거부한다 — 다시 그리면 진행 중인 폼의 단계 표시·중복 방지 상태가 사라진다.
 ⚠️ 작성은 하지 않는다 — [작성 시작]·[상신]은 사용자가(휴가 [작성 시작]이 근태신청을 서버에 저장하므로 특히). 근태구분·사유 목록은 루트 도구의 입력 검증도 쓰므로
 `shared/approval-format.ts` 로 옮겼다(`calc.ts` 가 다시 내보낸다). 단독판에는 루트가 없어 요청이 오지 않는다. 상세는 `features/orchestrator.md` 3c.
 

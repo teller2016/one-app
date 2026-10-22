@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { branchNameFor, branchTicketKey, pickPlace, type PlanWorktree } from './ticketPlan';
+import { branchNameFor, isSafeBranchName, pickPlace, type PlanWorktree } from './ticketPlan';
 
 const MAIN: PlanWorktree = { path: '/repo', branch: 'main', isMain: true, dirty: false };
 const none = () => 0;
@@ -12,12 +12,16 @@ describe('branchNameFor', () => {
   });
 });
 
-describe('branchTicketKey', () => {
-  it('마지막 조각의 앞머리 키', () => {
-    expect(branchTicketKey('feature/SSB-137')).toBe('SSB-137');
-    expect(branchTicketKey('fix/SSB-137-coupon')).toBe('SSB-137');
-    expect(branchTicketKey('main')).toBeUndefined();
-    expect(branchTicketKey(undefined)).toBeUndefined();
+describe('isSafeBranchName', () => {
+  it('보통 브랜치 이름은 받는다', () => {
+    for (const b of ['feature/SSB-137', 'fix/SSB-1-coupon', 'test/root-session-check', 'develop', 'release/1.2.0']) {
+      expect(isSafeBranchName(b)).toBe(true);
+    }
+  });
+  it('폴더·옵션으로 읽힐 수 있는 이름은 막는다', () => {
+    for (const b of ['.', '..', '.git', 'src/.hidden', '-rf', 'a/-x', '/abs', 'a//b', 'a/', 'a..b', 'x.lock', 'a.', '', 'a b', "a'b", '~/x']) {
+      expect(isSafeBranchName(b)).toBe(false);
+    }
   });
 });
 

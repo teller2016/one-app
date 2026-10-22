@@ -23,10 +23,9 @@ import type {
 } from '../../../shared/types';
 import { fetchWithTimeout as fetch, readJson } from '../../lib/http';
 import { mapLimit, shQuote } from '../../lib/util';
-import { femcStackFor } from '../terminal';
+import { femcStackFor, listSessions } from '../terminal';
 import { leadingIssueKey } from '../../../shared/jira-url';
 import { jiraAuth } from './jira';
-import { listSessions } from '../terminal/pty';
 
 /** 티켓 맥락 폴더 보관 개수 — 넘치면 오래된 것부터 지운다(세션이 살아있는 티켓은 제외) */
 const KEEP_TICKETS = 20;
@@ -100,10 +99,16 @@ export function femcCommand(o: {
   addDir?: string;
   stack?: string | null;
 }): string {
+  // ⚠️ femc 는 첫 인자가 자기 명령(setup·doctor·update…)이거나 그 오타처럼 보이는 한 낱말이면 명령으로 실행하거나 되묻고 끝나며,
+  //    `-` 로 시작하면 플래그로 읽는다(femc.mjs COMMANDS·nearestCommands). 그런 프롬프트만 `run` 뒤에 넘긴다 —
+  //    여러 낱말 프롬프트(Jira [작업]의 `/dev SSB-1 …`)는 예전 명령 그대로 둔다.
+  const prompt = o.prompt.trim();
+  const asRun = !/\s/.test(prompt) || prompt.startsWith('-');
   return [
     `CLAUDE_CONFIG_DIR=${shQuote(accountDir(o.account ?? 'personal'))}`,
     'FEMC_SKIP_UPDATE_CHECK=1',
     'command femc',
+    ...(asRun ? ['run'] : []),
     shQuote(o.prompt), // ② 프롬프트가 첫 인자 — 첫 인자가 플래그면 메뉴로 빠진다
     ...(o.addDir ? ['--add-dir', shQuote(o.addDir)] : []),
     ...(o.stack ? ['--stack', shQuote(o.stack)] : []),

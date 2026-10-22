@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import type { AppOpenRequest } from '../../../../shared/types';
 import { requestDeployConfirm } from '../../deploy';
-import { requestApprovalForm } from '../../approval';
 import { requestPr } from '../../prs';
 import { requestScheduleFill } from '../../schedule';
 
@@ -21,8 +20,9 @@ function dispatch(req: AppOpenRequest): void {
       requestPr({ kind: 'merge', repo: req.repo, number: req.number, method: req.method });
       break;
     case 'approval':
-      // 결재 섹션의 그 폼을 채워 연다 — [작성 시작]·그룹웨어 창의 [상신]은 사용자가(휴가는 작성이 근태신청을 서버에 저장한다)
-      requestApprovalForm(req.fill);
+      // 결재 섹션의 그 폼을 채워 연다 — [작성 시작]·그룹웨어 창의 [상신]은 사용자가(휴가는 작성이 근태신청을 서버에 저장한다).
+      // ⚠️ 결재는 lazy 청크다(App.tsx loadApproval) — 정적으로 import 하면 결재 섹션 전체가 첫 번들에 실린다
+      void import('../../approval').then((m) => m.requestApprovalForm(req.fill));
       break;
     case 'schedule':
       // 일정 등록 섹션의 작업 기록에 덧붙인다 — [일정 등록]·[노션에 기록]은 사용자가

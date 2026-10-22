@@ -139,6 +139,8 @@ export function addTask(input: {
   report: boolean;
   /** 지시를 넣은 claude — 새로 띄운 세션은 아직 없다(null) */
   claude: ClaudeProcess | null;
+  /** 지시를 넣기 직전의 대화 기록 크기(deliver) — 그 앞의 기록은 이전 일이다 */
+  offset?: number;
 }): OrchestratorTask {
   const list = load();
   for (const t of list) {
@@ -159,10 +161,10 @@ export function addTask(input: {
     state: 'dispatched',
     createdAt: now,
     updatedAt: now,
-    // 지시를 넣기 직전의 크기 — 붙여넣기 + Enter 가 250ms 뒤라 그 전의 기록은 이전 일이다.
+    // 지시를 넣기 직전의 크기(deliver 가 잰다) — deliver 는 Enter 까지 기다렸다 돌아오므로 지금 재면 지시 줄을 지나칠 수 있다.
     // 새 세션은 대화 파일이 아직 없다 — 처음 찾을 때(watchWork) 그 파일의 처음부터 읽는다
     file: input.claude?.file,
-    offset: input.claude ? safeSize(input.claude.file) : 0,
+    offset: input.claude ? (input.offset ?? safeSize(input.claude.file)) : 0,
     scan: WORKER_SCAN_START,
     graceUntil: input.claude ? undefined : now + START_GRACE_MS,
   };
@@ -232,13 +234,16 @@ async function finish(t: Stored, claude: ClaudeProcess): Promise<void> {
     return;
   }
   const res = await deliver(t.sessionId, reportRequest(t));
+  // 넣는 사이 다음 지시가 와서 이 일을 닫았으면(addTask 가 합침) 다시 열지 않는다
+  if (!isOpenTask(t)) return;
   if (res.ok) {
     // 보고 요청 턴을 따로 감시한다 — 워커가 보내지 않고 턴을 마치면(되묻기 등) 곧 닫기 위해
     update(t, {
       state: 'report_requested',
       workerPid: claude.pid,
       reportRequestedAt: Date.now(),
-      offset: safeSize(claude.file),
+      file: res.claude.file,
+      offset: res.offset,
       scan: WORKER_SCAN_START,
       note: undefined,
     });
@@ -279,6 +284,7 @@ async function watchWork(t: Stored, claude: ClaudeProcess): Promise<void> {
     return;
   }
   if (claude.status === 'waiting' && (await currentPrompt(t.sessionId, claude))) {
+    if (!isOpenTask(t)) return;
     idleStreak.set(t.id, 0);
     if (t.state !== 'waiting_prompt') update(t, { state: 'waiting_prompt' });
     return;
@@ -316,6 +322,8 @@ async function tick(): Promise<void> {
   const peers = open.some((t) => t.state === 'report_requested') ? await newPeerMessages() : [];
 
   for (const t of open) {
+    // 틱이 기다리는 사이(ps·파일 읽기·보고 요청 넣기) send_to_session 이 이 일을 닫았을 수 있다 — 닫힌 일은 건드리지 않는다
+    if (!isOpenTask(t)) continue;
     if (!alive.has(t.sessionId)) {
       update(t, { state: 'gone', note: '탭이 닫혔습니다.' });
       continue;

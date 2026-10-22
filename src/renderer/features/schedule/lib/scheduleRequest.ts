@@ -4,27 +4,13 @@
 // 그래서 배포의 `deployRequest.ts` 와 같은 패턴으로 요청을 넘기고 **섹션이 자기 상태에** 더한다.
 // ⚠️ 여기서는 등록하지 **않는다** — [일정 등록]·[노션에 기록]은 사용자가 누른다.
 import type { ScheduleFill } from '../../../../shared/types';
-import { navigateSection } from '../../../lib/sectionNav';
+import { createSectionRequest } from '../../../lib/sectionRequest';
 
-let pending: ScheduleFill | null = null;
-const listeners = new Set<() => void>();
+const channel = createSectionRequest<ScheduleFill>('schedule');
 
 /** 일정 등록 섹션으로 이동하며 작업 기록에 더해 달라고 요청한다 */
-export function requestScheduleFill(fill: ScheduleFill): void {
-  pending = fill;
-  navigateSection('schedule');
-  for (const l of listeners) l();
-}
-
-/** 대기 중인 요청을 꺼낸다 (한 번 꺼내면 비워진다) */
-export function takeScheduleRequest(): ScheduleFill | null {
-  const req = pending;
-  pending = null;
-  return req;
-}
-
+export const requestScheduleFill = channel.request;
+/** 대기 중인 요청을 꺼낸다 (한 번 꺼내면 비워진다 · 30초 지난 것은 버린다) */
+export const takeScheduleRequest = channel.take;
 /** 섹션이 떠 있는 동안 새 요청을 받는다 — 해제 함수를 돌려준다 */
-export function onScheduleRequest(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
+export const onScheduleRequest = channel.on;

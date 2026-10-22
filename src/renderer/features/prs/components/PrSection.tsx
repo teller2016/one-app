@@ -48,6 +48,8 @@ export function PrSection() {
     recentBases: {},
   });
   const [projects, setProjects] = useState<Project[]>([]);
+  // 레지스트리를 한 번이라도 받았는가 — 루트 요청은 이 뒤에 소비한다(등록 프로젝트가 0개여도 소비해야 '등록 안 됨'을 알린다)
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [hasToken, setHasToken] = useState(false);
   const [giteaUrl, setGiteaUrl] = useState(''); // 저장소 PR 경로 링크용 (빈 값이면 링크 생략)
   const [jiraUrl, setJiraUrl] = useState(''); // 상세 패널 티켓 칩 링크용 (빈 값이면 칩 생략)
@@ -65,9 +67,15 @@ export function PrSection() {
   // 방금 만든 PR — 목록 재조회가 끝나기 전에도 상세를 띄우기 위한 낙관적 항목
   const [justCreated, setJustCreated] = useState<PrItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  // 루트 세션이 채워 달라고 보낸 새 PR 초기값·머지 방식(prRequest.ts) — 열 때 한 번 쓴다
-  const [createInitial, setCreateInitial] = useState<CreatePrInitial | null>(null);
-  const [mergeMethodInit, setMergeMethodInit] = useState<{ key: string; method: PrMergeMethod } | null>(null);
+  // 루트 세션이 채워 달라고 보낸 새 PR 초기값·머지 방식(prRequest.ts) — 열 때 한 번 쓴다.
+  // seq 는 모달·상세의 key 로 — 이미 떠 있을 때 같은 요청이 다시 와도 새 값으로 다시 그린다(초기값은 마운트 때만 읽힌다)
+  const [createInitial, setCreateInitial] = useState<(CreatePrInitial & { seq: number }) | null>(null);
+  const [mergeMethodInit, setMergeMethodInit] = useState<{ key: string; method: PrMergeMethod; seq: number } | null>(null);
+  const reqSeq = useRef(0);
+  // 다른 PR 로 옮기면 미리 고른 머지 방식을 버린다 — 돌아왔을 때 루트가 고른 값이 다시 살아나지 않게
+  useEffect(() => {
+    if (mergeMethodInit && selectedKey !== mergeMethodInit.key) setMergeMethodInit(null);
+  }, [selectedKey, mergeMethodInit]);
   // 머지 직후 충돌 재검사 창 (`lib/conflictRecheck.ts` 주석 참고)
   const [recheck, setRecheck] = useState<{ repo: string; until: number } | null>(
     null,
@@ -148,7 +156,10 @@ export function PrSection() {
       setGiteaUrl(s.giteaUrl.replace(/\/+$/, ''));
       setJiraUrl(s.jiraUrl);
     });
-    void window.oneApp.projects.list().then(setProjects);
+    void window.oneApp.projects.list().then((list) => {
+      setProjects(list);
+      setProjectsLoaded(true);
+    });
     return window.oneApp.projects.onChanged(setProjects);
   }, []);
   usePolling(load, 120_000); // 조회 + 2분 주기 자동 새로고침
@@ -258,7 +269,7 @@ export function PrSection() {
   // 루트 세션의 PR 요청 — 목록·레지스트리가 뜬 뒤 그 저장소 탭으로 옮겨 새 PR 모달을 채워 열거나 그 PR 을 골라 둔다.
   // 만들기·머지는 하지 않는다(사용자가 모달의 [PR 생성]·패널의 [머지]로). 섹션 밖 요청은 마운트 전에 와 있고, 떠 있으면 구독으로 받는다
   useEffect(() => {
-    if (loading || projects.length === 0) return;
+    if (!projectsLoaded) return;
     const consume = () => {
       const req = takePrRequest();
       if (!req) return;
@@ -270,17 +281,19 @@ export function PrSection() {
           toast(`'${req.repo}' 은 프로젝트에 등록된 저장소가 아니라 여기서 PR 을 만들 수 없습니다`, 'fail');
           return;
         }
-        setCreateInitial({ head: req.head, base: req.base, title: req.title, body: req.body });
+        reqSeq.current += 1;
+        setCreateInitial({ head: req.head, base: req.base, title: req.title, body: req.body, seq: reqSeq.current });
         setCreateOpen(true);
         return;
       }
       const key = `${req.repo}#${req.number}`;
       setSelectedKey(key);
-      setMergeMethodInit(req.method ? { key, method: req.method } : null);
+      reqSeq.current += 1;
+      setMergeMethodInit(req.method ? { key, method: req.method, seq: reqSeq.current } : null);
     };
     consume();
     return onPrRequest(consume);
-  }, [loading, projects.length, createRepos, toast]);
+  }, [projectsLoaded, createRepos, toast]);
 
   // 재검사 창 안이면 이 저장소의 mergeable=false 는 '충돌'인지 아직 알 수 없다
   const conflictPending = !!recheck && recheck.repo === effectiveTab;
@@ -503,7 +516,7 @@ export function PrSection() {
               />
               {selected ? (
                 <PrDetail
-                  key={keyOf(selected)}
+                  key={mergeMethodInit?.key === keyOf(selected) ? `${keyOf(selected)}:${mergeMethodInit.seq}` : keyOf(selected)}
                   pr={selected}
                   defaultBranch={defaultBranchOf(selected.repo)}
                   jiraUrl={jiraUrl}
@@ -530,6 +543,7 @@ export function PrSection() {
       {/* 새 PR 모달 — 저장소는 현재 탭으로 고정 (레지스트리 저장소에서만 열린다) */}
       {createOpen && currentRegistry && (
         <CreatePrModal
+          key={createInitial?.seq ?? 0}
           repo={currentRegistry.repo}
           repoName={currentRegistry.name}
           projectDefault={currentRegistry.projectDefault}

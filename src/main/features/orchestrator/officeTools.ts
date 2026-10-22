@@ -17,6 +17,7 @@ import {
   getWorkerDept,
 } from '../approval';
 import { readStartConfig, readWorklog } from '../schedule';
+import { gateIfChained } from './approve';
 import { sendOpenRequest } from './openRequest';
 import { fail, json, READ } from './toolKit';
 
@@ -53,12 +54,18 @@ export function registerOfficeTools(server: McpServer): void {
       title: '연차 현황',
       description:
         '그룹웨어에서 연차 현황(총·사용·잔여·결재 진행 중)을 읽는다. ⚠️ 그룹웨어에 로그인한다 — 사용자가 연차를 물었을 때만 부를 것(반복 호출 금지). ' +
-        '휴가 작성이 진행 중이면 거부된다.',
+        '휴가 작성이 진행 중이면 거부된다. 사람이 시킨 턴이 아니면(워커 보고 뒤) 원앱 승인 창을 거친다.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async () => {
+    async (_args, extra) => {
       if (approvalLockOwner() === 'vacation') return fail('휴가 작성이 진행 중이라 지금은 조회할 수 없습니다.');
+      // 읽기지만 그룹웨어에 로그인한다(동시 로그인 거부·연속 실패 잠금) — 무인 연쇄로는 부르지 않게 상태 바꾸는 도구와 같은 관문
+      const blocked = await gateIfChained(
+        { title: '연차 현황 조회', fields: [{ label: '동작', value: '그룹웨어에 로그인해 연차 현황을 읽습니다' }] },
+        extra.signal,
+      );
+      if (blocked) return fail(blocked);
       try {
         return json(await fetchVacationStatus());
       } catch (err) {
@@ -88,7 +95,8 @@ export function registerOfficeTools(server: McpServer): void {
       title: '결재 폼 채워 열기',
       description:
         '원앱 결재 섹션의 폼(야근 결재·휴가신청서·지출결의서)을 채워 연다 — **작성하지 않는다**(사용자가 [작성 시작], 그룹웨어 창에서 [상신]). ' +
-        'kind 에 맞는 객체 하나만 준다. 비운 칸은 폼의 평소 기본값(지난 작성 내용·오늘). 사용자에게 "폼을 채워 띄웠다"고만 말할 것.',
+        'kind 에 맞는 객체 하나만 준다. 비운 칸은 폼의 평소 기본값(지난 작성 내용·오늘). 사용자에게 "폼을 채워 띄웠다"고만 말할 것. ' +
+        '다른 결재 작성이 진행 중이면 거부된다(get_approval_defaults 의 busy).',
       inputSchema: {
         kind: z.enum(['overtime', 'vacation', 'expend']).describe('야근 결재 · 휴가신청서 · 지출결의서(개인)'),
         overtime: z
@@ -163,7 +171,9 @@ export function registerOfficeTools(server: McpServer): void {
           dinners: e.dinners,
         };
       }
+      // 작성이 도는 중엔 띄우지 않는다 — 폼을 새 값으로 다시 그리면 진행 중인 폼(단계 표시·실패 시 중복 방지 상태)이 사라진다
       const busy = approvalLockOwner();
+      if (busy) return fail(`지금 결재 작성(${busy})이 진행 중이라 폼을 띄우지 않았습니다 — 끝난 뒤 다시 부르세요(사용자에게 알릴 것).`);
       if (!sendOpenRequest({ kind: 'approval', fill })) return fail('앱 창이 없어 폼을 띄우지 못했습니다.');
       const label = { overtime: '야근 결재', vacation: '휴가신청서', expend: '지출결의서' }[args.kind];
       return json({
@@ -171,7 +181,6 @@ export function registerOfficeTools(server: McpServer): void {
         opened: 'approval_form',
         kind: args.kind,
         note:
-          (busy ? `⚠️ 지금 다른 결재 작성(${busy})이 진행 중이라 [작성 시작]은 그게 끝난 뒤 됩니다. ` : '') +
           `${label} 폼을 채워 띄웠습니다 — 사용자가 확인하고 [작성 시작]을 누른 뒤 그룹웨어 창에서 직접 상신합니다.` +
           (args.kind === 'vacation' ? ' (휴가는 [작성 시작]이 근태신청을 서버에 저장합니다)' : ''),
       });

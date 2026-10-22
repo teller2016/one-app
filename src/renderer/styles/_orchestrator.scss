@@ -114,16 +114,9 @@
     }
   }
 
-  &__foot {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 16px;
-
-    .hint {
-      margin-right: auto;
-      font-variant-numeric: tabular-nums;
-    }
+  // 공용 Modal 하단 바(footer) 안 — 남은 시간은 왼쪽, 버튼은 오른쪽
+  &__remain {
+    margin-right: auto;
+    font-variant-numeric: tabular-nums;
   }
 }

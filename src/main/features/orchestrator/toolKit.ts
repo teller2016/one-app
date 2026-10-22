@@ -1,6 +1,9 @@
-// 루트 세션 MCP 도구 공용 — 결과 포맷 · 탭 상태 해석 · 대상에서 빼는 세션. tools.ts·terminalTools.ts 가 함께 쓴다.
-import type { TerminalSessionInfo } from '../../../shared/types';
-import { dockShellId } from '../terminal';
+// 루트 세션 MCP 도구 공용 — 결과 포맷 · 탭 상태 해석 · 대상에서 빼는 세션 · 회사 저장소 판정. 도구 파일들이 함께 쓴다.
+import path from 'node:path';
+import type { TerminalSessionInfo, TerminalWorkspace } from '../../../shared/types';
+import { registeredFemcStack } from '../../lib/femc';
+import { listProjects } from '../projects/store';
+import { completeLines, dockShellId, fileSize, readRange } from '../terminal';
 import { getRootSessionId } from './store';
 
 export type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };
@@ -11,6 +14,21 @@ export const json = (value: unknown): ToolResult => ({
 export const fail = (message: string): ToolResult => ({ content: [{ type: 'text', text: message }], isError: true });
 
 export const READ = { readOnlyHint: true, openWorldHint: false } as const;
+
+/** 도구 결과의 시각 — 없으면 null */
+export const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null);
+
+/**
+ * 대화 기록 꼬리의 완성된 줄 — 꼬리 첫 조각(줄 중간)은 버린다. whole = 파일 처음부터 읽었다.
+ * 파일이 없거나 못 읽으면 던진다(호출부가 '못 읽음'으로 다룬다).
+ */
+export function readTailLines(file: string, bytes: number): { lines: string[]; whole: boolean } {
+  const size = fileSize(file);
+  const start = Math.max(0, size - bytes);
+  let text = readRange(file, start, size);
+  if (start > 0) text = text.slice(text.indexOf('\n') + 1);
+  return { lines: completeLines(text).lines, whole: start === 0 };
+}
 
 export const NO_SESSION = '그런 세션이 없습니다 — list_sessions·list_terminals 로 id 를 다시 확인하세요.';
 
@@ -30,6 +48,18 @@ export function stateOf(s: Pick<TerminalSessionInfo, 'status' | 'working'>, clau
 
 /** 루트가 손대지 않는 세션 — 루트 자신·독 패널의 개인 셸 */
 export const excludedIds = () => new Set([getRootSessionId(), dockShellId()].filter((v): v is string => !!v));
+
+export const samePath = (a: string, b: string) => path.resolve(a) === path.resolve(b);
+
+/** 그 워크스페이스에 걸린 Jira 프로젝트 키 */
+export function jiraKeysOf(ws: TerminalWorkspace): string[] {
+  return listProjects()
+    .filter((p) => p.jiraProjectKey && samePath(p.localPath, ws.repoPath))
+    .map((p) => p.jiraProjectKey);
+}
+
+/** 회사(FEMC) 저장소인가 — femc 에 등록돼 있거나 Jira 키가 걸려 있다. 새 세션은 여기서만 연다(기획 결정) */
+export const isCompanyWorkspace = (ws: TerminalWorkspace) => !!registeredFemcStack(ws.repoPath) || jiraKeysOf(ws).length > 0;
 
 /**
  * 탭 순서 — 워크트리 경로 → 사용자가 정한 세션 id 순서. 정본은 렌더러(localStorage `terminal:tabOrder`)라 바뀔 때마다

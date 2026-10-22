@@ -8,13 +8,11 @@ import { z } from 'zod';
 import type { DeployPreviewResult, DeployProjectView, DeployStatus } from '../../../shared/types';
 import { callShared } from '../../lib/moIpc';
 import { sendOpenRequest } from './openRequest';
-import { fail, json, READ } from './toolKit';
+import { fail, iso, json, READ } from './toolKit';
 
 const COMMITS_SHOWN = 20;
 
 const projects = async () => (await callShared('deploy:projects:get', [])) as DeployProjectView[];
-
-const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null);
 
 /** id 또는 이름(대소문자 무시)으로 프로젝트·대상 찾기 */
 async function resolve(projectRef: string, targetRef: string) {

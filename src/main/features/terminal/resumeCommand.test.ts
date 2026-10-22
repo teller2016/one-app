@@ -101,6 +101,13 @@ describe('isRevivable', () => {
     expect(isRevivable('claude --disallowed-tools=Bash')).toBe(false);
   });
 
+  it('직접 띄운 claude 의 --tools 는 막은 것으로 — femc 의 --tools 는 femc 가 다시 붙인다', () => {
+    expect(isRevivable('claude --tools Read,Grep')).toBe(false);
+    expect(isRevivable('claude --tools=Read')).toBe(false);
+    expect(FEMC_ARGS).toContain('--tools');
+    expect(isRevivable(FEMC_ARGS)).toBe(true);
+  });
+
   it('--allowedTools 만 있으면 막은 것이 아니다', () => {
     expect(isRevivable('claude --allowedTools Read')).toBe(true);
   });

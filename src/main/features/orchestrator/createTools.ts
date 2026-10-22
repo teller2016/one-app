@@ -8,37 +8,54 @@
 import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import type { JiraWorkAccount, JiraWorkSkill, TerminalWorkspace } from '../../../shared/types';
-import { femcStacks, registeredFemcStack } from '../../lib/femc';
+import { branchIssueKey, leadingIssueKey } from '../../../shared/jira-url';
+import { isOpenTask, type JiraWorkAccount, type JiraWorkSkill, type TerminalWorkspace } from '../../../shared/types';
+import { femcStacks } from '../../lib/femc';
+import { isInsidePath } from '../../lib/util';
 import { sendToast } from '../notify/notify';
 import { femcCommand, listWorkAccounts, prepareJiraWork, resolveSkill, validateAddedTicket } from '../jira';
-import { findProjectsByJiraKey, listProjects } from '../projects/store';
+import { findProjectsByJiraKey } from '../projects/store';
 import { createSession, femcStackFor, listSessions, terminalOverview } from '../terminal';
 import { listBranches, listWorktrees, listWorktreesBrief } from '../workspaces/git';
 import { listWorkspaces } from '../workspaces/store';
 import { askApproval, DECLINED } from './approve';
 import { MAX_INSTRUCTION_CHARS, sanitizeInstruction, ticketKeyOf } from './guard';
-import { addTask } from './tasks';
-import { branchTicketKey, pickPlace, type TicketPlace } from './ticketPlan';
-import { excludedIds, fail, json } from './toolKit';
+import { addTask, listTasks } from './tasks';
+import { isSafeBranchName, pickPlace, type TicketPlace } from './ticketPlan';
+import { excludedIds, fail, isCompanyWorkspace, json, samePath } from './toolKit';
 import { setupWorktree, worktreePathFor } from './worktreeSetup';
 
 const MAX_TICKETS = 5;
 const SKILLS = ['auto', 'run-ticket', 'qa', 'dev', 'bugfix', 'none'] as const;
 const ACCOUNTS = ['personal', 'team'] as const;
-/** git 브랜치 이름으로 받을 것 — 셸·경로로 새지 않게 좁게 */
-const BRANCH_RE = /^(?!.*\.\.)(?!\/)(?!.*\/$)[\w.\-/]{1,100}$/;
-
-const samePath = (a: string, b: string) => path.resolve(a) === path.resolve(b);
-const isInside = (parent: string, child: string) => {
-  const rel = path.relative(path.resolve(parent), path.resolve(child));
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-};
 
 /** 그 경로(또는 아래)에 떠 있는 세션 수 — 루트·독 셸은 세지 않는다 */
 function sessionsAt(p: string): number {
   const excluded = excludedIds();
-  return listSessions().filter((s) => !excluded.has(s.id) && isInside(p, s.cwd)).length;
+  return listSessions().filter((s) => !excluded.has(s.id) && isInsidePath(p, s.cwd)).length;
+}
+
+/** 그 브랜치가 로컬이나 원격(origin)에 이미 있는가 — 승인 창에 '기존/새 브랜치'를 바르게 적으려고 */
+async function branchExists(repoPath: string, branch: string): Promise<boolean> {
+  const res = await listBranches(repoPath).catch(() => null);
+  return !!res && (res.locals.includes(branch) || res.remotes.some((r) => r.replace(/^origin\//, '') === branch));
+}
+
+/**
+ * 이미 그 티켓을 맡은 탭 — ① claude 가 뜬 세션(탭 제목·브랜치·첫 요청의 키) ② 아직 뜨는 중인 탭(제목 앞머리 키 —
+ * start_ticket 이 키로 단다) ③ 열린 작업 원장의 그 티켓. ⚠️ 루트 자신은 뺀다 — 루트의 첫 요청에 그 키가 들어 있으면
+ * 루트를 '그 티켓의 세션'으로 읽어 늘 거부했다(2026-10-22 검토).
+ */
+async function ticketOwner(key: string): Promise<{ id: string; tab: string } | null> {
+  const excluded = excludedIds();
+  const live = (await terminalOverview()).find((it) => !excluded.has(it.id) && ticketKeyOf(it) === key);
+  if (live) return { id: live.id, tab: live.tabTitle };
+  const sessions = listSessions().filter((s) => !excluded.has(s.id));
+  const starting = sessions.find((s) => leadingIssueKey(s.title) === key);
+  if (starting) return { id: starting.id, tab: starting.title };
+  const alive = new Set(sessions.map((s) => s.id));
+  const task = listTasks().find((t) => isOpenTask(t) && t.ticketKey === key && alive.has(t.sessionId));
+  return task ? { id: task.sessionId, tab: task.tab } : null;
 }
 
 /**
@@ -54,20 +71,10 @@ async function workspacesForProjectKey(projectKey: string): Promise<TerminalWork
   for (const ws of listWorkspaces()) {
     if (!isCompanyWorkspace(ws)) continue;
     const list = await listWorktreesBrief(ws.repoPath, { cached: true }).catch(() => []);
-    if (list.some((w) => branchTicketKey(w.branch)?.startsWith(`${projectKey}-`))) out.push(ws);
+    if (list.some((w) => branchIssueKey(w.branch)?.startsWith(`${projectKey}-`))) out.push(ws);
   }
   return out;
 }
-
-/** 그 워크스페이스에 걸린 Jira 프로젝트 키 */
-export function jiraKeysOf(ws: TerminalWorkspace): string[] {
-  return listProjects()
-    .filter((p) => p.jiraProjectKey && samePath(p.localPath, ws.repoPath))
-    .map((p) => p.jiraProjectKey);
-}
-
-/** 회사(FEMC) 저장소인가 — femc 에 등록돼 있거나 Jira 키가 걸려 있다. 새 세션은 여기서만 연다(기획 결정) */
-export const isCompanyWorkspace = (ws: TerminalWorkspace) => !!registeredFemcStack(ws.repoPath) || jiraKeysOf(ws).length > 0;
 
 const placeText = (ws: TerminalWorkspace, place: TicketPlace): string => {
   switch (place.kind) {
@@ -78,6 +85,12 @@ const placeText = (ws: TerminalWorkspace, place: TicketPlace): string => {
     case 'new':
       return `새 워크트리 ${path.basename(worktreePathFor(ws.name, place.branch))} ← ${place.fromBranch ? '기존' : '새'} 브랜치 ${place.branch}`;
   }
+};
+
+/** 분기점 표기 — 이미 있는 브랜치면 스크립트가 분기점을 쓰지 않으니 그렇게 적는다 */
+const baseText = (place: TicketPlace, base: string | undefined): string => {
+  if (place.kind !== 'new' || !base) return '';
+  return place.fromBranch ? ` (기존 브랜치라 분기점 ${base} 는 쓰지 않음)` : ` (분기점 ${base})`;
 };
 
 const skillText = (skill: JiraWorkSkill, issueType: string): string => {
@@ -104,10 +117,11 @@ const stackOptions = () => femcStacks().map((s) => ({ value: s, label: s }));
 async function ensurePlace(
   ws: TerminalWorkspace,
   place: TicketPlace,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; cwd: string; branch: string | null; created: boolean; warnings: string[] } | { ok: false; error: string }> {
   if (place.kind === 'existing') return { ok: true, cwd: place.path, branch: place.branch, created: false, warnings: [] };
   if (place.kind === 'main') return { ok: true, cwd: place.path, branch: place.branch, created: false, warnings: [] };
-  const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch: place.branch });
+  const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch: place.branch, signal });
   if (!res.ok) return { ok: false, error: `워크트리를 만들지 못했습니다: ${res.error}` };
   return { ok: true, cwd: res.path, branch: place.branch, created: true, warnings: res.warnings };
 }
@@ -132,12 +146,12 @@ async function planTicket(t: TicketInput): Promise<{ plan: TicketPlan } | { refu
   if (!info.ok || !info.key) return { refused: { key: t.key, reason: info.error ?? '티켓을 찾지 못했습니다.' } };
   const key = info.key;
 
-  const live = (await terminalOverview()).find((it) => ticketKeyOf(it) === key);
-  if (live) {
+  const owner = await ticketOwner(key);
+  if (owner) {
     return {
       refused: {
         key,
-        reason: `이미 이 티켓의 세션이 있습니다(탭 '${live.tabTitle}', id ${live.id}) — 새로 만들지 말고 send_to_session 으로 지시하세요.`,
+        reason: `이미 이 티켓의 세션이 있습니다(탭 '${owner.tab}', id ${owner.id}) — 새로 만들지 말고 send_to_session 으로 지시하세요.`,
       },
     };
   }
@@ -231,8 +245,10 @@ export function registerCreateTools(server: McpServer): void {
       const refused: { key: string; reason: string; candidates?: unknown }[] = [];
       for (const t of tickets) {
         const r = await planTicket(t);
-        if ('plan' in r) plans.push(r.plan);
-        else refused.push(r.refused);
+        if (!('plan' in r)) refused.push(r.refused);
+        // 키와 주소로 같은 티켓을 두 번 넘겨도 한 번만 연다
+        else if (plans.some((p) => p.key === r.plan.key)) refused.push({ key: r.plan.key, reason: '같은 티켓이 두 번 들어와 한 번만 엽니다.' });
+        else plans.push(r.plan);
       }
       if (plans.length === 0) return json({ ok: false, started: [], refused });
 
@@ -273,7 +289,12 @@ export function registerCreateTools(server: McpServer): void {
           started.push({ key: p.key, ok: false, skipped: '사용자가 승인 창에서 뺐습니다.' });
           continue;
         }
-        const placed = await ensurePlace(p.ws, p.place);
+        // 루트가 호출을 멈췄으면(Esc) 남은 티켓은 열지 않는다 — 이미 연 것은 그대로 둔다
+        if (extra.signal.aborted) {
+          started.push({ key: p.key, ok: false, skipped: '루트가 호출을 멈춰 열지 않았습니다.' });
+          continue;
+        }
+        const placed = await ensurePlace(p.ws, p.place, extra.signal);
         if (!placed.ok) {
           started.push({ key: p.key, ok: false, error: placed.error });
           continue;
@@ -344,8 +365,8 @@ export function registerCreateTools(server: McpServer): void {
       if (!isCompanyWorkspace(ws)) return fail(`'${ws.name}' 은 회사(FEMC) 저장소가 아닙니다 — 루트는 FEMC 저장소에서만 새 세션을 엽니다.`);
       const instruction = sanitizeInstruction(args.instruction).trim();
       if (!instruction) return fail('지시가 비었습니다.');
-      if (args.new_branch && !BRANCH_RE.test(args.new_branch)) return fail('브랜치 이름이 올바르지 않습니다.');
-      if (args.base && !BRANCH_RE.test(args.base)) return fail('분기점 브랜치 이름이 올바르지 않습니다.');
+      if (args.new_branch && !isSafeBranchName(args.new_branch)) return fail('브랜치 이름이 올바르지 않습니다.');
+      if (args.base && !isSafeBranchName(args.base)) return fail('분기점 브랜치 이름이 올바르지 않습니다.');
 
       const worktrees = (await listWorktrees(ws.repoPath).catch(() => [])).filter((w) => !w.missing && !w.plain);
       let place: TicketPlace;
@@ -355,7 +376,9 @@ export function registerCreateTools(server: McpServer): void {
         place = { kind: 'existing', path: wt.path, branch: wt.branch ?? 'detached', main: wt.isMain };
       } else if (args.new_branch) {
         const wt = worktrees.find((w) => w.branch === args.new_branch);
-        place = wt ? { kind: 'existing', path: wt.path, branch: args.new_branch, main: wt.isMain } : { kind: 'new', branch: args.new_branch, fromBranch: false };
+        place = wt
+          ? { kind: 'existing', path: wt.path, branch: args.new_branch, main: wt.isMain }
+          : { kind: 'new', branch: args.new_branch, fromBranch: await branchExists(ws.repoPath, args.new_branch) };
       } else {
         const main = worktrees.find((w) => w.isMain);
         if (!main) return fail('주 체크아웃을 찾지 못했습니다.');
@@ -371,7 +394,7 @@ export function registerCreateTools(server: McpServer): void {
           title: '새 세션 열기',
           fields: [
             { label: '저장소', value: ws.name },
-            { label: '위치', value: placeText(ws, place) + (place.kind === 'new' && args.base ? ` (분기점 ${args.base})` : '') },
+            { label: '위치', value: placeText(ws, place) + baseText(place, args.base) },
             { label: '지시', value: instruction },
             ...(known ? [{ label: '스택', value: known }] : []),
           ],
@@ -385,7 +408,7 @@ export function registerCreateTools(server: McpServer): void {
       let created = false;
       let warnings: string[] = [];
       if (place.kind === 'new') {
-        const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch: place.branch, base: args.base });
+        const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch: place.branch, base: args.base, signal: extra.signal });
         if (!res.ok) return fail(`워크트리를 만들지 못했습니다: ${res.error}`);
         cwd = res.path;
         created = true;
@@ -434,26 +457,27 @@ export function registerCreateTools(server: McpServer): void {
     async ({ workspace_id, branch, base }, extra) => {
       const ws = listWorkspaces().find((w) => w.id === workspace_id);
       if (!ws) return fail('그런 워크스페이스가 없습니다 — list_workspaces 의 id 를 쓰세요.');
-      if (!BRANCH_RE.test(branch)) return fail('브랜치 이름이 올바르지 않습니다.');
-      if (base && !BRANCH_RE.test(base)) return fail('분기점 브랜치 이름이 올바르지 않습니다.');
+      if (!isSafeBranchName(branch)) return fail('브랜치 이름이 올바르지 않습니다.');
+      if (base && !isSafeBranchName(base)) return fail('분기점 브랜치 이름이 올바르지 않습니다.');
       const worktrees = await listWorktrees(ws.repoPath).catch(() => []);
       const existing = worktrees.find((w) => !w.missing && w.branch === branch);
       if (existing) return json({ ok: true, created: false, path: existing.path, note: '그 브랜치의 워크트리가 이미 있습니다.' });
       const target = worktreePathFor(ws.name, branch);
+      const place: TicketPlace = { kind: 'new', branch, fromBranch: await branchExists(ws.repoPath, branch) };
       const outcome = await askApproval(
         {
           title: '워크트리 만들기',
           fields: [
             { label: '저장소', value: ws.name },
-            { label: '브랜치', value: branch + (base ? ` (분기점 ${base})` : '') },
+            { label: '브랜치', value: `${place.fromBranch ? '기존' : '새'} 브랜치 ${branch}${baseText(place, base)}` },
             { label: '위치', value: target },
-            ...(branchTicketKey(branch) ? [{ label: '티켓', value: branchTicketKey(branch) as string }] : []),
+            ...(branchIssueKey(branch) ? [{ label: '티켓', value: branchIssueKey(branch) as string }] : []),
           ],
         },
         extra.signal,
       );
       if (outcome.decision !== 'approved') return fail(DECLINED[outcome.decision]);
-      const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch, base });
+      const res = await setupWorktree({ repoPath: ws.repoPath, workspaceName: ws.name, branch, base, signal: extra.signal });
       if (!res.ok) return fail(`워크트리를 만들지 못했습니다: ${res.error}\n${res.output}`);
       sendToast({ title: '루트가 워크트리를 만들었습니다', message: `${ws.name} · ${path.basename(res.path)}`, variant: 'info', dedupeKey: `root-wt:${res.path}` });
       return json({ ok: true, created: true, path: res.path, branch, warnings: res.warnings.length ? res.warnings : undefined });

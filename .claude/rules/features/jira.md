@@ -86,8 +86,11 @@ paths:
 - `--dangerously-skip-permissions` 는 femc 가 `buildClaudeArgs()` 에서 자체적으로 붙이므로 권한 창·신뢰 확인도 없다.
 - **④ 스택 선택 창**(2026-10-22) — femc 는 등록 경로(`~/.femc/config.local.json` scopes) 밖이면 스택을 못 정해 실행할 때마다 'Which stack?' 을 띄운다
   (`~/projects/worktrees/…` 워크트리가 그렇다). → 모달이 위치(`cwd`)를 넘기면 `work.ts` 가 `terminal femcStackFor(cwd)` 로 스택을 정해
-  **`--stack <s>`** 를 붙인다: 그 저장소에서 마지막으로 쓴 스택(재부팅 복원 기록이 femc 실행 인자에서 읽어 `femc-stacks.json` 에 위치별로 남긴다)
-  → femc 등록 선언(`lib/femc.ts` — femc CLI 의 registeredStackOf 와 같은 파일) → 모르면 붙이지 않는다(femc 가 묻는다). femc 는 `--stack` 을 인자 어디서든 떼어 쓴다.
+  **`--stack <s>`** 를 붙인다: ① 그 위치가 femc 등록 경로 안이면 등록 선언(`lib/femc.ts` — femc CLI 의 registeredStackOf 와 같은 파일 · ⚠️ 등록 경로에서 선언과 다른
+  스택을 주면 femc 가 실행을 거부한다 `verifyStackCwd`) ② 그 저장소에서 마지막으로 쓴 스택(재부팅 복원 기록이 femc 실행 인자에서 읽어 `femc-stacks.json` 에
+  위치별로 남긴다 — 최근 것부터, 지금 femc 에 없는 스택은 버린다) ③ 주 저장소의 등록 선언 → 모르면 붙이지 않는다(femc 가 묻는다). femc 는 `--stack` 을 인자 어디서든 떼어 쓴다.
+  ⚠️ **프롬프트가 한 낱말이거나 `-` 로 시작하면 `femc run '<프롬프트>'`** — femc 는 첫 인자가 자기 명령(setup·doctor…)·그 오타처럼 보이는 낱말이면 명령으로 실행하거나
+  되묻고 끝난다(femc.mjs `COMMANDS`·`nearestCommands`). 여러 낱말(Jira [작업]의 `/dev SSB-1 …`)은 예전 명령 그대로.
   명령 조립은 `femcCommand()` 한 곳 — 루트 세션의 새 세션(orchestrator open_session)도 같은 것을 쓴다.
 - 실측 확인법: 개발 인스턴스는 **tmux 소켓이 갈린다**(`-L oneapp-dev`, sidecar 도 `terminal-sessions-dev.json`) — 빌드 앱 세션(`-L oneapp`)과 헷갈리지 말 것. ⚠️ `capture-pane` 은 pane 타깃이라 `=이름` 이 안 먹는다(`-t oneapp-<id>` 로 줄 것). attach replay 로는 TUI 화면을 볼 수 없다(대체 화면이면 replay 를 생략하는 설계).
 - 이 회피는 **Jira [작업] 경로에만** 적용했다(2026-08-12 사용자 선택). 터미널 `[+]` 새 세션·프리셋은 그대로라 거기선 계정 선택이 뜬다.

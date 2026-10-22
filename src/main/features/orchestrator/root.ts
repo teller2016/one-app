@@ -167,6 +167,11 @@ function rootCommand(mcpFile: string, resumeId: string | null): string {
     ...(resumeId ? ['--resume', shQuote(resumeId)] : []),
     '--mcp-config',
     shQuote(mcpFile),
+    // 루트에는 원앱 MCP 만 — 사용자 설정·프로젝트의 다른 MCP 서버(DB·브라우저 등)를 싣지 않는다
+    '--strict-mcp-config',
+    // 사용자 설정의 기본 권한 모드(auto 등)를 따르지 않는다 — 허용 목록 밖의 도구는 늘 묻게(choices 의 'manual' = 묻기, 2.1.307 --help)
+    '--permission-mode',
+    'manual',
     // 워커가 SendMessage 로 보내는 보고를 승인 대기 없이 받는다(권한 확인을 건너뛰는 워커의 메시지도)
     '--settings',
     shQuote(JSON.stringify({ crossSessionInbound: 'accept' })),

@@ -8,9 +8,23 @@ import { execFile } from 'node:child_process';
 
 export type ProcRow = { pid: number; ppid: number; args: string };
 
-/** 셸 프로세스 — 이 아래를 더 내려가 본다(`-zsh`·`/bin/zsh -il`·`zsh -ic '…'`) */
-const SHELL_RE = /^-?(?:\S*\/)?(?:zsh|bash|sh|fish|dash)(?:\s|$)/;
+const SHELL_NAME_RE = /^-?(?:\S*\/)?(?:zsh|bash|sh|fish|dash)$/;
 const MAX_ARGS = 160;
+
+/**
+ * 셸 프로세스인가 — 이 아래를 더 내려가 본다(`-zsh`·`/bin/zsh -il`·`zsh -ic '…'`).
+ * ⚠️ 스크립트 파일을 돌리는 셸(`bash ./deploy.sh`·`sh -x run.sh`)은 그 자체가 명령이다 — 내려가면 스크립트 대신
+ *    그 안의 `sleep`·`node` 를 보고했다(2026-10-22 검토). 옵션만 있거나 `-c` 래퍼일 때만 셸로 본다.
+ */
+export function isShellProcess(args: string): boolean {
+  const parts = args.split(/\s+/);
+  if (!SHELL_NAME_RE.test(parts[0])) return false;
+  for (const p of parts.slice(1)) {
+    if (!p.startsWith('-')) return false;
+    if (/^-[A-Za-z]*c[A-Za-z]*$/.test(p)) return true; // -c '…' 뒤는 명령 글 — pane 셸·프리셋 래퍼
+  }
+  return true;
+}
 
 /** `ps -A -o pid=,ppid=,args=` 출력 → 행 */
 export function parsePs(stdout: string): ProcRow[] {
@@ -34,7 +48,7 @@ export function foregroundCommands(rows: ProcRow[], root: number): string[] {
   const queue = [...(kids.get(root) ?? [])];
   for (let guard = 0; queue.length && guard < 200; guard += 1) {
     const r = queue.shift() as ProcRow;
-    if (SHELL_RE.test(r.args)) {
+    if (isShellProcess(r.args)) {
       queue.push(...(kids.get(r.pid) ?? []));
       continue;
     }

@@ -1320,7 +1320,8 @@ export function TerminalSection({ active = true }: { active?: boolean }) {
           onZoneDrop={onZoneDrop}
           onSplitGripDown={onSplitGripDown}
         >
-          {!activeSession && (
+          {/* 루트 칸인데 루트가 떠 있으면(막 켜져 활성 세션이 정해지기 전 등) 빈 화면 문구를 띄우지 않는다 — '꺼져 있습니다'가 깜빡였다 */}
+          {!activeSession && !(selection?.kind === 'root' && rootSession) && (
             <div className="terminal__empty">
               {selection?.kind === 'root' ? (
                 // 루트가 꺼져 있다(/exit·탭 닫기) — 켜면 지난 대화를 이어 간다(features/orchestrator rootLife)

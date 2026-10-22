@@ -61,6 +61,15 @@ export const isIssueKey = (value: unknown): value is string =>
 export const leadingIssueKey = (text: string): string | undefined =>
   /^[A-Z][A-Z0-9_]*-\d+/.exec(text.trim().toUpperCase())?.[0];
 
+/**
+ * 브랜치가 맡은 이슈 키 — **마지막 조각의 앞머리**(`feature/SSB-137` · `fix/SSB-137-쿠폰` · `feature/SSB-137-v2` 모두 SSB-137).
+ * Jira [작업] 모달의 기본 위치와 루트 세션(start_ticket 위치·세션의 티켓 키)이 같은 규칙을 쓴다.
+ */
+export const branchIssueKey = (branch: string | null | undefined): string | undefined => {
+  const seg = branch?.split('/').pop();
+  return seg ? leadingIssueKey(seg) : undefined;
+};
+
 /** 이슈 브라우저 주소 — `{base}/browse/{key}` */
 export const jiraIssueUrl = (jiraUrl: string, key: string) =>
   `${jiraUrl.replace(/\/+$/, '')}/browse/${key}`;

@@ -7,13 +7,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  completeLines,
-  fileSize,
   findClaude,
   listSessions,
   parseScreenStatus,
   parseTranscript,
-  readRange,
   revealSession,
   sessionScreen,
   terminalOverview,
@@ -21,9 +18,9 @@ import {
 import { sendToast } from '../notify/notify';
 import { gateIfChained } from './approve';
 import { currentPrompt, deliver } from './deliver';
-import { MAX_INSTRUCTION_CHARS, ticketKeyOf } from './guard';
+import { clip, MAX_INSTRUCTION_CHARS, ticketKeyOf } from './guard';
 import { addTask, listTasks, REPORT_REQUEST_PREFIX } from './tasks';
-import { excludedIds, fail, json, NO_SESSION, READ, stateOf, tabIndexOf } from './toolKit';
+import { excludedIds, fail, iso, json, NO_SESSION, READ, readTailLines, stateOf, tabIndexOf } from './toolKit';
 
 /** 마지막 답변을 찾는 꼬리 — 답변은 맨 끝에 있지만 그 앞 도구 결과 한 줄이 클 수 있다(waitCard.ts 와 같은 값) */
 const REPLY_TAIL_BYTES = 512 * 1024;
@@ -39,11 +36,7 @@ const TASKS_SHOWN = 30;
  */
 function lastReply(file: string): string | null {
   try {
-    const size = fileSize(file);
-    const start = Math.max(0, size - REPLY_TAIL_BYTES);
-    let text = readRange(file, start, size);
-    if (start > 0) text = text.slice(text.indexOf('\n') + 1); // 꼬리 첫 조각은 줄 중간이다
-    const items = parseTranscript(completeLines(text).lines, '').items;
+    const items = parseTranscript(readTailLines(file, REPLY_TAIL_BYTES).lines, '').items;
     let from = items.length - 1;
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const it = items[i];
@@ -63,8 +56,6 @@ function lastReply(file: string): string | null {
   }
   return null;
 }
-
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 export function registerOrchestratorTools(server: McpServer): void {
   server.registerTool(
@@ -98,7 +89,7 @@ export function registerOrchestratorTools(server: McpServer): void {
           title: it.title,
           first_prompt: it.firstPrompt,
           last_prompt: it.lastPrompt,
-          last_activity: new Date(it.activityAt).toISOString(),
+          last_activity: iso(it.activityAt),
         })),
       });
     },
@@ -185,6 +176,7 @@ export function registerOrchestratorTools(server: McpServer): void {
         instruction: text,
         report: report !== false,
         claude: res.claude,
+        offset: res.offset,
       });
       sendToast({
         title: `루트가 ${key ?? s.title} 에 지시했습니다`,
@@ -238,8 +230,8 @@ export function registerOrchestratorTools(server: McpServer): void {
           report: t.report,
           state: t.state,
           note: t.note,
-          dispatched_at: new Date(t.createdAt).toISOString(),
-          updated_at: new Date(t.updatedAt).toISOString(),
+          dispatched_at: iso(t.createdAt),
+          updated_at: iso(t.updatedAt),
         })),
       });
     },

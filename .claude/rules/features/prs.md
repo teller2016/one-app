@@ -61,5 +61,7 @@ push → PR 생성 → 머지 루프를 앱에서 끝내는 섹션. **마스터-
 
 ⚠️ **전역 이슈 검색 API 는 브랜치를 주지 않는다**(`base`·`head` 는 `null`, `ref` 는 빈 문자열 — 2026-08-06 실측). 그래서 `enrichBranches` 가 **저장소별 `/pulls?state=open` 1요청**으로 한꺼번에 채운다(PR 마다 `/pulls/{n}` 을 부르면 PR 수만큼 요청 — 저장소 수 ≪ PR 수). **같은 응답의 `mergeable` 도 함께 실어** 목록의 충돌 뱃지가 추가 요청 없이 나온다. 승인 수 보강과는 서로 독립이라 `Promise.all` 로 함께 돌린다. 상세 패널의 방향·충돌 정본은 `prs:merge-info`(`/pulls/{n}`).
 
-**루트 세션 진입점**(2026-10-22, `lib/prRequest.ts` — 배포의 deployRequest 와 같은 패턴): 루트가 `requestPr({kind:'create'|'merge'})` 로 새 PR 모달을 채워 열거나
+**루트 세션 진입점**(2026-10-22, `lib/prRequest.ts` — `lib/sectionRequest.ts` 틀): 루트가 `requestPr({kind:'create'|'merge'})` 로 새 PR 모달을 채워 열거나
 그 PR 을 골라 둔다(`CreatePrModal initial` · `PrDetail initialMethod`). ⚠️ 만들기·머지는 하지 않는다 — 사용자가 [PR 생성]·[머지]. 상세는 `features/orchestrator.md` 3b.
+- ⚠️ 초기값은 **마운트 때만** 읽힌다 — 모달·상세가 이미 떠 있을 때 다시 온 요청이 안 먹었다(2026-10-22 검토). 요청마다 순번을 올려 `CreatePrModal`·`PrDetail` 의 key 에 싣는다. 다른 PR 로 옮기면 미리 고른 머지 방식은 버린다.
+- 소비 시점은 **레지스트리를 한 번 받은 뒤**(`projectsLoaded`) — 예전 `projects.length > 0` 조건은 등록 프로젝트가 0개면 요청을 영영 안 꺼냈다(목록 로드는 기다리지 않는다 — 선택은 상태로 남아 목록이 오면 보인다).

@@ -13,7 +13,7 @@ import { listProjects } from '../projects/store';
 import { getGiteaConfig } from '../settings/store';
 import { listWorkspaces } from '../workspaces/store';
 import { sendOpenRequest } from './openRequest';
-import { fail, json, READ } from './toolKit';
+import { fail, iso, json, READ } from './toolKit';
 
 const METHODS = ['merge', 'squash', 'rebase'] as const;
 
@@ -60,8 +60,6 @@ async function myLogin(): Promise<string | null> {
   }
   return me.login;
 }
-
-const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null);
 
 async function openPrs(force: boolean): Promise<PrListResult> {
   return (await callShared('prs:fetch', [{ force }])) as PrListResult;

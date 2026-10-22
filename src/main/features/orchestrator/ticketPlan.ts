@@ -2,8 +2,8 @@
 //   ① 그 티켓 브랜치의 워크트리가 있으면 거기 ② 브랜치만 있으면(로컬·원격) 그 브랜치로 새 워크트리
 //   ③ 주 체크아웃이 비어 있으면(기본 브랜치·변경 없음·세션 없음) 주 체크아웃 — 브랜치는 워커(스킬)가 딴다
 //   ④ 아니면 새 워크트리 — 브랜치 이름은 이슈 유형으로(버그 계열 fix/키, 그 외 feature/키). -v2 같은 새 이름은 만들지 않는다.
-// 티켓 키는 브랜치 마지막 조각의 앞머리로 맞춘다(`feature/SSB-137` · `fix/SSB-137-쿠폰`) — Jira [작업]·list_sessions 와 같은 규칙.
-import { leadingIssueKey } from '../../../shared/jira-url';
+// 티켓 키는 브랜치 마지막 조각의 앞머리로 맞춘다(`feature/SSB-137` · `fix/SSB-137-쿠폰`) — shared `branchIssueKey`, Jira [작업] 모달·list_sessions 와 같은 규칙.
+import { branchIssueKey } from '../../../shared/jira-url';
 
 export type PlanWorktree = { path: string; branch?: string; isMain: boolean; dirty: boolean };
 
@@ -23,11 +23,13 @@ const BUG_RE = /버그|bug|결함|장애|defect/i;
 /** 이슈 유형으로 정한 새 브랜치 이름 — Jira [작업]의 스킬 자동 선택(bugfix/dev)과 같은 판별 */
 export const branchNameFor = (key: string, issueType: string) => `${BUG_RE.test(issueType) ? 'fix' : 'feature'}/${key}`;
 
-/** 브랜치가 맡은 티켓 키 — 마지막 조각의 앞머리 */
-export const branchTicketKey = (branch: string | undefined): string | undefined => {
-  const seg = branch?.split('/').pop();
-  return seg ? leadingIssueKey(seg) : undefined;
-};
+/**
+ * 루트가 넘긴 브랜치 이름을 받아도 되는가 — 셸·경로로 새지 않게 좁게(git check-ref-format 의 부분집합).
+ * ⚠️ femc-wt.sh 는 인자가 **있는 폴더면 그 워크트리를 채운다**(`[ -d "$TARGET" ]`, 작업 폴더 기준) — `.`·`src` 같은 이름이
+ *    저장소 안 폴더로 읽히지 않게 조각 첫 글자 `.`·`-` 를 막고, 실행은 빈 임시 폴더에서 한다(worktreeSetup.ts).
+ */
+export const isSafeBranchName = (name: string): boolean =>
+  /^(?![-./])(?!.*(?:\.\.|\/\/|\/[-.]))(?!.*(?:\/|\.|\.lock)$)[\w.\-/]{1,100}$/.test(name);
 
 export function pickPlace(input: {
   key: string;
@@ -39,10 +41,10 @@ export function pickPlace(input: {
   sessionsAt: (path: string) => number;
 }): TicketPlace {
   const { key } = input;
-  const wt = input.worktrees.find((w) => branchTicketKey(w.branch) === key);
+  const wt = input.worktrees.find((w) => branchIssueKey(w.branch) === key);
   if (wt?.branch) return { kind: 'existing', path: wt.path, branch: wt.branch, main: wt.isMain };
 
-  const named = input.branches.map((b) => b.replace(/^origin\//, '')).find((b) => branchTicketKey(b) === key);
+  const named = input.branches.map((b) => b.replace(/^origin\//, '')).find((b) => branchIssueKey(b) === key);
   if (named) return { kind: 'new', branch: named, fromBranch: true };
 
   const main = input.worktrees.find((w) => w.isMain);

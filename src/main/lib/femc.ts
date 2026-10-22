@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isInsidePath } from './util';
 
 const femcHome = () => process.env.FEMC_STATE_HOME || path.join(os.homedir(), '.femc');
 
@@ -39,11 +40,6 @@ export function femcStacks(): string[] {
   }
 }
 
-const isInside = (parent: string, child: string) => {
-  const rel = path.relative(path.resolve(parent), path.resolve(child));
-  return rel === '' || (!rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel));
-};
-
 type LocalConfig = { projects?: Record<string, { scopes?: Record<string, { path?: string | null }> }> };
 type SharedConfig = { projects?: Record<string, { stack?: string }> };
 
@@ -56,7 +52,7 @@ export function registeredFemcStack(cwd: string): string | null {
   if (!local?.projects || !shared?.projects) return null;
   for (const [name, entry] of Object.entries(local.projects)) {
     for (const scope of Object.values(entry?.scopes ?? {})) {
-      if (typeof scope?.path !== 'string' || !isInside(scope.path, cwd)) continue;
+      if (typeof scope?.path !== 'string' || !isInsidePath(scope.path, cwd)) continue;
       const declared = shared.projects[name]?.stack;
       if (typeof declared === 'string') return declared;
     }

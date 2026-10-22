@@ -747,7 +747,7 @@ async function restoreSessionsOnce(): Promise<void> {
     }
   }
   const now = Date.now();
-  let restored = false;
+  let anyRestored = false;
   // ⚠️ list-sessions 는 세션 이름(oneapp-<랜덤 id>)순으로 나열해 생성 순서와 무관하다 —
   // 그대로 Map 에 담으면 삽입 순서(= 탭 기본 순서)가 재시작마다 뒤섞인다(2026-09-15 신고).
   // sidecar 의 createdAt 순으로 복원해 생성 순서를 지킨다. 메타 없는 고아 세션은 뒤로.
@@ -762,7 +762,7 @@ async function restoreSessionsOnce(): Promise<void> {
   ].sort((a, b) => a.at - b.at);
   for (const entry of ordered) {
     if ('revive' in entry) {
-      if (reviveSession(bin, entry.revive.meta, entry.revive.resume, now)) restored = true;
+      if (reviveSession(bin, entry.revive.meta, entry.revive.resume, now)) anyRestored = true;
       continue;
     }
     const name = entry.name;
@@ -799,9 +799,9 @@ async function restoreSessionsOnce(): Promise<void> {
     session.notifiedSinceInput = true;
     sessions.set(id, session);
     wireSession(session);
-    restored = true;
+    anyRestored = true;
   }
-  if (restored) {
+  if (anyRestored) {
     ensureStatusTimer();
     emitChanged();
   }
@@ -1094,22 +1094,16 @@ export async function sessionRootPid(id: string): Promise<number | null> {
   return s.pty.pid || null;
 }
 
-/** 세션의 지금 화면 글자 — tmux 만(폴백 세션은 화면 모델이 없어 null) */
-export async function sessionScreen(id: string): Promise<string | null> {
+/**
+ * 세션의 지금 화면 글자 — tmux 만(폴백 세션은 화면 모델이 없어 null).
+ * styled = SGR 까지 — 루트 세션이 입력 상자의 흐린 제안 문구를 가려낸다(orchestrator/guard.ts)
+ */
+export async function sessionScreen(id: string, opts: { styled?: boolean } = {}): Promise<string | null> {
   const s = sessions.get(id);
   if (!s?.tmuxName) return null;
   if (!s.paneId) s.paneId = (await tmuxPaneId(s.tmuxName)) ?? undefined;
-  return s.paneId ? tmuxCapturePane(s.paneId) : null;
+  return s.paneId ? tmuxCapturePane(s.paneId, opts) : null;
 }
-
-/** 지금 화면 글자 + SGR — 루트 세션이 입력 상자의 흐린 제안 문구를 가려낸다(orchestrator/guard.ts) */
-export async function sessionStyledScreen(id: string): Promise<string | null> {
-  const s = sessions.get(id);
-  if (!s?.tmuxName) return null;
-  if (!s.paneId) s.paneId = (await tmuxPaneId(s.tmuxName)) ?? undefined;
-  return s.paneId ? tmuxCapturePane(s.paneId, { styled: true }) : null;
-}
-
 
 /** 상단 바 [맨 아래로] — copy-mode 를 끝내면 tmux 가 현재 화면으로 돌아온다 */
 export async function scrollSessionToBottom(id: string): Promise<void> {
