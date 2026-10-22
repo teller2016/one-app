@@ -968,7 +968,14 @@ export type MirrorStatus = {
   device: string | null; // 바로 쓸 수 있는 기기 모델명 ('device' 상태만, 없으면 null)
   deviceIssue?: MirrorDeviceIssue; // 기기는 붙어 있으나 쓸 수 없는 이유
   error?: string; // 마지막 비정상 종료 사유
+  shortcutTaken?: boolean; // 제어 중인데 포커스 단축키를 다른 앱이 쓰고 있어 등록하지 못함
 };
+
+/** 폰 제어 창 포커스 전역 단축키 — 제어 중에만 등록한다(main 등록 · 위젯 표기 공용) */
+export const MIRROR_FOCUS_SHORTCUT = {
+  accelerator: "Control+Alt+Command+P",
+  label: "⌃⌥⌘P",
+} as const;
 
 export type MirrorActionResult = { ok: boolean; error?: string };
 

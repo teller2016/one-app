@@ -1,16 +1,17 @@
 // scrcpy 실행·상태 추적 — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
 // ⚠️ spawn 자식은 부모(앱) 종료만으로 죽지 않는다(POSIX 재부모화) — 앱 종료 시
 // main.ts 의 before-quit 이 disposeMirror() 로 명시적으로 정리한다(2026-08-07).
-import { app } from 'electron';
+import { app, globalShortcut } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { dockLeftSlot } from '../../lib/macDock';
 import { CONTROL_ICON_PNG } from './controlIcon';
-import { focusWhenShown } from './focus';
+import { focusControlWindow, focusWhenShown } from './focus';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
+  MIRROR_FOCUS_SHORTCUT,
   type MirrorActionResult,
   type MirrorDeviceIssue,
   type MirrorMode,
@@ -123,6 +124,28 @@ let child: ChildProcess | null = null;
 let runningMode: MirrorMode | null = null;
 let starting = false; // 기기 확인(await) 중 재진입 방지 — 없으면 scrcpy 가 이중 실행돼 하나가 유실됨
 let lastError = '';
+let shortcutTaken = false; // 제어 중인데 포커스 단축키를 다른 앱이 쓰고 있어 등록 못 함
+
+/**
+ * 폰 제어 창 포커스 전역 단축키 — **제어 중에만** 등록한다(2026-10-22 사용자 결정).
+ * 제어를 안 할 땐 다른 앱의 키를 뺏지 않고, dev·설치본이 함께 떠 있어도 scrcpy 를 띄운 쪽만 등록해 다투지 않는다.
+ * 다른 앱이 이미 쓰는 키면 register 가 조용히 false 다(Electron 문서) — 위젯에 알린다.
+ * 이미 폰을 쓰는 중(scrcpy 가 맨 앞)이면 다시 눌러도 아무것도 안 한다(focus.ts 'already').
+ */
+function bindFocusShortcut(): void {
+  const { accelerator } = MIRROR_FOCUS_SHORTCUT;
+  if (globalShortcut.isRegistered(accelerator)) return;
+  shortcutTaken = !globalShortcut.register(accelerator, () => {
+    void focusMirror().then((r) => {
+      if (!r.ok) console.warn('[mirror] 단축키 포커스 실패:', r.error);
+    });
+  });
+}
+
+function unbindFocusShortcut(): void {
+  globalShortcut.unregister(MIRROR_FOCUS_SHORTCUT.accelerator);
+  shortcutTaken = false;
+}
 
 // 상태 변화 구독 (ipc 가 렌더러로 push)
 const listeners = new Set<() => void>();
@@ -186,6 +209,7 @@ export async function getMirrorStatus(): Promise<MirrorStatus> {
     device: scan.device,
     deviceIssue: scan.issue,
     error: lastError || undefined,
+    shortcutTaken: shortcutTaken || undefined,
   };
 }
 
@@ -234,18 +258,23 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
       }
       child = null;
       runningMode = null;
+      unbindFocusShortcut();
       emit();
     });
     proc.on('error', (err) => {
       lastError = err.message;
       child = null;
       runningMode = null;
+      unbindFocusShortcut();
       emit();
     });
     child = proc;
     runningMode = mode;
     // 제어는 켜자마자 키보드가 폰으로 가게 — 창이 뜨면 앞으로 가져온다(접근성 권한이 있을 때만)
-    if (mode === 'control') focusWhenShown(proc.pid);
+    if (mode === 'control') {
+      focusWhenShown(proc.pid);
+      bindFocusShortcut();
+    }
     emit();
     return { ok: true };
   } finally {
@@ -258,9 +287,29 @@ export function stopMirror(): MirrorActionResult {
   return { ok: true }; // 실제 정리는 exit 핸들러가 담당 (상태 push 포함)
 }
 
+/** 폰 제어 창을 맨 앞으로 + 마우스 캡처 — [포커스] 버튼·⌘P·전역 단축키 공용 */
+export async function focusMirror(): Promise<MirrorActionResult> {
+  if (!child?.pid || runningMode !== 'control') {
+    return { ok: false, error: '폰 제어가 켜져 있지 않습니다.' };
+  }
+  const r = await focusControlWindow(child.pid);
+  if (r === 'untrusted') {
+    return {
+      ok: false,
+      error:
+        '접근성 권한이 필요합니다 — 시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 One App 을 허용하세요.',
+    };
+  }
+  if (r === 'timeout' || r === 'failed') {
+    return { ok: false, error: '폰 제어 창을 앞으로 가져오지 못했습니다.' };
+  }
+  return { ok: true };
+}
+
 /** 앱 종료 시 scrcpy 회수 — 없으면 미러링을 켠 채 앱을 꺼도 scrcpy 가 고아로 남는다 */
 export function disposeMirror(): void {
   child?.kill('SIGTERM');
   child = null;
   runningMode = null;
+  unbindFocusShortcut();
 }

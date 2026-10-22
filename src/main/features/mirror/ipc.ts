@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import type { MirrorMode } from '../../../shared/types';
 import { broadcast } from '../../lib/broadcast';
 import {
+  focusMirror,
   getMirrorStatus,
   onMirrorChanged,
   startMirror,
@@ -13,6 +14,7 @@ export function registerMirrorIpc() {
   ipcMain.handle('mirror:status', () => getMirrorStatus());
   ipcMain.handle('mirror:start', (_e, mode: MirrorMode) => startMirror(mode));
   ipcMain.handle('mirror:stop', () => stopMirror());
+  ipcMain.handle('mirror:focus', () => focusMirror());
 
   // 프로세스 시작/종료(미러 창 닫힘 포함)를 모든 창에 push — 위젯이 다시 조회
   onMirrorChanged(() => broadcast('mirror:changed'));

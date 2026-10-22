@@ -242,6 +242,7 @@ declare global {
         getStatus: () => Promise<MirrorStatus>;
         start: (mode: MirrorMode) => Promise<MirrorActionResult>;
         stop: () => Promise<MirrorActionResult>;
+        focus: () => Promise<MirrorActionResult>;
         onChanged: (cb: () => void) => () => void;
       };
       vpn: {

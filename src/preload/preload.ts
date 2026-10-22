@@ -230,6 +230,8 @@ contextBridge.exposeInMainWorld("oneApp", {
     start: (mode: MirrorMode) => ipcRenderer.invoke("mirror:start", mode),
     // 미러링 종료 (SIGTERM)
     stop: () => ipcRenderer.invoke("mirror:stop"),
+    // 제어 창을 맨 앞으로 + 마우스 캡처 (접근성 권한 필요)
+    focus: () => ipcRenderer.invoke("mirror:focus"),
     // 프로세스 시작/종료(미러 창 닫힘 포함) 알림 — 위젯이 상태 재조회
     onChanged: (cb: () => void) => {
       const listener = () => cb();

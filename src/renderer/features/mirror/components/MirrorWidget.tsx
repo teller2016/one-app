@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
+  MIRROR_FOCUS_SHORTCUT,
   type MirrorMode,
   type MirrorStatus,
 } from '../../../../shared/types';
@@ -59,6 +60,18 @@ export function MirrorWidget() {
     }
   };
 
+  // 제어 창을 맨 앞으로 + 마우스 캡처 — 성공하면 팝업을 닫는다(폰을 쓸 차례라 가리기만 한다)
+  const focus = async () => {
+    setError('');
+    try {
+      const res = await window.oneApp.mirror.focus();
+      if (!res.ok) setError(res.error ?? '폰 제어 창을 앞으로 가져오지 못했습니다.');
+      else setCloseSignal((n) => n + 1);
+    } catch (err) {
+      setError(errMsg(err, '폰 제어 창을 앞으로 가져오지 못했습니다.'));
+    }
+  };
+
   const running = status?.running ?? null;
   // 기기가 붙어 있으나 쓸 수 없는 상태(승인 대기 등) — 원인을 그대로 보여준다
   const issue = status?.deviceIssue
@@ -82,12 +95,27 @@ export function MirrorWidget() {
     />
   );
   const tooltip = `폰 미러링 — ${statusText}`;
+  // 단축키를 다른 앱이 쓰고 있어 등록 못 했으면 표기하지 않는다(눌러도 안 되는 키를 안내하지 않게)
+  const focusKey = status?.shortcutTaken ? undefined : MIRROR_FOCUS_SHORTCUT.label;
 
   // ⌘P 팔레트 명령 — 위젯 버튼과 같은 핸들러
   useRegisterCommands('mirror', () => {
     if (busy) return [];
     if (running)
       return [
+        ...(running === 'control'
+          ? [
+              {
+                id: 'mirror-focus',
+                group: '명령' as const,
+                label: '폰 제어 창 포커스',
+                hint: focusKey,
+                keywords: 'scrcpy control focus',
+                icon: 'smartphone' as const,
+                run: () => void focus(),
+              },
+            ]
+          : []),
         {
           id: 'mirror-stop',
           group: '명령',
@@ -153,6 +181,15 @@ export function MirrorWidget() {
         {/* 액션 줄 — 기기 있으면 모드 선택, 실행 중이면 종료. 기기 없으면 줄 자체가 없음 */}
         {running ? (
           <div className="sbw__buttons">
+            {running === 'control' && (
+              <Button
+                size="sm"
+                onClick={() => void focus()}
+                title={`폰 제어 창을 앞으로 — 키보드·마우스가 폰으로 갑니다${focusKey ? ` (${focusKey})` : ''}`}
+              >
+                포커스
+              </Button>
+            )}
             <Button variant="danger" size="sm" onClick={stop} loading={busy}>
               {running === 'mirror' ? '미러링 종료' : '제어 종료'}
             </Button>
@@ -186,6 +223,11 @@ export function MirrorWidget() {
         )}
         {status && !status.installed && (
           <p className="hint">brew install scrcpy 로 설치하세요.</p>
+        )}
+        {running === 'control' && status?.shortcutTaken && (
+          <p className="hint">
+            단축키 {MIRROR_FOCUS_SHORTCUT.label} 를 다른 앱이 쓰고 있어 켜지 못했습니다 — [포커스] 버튼을 쓰세요.
+          </p>
         )}
         {/* 원인별 해결 힌트 — 실패 사유(에러)가 이미 떠 있으면 문구가 겹치므로 생략 */}
         {status?.installed && !running && issue && !error && !status.error && (
