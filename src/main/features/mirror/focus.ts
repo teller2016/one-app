@@ -174,6 +174,25 @@ function run(argv) {
 }
 `;
 
+// SIGTERM 을 받은 scrcpy 깨우기 — 해 없는 이벤트(수정키 없는 flagsChanged)를 그 프로세스에만 보낸다(scrcpy.ts terminate)
+const WAKE_SCRIPT = `
+ObjC.import('CoreGraphics');
+function run(argv) {
+  const ev = $.CGEventCreateKeyboardEvent(null, 55, false);
+  $.CGEventSetType(ev, $.kCGEventFlagsChanged);
+  $.CGEventSetFlags(ev, 0);
+  $.CGEventPostToPid(Number(argv[0]), ev);
+}
+`;
+
+/** 이벤트 하나로 scrcpy 의 이벤트 루프를 돌게 한다 — 앱이 꺼지는 중에도 끝까지 돌도록 main 과 떨어뜨려 띄운다 */
+export function wakeProcess(pid: number): void {
+  spawn('/usr/bin/osascript', ['-l', 'JavaScript', '-e', WAKE_SCRIPT, String(pid)], {
+    detached: true,
+    stdio: 'ignore',
+  }).unref();
+}
+
 /** focused = 앞으로(manual 이면 마우스 캡처까지) · already = 이미 맨 앞이라 손대지 않음 */
 export type FocusOutcome = 'focused' | 'already' | 'untrusted' | 'timeout' | 'failed';
 

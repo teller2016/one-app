@@ -91,6 +91,7 @@ paths:
 `adb devices -l` 로 USB 기기 모델명을 표시하고 기기 없으면 버튼 비활성. **기기가 붙어 있으나 쓸 수 없는 상태는 원인을 그대로 표시**(`MirrorDeviceIssue` = unauthorized/offline/no-permission → 위젯 라벨 + 해결 힌트, 문구는 `shared/types.ts` 의 `MIRROR_DEVICE_ISSUE_TEXT` 한 곳 — main 의 실행 실패 사유와 공용).
 
 scrcpy 창을 닫으면 exit 이벤트로 위젯 상태 자동 갱신(`mirror:changed`), 비정상 종료는 stderr 마지막 줄을 에러로 표시. 앱 종료 시 scrcpy 도 함께 종료됨(VPN 과 달리 독립 유지 안 함). 설정·저장 없음.
+- ⚠️ **SIGTERM 만으로는 scrcpy 가 안 끝날 수 있다**(2026-10-22 실측: 1분 넘게 남아 앱을 끈 뒤 고아가 됐다) — SDL3 은 SIGTERM 을 '다음에 이벤트 루프가 돌 때 종료'로 표시만 하고, 뒤에 가려져 이벤트가 오지 않는 scrcpy 는 깨어날 일이 없다(`sample` 스택: 메인 스레드가 `SDL_WaitEventTimeoutNS` 대기, AX 질의로는 안 깨어난다). [제어 종료]·앱 종료는 `scrcpy.ts` `terminate()` — SIGTERM 뒤 `wakeProcess`(해 없는 flagsChanged 를 `CGEventPostToPid` 로 그 프로세스에만, 앱이 꺼져도 돌도록 detached osascript)로 깨우고, 3초 안에 안 끝나면 `pkill -KILL -P`(adb 자식) + SIGKILL. 깨우자 바로 정상 종료되고 adb 자식도 정리됐다(실측). 앱 종료 중엔 타이머가 못 돌아 깨우기만 남는다.
 
 **창 한가운데 아이콘 교체** — `제어` 모드는 화면(비디오)이 없어도 키·마우스 입력을 받으려고 창을 띄우고, 그 안에 scrcpy 아이콘(초록 안드로이드)을 크게 그린다. **`SCRCPY_ICON_DIR` 환경변수로 아이콘 디렉터리를 통째로 갈아끼울 수 있어서**(scrcpy 4.0 실측, 2026-09-01) `userData/mirror-icons` 에 우리 PNG 를 만들어 spawn env 로 넘긴다(`mirror/scrcpy.ts` 의 `ensureIconDir`). 처음엔 투명 PNG(빈 창)였고, 2026-10-21 독 왼쪽 자리로 옮기며 **폰 모양 그림**으로 바꿨다(사용자 선택 — 테두리 없는 SDL 창은 모서리를 둥글게 못 해 안쪽 그림으로만 꾸민다. 앱 칩을 위에 덮는 안은 그림자 때문에 걷어냈다 — 아래 제어 창 절). 그림은 `npm run icon:mirror`(`scripts/make-mirror-icon.mjs` → `mirror/controlIcon.ts` base64)로 만든다 — 같은 그림이 Dock 타일로도 뜬다. 아이콘 하나 때문에 **scrcpy 를 직접 빌드해 번들할 이유가 없다** — 번들하면 ffmpeg 4종·SDL3·libusb dylib 을 전부 동봉하고 자가서명까지 해야 한다(서명이 어긋나면 safeStorage 계정이 날아간다).
 

@@ -1,6 +1,6 @@
 // scrcpy 실행·상태 추적 — 바탕화면 'Mirror USB.app'·'Control USB.app' 이식.
 // ⚠️ spawn 자식은 부모(앱) 종료만으로 죽지 않는다(POSIX 재부모화) — 앱 종료 시
-// main.ts 의 before-quit 이 disposeMirror() 로 명시적으로 정리한다(2026-08-07).
+// main.ts 의 before-quit 이 disposeMirror() 로 명시적으로 정리한다(2026-08-07) — SIGTERM 만으로는 안 끝날 수 있어 terminate() 를 쓴다.
 import { app, globalShortcut } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dockLeftSlot } from '../../lib/macDock';
 import { CONTROL_ICON_PNG } from './controlIcon';
-import { focusControlWindow, focusWhenShown, watchActivation } from './focus';
+import { focusControlWindow, focusWhenShown, wakeProcess, watchActivation } from './focus';
 import {
   MIRROR_DEVICE_ISSUE_TEXT,
   MIRROR_FOCUS_SHORTCUT,
@@ -292,8 +292,28 @@ export async function startMirror(mode: MirrorMode): Promise<MirrorActionResult>
   }
 }
 
+/**
+ * scrcpy 를 끝낸다 — ⚠️ SIGTERM 만으로는 안 끝날 수 있다(2026-10-22 실측: 1분 넘게 남아 앱 종료 뒤 고아가 됐다).
+ * SDL3 은 SIGTERM 을 '다음에 이벤트 루프가 돌 때 종료'로 표시만 해서, 뒤에 가려져 이벤트가 오지 않는 scrcpy 는
+ * 깨어날 일이 없다(스택: 메인 스레드가 `SDL_WaitEventTimeoutNS` 에서 대기). 그래서 해 없는 이벤트로 깨우고
+ * (`wakeProcess` — 접근성 권한 필요), 3초 안에 안 끝나면 자식(adb)까지 강제 종료한다.
+ * 앱 종료(dispose) 중엔 타이머가 못 돌므로 깨우기만 남는다 — 깨우기는 main 과 떨어진 프로세스라 앱이 꺼져도 돈다.
+ */
+function terminate(proc: ChildProcess): void {
+  proc.kill('SIGTERM');
+  const pid = proc.pid;
+  if (!pid) return;
+  wakeProcess(pid);
+  const force = setTimeout(() => {
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+    execFile('/usr/bin/pkill', ['-KILL', '-P', String(pid)], () => proc.kill('SIGKILL'));
+  }, 3000);
+  force.unref();
+  proc.once('exit', () => clearTimeout(force));
+}
+
 export function stopMirror(): MirrorActionResult {
-  child?.kill('SIGTERM');
+  if (child) terminate(child);
   return { ok: true }; // 실제 정리는 exit 핸들러가 담당 (상태 push 포함)
 }
 
@@ -318,7 +338,7 @@ export async function focusMirror(): Promise<MirrorActionResult> {
 
 /** 앱 종료 시 scrcpy 회수 — 없으면 미러링을 켠 채 앱을 꺼도 scrcpy 가 고아로 남는다 */
 export function disposeMirror(): void {
-  child?.kill('SIGTERM');
+  if (child) terminate(child);
   child = null;
   runningMode = null;
   endControlExtras();
