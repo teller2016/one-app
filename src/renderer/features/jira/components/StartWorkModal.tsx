@@ -1,7 +1,8 @@
 // Jira 티켓 [작업] — 시작할 위치를 고르고 femc 세션으로 넘긴다.
 //
 // 위치 목록은 터미널 LNB 와 같은 문법(저장소 그룹 → 워크트리 행)이고, Jira 프로젝트 키와
-// 이어진 저장소를 맨 위로 올려 기본 선택한다(프로젝트 레지스트리의 jiraProjectKey).
+// 이어진 저장소를 맨 위로 올린다(프로젝트 레지스트리의 jiraProjectKey — 없으면 그 키 접두어 브랜치가 있는 저장소).
+// 기본 선택은 **이 티켓 브랜치의 워크트리**(있으면) → 이어진 저장소의 주 워크트리 — 루트 세션 start_ticket 과 같은 규칙.
 // 티켓 본문·첨부 수집과 명령 조립은 main(`jira:prepare-work`)이 하고, 여기서는 그 결과를
 // 그대로 터미널에 넘긴다 — ⚠️ command 문자열을 렌더러에서 손대지 말 것(셸 인용 파손).
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,6 +27,7 @@ import { Select } from '../../../components/Select';
 import { Textarea } from '../../../components/Textarea';
 import { useToast } from '../../../components/Toast';
 import { openTerminalSession } from '../../../lib/sectionNav';
+import { branchIssueKey } from '../../../../shared/jira-url';
 import { worktreeName, worktreeRef } from '../../../../shared/types';
 import { errMsg } from '../../../lib/errMsg';
 
@@ -153,15 +155,24 @@ export function StartWorkModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 이 티켓과 이어진 저장소 — 레지스트리의 Jira 키가 같은 프로젝트의 로컬 경로로 판정
-  const matchedWsIds = useMemo(() => {
+  // 이 티켓과 이어진 저장소 — 레지스트리의 Jira 키가 같은 프로젝트의 로컬 경로로 판정.
+  // ⚠️ 레지스트리 키가 실제 티켓 키와 다를 수 있다(2026-10-22 실측: 레지스트리 BBJ · 티켓 SSB-…) — 그때는 그 키 접두어(`SSB-`)의
+  // 브랜치가 워크트리로 올라간 저장소를 잇는다(루트 세션 start_ticket 의 저장소 판정과 같은 규칙)
+  const matched = useMemo(() => {
     const paths = new Set(
       projects
         .filter((p) => p.jiraProjectKey && p.jiraProjectKey === projectKey)
         .map((p) => p.localPath)
     );
-    return new Set(workspaces.filter((w) => paths.has(w.repoPath)).map((w) => w.id));
-  }, [projects, workspaces, projectKey]);
+    const byRegistry = workspaces.filter((w) => paths.has(w.repoPath));
+    if (byRegistry.length) return { ids: new Set(byRegistry.map((w) => w.id)), byBranch: false };
+    const prefix = `${projectKey}-`;
+    const byBranch = workspaces.filter((w) =>
+      (worktrees[w.id] ?? []).some((wt) => branchIssueKey(wt.branch)?.startsWith(prefix))
+    );
+    return { ids: new Set(byBranch.map((w) => w.id)), byBranch: true };
+  }, [projects, workspaces, worktrees, projectKey]);
+  const matchedWsIds = matched.ids;
 
   // 매칭된 저장소를 맨 위로 (그 안의 순서는 등록 순 유지)
   const ordered = useMemo(
@@ -172,9 +183,26 @@ export function StartWorkModal({
     [workspaces, matchedWsIds]
   );
 
-  // 기본 선택 — 매칭 저장소의 주 워크트리, 없으면 첫 저장소의 첫 워크트리
+  // 이 티켓 브랜치의 워크트리(`feature/SSB-137-v2` 도 SSB-137) — 이어진 저장소부터. FE·BO 가 같은 티켓 브랜치를 갖기도 해서
+  // 여럿일 수 있다(2026-10-22 실측: BO-BBJ feature/SSB-137 · FO-BBJ feature/SSB-137-v2) — 전부 표시하고 첫 것을 기본으로 고른다
+  const ticketSpots = useMemo((): Spot[] => {
+    const out: Spot[] = [];
+    for (const ws of ordered) {
+      for (const w of worktrees[ws.id] ?? []) {
+        if (!w.missing && branchIssueKey(w.branch) === issueKey) out.push({ wsId: ws.id, path: w.path });
+      }
+    }
+    return out;
+  }, [ordered, worktrees, issueKey]);
+  const ticketSpot = ticketSpots[0] ?? null;
+
+  // 기본 선택 — 이 티켓의 워크트리 → 매칭 저장소의 주 워크트리 → 첫 저장소의 첫 워크트리
   useEffect(() => {
     if (!ready || spot) return;
+    if (ticketSpot) {
+      setSpot(ticketSpot);
+      return;
+    }
     for (const ws of ordered) {
       const list = worktrees[ws.id] ?? [];
       const wt = list.find((w) => w.isMain && !w.missing) ?? list.find((w) => !w.missing);
@@ -183,7 +211,7 @@ export function StartWorkModal({
         return;
       }
     }
-  }, [ready, spot, ordered, worktrees]);
+  }, [ready, spot, ticketSpot, ordered, worktrees]);
 
   /** 이어서 쓸 수 있는 세션 — 고른 위치에서 **입력을 기다리는** femc 세션 하나 */
   const resumable = useMemo(() => {
@@ -326,7 +354,16 @@ export function StartWorkModal({
                       <div className="jira-work__ws-head">
                         <span className="jira-work__ws-name">{ws.name}</span>
                         {matchedWsIds.has(ws.id) && (
-                          <span className="jira-work__match">{projectKey} 매칭</span>
+                          <span
+                            className="jira-work__match"
+                            title={
+                              matched.byBranch
+                                ? `프로젝트 레지스트리에 ${projectKey} 키가 없어, ${projectKey}- 브랜치가 있는 저장소로 골랐습니다`
+                                : undefined
+                            }
+                          >
+                            {matched.byBranch ? `${projectKey} 브랜치` : `${projectKey} 매칭`}
+                          </span>
                         )}
                         {/* 고를 행이 없다 — 이유를 남겨 둔다(정리는 터미널 섹션에서 워크스페이스 삭제) */}
                         {broken[ws.id] !== undefined && (
@@ -368,6 +405,9 @@ export function StartWorkModal({
                                   ? `±${wt.additions + wt.deletions}`
                                   : '미커밋'}
                               </span>
+                            )}
+                            {ticketSpots.some((t) => t.wsId === ws.id && t.path === wt.path) && (
+                              <span className="jira-work__wt-ticket">이 티켓</span>
                             )}
                             {count > 0 && (
                               <span className="jira-work__wt-count">{count}세션</span>

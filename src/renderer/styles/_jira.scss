@@ -859,6 +859,7 @@ $detail-w: min(var(--jira-detail-w), max(440px, calc(100vw - var(--sidebar-w) - 
 
   // 미커밋 변경·세션 수 — 목업 .badge 18px · 11px (미커밋은 주의색 · 모노)
   &__wt-dirty,
+  &__wt-ticket,
   &__wt-count {
     display: inline-flex;
     align-items: center;
@@ -880,6 +881,13 @@ $detail-w: min(var(--jira-detail-w), max(440px, calc(100vw - var(--sidebar-w) - 
   &__wt-count {
     background: var(--surface-2);
     color: var(--text-2);
+  }
+
+  // 이 티켓 브랜치의 워크트리 — 기본 선택의 이유를 행에 남긴다(저장소 머리의 '매칭' 칩과 같은 색)
+  &__wt-ticket {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
   }
 }
 
